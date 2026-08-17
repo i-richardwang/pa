@@ -1,0 +1,75 @@
+import { expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
+import {
+  CHART_CHROME,
+  CHART_SERIES,
+  FONT_FAMILY,
+  UI_CHART_TOKENS,
+  UI_TOKENS,
+} from "./design_tokens.js";
+import { CHART_DARK_COLORS, SERIES_COLORS } from "./chart_config.js";
+
+const TOKENS_CSS = new URL("./tokens.css", import.meta.url);
+
+/** tokens.css :root 里的 --pa-* 定义解析为明暗成对（单值 = 明暗同值） */
+async function parseCssTokens(): Promise<Map<string, { light: string; dark: string }>> {
+  const css = await readFile(TOKENS_CSS, "utf8");
+  const tokens = new Map<string, { light: string; dark: string }>();
+  for (const match of css.matchAll(/--pa-([a-z0-9-]+):\s*([^;]+);/g)) {
+    const [, name, raw] = match;
+    const value = raw.replaceAll(/\s+/g, " ").trim();
+    const pair = value.match(/^light-dark\((.+),\s*((?:[^()]|\([^)]*\))+)\)$/);
+    if (pair) {
+      tokens.set(name, { light: pair[1].trim(), dark: pair[2].trim() });
+    } else {
+      tokens.set(name, { light: value, dark: value });
+    }
+  }
+  return tokens;
+}
+
+test("tokens.css and design_tokens.ts define the same values", async () => {
+  const cssTokens = await parseCssTokens();
+  expect(cssTokens.get("bg")).toEqual({ light: "#ffffff", dark: "#171717" });
+  expect(cssTokens.get("accent")).toEqual({ light: "#3b6fdb", dark: "#5b8def" });
+  // 图表 chrome 也在同一张表里：它的字面值进序列化 option，与 CSS 侧不得各写一份
+  expect(cssTokens.get("faint")).toEqual({ ...CHART_CHROME.axisText });
+
+  const expected = { ...UI_TOKENS, ...UI_CHART_TOKENS };
+  for (const [name, pair] of Object.entries(expected)) {
+    expect(cssTokens.get(name), `tokens.css lacks --pa-${name}`).toEqual({ ...pair });
+  }
+  // 反向：CSS 侧不允许存在 TS 镜像之外的**字面**颜色令牌。
+  // 例外都不是颜色：popover-glow 是投影；selected 由 ink 现算（color-mix），
+  // 没有可镜像的明暗字面值。
+  const extra = [...cssTokens.keys()].filter((name) => !(name in expected));
+  expect(extra).toEqual(["selected", "popover-glow"]);
+});
+
+test("chart series stay in sync across css tokens and serialized options", () => {
+  expect(CHART_SERIES).toHaveLength(8);
+  expect(SERIES_COLORS).toEqual(CHART_SERIES.map((pair) => pair.light));
+  // 首色 = 数据蓝，与 --pa-accent 亮值同源
+  expect(SERIES_COLORS[0]).toBe("#3b6fdb");
+});
+
+test("dark color map covers exactly the pairs that differ", () => {
+  expect(CHART_DARK_COLORS["#3b6fdb"]).toBe("#5b8def");
+  expect(CHART_DARK_COLORS[CHART_CHROME.gridLine.light]).toBe(CHART_CHROME.gridLine.dark);
+  // 明暗同值的取值不得进映射（替换是恒等，混进来说明生成逻辑坏了）
+  for (const [light, dark] of Object.entries(CHART_DARK_COLORS)) {
+    expect(dark, `${light} 的暗色替换是恒等`).not.toBe(light);
+  }
+  // 未知颜色不得命中
+  expect(CHART_DARK_COLORS["#123456"]).toBeUndefined();
+  // 键恒为小写（渲染端 lookup 前做 toLowerCase）
+  for (const key of Object.keys(CHART_DARK_COLORS)) {
+    expect(key).toBe(key.toLowerCase());
+  }
+});
+
+test("the variable cut of inter leads the shared font stack", () => {
+  // 可变档必须排在静态 Inter 之前：落到静态档上，420 / 450 / 520 会被吸回 400 / 500，
+  // 写出来的那几档字重就永远看不见。
+  expect(FONT_FAMILY.startsWith("'Inter Variable', Inter,")).toBe(true);
+});

@@ -1,0 +1,8 @@
+#!/bin/sh
+# 完整门禁与依赖活容器或数据的回归按 AGENTS.md 执行；此处只跑快速本地门禁。
+set -e
+ROOT="$(git rev-parse --show-toplevel)"
+
+cd "$ROOT/server"
+bun run typecheck
+bun test

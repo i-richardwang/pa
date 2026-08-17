@@ -1,0 +1,23 @@
+views:
+  - name: employee_snapshot_metrics
+    title: 员工快照指标执行面
+    description: 月末人员规模与结构指标的权限受控执行面。
+    meta:
+      query_surface: metric_source
+      time_source: workforce
+      time_anchor_measure: active_employee_count
+      default_population_scope: 统计范围：公开虚构数据中的示例员工。
+    access_policy:
+      - groups: [pa_full, pa_service]
+        member_level:
+          includes: &members
+            [year, month, period_month, organization_name, department_name, gender, age_band, job_level_band, active_employee_count, average_age]
+        row_level: { allow_all: true }
+      - group: pa_scoped
+        member_level: { includes: *members }
+        row_level:
+          filters:
+            - { member: organization_name, operator: equals, values: securityContext.org_scope }
+    cubes:
+      - join_path: employee_month_snapshot_fact
+        includes: *members

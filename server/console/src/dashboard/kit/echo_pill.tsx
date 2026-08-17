@@ -1,0 +1,36 @@
+import { cn } from "@/lib/utils";
+
+const TONE_CLASS = {
+  strong:
+    "inline-flex max-w-full items-center rounded-sm bg-pa-selected px-2 font-medium text-pa-ink text-sm leading-6",
+  muted:
+    "inline-flex max-w-full items-center rounded-sm bg-pa-surface px-2 font-medium text-pa-muted text-sm leading-6",
+} as const;
+
+export function EchoPill({
+  label,
+  tone = "strong",
+  onClick,
+}: {
+  label: string;
+  tone?: keyof typeof TONE_CLASS;
+  /** 传入即可点；不传则只读（pointer-events-none）。 */
+  onClick?: () => void;
+}) {
+  const shape = TONE_CLASS[tone];
+  if (!onClick) {
+    return <span className={cn(shape, "pointer-events-none")}>{label}</span>;
+  }
+  return (
+    <button
+      type="button"
+      className={cn(
+        shape,
+        "cursor-pointer outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring",
+      )}
+      onClick={onClick}
+    >
+      <span className="min-w-0 truncate">{label}</span>
+    </button>
+  );
+}

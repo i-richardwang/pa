@@ -1,0 +1,38 @@
+views:
+  - name: employee_hire_records
+    title: 入职员工记录
+    description: 入职人数及入职率指标的受控构成记录面。
+    meta:
+      query_surface: detail
+      time_source: workforce
+      default_population_scope: 统计范围：公开虚构数据中的示例员工。
+      record_sets:
+        hire_event:
+          title: 入职员工
+          description: 所选期间构成入职人数的虚构员工记录。
+          record_key: record_key
+          entity_key: employee_id
+          fields:
+            - { member: employee_id }
+            - { member: employee_name }
+            - { member: record_date, title: 入职日期 }
+            - { member: organization_name }
+            - { member: department_name }
+            - { member: gender }
+            - { member: age_band }
+            - { member: job_level_band }
+          entity_order:
+            - { member: record_date, direction: desc }
+            - { member: record_key, direction: desc }
+    access_policy:
+      - groups: [pa_full, pa_service]
+        member_level: { includes: "*" }
+        row_level: { allow_all: true }
+      - group: pa_scoped
+        member_level: { includes: "*" }
+        row_level:
+          filters:
+            - { member: organization_name, operator: equals, values: securityContext.org_scope }
+    cubes:
+      - join_path: employee_hire_event_fact
+        includes: "*"

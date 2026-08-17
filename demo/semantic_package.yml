@@ -1,0 +1,94 @@
+schema_version: 1
+id: pa_demo
+model_path: model
+taxonomy:
+  metric_domains:
+    - id: metric_domain:workforce_structure
+      title: 人员规模与结构
+      description: 支持按组织、部门和通用员工属性分析月末人数、结构与平均特征。
+      time_source: workforce
+      synonyms: [人员规模, 人员结构, 在职人数]
+    - id: metric_domain:workforce_movement
+      title: 人员流动
+      description: 支持按组织、部门和通用员工属性分析入职、离职及相关比率。
+      time_source: workforce
+      synonyms: [人员流动, 入职, 离职, 离职率]
+    - id: metric_domain:headcount_plan
+      title: 编制计划与完成
+      description: 支持按组织和部门分析月度编制目标及完成率。
+      time_source: headcount_plan
+      synonyms: [编制计划, 编制完成率]
+  dimension_groups:
+    - name: organization
+      title: 组织与部门
+      description: 统计记录所属的组织与部门。
+    - name: employee_basic_info
+      title: 员工基本信息
+      description: 员工在记录时点的性别与年龄段信息。
+    - name: job_and_level
+      title: 岗位与职级
+      description: 员工在记录时点的通用职级段信息。
+    - name: termination_event
+      title: 离职记录属性
+      description: 离职事件对应的离职性质。
+formal_metrics:
+  - name: current_month_new_hire_rate
+    metric_domain_id: metric_domain:workforce_movement
+    host_view: employee_hire_metrics
+    title: 本月入职率
+    description: 所选月份入职人数除以同月月末在职人数。
+    time_contract: { aggregation: recompute, window: selected, grain: month }
+    node:
+      kind: ratio
+      numerator: { metric_id: measure:new_hire_count, missing: zero }
+      denominator: { metric_id: measure:active_employee_count, missing: "null" }
+      division_by_zero: "null"
+    format: percent
+    record_projection:
+      view: employee_hire_records
+      components: { numerator: new_hire_count, denominator: active_employee_count }
+      underlying_records: { record_set: hire_event, selection: { kind: numerator } }
+  - name: current_month_turnover_rate
+    metric_domain_id: metric_domain:workforce_movement
+    host_view: employee_leave_metrics
+    title: 本月离职率
+    description: 所选月份离职人数除以同月月末在职人数。
+    time_contract: { aggregation: recompute, window: selected, grain: month }
+    node:
+      kind: ratio
+      numerator: { metric_id: measure:turnover_count, missing: zero }
+      denominator: { metric_id: measure:active_employee_count, missing: "null" }
+      division_by_zero: "null"
+    format: percent
+    record_projection:
+      view: employee_leave_records
+      components: { numerator: turnover_count, denominator: active_employee_count }
+      underlying_records: { record_set: termination_event, selection: { kind: numerator } }
+  - name: current_month_voluntary_turnover_rate
+    metric_domain_id: metric_domain:workforce_movement
+    host_view: employee_leave_metrics
+    title: 本月主动离职率
+    description: 所选月份主动离职人数除以同月月末在职人数。
+    time_contract: { aggregation: recompute, window: selected, grain: month }
+    node:
+      kind: ratio
+      numerator: { metric_id: measure:voluntary_turnover_count, missing: zero }
+      denominator: { metric_id: measure:active_employee_count, missing: "null" }
+      division_by_zero: "null"
+    format: percent
+    record_projection:
+      view: employee_leave_records
+      components: { numerator: voluntary_turnover_count, denominator: active_employee_count }
+      underlying_records: { record_set: termination_event, selection: { kind: numerator } }
+  - name: current_month_fulfillment_rate
+    metric_domain_id: metric_domain:headcount_plan
+    host_view: headcount_plan_metrics
+    title: 当月编制完成率
+    description: 月末在职人数占同月编制目标的比例；超过100%表示实际人数高于计划。
+    time_contract: { aggregation: last, window: selected }
+    node:
+      kind: ratio
+      numerator: { metric_id: measure:active_employee_count, missing: "null" }
+      denominator: { metric_id: measure:planned_headcount, missing: "null" }
+      division_by_zero: "null"
+    format: percent

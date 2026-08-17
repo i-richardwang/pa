@@ -1,0 +1,1 @@
+../../../plugins/pa/skills/pa-analytics/SKILL.md

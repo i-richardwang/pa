@@ -1,0 +1,13 @@
+{
+  "name": "pa-result-view",
+  "private": true,
+  "type": "module",
+  "description": "PA 结果视图：供 MCP widget 与控制台共同消费的无宿主渲染包",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "echarts": "^6.0.0",
+    "lucide-react": "^1.24.0"
+  }
+}

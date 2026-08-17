@@ -1,0 +1,33 @@
+cubes:
+  - name: employee_leave_event_fact
+    title: 员工离职事件
+    public: false
+    description: 公开演示数据中每次离职一行的事件事实。
+    extends: employee_fact_base
+    sql: "SELECT * FROM read_parquet('/semantic/current/employee_leave_event_fact.parquet')"
+    dimensions:
+      - name: leave_type
+        title: 离职性质
+        description: 离职事件属于主动离职或被动离职。
+        sql: leave_type
+        type: string
+        meta: { dimension_group: termination_event }
+    measures:
+      - name: turnover_count
+        title: 离职人数
+        description: 所选期间发生离职的虚构员工人数。
+        type: count
+        meta:
+          metric_domain_id: metric_domain:workforce_movement
+          time_contract: { aggregation: sum, window: selected }
+          underlying_records: { record_set: termination_event, selection: { kind: self } }
+      - name: voluntary_turnover_count
+        title: 主动离职人数
+        description: 所选期间发生主动离职的虚构员工人数。
+        type: count
+        filters:
+          - sql: "{CUBE}.leave_type = '主动离职'"
+        meta:
+          metric_domain_id: metric_domain:workforce_movement
+          time_contract: { aggregation: sum, window: selected }
+          underlying_records: { record_set: termination_event, selection: { kind: self } }

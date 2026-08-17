@@ -1,0 +1,31 @@
+name: quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: astral-sh/setup-uv@v7
+      - name: Install TypeScript dependencies
+        working-directory: server
+        run: bun install --frozen-lockfile
+      - name: Audit dependencies
+        working-directory: server
+        run: bun run audit:dependencies
+      - name: Run repository quality gate
+        working-directory: server
+        run: bun run check
+      - name: Verify production image runtime dependencies
+        run: |
+          docker build --tag pa-server-ci server
+          docker run --rm --entrypoint node pa-server-ci \
+            --input-type=module --eval \
+            "await import('./dist/engine/semantic_package.js'); await import('./dist/semantic_core/semantic_model_catalog.js')"

@@ -1,0 +1,147 @@
+/**
+ * 看板编辑态草稿助手：新瓦片的稳定身份与落位、草稿与服务端真值的脏比较。
+ * tile_id 在客户端生成（RGL 的 key + 服务端归一要求 uuid），走 getRandomValues 而非
+ * crypto.randomUUID——后者仅安全上下文可用，控制台可经局域网明文 http 访问。
+ * 落位与尺寸沿用 tile_sizing 的形态映射：新瓦片按 presentation_type 粗分尺寸、堆到画布底部整列排开。
+ */
+import type { BoardPayload, BoardTile, Place, ReportRow } from "@contract";
+import { reportTileSize, TILE_SIZES } from "./tile_sizing";
+
+/** 生成合法 tile_id（8-4-4-4-12 hex，匹配服务端 BOARD_ID_PATTERN），不依赖安全上下文。 */
+function newTileId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
+}
+
+function bottomY(tiles: BoardTile[]): number {
+  return tiles.reduce((max, t) => Math.max(max, t.place.y + t.place.h), 0);
+}
+
+function newReportTile(report: ReportRow, tiles: BoardTile[]): BoardTile {
+  const { w, h } = reportTileSize(report);
+  const place: Place = { x: 0, y: bottomY(tiles), w, h };
+  return {
+    kind: "report",
+    tile_id: newTileId(),
+    report_id: report.id,
+    place,
+    name: report.name,
+    presentation_type: report.presentation_type,
+    render_shape: report.render_shape,
+  };
+}
+
+/** 新文本瓦片：整行落底，起始尺寸同尺寸表默认（最小高见 tile_sizing.text）。 */
+export function newTextTile(tiles: BoardTile[]): BoardTile {
+  return {
+    kind: "text",
+    tile_id: newTileId(),
+    md: "",
+    place: { x: 0, y: bottomY(tiles), w: TILE_SIZES.text.w, h: TILE_SIZES.text.h },
+  };
+}
+
+/** 持久化投影：只留会落库的字段（忽略报告瓦片的派生摘要），供脏比较。 */
+function persistProjection(tile: BoardTile): string {
+  const { x, y, w, h } = tile.place;
+  const body = tile.kind === "report" ? `c:${tile.report_id}` : `t:${tile.md}`;
+  return `${tile.tile_id}|${body}|${x},${y},${w},${h}`;
+}
+
+/** 草稿与服务端真值是否等价（成员、顺序、坐标、文本一致；派生字段不计）。 */
+function sameTiles(a: BoardTile[], b: BoardTile[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((tile, i) => persistProjection(tile) === persistProjection(b[i]));
+}
+
+export type BoardEditState = {
+  name: string;
+  tiles: BoardTile[];
+};
+
+export type DraftLayoutItem = Pick<Place, "x" | "y" | "w" | "h"> & { i: string };
+
+export function beginBoardEdit(board: BoardPayload): BoardEditState {
+  return { name: board.name, tiles: board.tiles };
+}
+
+export function isBoardEditDirty(draft: BoardEditState, board: BoardPayload): boolean {
+  return draft.name !== board.name || !sameTiles(draft.tiles, board.tiles);
+}
+
+export function applyBoardLayout(
+  draft: BoardEditState,
+  layout: readonly DraftLayoutItem[],
+): BoardEditState {
+  const byId = new Map(layout.map((item) => [item.i, item]));
+  let changed = false;
+  const tiles = draft.tiles.map((tile) => {
+    const item = byId.get(tile.tile_id);
+    if (!item) return tile;
+    if (
+      item.x === tile.place.x &&
+      item.y === tile.place.y &&
+      item.w === tile.place.w &&
+      item.h === tile.place.h
+    )
+      return tile;
+    changed = true;
+    return { ...tile, place: { x: item.x, y: item.y, w: item.w, h: item.h } };
+  });
+  return changed ? { ...draft, tiles } : draft;
+}
+
+export function removeBoardTile(draft: BoardEditState, tileId: string): BoardEditState {
+  return { ...draft, tiles: draft.tiles.filter((tile) => tile.tile_id !== tileId) };
+}
+
+export function changeBoardText(draft: BoardEditState, tileId: string, md: string): BoardEditState {
+  return {
+    ...draft,
+    tiles: draft.tiles.map((tile) =>
+      tile.tile_id === tileId && tile.kind === "text" ? { ...tile, md } : tile,
+    ),
+  };
+}
+
+export function addBoardReport(draft: BoardEditState, report: ReportRow): BoardEditState {
+  return {
+    ...draft,
+    tiles: [...draft.tiles, newReportTile(report, draft.tiles)],
+  };
+}
+
+/** 按阅读序（先上后下、同行先左）排列，供上移/下移使用。 */
+export function tilesInReadingOrder(tiles: readonly BoardTile[]): BoardTile[] {
+  return [...tiles].sort((a, b) => a.place.y - b.place.y || a.place.x - b.place.x);
+}
+
+/**
+ * 与相邻瓦片对换整格 `place`（含宽高），避免只换 y 造成叠压。
+ * 已在顶/底则原样返回。
+ */
+export function moveBoardTile(
+  draft: BoardEditState,
+  tileId: string,
+  direction: "up" | "down",
+): BoardEditState {
+  const ordered = tilesInReadingOrder(draft.tiles);
+  const idx = ordered.findIndex((tile) => tile.tile_id === tileId);
+  if (idx < 0) return draft;
+  const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= ordered.length) return draft;
+  const a = ordered[idx];
+  const b = ordered[swapIdx];
+  const placeA = a.place;
+  const placeB = b.place;
+  return {
+    ...draft,
+    tiles: draft.tiles.map((tile) => {
+      if (tile.tile_id === a.tile_id) return { ...tile, place: placeB };
+      if (tile.tile_id === b.tile_id) return { ...tile, place: placeA };
+      return tile;
+    }),
+  };
+}

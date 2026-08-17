@@ -1,0 +1,140 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@import "@fontsource-variable/inter/wght.css";
+/* 设计令牌单源：--pa-* 定义与 pa-* 工具类映射都在令牌源里。 */
+@import "../../src/presentation_core/tokens.css";
+
+/* 结果视图是独立工作区，Tailwind 不会从 console 入口自动发现，显式登记唯一渲染包。 */
+@source "../../result_view/src";
+
+@source "../../src/presentation_core";
+
+@theme inline {
+  --font-heading: var(--font-sans);
+
+  --shadow-xs: 0 0 0 0.5px var(--pa-border), 0 1px 2px 0 var(--pa-shadow);
+  --shadow-sm: 0 1px 4px 2px color-mix(in srgb, var(--pa-shadow) 47%, transparent);
+  --shadow-md: 0 4px 20px 0 color-mix(in srgb, var(--pa-shadow) 29%, transparent);
+  --shadow-login: 0 12px 40px 0 rgb(0 0 0 / 0.12);
+  /* 玻璃浮层专用：取值在令牌源，锚定浮层整壳走 .pa-popup-surface，这里只给 ⌘K 那一档单用 */
+  --shadow-popover-glow: var(--pa-popover-glow);
+  /* 大舞台弹层投影：设置面与图表设置这类占满视口中央的弹层 */
+  --shadow-stage: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --font-serif: ui-serif, Georgia, "Times New Roman", "Songti SC", "Noto Serif SC", serif;
+  /* 加载标记：条自底边长起。往复由 `.pa-loader-bar` 的 alternate 给，故只写两端。 */
+  @keyframes pa-sweep {
+    from {
+      transform: scaleY(0.3);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+  /* toast 进场/出场动效令牌，成功与失败按奇偶项错相。 */
+  --animate-toast-success-odd: toast-success-odd 0.32s cubic-bezier(0.5, 1, 0.89, 1);
+  --animate-toast-success-even: toast-success-even 0.32s cubic-bezier(0.5, 1, 0.89, 1);
+  --animate-toast-error-odd: toast-error-odd 0.28s cubic-bezier(0.5, 1, 0.89, 1);
+  --animate-toast-error-even: toast-error-even 0.28s cubic-bezier(0.5, 1, 0.89, 1);
+  @keyframes toast-success-odd {
+    0% { scale: 1; }
+    30% { scale: 1.025; }
+    60% { scale: 0.99; }
+    100% { scale: 1; }
+  }
+  @keyframes toast-success-even {
+    0% { scale: 1; }
+    30% { scale: 1.025; }
+    60% { scale: 0.99; }
+    100% { scale: 1; }
+  }
+  @keyframes toast-error-odd {
+    0% { translate: 0 0; }
+    25% { translate: -3px 0; }
+    50% { translate: 3px 0; }
+    75% { translate: -3px 0; }
+    100% { translate: 0 0; }
+  }
+  @keyframes toast-error-even {
+    0% { translate: 0 0; }
+    25% { translate: -3px 0; }
+    50% { translate: 3px 0; }
+    75% { translate: -3px 0; }
+    100% { translate: 0 0; }
+  }
+}
+
+.pa-loader-bar {
+  display: block;
+  background: currentColor;
+  transform-origin: 0 100%;
+  animation: pa-sweep 0.5s ease-in-out infinite alternate both;
+}
+
+@layer base {
+  * {
+    @apply border-pa-line outline-pa-focus-strong/50;
+
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--pa-fg) 14%, transparent) transparent;
+  }
+  body {
+
+    @apply font-sans font-normal text-sm bg-pa-page text-pa-fg antialiased;
+  }
+  html {
+    @apply font-sans;
+  }
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
+  }
+}
+
+/* 内容区可滚动但不占滚动条空间。 */
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* 看板编辑态画布：拖拽/缩放中的瓦片墨色描边 + 投影浮起，缩放手柄与落位占位框同用墨色
+   （编辑反馈属 chrome，与主动作同色系；彩色留给数据）。
+   .react-grid-* 是 react-grid-layout 的第三方类名。 */
+.react-grid-item:is(.react-draggable-dragging, .resizing) .pa-tile-card {
+  border-color: var(--pa-ink);
+  box-shadow: 3px 3px 8px var(--pa-shadow);
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  border-color: var(--pa-ink) !important;
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: var(--pa-ink);
+  opacity: 0.1;
+  border-radius: var(--radius-md);
+}
+
+/* 编辑态整卡可拖的光标语义；控件自带光标（pointer/text）自然覆盖 */
+.pa-board-editing .react-grid-item {
+  cursor: grab;
+}
+
+.pa-board-editing .react-grid-item.react-draggable-dragging {
+  cursor: grabbing;
+}
+
+/* 无障碍动效降级：偏好减少动效时全量关闭。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

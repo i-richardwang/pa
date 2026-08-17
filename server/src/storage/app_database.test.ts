@@ -1,0 +1,179 @@
+import { Database } from "bun:sqlite";
+import { describe, expect, test } from "bun:test";
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { SqliteDatabase } from "../sqlite.js";
+import {
+  APP_SCHEMA_STAMP,
+  inTransaction,
+  initializeAppDatabase,
+  openAppDatabase,
+  schemaStampOf,
+} from "./app_database.js";
+
+const path = (label: string) => join(tmpdir(), `pa_app_database_${label}_${randomUUID()}.db`);
+
+function names(db: SqliteDatabase, table: string): string[] {
+  return (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(
+    (row) => row.name,
+  );
+}
+
+describe("app database", () => {
+  test("空库一次性建立最终结构、版本与连接 pragma", async () => {
+    const db = await openAppDatabase(path("empty"));
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all() as Array<{ name: string }>;
+    for (const table of [
+      "usage_log",
+      "feedback",
+      "business_term",
+      "analysis",
+      "report",
+      "report_revision",
+      "board",
+      "export_ticket",
+      "export_audit",
+      "record_projection_audit",
+    ]) {
+      expect(tables.map((row) => row.name)).toContain(table);
+    }
+    expect(db.prepare("PRAGMA user_version").get()).toEqual({ user_version: APP_SCHEMA_STAMP });
+    expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
+    expect(db.prepare("PRAGMA busy_timeout").get()).toEqual({ timeout: 5000 });
+    expect(db.prepare("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
+    expect(names(db, "analysis")).toEqual(["id", "owner", "spec", "created_at"]);
+    expect(names(db, "business_term")).toEqual([
+      "id",
+      "canonical_term",
+      "definition",
+      "context",
+      "aliases",
+      "related_member_ids",
+    ]);
+    expect(names(db, "report")).toEqual([
+      "id",
+      "owner",
+      "name",
+      "analysis_id",
+      "render_shape",
+      "archived_at",
+      "revision",
+      "created_at",
+      "updated_at",
+    ]);
+    expect(names(db, "export_ticket")).toEqual([
+      "id",
+      "created_at",
+      "expires_at",
+      "caller",
+      "query",
+      "security_context",
+    ]);
+    expect(names(db, "record_projection_audit")).toEqual([
+      "id",
+      "at",
+      "caller",
+      "source_kind",
+      "source_id",
+      "source_reference_id",
+      "source_revision",
+      "metric_id",
+      "coordinates",
+      "offset",
+      "row_count",
+      "outcome",
+      "error",
+    ]);
+    db.close();
+  });
+
+  test("当前版本重复打开不改已有数据", async () => {
+    const file = path("reopen");
+    const first = await openAppDatabase(file);
+    first
+      .prepare(
+        `INSERT INTO board (id, name, tiles, created_by, created_at, updated_at)
+         VALUES (?, ?, '[]', ?, ?, ?)`,
+      )
+      .run(randomUUID(), "经营看板", "alice@x", "2026-07-01", "2026-07-01");
+    first.close();
+
+    const reopened = await openAppDatabase(file);
+    expect(reopened.prepare("SELECT name, revision FROM board").get()).toEqual({
+      name: "经营看板",
+      revision: 1,
+    });
+    reopened.close();
+  });
+
+  test("非空但结构版本不匹配的库 fail-closed，不做原地改结构", () => {
+    const db = new Database(path("stale")) as unknown as SqliteDatabase;
+    db.exec("CREATE TABLE usage_log (id INTEGER PRIMARY KEY)");
+    expect(() => initializeAppDatabase(db)).toThrow("请以空库重建后再启动");
+    expect(
+      db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all(),
+    ).toEqual([{ name: "usage_log" }]);
+    db.close();
+  });
+
+  // 印记必须对 DDL 结构敏感、对纯排版不敏感，才能在开库时识别非当前结构。
+  test("结构印记随 DDL 的结构变化而变，随排版变化而不变", () => {
+    const ddl = "CREATE TABLE t (id TEXT PRIMARY KEY);";
+    expect(schemaStampOf(ddl)).not.toBe(schemaStampOf(`${ddl}\nCREATE TABLE u (id TEXT);`));
+    expect(schemaStampOf(ddl)).not.toBe(schemaStampOf("CREATE TABLE t (id INTEGER PRIMARY KEY);"));
+    expect(schemaStampOf(ddl)).toBe(schemaStampOf("\n  CREATE TABLE t (id TEXT   PRIMARY KEY);\n"));
+    expect(APP_SCHEMA_STAMP).toBeGreaterThan(0);
+  });
+
+  test("旧代码建的库（自带匹配的旧印记）同样 fail-closed", () => {
+    // 非当前 DDL 的完整库也必须在开库时拒绝。
+    const db = new Database(path("previous-shape")) as unknown as SqliteDatabase;
+    const stale = "CREATE TABLE value_alias (id TEXT PRIMARY KEY, term TEXT NOT NULL);";
+    db.exec(stale);
+    db.exec(`PRAGMA user_version = ${schemaStampOf(stale)}`);
+    expect(() => initializeAppDatabase(db)).toThrow("应用库结构与当前代码不符");
+    db.close();
+  });
+
+  test("事务 helper 原子回滚，报告历史依附报告生命周期", async () => {
+    const db = await openAppDatabase(path("transaction"));
+    expect(() =>
+      inTransaction(db, () => {
+        db.prepare(
+          `INSERT INTO board (id, name, tiles, created_by, created_at, updated_at)
+           VALUES (?, ?, '[]', ?, ?, ?)`,
+        ).run(randomUUID(), "临时看板", "alice@x", "2026-07-01", "2026-07-01");
+        throw new Error("injected");
+      }),
+    ).toThrow("injected");
+    expect(db.prepare("SELECT COUNT(*) AS n FROM board").get()).toEqual({ n: 0 });
+
+    const reportId = randomUUID();
+    const analysisId = randomUUID();
+    db.prepare(
+      `INSERT INTO analysis (id, owner, spec, created_at)
+       VALUES (?, ?, ?, ?)`,
+    ).run(analysisId, "alice@x", "{}", "2026-07-01");
+    db.prepare(
+      `INSERT INTO report
+       (id, owner, name, analysis_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(reportId, "alice@x", "经营报告", analysisId, "2026-07-01", "2026-07-01");
+    db.prepare(
+      `INSERT INTO report_revision
+       (report_id, revision, name, analysis_id, saved_by, saved_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(reportId, 1, "经营报告", analysisId, "alice@x", "2026-07-01");
+    db.prepare("DELETE FROM report WHERE id = ?").run(reportId);
+    expect(
+      db.prepare("SELECT COUNT(*) AS n FROM report_revision WHERE report_id = ?").get(reportId),
+    ).toEqual({ n: 0 });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM analysis WHERE id = ?").get(analysisId)).toEqual({
+      n: 1,
+    });
+    db.close();
+  });
+});

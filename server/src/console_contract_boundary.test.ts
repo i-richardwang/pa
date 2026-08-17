@@ -1,0 +1,995 @@
+import { expect, test } from "bun:test";
+import { readdir, readFile } from "node:fs/promises";
+
+const CONSOLE_SRC = new URL("../console/src/", import.meta.url);
+const RESULT_VIEW_SRC = new URL("../result_view/src/", import.meta.url);
+const WIDGET_SRC = new URL("../widget/src/", import.meta.url);
+
+const BASE_UI = new URL("../console/node_modules/@base-ui/react/", import.meta.url);
+
+function isProductSource(name: string): boolean {
+  if (!name.endsWith(".ts") && !name.endsWith(".tsx")) return false;
+  return !name.endsWith(".test.ts") && !name.endsWith(".test.tsx");
+}
+
+async function readSources(base: URL): Promise<Array<{ name: string; text: string }>> {
+  const names = (await readdir(base, { recursive: true })).filter(isProductSource);
+  return Promise.all(
+    names.map(async (name) => ({
+      name,
+      text: await readFile(new URL(name, base), "utf8"),
+    })),
+  );
+}
+
+const HAND_ROLLED_ROLE =
+  /(?<![[\w-])role=["'](listbox|option|combobox|menu|menubar|menuitem|menuitemcheckbox|menuitemradio|tab|tablist|tabpanel|tree|treeitem|grid|gridcell|dialog|alertdialog|radiogroup|slider|spinbutton)["']/g;
+
+test("interaction roles come from primitives, never hand-written", async () => {
+  const bad = '<div role="listbox"><span role="option">A</span></div>';
+
+  const good =
+    '<div role="alert" /><p role="presentation" /><style>{"[role=\'combobox\'], [role=\'listbox\'] {}"}</style>';
+  expect([...bad.matchAll(HAND_ROLLED_ROLE)].length, "role matcher is stale").toBe(2);
+  expect([...good.matchAll(HAND_ROLLED_ROLE)], "role matcher over-matches").toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  expect(sources.length, "console source scan found no files — path likely stale").toBeGreaterThan(
+    0,
+  );
+  for (const { name, text } of sources) {
+    const found = [...text.matchAll(HAND_ROLLED_ROLE)].map((match) => match[1]);
+    expect(
+      found,
+      `console/src/${name} hand-writes role=${found.join("/")}; take it from a Base UI primitive instead`,
+    ).toEqual([]);
+  }
+});
+
+const SLOT_NAMES = [
+  "background",
+  "foreground",
+  "card",
+  "card-foreground",
+  "popover",
+  "popover-foreground",
+  "primary",
+  "primary-foreground",
+  "secondary",
+  "secondary-foreground",
+  "muted",
+  "muted-foreground",
+  "accent",
+  "accent-foreground",
+  "destructive",
+  "destructive-foreground",
+  "info",
+  "info-foreground",
+  "success",
+  "success-foreground",
+  "warning",
+  "warning-foreground",
+  "border",
+  "input",
+  "ring",
+  "selected",
+  "sidebar",
+  "sidebar-foreground",
+  "sidebar-primary",
+  "sidebar-primary-foreground",
+  "sidebar-accent",
+  "sidebar-accent-foreground",
+  "sidebar-border",
+  "sidebar-ring",
+];
+const COLOR_PROPS =
+  "bg|text|border|ring|outline|fill|stroke|from|to|via|divide|caret|placeholder|decoration";
+const FOREIGN_TOKEN = new RegExp(
+  `\\b(?:${COLOR_PROPS})-(?:${[...SLOT_NAMES].sort((a, b) => b.length - a.length).join("|")})(?:/\\d+)?\\b`,
+  "g",
+);
+
+const FOREIGN_CSS_VAR = new RegExp(
+  `var\\(\\s*--(?:${[...SLOT_NAMES].sort((a, b) => b.length - a.length).join("|")})\\s*[),]`,
+  "g",
+);
+
+test("colors are spelled in the pa-* vocabulary only", async () => {
+  const badVars = 'style={{ fill: "var(--card)", stroke: "var( --primary )" }}';
+  const goodVars = 'style={{ fill: "var(--pa-bg)", stroke: "var(--pa-border-strong)" }}';
+  expect([...badVars.matchAll(FOREIGN_CSS_VAR)].length, "css-var matcher is stale").toBe(2);
+  expect(
+    [...goodVars.matchAll(FOREIGN_CSS_VAR)].map((match) => match[0]),
+    "css-var matcher over-matches",
+  ).toEqual([]);
+
+  const bad = 'className="text-muted-foreground bg-accent border-border ring-ring/50"';
+  const good =
+    'className="text-pa-muted bg-pa-surface border-pa-line-strong ring-pa-focus-ring/50 shadow-popover-glow border-0"';
+  expect([...bad.matchAll(FOREIGN_TOKEN)].length, "token matcher is stale").toBe(4);
+  expect(
+    [...good.matchAll(FOREIGN_TOKEN)].map((match) => match[0]),
+    "token matcher over-matches",
+  ).toEqual([]);
+
+  for (const base of [CONSOLE_SRC, RESULT_VIEW_SRC, WIDGET_SRC]) {
+    const sources = await readSources(base);
+    expect(sources.length, "source scan found no files — path likely stale").toBeGreaterThan(0);
+    for (const { name, text } of sources) {
+      const found = [
+        ...[...text.matchAll(FOREIGN_TOKEN)].map((match) => match[0]),
+        ...[...text.matchAll(FOREIGN_CSS_VAR)].map((match) => match[0]),
+      ];
+      expect(
+        found,
+        `${name} spells colors in the component-slot vocabulary (${found.join(", ")}); use the pa-* name`,
+      ).toEqual([]);
+    }
+  }
+});
+
+const POPUP_SURFACE_CSS = new URL("./presentation_core/tokens.css", import.meta.url);
+const POPUP_SURFACE_CLASS = "pa-popup-surface";
+const POPUP_SURFACE_INGREDIENT = /\bbg-pa-glass-popover\b/g;
+
+test("the anchored-popup surface has exactly one spelling", async () => {
+  expect(
+    [...'className="bg-pa-glass-popover"'.matchAll(POPUP_SURFACE_INGREDIENT)].length,
+    "surface matcher is stale",
+  ).toBe(1);
+  expect(
+    [...'className="bg-pa-glass"'.matchAll(POPUP_SURFACE_INGREDIENT)],
+    "surface matcher over-matches",
+  ).toEqual([]);
+
+  const css = await readFile(POPUP_SURFACE_CSS, "utf8");
+  const recipe = css.match(/\.pa-popup-surface\s*\{([^}]*)\}/);
+  expect(recipe, "tokens.css no longer defines .pa-popup-surface").not.toBeNull();
+  expect(recipe?.[1]).toContain("var(--pa-glass-popover)");
+  expect(recipe?.[1]).toContain("var(--pa-popover-glow)");
+
+  const sources = [
+    ...(await readSources(CONSOLE_SRC)),
+    ...(await readSources(RESULT_VIEW_SRC)),
+    ...(await readSources(WIDGET_SRC)),
+  ];
+  const consumers = sources.filter(({ text }) => text.includes(POPUP_SURFACE_CLASS));
+  expect(
+    consumers.length,
+    "nobody consumes the popup surface — the class name moved",
+  ).toBeGreaterThan(0);
+
+  for (const { name, text } of sources) {
+    expect(
+      [...text.matchAll(POPUP_SURFACE_INGREDIENT)].map((match) => match[0]),
+      `${name} re-spells the popup surface instead of taking .${POPUP_SURFACE_CLASS}`,
+    ).toEqual([]);
+  }
+});
+
+const COMMENT_OR_JSX_COMMENT = /\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+
+const DATA_SELECTOR = [
+  /data-\[([a-z][a-z-]*)[=\]]/g,
+  /(?<![\w-])data-([a-z][a-z-]*):/g,
+  /\[data-([a-z][a-z-]*)[=\]]/g,
+];
+const DATA_EMITTER = [
+  /(?<![\w-])data-([a-z][a-z-]*)\s*=/g,
+  /"data-([a-z][a-z-]*)"\s*:/g,
+  /(?<![\w-])data-([a-z][a-z-]*)(?=[\s/>}])/g,
+];
+
+function collect(text: string, patterns: RegExp[]): Set<string> {
+  const names = new Set<string>();
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) names.add(match[1]);
+  }
+  return names;
+}
+
+async function baseUiAttributes(): Promise<Set<string>> {
+  const names = (await readdir(BASE_UI, { recursive: true })).filter((name) =>
+    name.endsWith(".js"),
+  );
+  const found = new Set<string>();
+  await Promise.all(
+    names.map(async (name) => {
+      const text = await readFile(new URL(name, BASE_UI), "utf8");
+      for (const match of text.matchAll(/['"]data-([a-z][a-z-]*)['"]/g)) found.add(match[1]);
+    }),
+  );
+  return found;
+}
+
+test("every data-* selector has something that emits it", async () => {
+  const bad = 'className="data-[state=open]:bg-pa-surface data-nosuchthing:hidden"';
+  const good = 'className="data-highlighted:bg-pa-surface data-[side=top]:mt-1"';
+  expect(
+    collect("/* 曾误写成 data-nope: */".replaceAll(COMMENT_OR_JSX_COMMENT, " "), DATA_SELECTOR),
+    "comments must not count as selectors",
+  ).toEqual(new Set());
+  expect(collect(bad, DATA_SELECTOR), "selector matcher is stale").toEqual(
+    new Set(["state", "nosuchthing"]),
+  );
+  expect(collect(good, DATA_SELECTOR), "selector matcher missed a form").toEqual(
+    new Set(["highlighted", "side"]),
+  );
+  expect(
+    collect('<div data-slot="row" data-dontdrag data-size={n} />', DATA_EMITTER),
+    "emitter matcher is stale",
+  ).toEqual(new Set(["slot", "dontdrag", "size"]));
+
+  const fromPrimitives = await baseUiAttributes();
+  expect(
+    fromPrimitives.has("highlighted") && fromPrimitives.has("checked"),
+    "Base UI scan found no known attributes — the package path likely moved",
+  ).toBe(true);
+  expect(fromPrimitives.has("state"), "Base UI scan over-matches").toBe(false);
+
+  const sources = [
+    ...(await readSources(CONSOLE_SRC)),
+    ...(await readSources(RESULT_VIEW_SRC)),
+    ...(await readSources(WIDGET_SRC)),
+  ].map((entry) => ({ ...entry, code: entry.text.replaceAll(COMMENT_OR_JSX_COMMENT, " ") }));
+  const emitted = new Set<string>();
+  for (const { code } of sources) for (const name of collect(code, DATA_EMITTER)) emitted.add(name);
+
+  for (const { name, code } of sources) {
+    const dangling = [...collect(code, DATA_SELECTOR)].filter(
+      (attribute) => !emitted.has(attribute) && !fromPrimitives.has(attribute),
+    );
+    expect(
+      dangling,
+      `${name} styles on data-${dangling.join("/")}, which nothing in this repo or in Base UI ever emits — the rule can never match`,
+    ).toEqual([]);
+  }
+});
+
+const COMMENT = /\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+const CLASS_IN_COMMENT =
+  /`((?:bg|text|border|ring|rounded|shadow|px|py|pl|pr|pt|pb|mx|my|ml|mr|mt|mb|gap|min-h|max-h|min-w|max-w|font|leading|opacity|backdrop|overflow|grid|flex|inset|translate|scale|z)-[a-z0-9[\]().,%/_-]+)`/g;
+
+test("class names quoted in comments still exist", async () => {
+  const sources = await readSources(CONSOLE_SRC);
+  const all = sources.map((entry) => entry.text).join("\n");
+  expect(
+    [..."/** 壳走 `rounded-xl`，不是 `rounded-nonexistent-9` */".matchAll(CLASS_IN_COMMENT)].map(
+      (match) => match[1],
+    ),
+    "comment matcher is stale",
+  ).toEqual(["rounded-xl", "rounded-nonexistent-9"]);
+
+  for (const { name, text } of sources) {
+    for (const comment of text.matchAll(COMMENT)) {
+      const body = text.slice(0, comment.index) + text.slice(comment.index + comment[0].length);
+      const rest = all.replace(comment[0], "");
+      for (const quoted of comment[0].matchAll(CLASS_IN_COMMENT)) {
+        const className = quoted[1];
+        expect(
+          body.includes(className) || rest.includes(className),
+          `console/src/${name} documents \`${className}\`, which no longer appears anywhere in console/src`,
+        ).toBe(true);
+      }
+    }
+  }
+});
+
+const CARD_TITLE_FILES = [
+  { base: CONSOLE_SRC, name: "dashboard/boards/tile_shell.tsx" },
+  { base: RESULT_VIEW_SRC, name: "components/view_renderer.tsx" },
+  { base: WIDGET_SRC, name: "components/record_card.tsx" },
+];
+
+const TYPOGRAPHY_CLASS = /^(?:font|text|leading|tracking)-/;
+const CARD_TITLE_SIZE = "text-base";
+
+function typographyOf(className: string): string[] {
+  return className
+    .split(/\s+/)
+    .filter((name) => TYPOGRAPHY_CLASS.test(name))
+    .sort();
+}
+
+test("the card title has one typographic recipe across all three hosts", async () => {
+  expect(
+    typographyOf("min-w-0 flex-1 truncate font-medium text-base text-pa-fg"),
+    "typography matcher is stale",
+  ).toEqual(["font-medium", "text-base", "text-pa-fg"]);
+  expect(
+    typographyOf("min-w-0 flex-1 truncate"),
+    "typography matcher over-matches layout classes",
+  ).toEqual([]);
+
+  expect(
+    typographyOf("font-semibold text-pa-fg text-sm"),
+    "recipe comparison would pass the pre-fix spelling",
+  ).not.toEqual(typographyOf("font-medium text-base text-pa-fg"));
+
+  const recipes = await Promise.all(
+    CARD_TITLE_FILES.map(async ({ base, name }) => {
+      const text = await readFile(new URL(name, base), "utf8");
+      const titles = [...text.matchAll(/className="([^"]*)"/g)]
+        .map((match) => match[1])
+        .filter((className) => className.includes(CARD_TITLE_SIZE));
+      expect(
+        titles.length,
+        `${name} no longer has exactly one ${CARD_TITLE_SIZE} class string — the card title moved or changed size`,
+      ).toBe(1);
+      return { name, recipe: typographyOf(titles[0]) };
+    }),
+  );
+
+  const [first, ...rest] = recipes;
+  for (const { name, recipe } of rest) {
+    expect(
+      recipe,
+      `${name} spells the card title as "${recipe.join(" ")}"; ${first.name} spells it "${first.recipe.join(" ")}" — one semantic, one recipe`,
+    ).toEqual(first.recipe);
+  }
+  expect(first.recipe).toContain(CARD_TITLE_SIZE);
+  expect(first.recipe).toContain("font-medium");
+  for (const weight of ["font-semibold", "font-bold"]) {
+    expect(first.recipe, `card title leans on ${weight} instead of size`).not.toContain(weight);
+  }
+});
+
+const WINDOW_ONLY_WIDTH = /\bWidthProvider\b/g;
+
+test("container width comes from a ResizeObserver, never from a window-only measurer", async () => {
+  expect(
+    [..."const G = WidthProvider(Responsive)".matchAll(WINDOW_ONLY_WIDTH)].length,
+    "width matcher is stale",
+  ).toBe(1);
+  expect(
+    [..."const G = Responsive; // width={size.width}".matchAll(WINDOW_ONLY_WIDTH)],
+    "width matcher over-matches",
+  ).toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  expect(sources.length, "console source scan found no files — path likely stale").toBeGreaterThan(
+    0,
+  );
+  for (const { name, text } of sources) {
+    const code = text.replaceAll(COMMENT_OR_JSX_COMMENT, " ");
+    expect(
+      [...code.matchAll(WINDOW_ONLY_WIDTH)],
+      `console/src/${name} takes its width from WidthProvider; observe the element instead (useElementSize)`,
+    ).toEqual([]);
+  }
+
+  const observed = sources.filter(({ text }) => text.includes("useElementSize"));
+  expect(
+    observed.length,
+    "nobody observes element size — the replacement path is gone",
+  ).toBeGreaterThan(0);
+});
+
+const HEADER_ROW_UNDO = /<TableRow\b[^>]*className=["'][^"']*(?:border-t-0|hover:bg-transparent)/g;
+
+test("primitive defaults are corrected in the primitive, not undone per page", async () => {
+  const bad = '<TableRow className="border-t-0 hover:bg-transparent">';
+  const good = '<TableRow className="cursor-pointer"><TableHead className="w-[60%]" />';
+  expect([...bad.matchAll(HEADER_ROW_UNDO)].length, "header-row matcher is stale").toBe(1);
+  expect([...good.matchAll(HEADER_ROW_UNDO)], "header-row matcher over-matches").toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  expect(sources.length, "console source scan found no files — path likely stale").toBeGreaterThan(
+    0,
+  );
+  for (const { name, text } of sources) {
+    expect(
+      [...text.matchAll(HEADER_ROW_UNDO)],
+      `console/src/${name} undoes the row default on a header row; put the rule on TableHeader instead`,
+    ).toEqual([]);
+  }
+
+  const table = sources.find(({ name }) => name.endsWith("ui/table.tsx"));
+  expect(table, "ui/table.tsx not found — the scan path is stale").toBeDefined();
+  expect(table?.text).toContain("[&_tr]:border-t-0");
+  expect(table?.text).toContain("[&_tr]:hover:bg-transparent");
+});
+
+const OFF_VOCAB_GUTTER = /(?<![@\w-])container(?![\w-])/g;
+
+test("the in-card gutter has exactly one spelling", async () => {
+  const bad = '<div className="container pt-4" /><div className={cn("container flex")} />';
+  const good =
+    '<div className="@container flex" /><div data-slot="table-container" /><div data-slot="sidebar-container" /><div className={cn(MAIN_CARD_BODY_INSET)} />';
+  expect([...bad.matchAll(OFF_VOCAB_GUTTER)].length, "gutter matcher is stale").toBe(2);
+  expect([...good.matchAll(OFF_VOCAB_GUTTER)], "gutter matcher over-matches").toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  expect(sources.length, "console source scan found no files — path likely stale").toBeGreaterThan(
+    0,
+  );
+  for (const { name, text } of sources) {
+    const code = text.replaceAll(COMMENT_OR_JSX_COMMENT, " ");
+    expect(
+      [...code.matchAll(OFF_VOCAB_GUTTER)],
+      `console/src/${name} opens a second in-card gutter with \`container\`; use MAIN_CARD_BODY_INSET`,
+    ).toEqual([]);
+  }
+
+  const gutter = sources.find(({ name }) => name.endsWith("layout/layout_chrome.tsx"));
+  expect(gutter?.text, "layout_chrome no longer defines the single gutter").toContain(
+    "export const MAIN_CARD_BODY_INSET =",
+  );
+  const users = sources.filter(({ text }) => /\bMAIN_CARD_BODY_INSET\b/.test(text));
+  expect(
+    users.length,
+    "the single gutter has no consumers left — it stopped being the one road",
+  ).toBeGreaterThan(1);
+});
+
+const COMPONENT_DEF = /^(?:export )?function ([A-Z][A-Za-z0-9]*)\(/gm;
+
+test("a component name is defined in exactly one file", async () => {
+  const bad = "function EmptyPanel({ text }) {\nexport function EmptyPanel(props) {";
+  const good = "function useThing() {\n  function EmptyPanel() {}\nconst EmptyPanel = 1;";
+  expect(
+    [...bad.matchAll(COMPONENT_DEF)].map((m) => m[1]),
+    "component matcher is stale",
+  ).toEqual(["EmptyPanel", "EmptyPanel"]);
+  expect([...good.matchAll(COMPONENT_DEF)], "component matcher over-matches").toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  expect(sources.length, "console source scan found no files — path likely stale").toBeGreaterThan(
+    0,
+  );
+  const homes = new Map<string, string[]>();
+  for (const { name, text } of sources) {
+    for (const [, component] of text.matchAll(COMPONENT_DEF)) {
+      homes.set(component, [...(homes.get(component) ?? []), name]);
+    }
+  }
+
+  expect(homes.size, "no components found — the matcher stopped matching").toBeGreaterThan(50);
+
+  const shared = [...homes].filter(([, files]) => files.length > 1);
+  expect(
+    shared.map(([component, files]) => `${component}: ${files.join(", ")}`),
+    "the same component is defined in more than one file; give it one home and import it",
+  ).toEqual([]);
+});
+
+const NON_CHINESE_ARIA_LABEL = /aria-label=["']([^"'{}]*)["']/g;
+const HAS_CHINESE = /[一-鿿]/;
+
+test("aria-label is written in the interface's own language", async () => {
+  const bad = 'aria-label="Close" aria-label="pagination"';
+  const good = 'aria-label="关闭" aria-label="API 密钥" aria-label={copyLabel}';
+  expect(
+    [...bad.matchAll(NON_CHINESE_ARIA_LABEL)].map((m) => m[1]),
+    "aria-label matcher is stale",
+  ).toEqual(["Close", "pagination"]);
+  expect(
+    [...good.matchAll(NON_CHINESE_ARIA_LABEL)].map((m) => m[1]).filter((l) => !HAS_CHINESE.test(l)),
+    "aria-label matcher flags Chinese labels or reads into expressions",
+  ).toEqual([]);
+
+  for (const base of [CONSOLE_SRC, RESULT_VIEW_SRC, WIDGET_SRC]) {
+    const sources = await readSources(base);
+    expect(sources.length, "source scan found no files — path likely stale").toBeGreaterThan(0);
+    for (const { name, text } of sources) {
+      const english = [...text.matchAll(NON_CHINESE_ARIA_LABEL)]
+        .map((m) => m[1])
+        .filter((label) => !HAS_CHINESE.test(label));
+      expect(
+        english,
+        `${name} names something in English for screen readers only; write it in Chinese`,
+      ).toEqual([]);
+    }
+  }
+});
+
+const PAGE_WRITTEN_SHEET_WIDTH = /<(?:SheetPopup|SheetContent)\b[^>]*\bmax-w-/g;
+
+test("a page never writes the sidesheet's width", async () => {
+  const bad = '<SheetPopup className="max-w-160">';
+  const good = '<SheetPopup>\n<DialogPopup className="max-w-lg">';
+  expect([...bad.matchAll(PAGE_WRITTEN_SHEET_WIDTH)], "sheet width matcher is stale").toHaveLength(
+    1,
+  );
+  expect([...good.matchAll(PAGE_WRITTEN_SHEET_WIDTH)], "sheet width matcher over-matches").toEqual(
+    [],
+  );
+
+  const sources = await readSources(CONSOLE_SRC);
+  for (const { name, text } of sources) {
+    if (name.endsWith("components/ui/sheet.tsx")) continue;
+    expect(
+      [...text.matchAll(PAGE_WRITTEN_SHEET_WIDTH)],
+      `console/src/${name} writes the sidesheet width; it belongs to ui/sheet.tsx`,
+    ).toEqual([]);
+  }
+
+  const sheet = sources.find(({ name }) => name.endsWith("components/ui/sheet.tsx"));
+  expect(sheet?.text, "ui/sheet.tsx no longer defines the single sidesheet width").toMatch(
+    /const SIDESHEET_WIDTH = ["']max-w-/,
+  );
+});
+
+const RAW_H1 = /<h1\b/g;
+const H1_OWNERS = [
+  "login.tsx",
+  "dashboard/layout/shell.tsx",
+  "dashboard/boards/board_page.tsx",
+  "dashboard/analyses/chart_stage.tsx",
+];
+
+test("only page-naming components may emit an h1", async () => {
+  expect([...'<h1 className="x">'.matchAll(RAW_H1)], "h1 matcher is stale").toHaveLength(1);
+  expect([...'<h2 className="x">'.matchAll(RAW_H1)], "h1 matcher over-matches").toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  const emitters = sources.filter(({ text }) => RAW_H1.test(text)).map(({ name }) => name);
+  RAW_H1.lastIndex = 0;
+  expect(
+    emitters.filter((name) => !H1_OWNERS.some((owner) => name.endsWith(owner))),
+    "这些件发了页级标题；一个视图只有一个 h1，从属层级请从 h2 起",
+  ).toEqual([]);
+  expect(emitters.length, "h1 一个都没扫到，名单已经形同虚设").toBeGreaterThan(2);
+});
+
+const OPTION_ROW = /<InspectorOptionRow\b([\s\S]*?)<\/InspectorOptionRow>/g;
+
+function unnamedSelectRows(text: string): string[] {
+  const bad: string[] = [];
+  for (const [block, body] of text.matchAll(OPTION_ROW)) {
+    if (!body.includes("<SelectTrigger")) continue;
+    if (/label=\{[\s\S]{0,80}?<SelectLabel\b/.test(block)) continue;
+    bad.push(block.slice(0, 60).replaceAll(/\s+/g, " "));
+  }
+  return bad;
+}
+
+test("a settings row names its control, it does not merely sit next to it", async () => {
+  const BAD = '<InspectorOptionRow label="坐标轴">\n<SelectTrigger />\n</InspectorOptionRow>';
+  const GOOD =
+    "<InspectorOptionRow label={<SelectLabel>坐标轴</SelectLabel>}>\n<SelectTrigger />\n</InspectorOptionRow>";
+  const TEXT_ONLY = '<InspectorOptionRow label="类型">\n<span>指标</span>\n</InspectorOptionRow>';
+  expect(unnamedSelectRows(BAD), "探测器失灵").toHaveLength(1);
+  expect(unnamedSelectRows(GOOD), "探测器把自带命名件的那种也当成了裸标签").toEqual([]);
+  expect(unnamedSelectRows(TEXT_ONLY), "静态文本行没有控件可命名，不该被拦").toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  const rows = sources.filter(({ text }) => text.includes("<InspectorOptionRow"));
+  expect(rows.length, "一处设置行都没扫到，这条规则已经形同虚设").toBeGreaterThan(1);
+  for (const { name, text } of rows) {
+    expect(
+      unnamedSelectRows(text),
+      `console/src/${name} 的设置行给下拉配了纯文本标签；改用 <SelectLabel>，否则它念出来是当前值`,
+    ).toEqual([]);
+  }
+});
+
+const AUTOCOMPLETE_TRIGGER = /<AutocompleteTrigger\b([\s\S]*?)>/g;
+
+function unnamedComboTriggers(text: string): string[] {
+  return [...text.matchAll(AUTOCOMPLETE_TRIGGER)]
+    .filter(([, attrs]) => !attrs.includes("aria-label") && !attrs.includes("render="))
+    .map(([tag]) => tag.replaceAll(/\s+/g, " ").slice(0, 60));
+}
+
+test("a self-drawn combobox trigger carries its own name", async () => {
+  expect(unnamedComboTriggers('<AutocompleteTrigger className="x">'), "探测器失灵").toHaveLength(1);
+  expect(
+    unnamedComboTriggers('<AutocompleteTrigger aria-label="添加瓦片" className="x">'),
+    "探测器把写了名字的也算成漏写",
+  ).toEqual([]);
+  expect(
+    unnamedComboTriggers("<AutocompleteTrigger render={trigger} />"),
+    "render= 的名字挂在别处，本条不该管",
+  ).toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  const hosts = sources.filter(({ text }) => text.includes("<AutocompleteTrigger"));
+  expect(hosts.length, "一处自绘触发件都没扫到，这条规则已经形同虚设").toBeGreaterThan(0);
+  for (const { name, text } of hosts) {
+    expect(
+      unnamedComboTriggers(text),
+      `console/src/${name} 的下拉触发件没有名字；面上那行字给不了它，写 aria-label`,
+    ).toEqual([]);
+  }
+});
+
+const COMMAND_POPUP = /<CommandDialogPopup\b([^>]*)>/g;
+
+function popupsWithoutFinalFocus(text: string): string[] {
+  return [...text.matchAll(COMMAND_POPUP)]
+    .filter(([, attrs]) => !attrs.includes("finalFocus"))
+    .map(([tag]) => tag.replaceAll(/\s+/g, " "));
+}
+
+test("trigger-less command popups say where focus goes back to", async () => {
+  expect(popupsWithoutFinalFocus("<CommandDialogPopup>"), "探测器失灵").toHaveLength(1);
+  expect(
+    popupsWithoutFinalFocus("<CommandDialogPopup finalFocus={opener}>"),
+    "探测器把交代过的那种也算成漏写",
+  ).toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  const hosts = sources.filter(({ text }) => text.includes("<CommandDialogPopup"));
+  expect(hosts.length, "命令面壳挪了位置或改了写法，这条规则已经落空").toBeGreaterThan(0);
+  for (const { name, text } of hosts) {
+    expect(
+      popupsWithoutFinalFocus(text),
+      `console/src/${name} 没交代 finalFocus；关掉后键盘焦点会落到别处`,
+    ).toEqual([]);
+  }
+});
+
+const SPIN_USE = /\banimate-spin\b/g;
+const SPIN_ESCORTS = ["components/ui/toast.tsx"];
+
+test("the spin is an escort to words, never a second waiting mark", async () => {
+  expect(
+    [...'className="size-4 animate-spin"'.matchAll(SPIN_USE)],
+    "matcher is stale",
+  ).toHaveLength(1);
+  expect([...'className="animate-spinner"'.matchAll(SPIN_USE)], "matcher over-matches").toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  for (const { name, text } of sources) {
+    if (SPIN_ESCORTS.some((escort) => name.endsWith(escort))) continue;
+    expect(
+      [...text.matchAll(SPIN_USE)],
+      `console/src/${name} spins on its own; a wait is marked by LoadingMark`,
+    ).toEqual([]);
+  }
+
+  for (const escort of SPIN_ESCORTS) {
+    const source = sources.find(({ name }) => name.endsWith(escort));
+    expect(source?.text, `${escort} no longer spins; this exemption has lost its subject`).toMatch(
+      SPIN_USE,
+    );
+  }
+});
+
+const PIXEL_TYPOGRAPHY = /\b(?:text|leading)-\[\d+px\]|\bfont-\[\d+\]/g;
+const HAND_WRITTEN_RADIUS = /\brounded(?:-[a-z]+)?-\[(?!inherit\])[^\]]+\]/g;
+const DISPLAY_RAMP = "components/kpis.tsx";
+
+const HAND_DRAWN_ROUND = /\brounded-full\b/g;
+const ROUND_PRIMITIVES = "components/ui/";
+
+const NEUTRAL_CHIP = ["rounded-sm", "h-5", "px-1.5", "bg-pa-surface", "text-pa-muted", "text-xs"];
+
+const FILL_HOVER = /\b(?:hover|data-pressed|data-highlighted|data-popup-open):bg-pa-[a-z-]+/;
+const COLOUR_TRANSITION = /\btransition(?:-colors)?\b(?!-(?:opacity|transform|shadow|\[))/;
+
+const DISABLED_BORROWS_CONTENT = /\bdata-disabled:|\bdisabled:/.source;
+const BORROWED_FAINT = new RegExp(
+  `(?:${DISABLED_BORROWS_CONTENT})(?:\\[&_svg\\]:)?text-pa-faint\\b`,
+  "g",
+);
+
+const BORROWED_PLACEHOLDER = /(?<![\w-])placeholder:text-pa-(?:faint|muted)\b/g;
+
+test("typography comes from the named steps, never hand-written pixels", async () => {
+  const bad = 'className="text-[13px] font-[450] leading-[17px]"';
+  const good = 'className="text-[1.75rem] text-[length:inherit] leading-[inherit] size-[13px]"';
+  expect([...bad.matchAll(PIXEL_TYPOGRAPHY)], "typography matcher is stale").toHaveLength(3);
+  expect([...good.matchAll(PIXEL_TYPOGRAPHY)], "typography matcher over-matches").toEqual([]);
+
+  const hosts = [
+    { label: "console", base: CONSOLE_SRC },
+    { label: "result_view", base: RESULT_VIEW_SRC },
+    { label: "widget", base: WIDGET_SRC },
+  ];
+  for (const { label, base } of hosts) {
+    const sources = await readSources(base);
+    expect(
+      sources.length,
+      `${label} source scan found no files — path likely stale`,
+    ).toBeGreaterThan(0);
+    for (const { name, text } of sources) {
+      if (name.endsWith(DISPLAY_RAMP)) continue;
+      expect(
+        [...text.matchAll(PIXEL_TYPOGRAPHY)],
+        `${label}/src/${name} writes typography in pixels; take the named step, or fix the step in tokens.css`,
+      ).toEqual([]);
+    }
+  }
+});
+
+test("the radius ladder has no hand-written steps", async () => {
+  const bad = 'className="rounded-[5px] rounded-[calc(var(--radius)-1px)] rounded-tl-[7px]"';
+  const good = 'className="rounded-md rounded-avatar rounded-[inherit] size-[13px]"';
+  expect([...bad.matchAll(HAND_WRITTEN_RADIUS)], "radius matcher is stale").toHaveLength(3);
+  expect([...good.matchAll(HAND_WRITTEN_RADIUS)], "radius matcher over-matches").toEqual([]);
+
+  const hosts = [
+    { label: "console", base: CONSOLE_SRC },
+    { label: "result_view", base: RESULT_VIEW_SRC },
+    { label: "widget", base: WIDGET_SRC },
+  ];
+  for (const { label, base } of hosts) {
+    const sources = await readSources(base);
+    expect(
+      sources.length,
+      `${label} source scan found no files — path likely stale`,
+    ).toBeGreaterThan(0);
+    for (const { name, text } of sources) {
+      expect(
+        [...text.matchAll(HAND_WRITTEN_RADIUS)],
+        `${label}/src/${name} writes a radius by hand; take the named step, or add the step in tokens.css`,
+      ).toEqual([]);
+    }
+  }
+
+  const consoleCss = await readFile(new URL("../console/src/styles.css", import.meta.url), "utf8");
+  expect(consoleCss, "console re-declared a radius step; the ladder has one home").not.toMatch(
+    /--radius(?:-[a-z0-9]+)?\s*:/,
+  );
+});
+
+test("the pill and the round badge are drawn by primitives, not by call sites", async () => {
+  const bad = '<Button className="h-8 rounded-full px-3" />';
+  const good = '<Button shape="pill" /><span className="rounded-lg" />';
+  expect([...bad.matchAll(HAND_DRAWN_ROUND)], "round matcher is stale").toHaveLength(1);
+  expect([...good.matchAll(HAND_DRAWN_ROUND)], "round matcher over-matches").toEqual([]);
+
+  const hosts = [
+    { label: "console", base: CONSOLE_SRC },
+    { label: "result_view", base: RESULT_VIEW_SRC },
+    { label: "widget", base: WIDGET_SRC },
+  ];
+  const consoleSources = await readSources(CONSOLE_SRC);
+  for (const { label, base } of hosts) {
+    const sources = label === "console" ? consoleSources : await readSources(base);
+    expect(
+      sources.length,
+      `${label} source scan found no files — path likely stale`,
+    ).toBeGreaterThan(0);
+    for (const { name, text } of sources) {
+      if (name.startsWith(ROUND_PRIMITIVES)) continue;
+      expect(
+        [...text.matchAll(HAND_DRAWN_ROUND)],
+        `${label}/src/${name} draws a round shape by hand; take Button's size / shape="pill" or Avatar`,
+      ).toEqual([]);
+    }
+  }
+
+  const button = consoleSources.find(({ name }) => name.endsWith("ui/button.tsx"));
+  const avatar = consoleSources.find(({ name }) => name.endsWith("ui/avatar.tsx"));
+  expect(button?.text, "ui/button.tsx no longer emits the pill").toContain("rounded-full");
+  expect(avatar?.text, "ui/avatar.tsx no longer emits the round badge").toContain("rounded-full");
+});
+
+const CHIP_CLASS = /function DerivedBadge\(\)[\s\S]*?className="([^"]*)"/;
+
+const HEADING_TAG = /<h[12]\s+className="([^"]*)"/g;
+const HEADING_DISPLAY_EXEMPT = "login.tsx";
+
+function classLiterals(text: string): string[] {
+  return [...text.matchAll(/"([^"\n]{12,})"|`([^`\n]{12,})`/g)].map((m) => m[1] ?? m[2] ?? "");
+}
+
+test("page headings all carry the title weight", async () => {
+  const bad = '<h2 className="text-xl font-medium">账号</h2>';
+  const good = '<h1 className="truncate text-xl font-semibold">看板</h1>';
+
+  const good2 = '<h1 className="min-w-0 truncate">{title}</h1>';
+  const weights = (text: string) =>
+    [...text.matchAll(HEADING_TAG)]
+      .map((m) => m[1] ?? "")
+      .filter((c) => /\bfont-(?:normal|medium)\b/.test(c));
+  expect(weights(bad), "heading matcher is stale").toHaveLength(1);
+  expect(weights(good + good2), "heading matcher over-matches").toEqual([]);
+
+  for (const { name, text } of await readSources(CONSOLE_SRC)) {
+    if (name.endsWith(HEADING_DISPLAY_EXEMPT)) continue;
+    expect(
+      weights(text),
+      `console/src/${name} sets a page heading below the title weight; take font-semibold`,
+    ).toEqual([]);
+  }
+
+  const tokens = await readFile(new URL("./presentation_core/tokens.css", import.meta.url), "utf8");
+  expect(tokens, "the title weight drifted off 520").toContain("--font-weight-semibold: 520;");
+});
+
+test("a hover fill lands with the pointer, never fades in", async () => {
+  const bad = '"rounded-md transition-colors duration-150 hover:bg-pa-surface"';
+  const good =
+    '"transition-opacity duration-300 hover:opacity-85" + "rounded-md hover:bg-pa-surface" + "transition duration-200 hover:border-pa-line-hover"';
+  const hits = (text: string) =>
+    classLiterals(text).filter((c) => FILL_HOVER.test(c) && COLOUR_TRANSITION.test(c));
+  expect(hits(bad), "fill-hover matcher is stale").toHaveLength(1);
+  expect(hits(good), "fill-hover matcher over-matches").toEqual([]);
+
+  for (const base of [CONSOLE_SRC, RESULT_VIEW_SRC, WIDGET_SRC]) {
+    for (const { name, text } of await readSources(base)) {
+      expect(
+        hits(text),
+        `${name} fades a hover fill in; the grey means "the pointer is here" and must not lag it`,
+      ).toEqual([]);
+    }
+  }
+
+  const input = (await readSources(CONSOLE_SRC)).find(({ name }) => name.endsWith("ui/input.tsx"));
+  expect(input?.text, "the input frame lost its transition").toContain("transition duration-200");
+});
+
+test("chrome axes don't borrow the content tiers", async () => {
+  const bad = 'className="disabled:text-pa-faint data-disabled:[&_svg]:text-pa-faint"';
+  const good = 'className="text-pa-faint disabled:text-pa-disabled-fg"';
+  expect([...bad.matchAll(BORROWED_FAINT)], "disabled-borrow matcher is stale").toHaveLength(2);
+  expect([...good.matchAll(BORROWED_FAINT)], "disabled-borrow matcher over-matches").toEqual([]);
+
+  const badHold = 'className="placeholder:text-pa-faint placeholder:text-pa-muted"';
+  const goodHold =
+    'className="text-pa-muted placeholder:text-pa-placeholder data-placeholder:text-pa-muted"';
+  expect([...badHold.matchAll(BORROWED_PLACEHOLDER)], "placeholder matcher is stale").toHaveLength(
+    2,
+  );
+  expect([...goodHold.matchAll(BORROWED_PLACEHOLDER)], "placeholder matcher over-matches").toEqual(
+    [],
+  );
+
+  for (const base of [CONSOLE_SRC, RESULT_VIEW_SRC, WIDGET_SRC]) {
+    for (const { name, text } of await readSources(base)) {
+      expect(
+        [...text.matchAll(BORROWED_FAINT)],
+        `${name} paints a disabled control with the content tier; take pa-disabled-fg`,
+      ).toEqual([]);
+      expect(
+        [...text.matchAll(BORROWED_PLACEHOLDER)],
+        `${name} paints a placeholder with the content tier; take pa-placeholder`,
+      ).toEqual([]);
+    }
+  }
+
+  const tokens = await readFile(new URL("./presentation_core/tokens.css", import.meta.url), "utf8");
+  for (const axis of ["disabled-fg", "placeholder"]) {
+    expect(tokens, `tokens.css dropped the ${axis} axis`).toContain(`--pa-${axis}:`);
+    expect(tokens, `pa-${axis} is not exposed to Tailwind`).toContain(`--color-pa-${axis}:`);
+  }
+});
+
+test("the neutral chip reads the same in every host", async () => {
+  const sample =
+    'function DerivedBadge() {\n  return <span className="rounded-sm px-1.5">派生</span>;\n}';
+  expect(CHIP_CLASS.exec(sample)?.[1], "chip class probe is stale").toBe("rounded-sm px-1.5");
+  expect(
+    CHIP_CLASS.exec('<input className="border-pa-line" />')?.[1],
+    "chip class probe over-matches",
+  ).toBeUndefined();
+
+  const badge = (await readSources(CONSOLE_SRC)).find(({ name }) => name.endsWith("ui/badge.tsx"));
+  const derived = (await readSources(RESULT_VIEW_SRC)).find(({ name }) =>
+    name.endsWith("components/view_renderer.tsx"),
+  );
+  expect(badge?.text, "console/src/components/ui/badge.tsx not found").toBeString();
+  expect(derived?.text, "result_view/src/components/view_renderer.tsx not found").toBeString();
+
+  const chip = CHIP_CLASS.exec(derived?.text ?? "")?.[1];
+  expect(chip, "result_view's DerivedBadge no longer matches the probe").toBeString();
+
+  for (const token of NEUTRAL_CHIP) {
+    expect(
+      badge?.text,
+      `ui/badge.tsx no longer carries ${token}; the pinned recipe is stale`,
+    ).toContain(token);
+    expect(chip, `result_view's 派生 chip drifted from ui/badge.tsx on ${token}`).toContain(token);
+  }
+
+  expect(chip, "result_view's 派生 chip grew a border; badges carry no outline").not.toContain(
+    "border",
+  );
+});
+
+const HAND_ROLLED_CLOSE = /aria-label="关闭"[\s\S]{0,160}?<Button\b/g;
+
+test("the overlay close button is drawn in one place", async () => {
+  const bad = '<DialogClose aria-label="关闭" render={<Button size="icon" variant="subtle" />}>';
+  const good = '<DialogClose aria-label="关闭" render={<OverlayCloseButton />}>';
+  expect([...bad.matchAll(HAND_ROLLED_CLOSE)], "close-button matcher is stale").toHaveLength(1);
+  expect([...good.matchAll(HAND_ROLLED_CLOSE)], "close-button matcher over-matches").toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  for (const { name, text } of sources) {
+    if (name.endsWith("components/ui/toast.tsx")) continue;
+    expect(
+      [...text.matchAll(HAND_ROLLED_CLOSE)],
+      `console/src/${name} draws its own close button; it belongs to ui/dialog.tsx`,
+    ).toEqual([]);
+  }
+
+  const dialog = sources.find(({ name }) => name.endsWith("components/ui/dialog.tsx"));
+  expect(dialog?.text, "ui/dialog.tsx no longer defines the single close-button shape").toMatch(
+    /export function OverlayCloseButton\b/,
+  );
+  expect(dialog?.text, "ui/dialog.tsx no longer defines the single close-button inset").toMatch(
+    /export const OVERLAY_CLOSE_INSET_CLASS = ["']absolute /,
+  );
+});
+
+const PILL_SHAPE = /shape=["']pill["']/g;
+const PILL_SHAPE_HOMES = ["dashboard/layout/view_chrome.tsx", "components/ui/dialog.tsx"];
+
+test("the pill icon button stays an exception", async () => {
+  expect([...'<Button shape="pill" size="icon-sm" />'.matchAll(PILL_SHAPE)]).toHaveLength(1);
+  expect([...'<Button size="icon-sm" variant="subtle" />'.matchAll(PILL_SHAPE)]).toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  for (const { name, text } of sources) {
+    if (name.endsWith("components/ui/button.tsx")) continue;
+    if (PILL_SHAPE_HOMES.some((home) => name.endsWith(home))) continue;
+    expect(
+      [...text.matchAll(PILL_SHAPE)],
+      `console/src/${name} takes the title-bar pill outside the title bar`,
+    ).toEqual([]);
+  }
+
+  for (const home of PILL_SHAPE_HOMES) {
+    const source = sources.find(({ name }) => name.endsWith(home));
+    expect(source?.text, `${home} no longer spells the pill exception`).toMatch(PILL_SHAPE);
+  }
+
+  const chrome = sources.find(({ name }) => name.endsWith("dashboard/layout/view_chrome.tsx"));
+  expect(chrome?.text, "the title-bar icon button fell back to the content step").toMatch(
+    /size="icon"/,
+  );
+  const sidebar = sources.find(({ name }) => name.endsWith("components/ui/sidebar.tsx"));
+  expect(sidebar?.text, "the sidebar tool button no longer takes the shell round").toMatch(
+    /sidebarToolButtonClass =\s*\n?\s*"[^"]*\brounded-full\b/,
+  );
+});
+
+const OVERRIDDEN_SMALLEST_LEADING =
+  /text-2xs[^"'`]*\bleading-(?:4|5|6|7|relaxed|normal|loose)\b|\bleading-(?:4|5|6|7|relaxed|normal|loose)[^"'`]*text-2xs/g;
+
+test("the smallest type step is not re-leaded into a paragraph", async () => {
+  const bad = 'className="px-2 py-1.5 text-2xs leading-4 text-pa-muted"';
+  const good = 'className="px-1 text-2xs leading-none text-pa-muted"';
+  expect(
+    [...bad.matchAll(OVERRIDDEN_SMALLEST_LEADING)],
+    "smallest-step matcher is stale",
+  ).toHaveLength(1);
+  expect(
+    [...good.matchAll(OVERRIDDEN_SMALLEST_LEADING)],
+    "smallest-step matcher over-matches",
+  ).toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  for (const { name, text } of sources) {
+    expect(
+      [...text.matchAll(OVERRIDDEN_SMALLEST_LEADING)],
+      `console/src/${name} re-leads the smallest step; a hint paragraph takes <Hint>`,
+    ).toEqual([]);
+  }
+
+  const hint = sources.find(({ name }) => name.endsWith("components/ui/hint.tsx"));
+  expect(hint?.text, "ui/hint.tsx no longer defines the single hint step").toMatch(
+    /export const HINT_TEXT = /,
+  );
+});
+
+const RAW_AUTOCOMPLETE_INPUT = /<AutocompletePrimitive\.Input\b/g;
+const AUTOCOMPLETE_INPUT_HOMES = ["components/ui/autocomplete.tsx", "components/ui/command.tsx"];
+
+test("the popup search row is drawn in one place", async () => {
+  expect([
+    ...'<AutocompletePrimitive.Input aria-label="搜索" />'.matchAll(RAW_AUTOCOMPLETE_INPUT),
+  ]).toHaveLength(1);
+  expect([...'<AutocompleteSearch aria-label="搜索" />'.matchAll(RAW_AUTOCOMPLETE_INPUT)]).toEqual(
+    [],
+  );
+
+  const sources = await readSources(CONSOLE_SRC);
+  for (const { name, text } of sources) {
+    if (AUTOCOMPLETE_INPUT_HOMES.some((home) => name.endsWith(home))) continue;
+    expect(
+      [...text.matchAll(RAW_AUTOCOMPLETE_INPUT)],
+      `console/src/${name} spells its own search row; it belongs to ui/autocomplete.tsx`,
+    ).toEqual([]);
+  }
+
+  const autocomplete = sources.find(({ name }) => name.endsWith("components/ui/autocomplete.tsx"));
+  expect(autocomplete?.text, "ui/autocomplete.tsx no longer exports the search row").toMatch(
+    /export function AutocompleteSearch\b/,
+  );
+});

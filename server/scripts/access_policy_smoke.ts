@@ -1,0 +1,84 @@
+/** 公开 Demo 的 Cube access_policy 实链：组映射、组织范围和正式指标可见性。 */
+import { createCubeGateway } from "../src/adapters/cube_gateway.js";
+import { SERVICE_CUBE_CONTEXT } from "../src/engine/cube_security.js";
+import { withFormalMetricModel } from "../src/engine/formal_metric_gateway.js";
+import type { CubeQuery, CubeSecurityContext } from "../src/ports/cube_gateway.js";
+import {
+  configuredSemanticPackageDir,
+  loadSemanticPackage,
+} from "../src/engine/semantic_package.js";
+
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) throw new Error(message);
+}
+
+const apiSecret = process.env.CUBEJS_API_SECRET;
+if (!apiSecret) throw new Error("缺少 CUBEJS_API_SECRET");
+const semanticPackage = await loadSemanticPackage(configuredSemanticPackageDir());
+if (semanticPackage.id !== "pa_demo") throw new Error("本冒烟只验证公开 pa_demo 包");
+const cube = withFormalMetricModel(
+  createCubeGateway({
+    cubeUrl: process.env.CUBE_URL ?? "http://localhost:4000",
+    apiSecret,
+    serviceContext: SERVICE_CUBE_CONTEXT,
+  }),
+  semanticPackage.formal_metrics,
+);
+
+const full: CubeSecurityContext = { subject: "full", groups: ["pa_full"], orgScope: "*" };
+const scoped: CubeSecurityContext = {
+  subject: "scoped",
+  groups: ["pa_scoped"],
+  orgScope: ["Aurora Labs"],
+};
+const unknown: CubeSecurityContext = {
+  subject: "unknown",
+  groups: ["unknown"],
+  orgScope: "*",
+};
+const expectedViews = [
+  "employee_hire_metrics",
+  "employee_hire_records",
+  "employee_leave_metrics",
+  "employee_leave_records",
+  "employee_snapshot_metrics",
+  "employee_snapshot_records",
+  "headcount_plan_metrics",
+];
+for (const context of [full, scoped]) {
+  const names = (await cube.meta(context)).map((view) => view.name).sort();
+  assert(JSON.stringify(names) === JSON.stringify(expectedViews), `公开 View 不完整：${names}`);
+}
+assert((await cube.meta(unknown)).length === 0, "未知组不应看到任何 View");
+
+const { dataAsOf } = await cube.timeContext();
+const [year, month] = dataAsOf.split("-");
+const query: CubeQuery = {
+  measures: ["employee_snapshot_metrics.active_employee_count"],
+  dimensions: ["employee_snapshot_metrics.organization_name"],
+  filters: [
+    { member: "employee_snapshot_metrics.year", operator: "equals", values: [year] },
+    { member: "employee_snapshot_metrics.month", operator: "equals", values: [String(+month)] },
+  ],
+};
+const fullRows = (await cube.load(query, full)).data;
+const scopedRows = (await cube.load(query, scoped)).data;
+assert(fullRows.length === 2, "全量身份应看到两个虚构组织");
+assert(
+  scopedRows.length === 1 &&
+    scopedRows[0]?.["employee_snapshot_metrics.organization_name"] === "Aurora Labs",
+  "受限身份只能看到配置的虚构组织",
+);
+const sql = await cube.sql(query, scoped);
+assert(
+  sql.some((statement) => statement.params.includes("Aurora Labs")),
+  "组织范围必须进入 Cube 生成 SQL 的参数",
+);
+
+const views = await cube.meta(scoped);
+const hire = views.find((view) => view.name === "employee_hire_metrics");
+assert(
+  hire?.measures.some((measure) => measure.name.endsWith(".current_month_new_hire_rate")),
+  "叶子指标可见时正式入职率应进入权限裁剪后的目录",
+);
+console.log("公开 Demo access_policy 冒烟通过");

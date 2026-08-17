@@ -1,0 +1,96 @@
+import { expect, test } from "bun:test";
+import { CATALOG_OUTPUT_SCHEMA, RECORDS_OUTPUT_SCHEMA, RUN_OUTPUT_SCHEMA } from "./contracts.js";
+
+test("公共 MCP 响应 schema 递归 strict，物理字段不能被静默剥离", () => {
+  const catalog = {
+    default_population_scope: "测试人群口径。",
+    data_as_of: "2026-07",
+    time_context: [],
+    metric_domains: [
+      {
+        id: "metric_domain:workforce",
+        title: "人员规模",
+        measure_ids: ["measure:active_employee_count"],
+        dimension_ids: [],
+      },
+    ],
+    measures: [
+      {
+        id: "measure:active_employee_count",
+        kind: "measure",
+        title: "在职人数",
+        description: "月末在职人数。",
+      },
+    ],
+    dimensions: [],
+    matched_terms: ["在职人数"],
+    unmatched_terms: [],
+    ambiguous_terms: [],
+    term_knowledge_status: "available",
+    term_resolutions: [],
+  };
+  expect(CATALOG_OUTPUT_SCHEMA.safeParse(catalog).success).toBe(true);
+  expect(
+    CATALOG_OUTPUT_SCHEMA.safeParse({
+      ...catalog,
+      measures: [{ ...catalog.measures[0], name: "test_people_metrics.active_employee_count" }],
+    }).success,
+  ).toBe(false);
+  expect(
+    CATALOG_OUTPUT_SCHEMA.safeParse({
+      ...catalog,
+      unexpected_key: "test_people_metrics",
+    }).success,
+  ).toBe(false);
+
+  const run = {
+    analysis_id: "018f5da8-7a4c-7d4d-9f3a-8a3c7f4b4c01",
+    default_population_scope: "测试人群口径。",
+    data_as_of: "2026-07",
+    time_context: [],
+    view: {
+      id: "result",
+      columns: ["measure:active_employee_count"],
+      column_roles: { "measure:active_employee_count": "measure" },
+      rows: [[12]],
+      row_count: 1,
+      time: {
+        grain: "total",
+        coordinates: [{ role: "primary", from: "2026-07", to: "2026-07" }],
+        buckets: [{ key: null, from: "2026-07", to: "2026-07" }],
+      },
+      query_notes: [
+        {
+          member: "measure:active_employee_count",
+          title: "在职人数",
+          text: "月末在职人数。",
+        },
+      ],
+    },
+  };
+  expect(RUN_OUTPUT_SCHEMA.safeParse(run).success).toBe(true);
+  // derived 不在公共输出协议内：工件内部的派生声明不得随结果外泄。
+  expect(
+    RUN_OUTPUT_SCHEMA.safeParse({
+      ...run,
+      view: { ...run.view, derived: { formula: "a+b" } },
+    }).success,
+  ).toBe(false);
+
+  const records = {
+    analysis_id: "018f5da8-7a4c-7d4d-9f3a-8a3c7f4b4c01",
+    metric_id: "measure:active_employee_count",
+    metric_title: "在职人数",
+    record_set_title: "在职员工",
+    record_set_description: "构成在职人数的员工记录。",
+    offset: 0,
+    displayed_records: 1,
+    has_more: false,
+    data_as_of: "2026-07",
+    data_changed: false,
+  };
+  expect(RECORDS_OUTPUT_SCHEMA.safeParse(records).success).toBe(true);
+  expect(RECORDS_OUTPUT_SCHEMA.safeParse({ ...records, rows: [["e_001", "张三"]] }).success).toBe(
+    false,
+  );
+});

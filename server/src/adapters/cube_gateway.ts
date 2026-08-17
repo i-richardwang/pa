@@ -1,0 +1,357 @@
+/** Cube Core HTTP 适配器：负责鉴权、缓存、协议调用与响应归一。 */
+import { SignJWT } from "jose";
+import {
+  TIME_SOURCES,
+  parseTimeSourceKey,
+  type TimeSourceKey,
+} from "../semantic_core/time_source.js";
+import type {
+  CubeGateway,
+  CubeMember,
+  CubeQuery,
+  CubeSecurityContext,
+  CubeView,
+  GeneratedSqlStatement,
+  LoadResponse,
+  SqlParameter,
+  TimeContext,
+  TimeSourceContext,
+} from "../ports/cube_gateway.js";
+
+export type CubeGatewayConfig = {
+  cubeUrl: string;
+  apiSecret: string;
+  serviceContext: CubeSecurityContext;
+};
+
+const TOKEN_TTL_S = 3600;
+const META_TTL_MS = 5 * 60 * 1000;
+
+type CubeGatewayState = {
+  config: CubeGatewayConfig;
+  tokenCache: Map<string, { token: string; expiresAt: number }>;
+  metaCache: Map<string, { views: CubeView[]; fetchedAt: number }>;
+  timeContextCache: { value: TimeContext; fetchedAt: number } | null;
+};
+
+function contextKey(context: CubeSecurityContext): string {
+  return JSON.stringify([context.subject, context.groups, context.orgScope]);
+}
+
+async function token(state: CubeGatewayState, context: CubeSecurityContext): Promise<string> {
+  const key = contextKey(context);
+  const cached = state.tokenCache.get(key);
+  if (cached && cached.expiresAt - Date.now() > 5 * 60 * 1000) return cached.token;
+  const jwt = await new SignJWT({
+    email: context.subject,
+    groups: context.groups,
+    org_scope: context.orgScope,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(context.subject)
+    .setExpirationTime(`${TOKEN_TTL_S}s`)
+    .sign(new TextEncoder().encode(state.config.apiSecret));
+  state.tokenCache.set(key, {
+    token: jwt,
+    expiresAt: Date.now() + TOKEN_TTL_S * 1000,
+  });
+  return jwt;
+}
+
+/**
+ * 引擎应答的统一入口：网络失败、非 JSON（如网关 502 页面）、HTTP 错误在此转成
+ * 可指引重试的信息——这是所有工具调用的必经层，不把故障以 TypeError 形态漏给上层。
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function request(
+  state: CubeGatewayState,
+  path: string,
+  context: CubeSecurityContext,
+  init?: RequestInit,
+): Promise<unknown> {
+  let res: Response;
+  try {
+    res = await fetch(`${state.config.cubeUrl}/cubejs-api/v1${path}`, {
+      ...init,
+      headers: {
+        Authorization: await token(state, context),
+        "Content-Type": "application/json",
+        ...init?.headers,
+      },
+    });
+  } catch (e) {
+    throw new Error(`Cube 引擎不可达（${state.config.cubeUrl}）：${(e as Error).message}`);
+  }
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error(`Cube 引擎返回非 JSON 应答（HTTP ${res.status}），引擎可能未就绪`);
+  }
+  if (!isRecord(body) && !Array.isArray(body)) {
+    throw new Error(`Cube 引擎应答格式异常（HTTP ${res.status}）`);
+  }
+  if (!res.ok && !(isRecord(body) && body.error)) throw new Error(`Cube HTTP ${res.status}`);
+  return body;
+}
+
+/**
+ * /v1/meta：只含 public views。5 分钟缓存。
+ * meta.internal 成员不进入公开成员数组；服务端契约解析仍可从独立字段读取，
+ * 目录、查询规划与层级补全只消费 measures/dimensions。
+ */
+export function normalizeMetaViews(cubes: (CubeView & { type: string })[]): CubeView[] {
+  const isInternal = (member: CubeMember) => member.meta?.internal === true;
+  return cubes
+    .filter((cube) => cube.type === "view")
+    .map((view) => ({
+      ...view,
+      measures: view.measures.filter((member) => !isInternal(member)),
+      dimensions: view.dimensions.filter((member) => !isInternal(member)),
+      internalMeasures: view.measures.filter(isInternal),
+      internalDimensions: view.dimensions.filter(isInternal),
+    }));
+}
+
+async function fetchMeta(
+  state: CubeGatewayState,
+  context: CubeSecurityContext,
+): Promise<CubeView[]> {
+  const key = contextKey(context);
+  const cached = state.metaCache.get(key);
+  if (cached && Date.now() - cached.fetchedAt < META_TTL_MS) return cached.views;
+  const raw = await request(state, "/meta", context);
+  if (!isRecord(raw)) throw new Error("Cube /meta 应答格式异常");
+  const body = raw;
+  if (body.error) throw new Error(`Cube /meta 错误：${String(body.error)}`);
+  if (!Array.isArray(body.cubes)) throw new Error("Cube /meta 应答缺少 cubes");
+  const views = normalizeMetaViews(body.cubes as (CubeView & { type: string })[]);
+  state.metaCache.set(key, { views, fetchedAt: Date.now() });
+  return views;
+}
+
+async function loadRaw(
+  state: CubeGatewayState,
+  query: CubeQuery,
+  payload: Record<string, unknown>,
+  context: CubeSecurityContext,
+): Promise<Record<string, unknown>> {
+  for (let i = 0; i < 30; i++) {
+    const raw = await request(state, "/load", context, {
+      method: "POST",
+      body: JSON.stringify({ query, ...payload }),
+    });
+    if (!isRecord(raw)) throw new Error("Cube /load 应答格式异常");
+    const body = raw;
+    if (body.error === "Continue wait") {
+      await new Promise((r) => setTimeout(r, 1000));
+      continue;
+    }
+    if (body.error) throw new Error(String(body.error));
+    return body;
+  }
+  throw new Error("Cube 查询超时（Continue wait 重试耗尽）");
+}
+
+/** /v1/load：带 Continue wait 重试。 */
+async function fetchLoad(
+  state: CubeGatewayState,
+  query: CubeQuery,
+  context: CubeSecurityContext,
+): Promise<LoadResponse> {
+  const body = await loadRaw(state, query, {}, context);
+  if (!Array.isArray(body.data) || typeof body.annotation !== "object" || !body.annotation) {
+    throw new Error("Cube /load 应答缺少 data/annotation");
+  }
+  return body as unknown as LoadResponse;
+}
+
+/**
+ * /v1/load 的同期多窗形态（timeDimensions 带 compareDateRange）：POST 体须带
+ * queryType=multi 声明客户端支持，应答为逐窗结果数组，序与 compareDateRange 一致。
+ */
+async function fetchLoadMulti(
+  state: CubeGatewayState,
+  query: CubeQuery,
+  context: CubeSecurityContext,
+): Promise<LoadResponse[]> {
+  const body = await loadRaw(state, query, { queryType: "multi" }, context);
+  if (!Array.isArray(body.results)) throw new Error("Cube /load 多窗应答缺少 results");
+  return (body.results as Record<string, unknown>[]).map((r) => {
+    if (!Array.isArray(r.data) || typeof r.annotation !== "object" || !r.annotation) {
+      throw new Error("Cube /load 多窗应答缺少 data/annotation");
+    }
+    return r as unknown as LoadResponse;
+  });
+}
+
+function isSqlParameter(value: unknown): value is SqlParameter {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    (typeof value === "number" && Number.isFinite(value)) ||
+    typeof value === "boolean"
+  );
+}
+
+function sqlPair(value: unknown): [string, SqlParameter[]] | null {
+  if (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    typeof value[0] === "string" &&
+    Array.isArray(value[1]) &&
+    value[1].every(isSqlParameter)
+  ) {
+    return [value[0], value[1]];
+  }
+  return isRecord(value) && "sql" in value ? sqlPair(value.sql) : null;
+}
+
+/** Cube 单窗/多窗 SQL 应答到稳定产品形态的唯一归一边界。 */
+export function normalizeSqlResponse(query: CubeQuery, body: unknown): GeneratedSqlStatement[] {
+  const direct = sqlPair(body);
+  const rawStatements = direct ? [body] : Array.isArray(body) ? body : [body];
+  const pairs = rawStatements.map(sqlPair);
+  if (pairs.some((pair) => pair === null)) throw new Error("Cube /sql 应答缺少 SQL 或参数");
+
+  const time = query.timeDimensions?.[0];
+  const ranges = time?.compareDateRange ?? (time?.dateRange ? [time.dateRange] : [null]);
+  if (pairs.length !== ranges.length) {
+    throw new Error(`Cube /sql 应答窗口数异常：期望 ${ranges.length}，实际 ${pairs.length}`);
+  }
+  return pairs.map((pair, index) => ({
+    window: ranges[index] ? { from: ranges[index]![0], to: ranges[index]![1] } : null,
+    sql: pair![0],
+    params: pair![1],
+  }));
+}
+
+/** /v1/sql：返回与实际物理窗口逐一对应的生成 SQL。 */
+async function fetchSql(
+  state: CubeGatewayState,
+  query: CubeQuery,
+  context: CubeSecurityContext,
+): Promise<GeneratedSqlStatement[]> {
+  const body = await request(
+    state,
+    `/sql?query=${encodeURIComponent(JSON.stringify(query))}`,
+    context,
+  );
+  if (isRecord(body) && body.error) throw new Error(String(body.error));
+  return normalizeSqlResponse(query, body);
+}
+
+const TIME_CONTEXT_TTL_MS = 10 * 60 * 1000;
+
+export type TimeSourceAnchor = { view: string; measure: string };
+
+/** 时间锚点由执行 View 显式声明；重命名物理 View 时不会在客户端留下第二份映射。 */
+export function resolveTimeSourceAnchors(views: CubeView[]): Map<TimeSourceKey, TimeSourceAnchor> {
+  const anchors = new Map<TimeSourceKey, TimeSourceAnchor>();
+  for (const view of views) {
+    if (view.meta?.query_surface !== "metric_source") continue;
+    const source = parseTimeSourceKey(view.meta.time_source, `执行 View ${view.name}`);
+    const anchorMeasure = view.meta.time_anchor_measure;
+    if (anchorMeasure === undefined) continue;
+    if (typeof anchorMeasure !== "string" || !anchorMeasure) {
+      throw new Error(`执行 View ${view.name} 的时间锚点无效`);
+    }
+    const measure = `${view.name}.${anchorMeasure}`;
+    if (!view.measures.some((candidate) => candidate.name === measure)) {
+      throw new Error(`执行 View ${view.name} 的时间锚点 ${anchorMeasure} 不是公开指标`);
+    }
+    if (anchors.has(source)) throw new Error(`时间来源 ${source} 声明了多个锚点`);
+    anchors.set(source, { view: view.name, measure: anchorMeasure });
+  }
+  for (const source of TIME_SOURCES) {
+    if (!anchors.has(source.key)) throw new Error(`时间来源 ${source.key} 缺少唯一时间锚点`);
+  }
+  return anchors;
+}
+
+/** 取某个公开指标有非零数据的最新月份；year/month 是仅供内部查询的分区成员。 */
+async function latestMonth(
+  state: CubeGatewayState,
+  view: string,
+  measure: string,
+): Promise<string> {
+  const res = await fetchLoad(
+    state,
+    {
+      dimensions: [`${view}.year`, `${view}.month`],
+      measures: [`${view}.${measure}`],
+      filters: [{ member: `${view}.${measure}`, operator: "gt", values: ["0"] }],
+      order: [
+        [`${view}.year`, "desc"],
+        [`${view}.month`, "desc"],
+      ],
+      limit: 1,
+    },
+    state.config.serviceContext,
+  );
+  const row = res.data[0];
+  if (!row) throw new Error(`无法确定 ${view}.${measure} 的可用月份`);
+  return `${row[`${view}.year`]}-${String(row[`${view}.month`]).padStart(2, "0")}`;
+}
+
+/**
+ * 数据时间上下文：人员数据与编制计划分别取真实数据边界；跨指标域查询默认取人员数据截至月，
+ * 但允许显式查询到编制计划上界。
+ * actualThrough 是默认参考月，availableThrough 是显式查询上界。
+ */
+async function fetchTimeContext(state: CubeGatewayState): Promise<TimeContext> {
+  if (
+    state.timeContextCache &&
+    Date.now() - state.timeContextCache.fetchedAt < TIME_CONTEXT_TTL_MS
+  ) {
+    return state.timeContextCache.value;
+  }
+  const anchors = resolveTimeSourceAnchors(await fetchMeta(state, state.config.serviceContext));
+  const anchorMonths = new Map(
+    await Promise.all(
+      TIME_SOURCES.map(async (source) => {
+        const anchor = anchors.get(source.key)!;
+        return [source.key, await latestMonth(state, anchor.view, anchor.measure)] as const;
+      }),
+    ),
+  );
+  const sources: Record<string, TimeSourceContext> = {};
+  for (const source of TIME_SOURCES) {
+    const actualThrough = anchorMonths.get(source.actual_source)!;
+    const availableThrough = anchorMonths.get(source.key)!;
+    sources[source.key] = {
+      actualThrough,
+      availableThrough,
+      ...(source.horizon === "plan" ? { planThrough: availableThrough } : {}),
+    };
+  }
+  const primary = TIME_SOURCES.find((source) => source.primary);
+  if (!primary) throw new Error("时间来源缺少主数据时钟");
+  const dataAsOf = anchorMonths.get(primary.key)!;
+  const value: TimeContext = {
+    dataAsOf,
+    sources,
+  };
+  state.timeContextCache = { value, fetchedAt: Date.now() };
+  return value;
+}
+
+export function createCubeGateway(config: CubeGatewayConfig): CubeGateway {
+  const state: CubeGatewayState = {
+    config,
+    tokenCache: new Map(),
+    metaCache: new Map(),
+    timeContextCache: null,
+  };
+  return {
+    meta: (context) => fetchMeta(state, context),
+    load: (query, context) => fetchLoad(state, query, context),
+    loadMulti: (query, context) => fetchLoadMulti(state, query, context),
+    sql: (query, context) => fetchSql(state, query, context),
+    timeContext: () => fetchTimeContext(state),
+  };
+}

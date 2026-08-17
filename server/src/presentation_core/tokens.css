@@ -1,0 +1,202 @@
+
+:root {
+  color-scheme: light dark;
+
+  --pa-page: light-dark(#ffffff, #0f0f0f);
+  --pa-bg: light-dark(#ffffff, #171717);
+
+  --pa-canvas: light-dark(#f7f7f8, #0f0f0f);
+
+  /* 内容文字三级：中性近黑起手，不带蓝调 */
+  --pa-fg: light-dark(#191919, #ededed);
+  --pa-muted: light-dark(#767676, #a3a3a3);
+  --pa-faint: light-dark(#aaaaaa, #6e6e6e);
+  /* 交互 chrome 的静息字与图标：比正文浅、比次级说明深。它不是内容层级的第四档，
+     而是另一根轴——面包屑链接、工具钮图标、菜单图标这类「可点但静息」的 chrome */
+  --pa-fg-soft: light-dark(#4c4c4c, #c9c9c9);
+  /* 停用件的字与图标：又一根独立的轴。它比 faint 更退，因为「这件事现在做不了」
+     不需要被读，只需要被认出；而 faint 是要读的内容（破折号、占位、轴刻度）。
+     半透黑而非实色灰：停用件也可能落在灰底上，实色灰在那里会浮起来 */
+  --pa-disabled-fg: light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.22));
+  /* 占位符：又一根轴，比内容第三档更退。占位是「这里还空着」的提示，
+     不是一条待读的内容，压到 faint 那一档会被当成已经填好的值 */
+  --pa-placeholder: light-dark(#c4c4c4, #5e5e5e);
+
+  --pa-border: light-dark(rgba(0, 0, 0, 0.09), rgba(255, 255, 255, 0.1));
+  --pa-border-strong: light-dark(#d2d2d2, #3f3f3f);
+
+  --pa-border-hover: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.16));
+  --pa-border-subtle: light-dark(#f2f2f2, #212121);
+  --pa-surface: light-dark(rgba(0, 0, 0, 0.04), rgba(255, 255, 255, 0.07));
+  --pa-wash: light-dark(rgba(25, 25, 25, 0.02), rgba(255, 255, 255, 0.04));
+
+  --pa-wash-solid: light-dark(#fafafa, #1f1f1f);
+
+  /* 墨色：主动作实底、筛选片选中底、Tabs 下划线、看板编辑态描边与落位框——动作色是墨不是品牌色 */
+  --pa-ink: light-dark(#191919, #ededed);
+  --pa-ink-fg: light-dark(#ffffff, #171717);
+
+  --pa-selected: color-mix(in srgb, var(--pa-ink) 10%, transparent);
+
+  --pa-accent: light-dark(#3b6fdb, #5b8def);
+  --pa-accent-fg: #ffffff;
+  /* 聚焦描边：框自己转成这个色，环另叠 pa-focus-ring。全站只有这一对，
+     无描边的件（按钮、分段、行）只叠环 */
+  --pa-focus-strong: light-dark(#7eaff7, #5b8def);
+  /* 聚焦光环：描边色的半透版本，恒 3px。环与描边成对出现，不单用 */
+  --pa-focus-ring: light-dark(rgba(67, 138, 232, 0.15), rgba(91, 141, 239, 0.25));
+
+  --pa-highlight: light-dark(#438ae8, #5b8def);
+  /* 强调蓝的带底：日历区间带、被选端点的圈。与 pa-avatar 同值不同义，两者各自独立取值 */
+  --pa-highlight-bg: light-dark(#e9f1fe, #24344d);
+  /* 登录浮签静默描边与标签灰 */
+  --pa-login-input-border: light-dark(#d1d1d1, #3f3f3f);
+  --pa-login-label: light-dark(#838383, #a3a3a3);
+
+  /* 反馈色：语义色降饱和到与中性壳同呼吸，仍守可读对比 */
+  --pa-danger: #b42318;
+  --pa-danger-fg: light-dark(#b42318, #f97066);
+  --pa-success: #3d9a5f;
+  --pa-success-fg: light-dark(#2f7a4a, #5cbd82);
+  --pa-warning: #d99b1f;
+  --pa-warning-fg: light-dark(#96620f, #f5c451);
+  --pa-info-fg: light-dark(#3b6fdb, #5b8def);
+
+  --pa-shadow: light-dark(rgba(25, 25, 25, 0.12), rgba(0, 0, 0, 0.4));
+  /* 弹层罩层：浅 dimmer 配 backdrop-grayscale，不是重墨遮罩 */
+  --pa-dimmer: light-dark(rgba(10, 10, 10, 0.1), rgba(0, 0, 0, 0.4));
+  /* 玻璃浮层面：Jump/大舞台走 glass，菜单与锚定选择器走 glass-popover */
+  --pa-glass: light-dark(rgba(255, 255, 255, 0.8), rgba(38, 38, 38, 0.8));
+  --pa-glass-popover: light-dark(rgba(255, 255, 255, 0.75), rgba(38, 38, 38, 0.75));
+  /* 玻璃浮层的外投影 + 双层内高光：只与玻璃底同用，独用会在实底上显出一圈假边。
+     内高光必须随明暗换档——暗面上留着亮面那道 50% 白边，浮层就镶了一圈会先于内容被看见的亮线 */
+  --pa-popover-glow:
+    0 3px 16px 0 light-dark(rgb(0 0 0 / 0.15), rgb(0 0 0 / 0.3)),
+    0 0 1px 0 light-dark(rgb(0 0 0 / 0.3), rgb(0 0 0 / 0.5)),
+    inset 0 0 3px 0 light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.05)),
+    inset 0 0 0 1px light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.1));
+  /* 身份徽标底（工作区标记、用户头像）：唯一带色相的中性片 */
+  --pa-avatar: light-dark(#e9f1fe, #24344d);
+
+  /* 悬停提示与 toast 的深面浅字（图表读数卡不在此列，它走玻璃浮层） */
+  --pa-tooltip-bg: light-dark(#191919, #2e2e2e);
+
+  --pa-chart-1: light-dark(#3b6fdb, #5b8def);
+  --pa-chart-2: light-dark(#e0857a, #e8998f);
+  --pa-chart-3: light-dark(#3fa08f, #4fb8a5);
+  --pa-chart-4: light-dark(#a97fd4, #b894e0);
+  --pa-chart-5: light-dark(#e0b451, #e8c470);
+  --pa-chart-6: light-dark(#6a9e58, #7fb56c);
+  --pa-chart-7: light-dark(#4d9dc4, #63b0d6);
+  --pa-chart-8: light-dark(#8c7b6b, #a08e7d);
+
+}
+
+@theme inline {
+  /* 中性无衬线承担数字与拉丁，中文走系统栈。
+     「Inter Variable」是可变字重那一支的家族名，排在静态 Inter 之前：
+     没有它，写出来的 420 / 450 / 520 会被静态档吸回 400 / 500。 */
+  --font-sans:
+    "Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+
+  --text-2xs: 11px;
+  --text-2xs--line-height: 14px;
+  --text-xs--line-height: 15px;
+  --text-sm: 13px;
+  --text-sm--line-height: 16px;
+
+  --text-md: 14px;
+  --text-md--line-height: 17px;
+  --text-base--line-height: 19px;
+  --text-lg--line-height: 21px;
+  --text-xl: 22px;
+  --text-xl--line-height: 26px;
+  --text-3xl--line-height: 34px;
+  /* 阶梯到此为止：没被上面点名的档一律撤名，`text-2xl` / `text-4xl` 这些 Tailwind 自带档
+     写出来会直接失效。禁令光靠正则拦不住——它们本来就有名字，看着完全合法。 */
+  --text-2xl: initial;
+  --text-4xl: initial;
+  --text-5xl: initial;
+  --text-6xl: initial;
+  --text-7xl: initial;
+  --text-8xl: initial;
+  --text-9xl: initial;
+
+  --font-weight-normal: 420;
+  --font-weight-medium: 450;
+  --font-weight-semibold: 520;
+
+  --color-pa-page: var(--pa-page);
+  --color-pa-bg: var(--pa-bg);
+  --color-pa-canvas: var(--pa-canvas);
+  --color-pa-fg: var(--pa-fg);
+  --color-pa-muted: var(--pa-muted);
+  --color-pa-faint: var(--pa-faint);
+  --color-pa-fg-soft: var(--pa-fg-soft);
+  --color-pa-disabled-fg: var(--pa-disabled-fg);
+  --color-pa-placeholder: var(--pa-placeholder);
+  --color-pa-line: var(--pa-border);
+  --color-pa-line-strong: var(--pa-border-strong);
+  --color-pa-line-hover: var(--pa-border-hover);
+  --color-pa-line-subtle: var(--pa-border-subtle);
+  --color-pa-surface: var(--pa-surface);
+  --color-pa-wash: var(--pa-wash);
+  --color-pa-wash-solid: var(--pa-wash-solid);
+  --color-pa-ink: var(--pa-ink);
+  --color-pa-ink-fg: var(--pa-ink-fg);
+  --color-pa-selected: var(--pa-selected);
+  --color-pa-accent: var(--pa-accent);
+  --color-pa-accent-fg: var(--pa-accent-fg);
+  --color-pa-focus-strong: var(--pa-focus-strong);
+  --color-pa-focus-ring: var(--pa-focus-ring);
+  --color-pa-highlight: var(--pa-highlight);
+  --color-pa-highlight-bg: var(--pa-highlight-bg);
+  --color-pa-dimmer: var(--pa-dimmer);
+  --color-pa-glass: var(--pa-glass);
+  --color-pa-glass-popover: var(--pa-glass-popover);
+  --color-pa-avatar: var(--pa-avatar);
+  --color-pa-login-input-border: var(--pa-login-input-border);
+  --color-pa-login-label: var(--pa-login-label);
+  --color-pa-danger: var(--pa-danger);
+  --color-pa-danger-fg: var(--pa-danger-fg);
+  --color-pa-success: var(--pa-success);
+  --color-pa-success-fg: var(--pa-success-fg);
+  --color-pa-warning: var(--pa-warning);
+  --color-pa-warning-fg: var(--pa-warning-fg);
+  --color-pa-info-fg: var(--pa-info-fg);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+
+  --radius-avatar: 18%;
+  --radius-auth: 7px;
+
+  --radius-xs: initial;
+  --radius-4xl: initial;
+  --radius-5xl: initial;
+  --radius-6xl: initial;
+  --radius-7xl: initial;
+}
+
+/*
+ * 锚定浮层的玻璃壳：菜单、Popover、Select 下拉、字段选择面与图表读数卡同料。
+ *
+ * 它落在 CSS 里而不是一串工具类，是因为消费方跨了两种承载：控制台的 React 件按类名取，
+ * 图表读数卡是 echarts 自建的 DOM，只能给类名。同一张壳若两边各拼一次，浮层常彼此叠着开，
+ * 差异当场可见。写在 components 层，件仍可用工具类改圆角与宽度。
+ */
+@layer components {
+  .pa-popup-surface {
+    border: 0;
+    border-radius: var(--radius-xl);
+    background-color: var(--pa-glass-popover);
+    color: var(--pa-fg);
+    box-shadow: var(--pa-popover-glow);
+    backdrop-filter: blur(16px);
+  }
+}

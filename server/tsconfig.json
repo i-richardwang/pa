@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "preserveSymlinks": true,
+    "types": ["bun", "node"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": ["src"],
+  // 测试由 bun test 运行（bun:test 类型不进 tsc）；也避免测试编译进 dist
+  "exclude": ["src/**/*.test.ts", "src/test_support/**"]
+}

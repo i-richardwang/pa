@@ -1,0 +1,10 @@
+{
+  "name": "pa-widget",
+  "private": true,
+  "description": "query 结果预览卡片（server/ 工作区子应用，依赖仅构建期使用）：渲染服务端生成的 ECharts 配置",
+  "devDependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.4",
+    "lucide-react": "^1.24.0",
+    "pa-result-view": "workspace:*"
+  }
+}

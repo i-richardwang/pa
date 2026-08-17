@@ -1,0 +1,976 @@
+{
+  "facts": [
+    {
+      "name": "department_headcount_plan_fact",
+      "title": "部门编制计划",
+      "description": "公开演示数据中每个部门每月一行的编制目标事实。",
+      "kind": "fact",
+      "members": [
+        {
+          "name": "record_key",
+          "title": null,
+          "description": null,
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": true,
+          "role": "relationship_key",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "year",
+          "title": "年",
+          "description": "数据记录所属的自然年。",
+          "kind": "dimension",
+          "member_type": "number",
+          "internal": true,
+          "role": "time_control",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "month",
+          "title": "月",
+          "description": "数据记录所属自然年中的月份序号。",
+          "kind": "dimension",
+          "member_type": "number",
+          "internal": true,
+          "role": "time_control",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "period_month",
+          "title": "月份",
+          "description": "数据记录所属月份的时间轴。",
+          "kind": "dimension",
+          "member_type": "time",
+          "internal": true,
+          "role": "time_control",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "organization_name",
+          "title": "组织",
+          "description": "统计记录所属的一级组织。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "department_name",
+          "title": "部门",
+          "description": "统计记录所属的部门。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "planned_headcount",
+          "title": "编制目标",
+          "description": "所选月份各部门计划配置的员工人数。",
+          "kind": "measure",
+          "member_type": "sum",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": "metric_domain:headcount_plan",
+          "time_contract": {
+            "aggregation": "last",
+            "window": "selected"
+          },
+          "format": null,
+          "components": null
+        }
+      ],
+      "hierarchies": []
+    },
+    {
+      "name": "employee_hire_event_fact",
+      "title": "员工入职事件",
+      "description": "公开演示数据中每次入职一行的事件事实。",
+      "kind": "fact",
+      "members": [
+        {
+          "name": "record_key",
+          "title": null,
+          "description": null,
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": true,
+          "role": "relationship_key",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "employee_id",
+          "title": "员工编号",
+          "description": "公开演示数据中的虚构员工编号。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": true,
+          "role": "restricted_detail",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "employee_name",
+          "title": "员工姓名",
+          "description": "公开演示数据中的虚构员工姓名。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": true,
+          "role": "restricted_detail",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "year",
+          "title": "年",
+          "description": "数据记录所属的自然年。",
+          "kind": "dimension",
+          "member_type": "number",
+          "internal": true,
+          "role": "time_control",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "month",
+          "title": "月",
+          "description": "数据记录所属自然年中的月份序号。",
+          "kind": "dimension",
+          "member_type": "number",
+          "internal": true,
+          "role": "time_control",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "period_month",
+          "title": "月份",
+          "description": "数据记录所属月份的时间轴。",
+          "kind": "dimension",
+          "member_type": "time",
+          "internal": true,
+          "role": "time_control",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "record_date",
+          "title": "记录日期",
+          "description": "快照或事件实际发生的日期。",
+          "kind": "dimension",
+          "member_type": "time",
+          "internal": true,
+          "role": "restricted_detail",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "organization_name",
+          "title": "组织",
+          "description": "统计记录所属的一级组织。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "department_name",
+          "title": "部门",
+          "description": "统计记录所属的部门。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "gender",
+          "title": "性别",
+          "description": "员工在记录时点的性别分类。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "age_band",
+          "title": "年龄段",
+          "description": "员工在记录时点按年龄划分的区间。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "age",
+          "title": "年龄",
+          "description": "员工在记录时点的周岁年龄。",
+          "kind": "dimension",
+          "member_type": "number",
+          "internal": true,
+          "role": "calculation_input",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "job_level_band",
+          "title": "职级段",
+          "description": "员工在记录时点的通用职级区间。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "new_hire_count",
+          "title": "入职人数",
+          "description": "所选期间发生入职的虚构员工人数。",
+          "kind": "measure",
+          "member_type": "count",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": "metric_domain:workforce_movement",
+          "time_contract": {
+            "aggregation": "sum",
+            "window": "selected"
+          },
+          "format": null,
+          "components": null
+        }
+      ],
+      "hierarchies": []
+    },
+    {
+      "name": "employee_leave_event_fact",
+      "title": "员工离职事件",
+      "description": "公开演示数据中每次离职一行的事件事实。",
+      "kind": "fact",
+      "members": [
+        {
+          "name": "record_key",
+          "title": null,
+          "description": null,
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": true,
+          "role": "relationship_key",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "employee_id",
+          "title": "员工编号",
+          "description": "公开演示数据中的虚构员工编号。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": true,
+          "role": "restricted_detail",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "employee_name",
+          "title": "员工姓名",
+          "description": "公开演示数据中的虚构员工姓名。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": true,
+          "role": "restricted_detail",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "year",
+          "title": "年",
+          "description": "数据记录所属的自然年。",
+          "kind": "dimension",
+          "member_type": "number",
+          "internal": true,
+          "role": "time_control",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "month",
+          "title": "月",
+          "description": "数据记录所属自然年中的月份序号。",
+          "kind": "dimension",
+          "member_type": "number",
+          "internal": true,
+          "role": "time_control",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "period_month",
+          "title": "月份",
+          "description": "数据记录所属月份的时间轴。",
+          "kind": "dimension",
+          "member_type": "time",
+          "internal": true,
+          "role": "time_control",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "record_date",
+          "title": "记录日期",
+          "description": "快照或事件实际发生的日期。",
+          "kind": "dimension",
+          "member_type": "time",
+          "internal": true,
+          "role": "restricted_detail",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "organization_name",
+          "title": "组织",
+          "description": "统计记录所属的一级组织。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "department_name",
+          "title": "部门",
+          "description": "统计记录所属的部门。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "gender",
+          "title": "性别",
+          "description": "员工在记录时点的性别分类。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "age_band",
+          "title": "年龄段",
+          "description": "员工在记录时点按年龄划分的区间。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "age",
+          "title": "年龄",
+          "description": "员工在记录时点的周岁年龄。",
+          "kind": "dimension",
+          "member_type": "number",
+          "internal": true,
+          "role": "calculation_input",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "job_level_band",
+          "title": "职级段",
+          "description": "员工在记录时点的通用职级区间。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "leave_type",
+          "title": "离职性质",
+          "description": "离职事件属于主动离职或被动离职。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "turnover_count",
+          "title": "离职人数",
+          "description": "所选期间发生离职的虚构员工人数。",
+          "kind": "measure",
+          "member_type": "count",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": "metric_domain:workforce_movement",
+          "time_contract": {
+            "aggregation": "sum",
+            "window": "selected"
+          },
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "voluntary_turnover_count",
+          "title": "主动离职人数",
+          "description": "所选期间发生主动离职的虚构员工人数。",
+          "kind": "measure",
+          "member_type": "count",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": "metric_domain:workforce_movement",
+          "time_contract": {
+            "aggregation": "sum",
+            "window": "selected"
+          },
+          "format": null,
+          "components": null
+        }
+      ],
+      "hierarchies": []
+    },
+    {
+      "name": "employee_month_snapshot_fact",
+      "title": "员工月末快照",
+      "description": "公开演示数据中每名在职员工每月一行的快照事实。",
+      "kind": "fact",
+      "members": [
+        {
+          "name": "record_key",
+          "title": null,
+          "description": null,
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": true,
+          "role": "relationship_key",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "employee_id",
+          "title": "员工编号",
+          "description": "公开演示数据中的虚构员工编号。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": true,
+          "role": "restricted_detail",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "employee_name",
+          "title": "员工姓名",
+          "description": "公开演示数据中的虚构员工姓名。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": true,
+          "role": "restricted_detail",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "year",
+          "title": "年",
+          "description": "数据记录所属的自然年。",
+          "kind": "dimension",
+          "member_type": "number",
+          "internal": true,
+          "role": "time_control",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "month",
+          "title": "月",
+          "description": "数据记录所属自然年中的月份序号。",
+          "kind": "dimension",
+          "member_type": "number",
+          "internal": true,
+          "role": "time_control",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "period_month",
+          "title": "月份",
+          "description": "数据记录所属月份的时间轴。",
+          "kind": "dimension",
+          "member_type": "time",
+          "internal": true,
+          "role": "time_control",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "record_date",
+          "title": "记录日期",
+          "description": "快照或事件实际发生的日期。",
+          "kind": "dimension",
+          "member_type": "time",
+          "internal": true,
+          "role": "restricted_detail",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "organization_name",
+          "title": "组织",
+          "description": "统计记录所属的一级组织。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "department_name",
+          "title": "部门",
+          "description": "统计记录所属的部门。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "gender",
+          "title": "性别",
+          "description": "员工在记录时点的性别分类。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "age_band",
+          "title": "年龄段",
+          "description": "员工在记录时点按年龄划分的区间。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "age",
+          "title": "年龄",
+          "description": "员工在记录时点的周岁年龄。",
+          "kind": "dimension",
+          "member_type": "number",
+          "internal": true,
+          "role": "calculation_input",
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "job_level_band",
+          "title": "职级段",
+          "description": "员工在记录时点的通用职级区间。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "active_employee_count",
+          "title": "在职人数",
+          "description": "所选月末仍在职的虚构员工人数。",
+          "kind": "measure",
+          "member_type": "count",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": "metric_domain:workforce_structure",
+          "time_contract": {
+            "aggregation": "last",
+            "window": "selected"
+          },
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "average_age",
+          "title": "平均年龄",
+          "description": "所选月末员工年龄的算术平均值。",
+          "kind": "measure",
+          "member_type": "avg",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": "metric_domain:workforce_structure",
+          "time_contract": {
+            "aggregation": "last",
+            "window": "selected"
+          },
+          "format": null,
+          "components": null
+        }
+      ],
+      "hierarchies": []
+    }
+  ],
+  "dimension_groups": [
+    {
+      "name": "organization",
+      "title": "组织与部门",
+      "description": "统计记录所属的组织与部门。",
+      "members": [
+        "organization_name",
+        "department_name"
+      ],
+      "bindings": [
+        {
+          "fact": "department_headcount_plan_fact",
+          "members": [
+            "organization_name",
+            "department_name"
+          ]
+        },
+        {
+          "fact": "employee_hire_event_fact",
+          "members": [
+            "organization_name",
+            "department_name"
+          ]
+        },
+        {
+          "fact": "employee_leave_event_fact",
+          "members": [
+            "organization_name",
+            "department_name"
+          ]
+        },
+        {
+          "fact": "employee_month_snapshot_fact",
+          "members": [
+            "organization_name",
+            "department_name"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "employee_basic_info",
+      "title": "员工基本信息",
+      "description": "员工在记录时点的性别与年龄段信息。",
+      "members": [
+        "gender",
+        "age_band"
+      ],
+      "bindings": [
+        {
+          "fact": "employee_hire_event_fact",
+          "members": [
+            "gender",
+            "age_band"
+          ]
+        },
+        {
+          "fact": "employee_leave_event_fact",
+          "members": [
+            "gender",
+            "age_band"
+          ]
+        },
+        {
+          "fact": "employee_month_snapshot_fact",
+          "members": [
+            "gender",
+            "age_band"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "job_and_level",
+      "title": "岗位与职级",
+      "description": "员工在记录时点的通用职级段信息。",
+      "members": [
+        "job_level_band"
+      ],
+      "bindings": [
+        {
+          "fact": "employee_hire_event_fact",
+          "members": [
+            "job_level_band"
+          ]
+        },
+        {
+          "fact": "employee_leave_event_fact",
+          "members": [
+            "job_level_band"
+          ]
+        },
+        {
+          "fact": "employee_month_snapshot_fact",
+          "members": [
+            "job_level_band"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "termination_event",
+      "title": "离职记录属性",
+      "description": "离职事件对应的离职性质。",
+      "members": [
+        "leave_type"
+      ],
+      "bindings": [
+        {
+          "fact": "employee_leave_event_fact",
+          "members": [
+            "leave_type"
+          ]
+        }
+      ]
+    }
+  ],
+  "metric_domains": [
+    {
+      "id": "metric_domain:workforce_structure",
+      "title": "人员规模与结构",
+      "description": "支持按组织、部门和通用员工属性分析月末人数、结构与平均特征。",
+      "metrics": [
+        {
+          "name": "active_employee_count",
+          "title": "在职人数"
+        },
+        {
+          "name": "average_age",
+          "title": "平均年龄"
+        }
+      ],
+      "dimensions": [
+        "organization_name",
+        "department_name",
+        "gender",
+        "age_band",
+        "job_level_band"
+      ],
+      "bindings": [
+        {
+          "fact": "employee_month_snapshot_fact",
+          "includes": [
+            "active_employee_count",
+            "average_age"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "metric_domain:workforce_movement",
+      "title": "人员流动",
+      "description": "支持按组织、部门和通用员工属性分析入职、离职及相关比率。",
+      "metrics": [
+        {
+          "name": "new_hire_count",
+          "title": "入职人数"
+        },
+        {
+          "name": "turnover_count",
+          "title": "离职人数"
+        },
+        {
+          "name": "voluntary_turnover_count",
+          "title": "主动离职人数"
+        },
+        {
+          "name": "current_month_new_hire_rate",
+          "title": "本月入职率"
+        },
+        {
+          "name": "current_month_turnover_rate",
+          "title": "本月离职率"
+        },
+        {
+          "name": "current_month_voluntary_turnover_rate",
+          "title": "本月主动离职率"
+        }
+      ],
+      "dimensions": [
+        "organization_name",
+        "department_name",
+        "gender",
+        "age_band",
+        "job_level_band"
+      ],
+      "bindings": [
+        {
+          "fact": "employee_hire_event_fact",
+          "includes": [
+            "new_hire_count"
+          ]
+        },
+        {
+          "fact": "employee_leave_event_fact",
+          "includes": [
+            "turnover_count",
+            "voluntary_turnover_count"
+          ]
+        },
+        {
+          "fact": "employee_month_snapshot_fact",
+          "includes": [
+            "active_employee_count"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "metric_domain:headcount_plan",
+      "title": "编制计划与完成",
+      "description": "支持按组织和部门分析月度编制目标及完成率。",
+      "metrics": [
+        {
+          "name": "planned_headcount",
+          "title": "编制目标"
+        },
+        {
+          "name": "current_month_fulfillment_rate",
+          "title": "当月编制完成率"
+        }
+      ],
+      "dimensions": [
+        "organization_name",
+        "department_name"
+      ],
+      "bindings": [
+        {
+          "fact": "department_headcount_plan_fact",
+          "includes": [
+            "planned_headcount"
+          ]
+        },
+        {
+          "fact": "employee_month_snapshot_fact",
+          "includes": [
+            "active_employee_count"
+          ]
+        }
+      ]
+    }
+  ]
+}

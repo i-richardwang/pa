@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@contract": ["../src/contracts/dashboard_contract.ts"],
+      "@payload": ["../src/semantic_core/query_payload.ts"],
+      "@charts": ["../src/presentation_core/chart_config.ts"],
+      "@shape": ["../src/presentation_core/view_shape.ts"],
+      "@format": ["../src/presentation_core/view_format.ts"],
+      "@member": ["../src/semantic_core/member_name.ts"],
+      "@time": ["../src/semantic_core/time_contract.ts"],
+      "@semantic-analysis": ["../src/semantic_core/semantic_analysis.ts"],
+      "@data-capability-map": ["../src/presentation_core/data_capability_map.ts"]
+    },
+    "resolveJsonModule": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src", "vite.config.ts"],
+  // 测试由 bun test 运行（bun:test 类型不进 tsc）
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}

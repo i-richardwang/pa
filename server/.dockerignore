@@ -1,0 +1,14 @@
+# 构建上下文只需要源码与锁文件：依赖在镜像内 bun install，产物在镜像内构建
+# （data/ 含 auth.db/app.db 身份与应用状态，绝不进构建上下文）
+node_modules
+widget/node_modules
+console/node_modules
+dist
+widget/dist
+console/dist
+data
+scripts/*
+!scripts/clean_build.ts
+# demo 播种要与 server 同侧写 app.db，故进构建上下文；只留在 build 阶段，不进生产镜像
+!scripts/seed_demo.ts
+!scripts/demo_business_terms.ts

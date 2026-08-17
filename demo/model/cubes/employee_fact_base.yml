@@ -1,0 +1,93 @@
+cubes:
+  - name: employee_fact_base
+    title: 通用人员事实模板
+    public: false
+    description: 为公开演示事实复用时间、组织与通用员工属性合同。
+    meta: { model_role: template }
+    sql: "SELECT * FROM read_parquet('/semantic/current/employee_month_snapshot_fact.parquet')"
+    dimensions:
+      - name: record_key
+        sql: record_key
+        type: string
+        primary_key: true
+        public: false
+        meta: { internal: true, member_role: relationship_key }
+      - name: employee_id
+        title: 员工编号
+        description: 公开演示数据中的虚构员工编号。
+        sql: employee_id
+        type: string
+        public: false
+        meta: { internal: true, member_role: restricted_detail, dimension_kind: individual }
+      - name: employee_name
+        title: 员工姓名
+        description: 公开演示数据中的虚构员工姓名。
+        sql: employee_name
+        type: string
+        public: false
+        meta: { internal: true, member_role: restricted_detail, dimension_kind: individual }
+      - name: year
+        title: 年
+        description: 数据记录所属的自然年。
+        sql: year
+        type: number
+        public: false
+        meta: { internal: true, member_role: time_control }
+      - name: month
+        title: 月
+        description: 数据记录所属自然年中的月份序号。
+        sql: month
+        type: number
+        public: false
+        meta: { internal: true, member_role: time_control }
+      - name: period_month
+        title: 月份
+        description: 数据记录所属月份的时间轴。
+        sql: period_month
+        type: time
+        public: false
+        meta: { internal: true, member_role: time_control }
+      - name: record_date
+        title: 记录日期
+        description: 快照或事件实际发生的日期。
+        sql: record_date
+        type: time
+        public: false
+        meta: { internal: true, member_role: restricted_detail }
+      - name: organization_name
+        title: 组织
+        description: 统计记录所属的一级组织。
+        sql: organization_name
+        type: string
+        meta: { dimension_group: organization }
+      - name: department_name
+        title: 部门
+        description: 统计记录所属的部门。
+        sql: department_name
+        type: string
+        meta: { dimension_group: organization }
+      - name: gender
+        title: 性别
+        description: 员工在记录时点的性别分类。
+        sql: gender
+        type: string
+        meta: { dimension_group: employee_basic_info }
+      - name: age_band
+        title: 年龄段
+        description: 员工在记录时点按年龄划分的区间。
+        sql: age_band
+        type: string
+        meta: { dimension_group: employee_basic_info }
+      - name: age
+        title: 年龄
+        description: 员工在记录时点的周岁年龄。
+        sql: age
+        type: number
+        public: false
+        meta: { internal: true, member_role: calculation_input }
+      - name: job_level_band
+        title: 职级段
+        description: 员工在记录时点的通用职级区间。
+        sql: job_level_band
+        type: string
+        meta: { dimension_group: job_and_level }

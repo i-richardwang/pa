@@ -1,0 +1,16 @@
+cubes:
+  - name: employee_hire_event_fact
+    title: 员工入职事件
+    public: false
+    description: 公开演示数据中每次入职一行的事件事实。
+    extends: employee_fact_base
+    sql: "SELECT * FROM read_parquet('/semantic/current/employee_hire_event_fact.parquet')"
+    measures:
+      - name: new_hire_count
+        title: 入职人数
+        description: 所选期间发生入职的虚构员工人数。
+        type: count
+        meta:
+          metric_domain_id: metric_domain:workforce_movement
+          time_contract: { aggregation: sum, window: selected }
+          underlying_records: { record_set: hire_event, selection: { kind: self } }
