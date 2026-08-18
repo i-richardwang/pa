@@ -1,4 +1,4 @@
-/** CatalogService 集成纯桩：文档只读 /meta，翻值复用同一 context 走 /load 与上限协议。 */
+/** CatalogService 集成纯桩：授权模型读取 /meta，翻值复用同一 context 走 /load 与上限协议。 */
 import { describe, expect, spyOn, test } from "bun:test";
 import { DIMENSION_VALUES_CAP, DIMENSION_VALUES_SCAN_LIMIT } from "../engine/dimension_values.js";
 import type { Principal } from "../engine/cube_security.js";
@@ -13,6 +13,7 @@ import {
   SemanticModelUnavailableError,
 } from "./catalog_service.js";
 import { TEST_SEMANTIC_TAXONOMY } from "../test_support/semantic_taxonomy.js";
+import { canonicalModelFixture } from "../test_support/canonical_semantic_model.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
   buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY);
@@ -60,6 +61,7 @@ const views: CubeView[] = [
     dimensions: [{ name: "employee_attributes_fixture.age", title: "年龄", type: "number" }],
   },
 ];
+const canonical = canonicalModelFixture(views, TEST_SEMANTIC_TAXONOMY);
 
 // 翻值现按语义 id 入参；从编译器目录取稳定 id（服务端再解析成物理绑定翻值）。
 const catalogDimensions = toCompilerCatalog(buildCatalogDocument(views)).dimensions;
@@ -70,10 +72,10 @@ const dimId = (title: string) => {
 };
 
 describe("CatalogService", () => {
-  test("document 只用调用者 context 读取 /meta", async () => {
+  test("authorized 只用调用者 context 读取 /meta", async () => {
     const seen: CubeSecurityContext[] = [];
     const service = createCatalogService({
-      taxonomy: TEST_SEMANTIC_TAXONOMY,
+      canonical,
       cube: {
         meta: async (received) => {
           seen.push(received);
@@ -85,7 +87,7 @@ describe("CatalogService", () => {
         timeContext: async () => ({ dataAsOf: "2026-07", sources: {} }),
       },
     });
-    expect((await service.document(principal)).views.map((view) => view.name)).toEqual([
+    expect((await service.authorized(principal)).document.views.map((view) => view.name)).toEqual([
       "employee_attributes_fixture",
       "test_people_metrics",
     ]);
@@ -94,7 +96,7 @@ describe("CatalogService", () => {
 
   test("publicDocument 同时交付权限裁剪目录与权威数据截至月", async () => {
     const service = createCatalogService({
-      taxonomy: TEST_SEMANTIC_TAXONOMY,
+      canonical,
       cube: {
         meta: async () => views,
         load: async () => {
@@ -129,7 +131,7 @@ describe("CatalogService", () => {
       timeContext: async () => ({ dataAsOf: "2026-07", sources: {} }),
     };
     const broken = createCatalogService({
-      taxonomy: TEST_SEMANTIC_TAXONOMY,
+      canonical,
       cube,
       businessTerms: {
         resolve: async () => {
@@ -142,7 +144,7 @@ describe("CatalogService", () => {
     expect(degraded.term_resolutions).toEqual([]);
     expect(degraded.dimensions.map((member) => member.title)).toContain("组织");
     const healthy = createCatalogService({
-      taxonomy: TEST_SEMANTIC_TAXONOMY,
+      canonical,
       cube,
       businessTerms: {
         resolve: async (inputs) => [
@@ -188,7 +190,7 @@ describe("CatalogService", () => {
       { "test_people_metrics.organization_name": "" },
     ];
     const service = createCatalogService({
-      taxonomy: TEST_SEMANTIC_TAXONOMY,
+      canonical,
       cube: {
         meta: async () => views,
         load: async (query, received) => {
@@ -233,7 +235,7 @@ describe("CatalogService", () => {
       { "test_people_metrics.organization_name": "" },
     ];
     const service = createCatalogService({
-      taxonomy: TEST_SEMANTIC_TAXONOMY,
+      canonical,
       cube: {
         meta: async () => views,
         load: async () => ({
@@ -250,7 +252,7 @@ describe("CatalogService", () => {
 
   test("不可翻维度转成可识别的输入错误", async () => {
     const service = createCatalogService({
-      taxonomy: TEST_SEMANTIC_TAXONOMY,
+      canonical,
       cube: {
         meta: async () => views,
         load: async () => {
@@ -270,7 +272,7 @@ describe("CatalogService", () => {
     );
     const logged = spyOn(console, "error").mockImplementation(() => undefined);
     const service = createCatalogService({
-      taxonomy: TEST_SEMANTIC_TAXONOMY,
+      canonical,
       cube: {
         meta: async () => {
           throw diagnostic;
@@ -283,7 +285,7 @@ describe("CatalogService", () => {
     });
 
     try {
-      await service.document(principal);
+      await service.authorized(principal);
       throw new Error("预期模型装配失败");
     } catch (error) {
       expect(error).toBeInstanceOf(SemanticModelUnavailableError);

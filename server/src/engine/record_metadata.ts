@@ -133,6 +133,63 @@ function memberContract(member: CubeMember, title: string) {
   return parsed.data;
 }
 
+function referencedRecordMembers(view: CubeView, records: RecordSetDefinition): string[] {
+  return [
+    records.rowKey,
+    records.entityKey,
+    ...records.fields.map((field) => field.member),
+    ...records.entityOrder.map((order) => order.member),
+  ].map((member) => qualify(view.name, member));
+}
+
+/** 按成员权限保留字段完整的记录集，并移除指向不可用记录集的指标契约。 */
+export function projectRecordMetadata(
+  view: CubeView,
+  visibleMembers: ReadonlySet<string>,
+): CubeView {
+  const definitions = recordSetsOf(view);
+  if (!definitions.size) return view;
+  const targets = recordProjectionTargetsOf(view);
+
+  const available = new Set(
+    [...definitions].flatMap(([name, records]) =>
+      referencedRecordMembers(view, records).every((member) => visibleMembers.has(member))
+        ? [name]
+        : [],
+    ),
+  );
+  const rawSets = view.meta?.record_sets as Record<string, unknown>;
+  const meta = { ...view.meta };
+  if (available.size) {
+    meta.record_sets = Object.fromEntries(
+      Object.entries(rawSets).filter(([name]) => available.has(name)),
+    );
+  } else {
+    delete meta.record_sets;
+  }
+
+  const projectMember = (member: CubeMember): CubeMember => {
+    const contract = memberContract(member, member.title);
+    const target = targets.get(member.name);
+    if (
+      !contract ||
+      (available.has(contract.record_set) && (!target || visibleMembers.has(target.member)))
+    ) {
+      return member;
+    }
+    const memberMeta = { ...member.meta };
+    delete memberMeta.underlying_records;
+    return { ...member, meta: memberMeta };
+  };
+
+  return {
+    ...view,
+    meta,
+    measures: view.measures.map(projectMember),
+    internalMeasures: view.internalMeasures?.map(projectMember),
+  };
+}
+
 /**
  * 指标能否投影构成记录只认模型成员自己的 underlying_records 契约；聚合类型、率组件和技术
  * View 的成员存在性均不隐式授予能力。记录选择最终必须落到同时间口径的计数度量。

@@ -39,7 +39,7 @@ export type DashboardDependencies = {
   presentation?: PresentationService;
   boardService?: BoardService;
   feedback?: FeedbackService;
-  catalog?: CatalogService;
+  catalog?: Pick<CatalogService, "publicDocument" | "dimensionValues">;
   businessTerms?: BusinessTermService;
   semanticPlanning?: SemanticPlanningService;
   records?: RecordProjectionService;

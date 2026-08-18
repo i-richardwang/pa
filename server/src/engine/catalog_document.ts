@@ -1,4 +1,4 @@
-/** Cube /meta 的权限裁剪结果及其两个服务端/公开投影。公开投影不含物理成员绑定。 */
+/** Canonical 执行目录及其服务端/公开投影。公开投影不含物理成员绑定。 */
 import { hitCount, memberFallbackTokens, memberHit, rankMembers } from "./catalog_search.js";
 import type { PublicCatalogDocument, PublicCatalogMember } from "../contracts/catalog_contract.js";
 import type { CompilerCatalog, CompilerCatalogMember } from "../semantic_core/compiler_catalog.js";

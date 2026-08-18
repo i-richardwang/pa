@@ -78,9 +78,6 @@ describe("dashboard app routes and access control", () => {
       usage: createTestUsage(createTestAppDatabase()),
       html: async () => "",
       catalog: {
-        query: async () => {
-          throw new Error("MCP 查询不应由 dashboard 调用");
-        },
         publicDocument: async (context) => {
           contexts.push(context);
           return {
@@ -107,45 +104,6 @@ describe("dashboard app routes and access control", () => {
               },
             ],
             dimensions: [],
-          };
-        },
-        document: async () => {
-          return {
-            default_population_scope: "统计范围",
-            views: [
-              {
-                name: "test_people_metrics",
-                surface: "metric_source",
-                title: "人员总览",
-                time_source: "workforce",
-                measures: [
-                  {
-                    name: "test_people_metrics.ytd_primary_event_rate",
-                    kind: "measure",
-                    metric_domain_id: "metric_domain:workforce_movement",
-                    title: "人员总览 YTD主要事件率",
-                    display_title: "YTD主要事件率",
-                    alias: "employee_month_snapshot_fact.ytd_primary_event_rate",
-                    value_type: "number",
-                    description: "主要事件数除以月均基数。",
-                    ai_context: "只供 Agent",
-                  },
-                ],
-                dimensions: [],
-                hierarchies: [],
-                record_projection_members: [],
-                calculation_input_titles: {},
-              },
-            ],
-            metric_domains: [
-              {
-                id: "metric_domain:workforce_movement",
-                title: "人员流动",
-                description: "含业务时间坐标的 Agent 说明",
-                time_source: "workforce",
-                synonyms: ["流失率"],
-              },
-            ],
           };
         },
         dimensionValues: async (context, member, contains) => {
@@ -226,14 +184,7 @@ describe("dashboard app routes and access control", () => {
         usage: createTestUsage(createTestAppDatabase()),
         html: async () => "",
         catalog: {
-          query: async () => {
-            throw new Error("不应调用");
-          },
           publicDocument: async (principal) => {
-            cubeSecurityContext(principal);
-            throw new Error("不应调用");
-          },
-          document: async (principal) => {
             cubeSecurityContext(principal);
             throw new Error("不应调用");
           },
@@ -381,9 +332,6 @@ describe("dashboard app routes and access control", () => {
       related_members: [],
     };
     const catalog = {
-      query: async () => {
-        throw new Error("dashboard 不应调用 MCP catalog query");
-      },
       publicDocument: async () => ({
         default_population_scope: "统计范围",
         data_as_of: "2026-07",
@@ -391,11 +339,6 @@ describe("dashboard app routes and access control", () => {
         metric_domains: [],
         measures: [],
         dimensions: [],
-      }),
-      document: async () => ({
-        default_population_scope: "统计范围",
-        views: [],
-        metric_domains: [],
       }),
       dimensionValues: async () => {
         throw new Error("术语维护不应翻值");

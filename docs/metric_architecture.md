@@ -13,11 +13,10 @@ PA 采用“独立宽事实 + 正式指标图 + 聚合后对齐”。目标是�
    计算可使用 multi-stage measure。
 3. 语义包声明业务指标域与规范维度构件。指标声明业务域，事实维度声明构件归属；
    指标域负责发现，维度构件负责语义身份，两者都不参与物理选路。
-4. build-time Semantic Model Catalog 装配包内分类、物理事实、执行 View 与正式指标血缘，
-   并对成员合同、唯一来源、事实绑定、每个时间源的唯一时钟锚点和运行时 join 禁令 fail-closed。
-   能力地图只是该目录的静态投影，不自行解析 Cube YAML 或推导业务分类。
+4. 服务启动时装配唯一的 `CanonicalSemanticModel`；能力地图、Catalog、Planner 和 Record Projection
+   均从该模型投影。装配与权限合同见“Canonical model 与权限”。
 5. 正式指标模型定义跨事实指标 DAG。节点引用规范指标 id，并显式声明时间合同、缺失值、零分母、
-   格式、权限闭包和 Record Projection；运行时只在权限裁剪后的物理目录上叠加当前主体可用的正式指标。
+   格式、权限闭包和 Record Projection。
 6. Metric Planner 把一次逻辑查询展开为最少的事实内 Cube 查询腿——一条腿即按事实来源与求值形态
    拆出的单条 Cube 查询；Metric Executor 只执行计划；
    Metric Calculator 按完整规范维度键与业务时间键 full outer 对齐聚合结果，再执行指标节点声明的
@@ -35,6 +34,17 @@ PA 采用“独立宽事实 + 正式指标图 + 聚合后对齐”。目标是�
 该宽事实物理携带的成员。跨事实同名维度表示同一语义合同，不表示物理共享维表。名称相同的成员必须
 归属同一构件，并拥有一致的业务含义、标题、类型、格式和时间语义；不一致时模型装配 fail-closed。
 Planner 按规范短名把逻辑维度映射到各事实腿，所以查询能够按共同维度对齐，但不会产生原始事实 join。
+
+## Canonical model 与权限
+
+应用进程只装配一次完整语义模型。服务身份读取 Cube 完整 `/meta`，得到 Cube YAML 编译出的物理成员
+与 View 结构；语义包提供 taxonomy、正式指标图及能力血缘。启动边界校验两侧的指标身份、维度归属、
+时间锚点及执行合同，任一漂移均 fail-closed。Catalog、查询编译、翻值和记录投影共享该模型。
+
+请求身份的 `/meta` 只提供 View 与成员可见集合，应用在 canonical model 上取交集。标题、说明、分类、
+时间合同、公式和记录集合同均来自 canonical model；记录集只有在全部字段可见时才进入授权投影。
+Cube `/load` 使用同一用户 security context 执行行权限，因此成员权限与行权限都由 Cube access policy
+裁剪，业务语义保持单一事实源。
 
 ## 查询执行
 

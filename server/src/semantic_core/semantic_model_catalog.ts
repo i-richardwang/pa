@@ -1,6 +1,6 @@
 /**
- * build-time 统一语义目录：装配规范指标域、规范维度构件、物理事实与正式指标血缘。
- * 它是静态能力呈现和仓库模型门禁的共同输入，不参与运行时查询规划，也不产生事实 join。
+ * canonical model 的结构能力层：装配规范指标域、规范维度构件、物理事实与正式指标血缘。
+ * 它既是能力呈现和仓库模型门禁的共同输入，也是进程级 canonical model 的组成部分；不产生事实 join。
  */
 import { parse } from "yaml";
 import type { MetricDomainId } from "./metric_domain_id.js";

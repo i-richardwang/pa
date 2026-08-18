@@ -8,6 +8,7 @@ import { parseSemanticAnalysisSpec } from "./semantic_core/semantic_analysis.js"
 import { semanticSpecOf } from "./test_support/report.js";
 import { createTestAppDatabase } from "./test_support/app_database.js";
 import { TEST_SEMANTIC_TAXONOMY } from "./test_support/semantic_taxonomy.js";
+import { canonicalModelFixture } from "./test_support/canonical_semantic_model.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -238,7 +239,23 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     cube,
     audit: exportAudit.log,
   });
-  const catalog = createCatalogService({ cube, taxonomy: TEST_SEMANTIC_TAXONOMY });
+  const canonical = canonicalModelFixture(
+    [
+      {
+        name: "test_metrics",
+        title: "测试指标执行面",
+        meta: {
+          query_surface: "metric_source",
+          time_source: "workforce",
+          default_population_scope: "统计范围：测试。",
+        },
+        measures: [],
+        dimensions: [],
+      },
+    ],
+    TEST_SEMANTIC_TAXONOMY,
+  );
+  const catalog = createCatalogService({ cube, canonical });
   const runtime = createApplicationRuntime({
     db,
     usage,

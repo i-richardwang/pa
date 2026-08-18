@@ -8,7 +8,10 @@ import { createRecordProjectionService } from "../src/application/record_project
 import { createSemanticPlanningService } from "../src/application/semantic_planning_service.js";
 import { SERVICE_CUBE_CONTEXT, type Principal } from "../src/engine/cube_security.js";
 import { withFormalMetricModel } from "../src/engine/formal_metric_gateway.js";
-import { toCompilerCatalog } from "../src/engine/catalog_document.js";
+import {
+  loadCanonicalSemanticModel,
+  withCanonicalSemanticModel,
+} from "../src/engine/canonical_semantic_model.js";
 import type { SemanticAnalysisSpec } from "../src/semantic_core/semantic_analysis.js";
 import {
   configuredSemanticPackageDir,
@@ -28,7 +31,7 @@ const apiSecret = process.env.CUBEJS_API_SECRET;
 if (!apiSecret) throw new Error("缺少 CUBEJS_API_SECRET");
 const semanticPackage = await loadSemanticPackage(configuredSemanticPackageDir());
 if (semanticPackage.id !== "pa_demo") throw new Error("本冒烟只验证公开 pa_demo 包");
-const cube = withFormalMetricModel(
+const visibilityCube = withFormalMetricModel(
   createCubeGateway({
     cubeUrl: process.env.CUBE_URL ?? "http://localhost:4000",
     apiSecret,
@@ -36,7 +39,13 @@ const cube = withFormalMetricModel(
   }),
   semanticPackage.formal_metrics,
 );
-const catalog = createCatalogService({ cube, taxonomy: semanticPackage.taxonomy });
+const canonical = await loadCanonicalSemanticModel({
+  semantic_package: semanticPackage,
+  cube: visibilityCube,
+  service_context: SERVICE_CUBE_CONTEXT,
+});
+const cube = withCanonicalSemanticModel(visibilityCube, canonical);
+const catalog = createCatalogService({ cube: visibilityCube, canonical });
 const planning = createSemanticPlanningService({ catalog });
 const principal: Principal = {
   email: "records-demo@example.com",
@@ -44,7 +53,7 @@ const principal: Principal = {
   orgScope: ["Aurora Labs"],
 };
 const context = await cube.timeContext();
-const compiler = toCompilerCatalog(await catalog.document(principal));
+const compiler = await catalog.compiler(principal);
 const active = compiler.measures.find((metric) => metric.title === "在职人数");
 const organization = compiler.dimensions.find((dimension) => dimension.title === "组织");
 assert(active?.records_available === true && organization, "在职人数或组织明细合同缺失");

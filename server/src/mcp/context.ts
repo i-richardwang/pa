@@ -8,7 +8,7 @@ import type { Principal } from "../engine/cube_security.js";
 
 export type McpServerDependencies = {
   runtime: ApplicationRuntime;
-  catalog: CatalogService;
+  catalog: Pick<CatalogService, "query" | "dimensionValues">;
   feedback: FeedbackService;
   usage: UsageService;
   baseUrl: string;

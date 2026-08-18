@@ -27,12 +27,12 @@ import { createUsageStats } from "./storage/usage_stats.js";
 import { openAppDatabase } from "./storage/app_database.js";
 import { createExportTicketStore } from "./storage/export_ticket.js";
 import { openSqlite, type SqliteDatabase } from "./sqlite.js";
-import {
-  configuredSemanticPackageDir,
-  loadSemanticModelCatalog,
-  loadSemanticPackage,
-} from "./engine/semantic_package.js";
+import { configuredSemanticPackageDir, loadSemanticPackage } from "./engine/semantic_package.js";
 import { projectDataCapabilityMap } from "./presentation_core/data_capability_map.js";
+import {
+  loadCanonicalSemanticModel,
+  withCanonicalSemanticModel,
+} from "./engine/canonical_semantic_model.js";
 
 // 鉴权 fail-closed：基座未配置即拒绝启动；PA_ALLOW_OPEN=1 是部署者对当前监听范围的显式放行。
 if (!config.authSecret && !config.allowOpen) {
@@ -53,8 +53,7 @@ const usageService = createUsageService({
 });
 const feedbackStore = createFeedbackStore(appDb);
 const semanticPackage = await loadSemanticPackage(configuredSemanticPackageDir());
-const capabilityMap = projectDataCapabilityMap(await loadSemanticModelCatalog(semanticPackage));
-const cube = withFormalMetricModel(
+const visibilityCube = withFormalMetricModel(
   createCubeGateway({
     cubeUrl: config.cubeUrl,
     apiSecret: config.apiSecret,
@@ -62,6 +61,13 @@ const cube = withFormalMetricModel(
   }),
   semanticPackage.formal_metrics,
 );
+const canonicalModel = await loadCanonicalSemanticModel({
+  semantic_package: semanticPackage,
+  cube: visibilityCube,
+  service_context: SERVICE_CUBE_CONTEXT,
+});
+const cube = withCanonicalSemanticModel(visibilityCube, canonicalModel);
+const capabilityMap = projectDataCapabilityMap(canonicalModel.capabilities);
 const exportAudit = createExportAudit(appDb);
 const exports = createExportRuntime({
   tickets: createExportTicketStore(appDb),
@@ -75,8 +81,8 @@ const businessTermService = createBusinessTermService({
   usage: usageService,
 });
 const catalogService = createCatalogService({
-  cube,
-  taxonomy: semanticPackage.taxonomy,
+  cube: visibilityCube,
+  canonical: canonicalModel,
   businessTerms: businessTermService,
 });
 const feedbackService = createFeedbackService({ repository: feedbackStore, usage: usageService });

@@ -7,7 +7,10 @@ import { createSemanticPlanningService } from "../src/application/semantic_plann
 import { createCubeGateway } from "../src/adapters/cube_gateway.js";
 import { SERVICE_CUBE_CONTEXT, type Principal } from "../src/engine/cube_security.js";
 import { withFormalMetricModel } from "../src/engine/formal_metric_gateway.js";
-import { toSemanticCatalog } from "../src/engine/catalog_document.js";
+import {
+  loadCanonicalSemanticModel,
+  withCanonicalSemanticModel,
+} from "../src/engine/canonical_semantic_model.js";
 import type { SemanticAnalysisSpec } from "../src/semantic_core/semantic_analysis.js";
 import {
   configuredSemanticPackageDir,
@@ -30,7 +33,7 @@ if (semanticPackage.id !== "pa_demo") {
   throw new Error("seed:demo 只对公开 pa_demo 语义包生效，内部包应维护自己的播种适配器");
 }
 
-const cube = withFormalMetricModel(
+const visibilityCube = withFormalMetricModel(
   createCubeGateway({
     cubeUrl: process.env.CUBE_URL ?? "http://localhost:4000",
     apiSecret,
@@ -38,7 +41,13 @@ const cube = withFormalMetricModel(
   }),
   semanticPackage.formal_metrics,
 );
-const catalog = createCatalogService({ cube, taxonomy: semanticPackage.taxonomy });
+const canonical = await loadCanonicalSemanticModel({
+  semantic_package: semanticPackage,
+  cube: visibilityCube,
+  service_context: SERVICE_CUBE_CONTEXT,
+});
+const cube = withCanonicalSemanticModel(visibilityCube, canonical);
+const catalog = createCatalogService({ cube: visibilityCube, canonical });
 const planning = createSemanticPlanningService({ catalog });
 const execution = createQueryExecutionService({
   cube,
@@ -50,7 +59,7 @@ const execution = createQueryExecutionService({
   audit: async () => undefined,
 });
 const principal: Principal = { email: owner, roles: ["admin"], orgScope: "*" };
-const document = toSemanticCatalog(await catalog.document(principal));
+const document = await catalog.publicDocument(principal);
 const timeContext = await cube.timeContext();
 const asOf = timeContext.dataAsOf;
 

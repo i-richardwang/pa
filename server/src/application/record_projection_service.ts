@@ -1,4 +1,3 @@
-import { toCompilerCatalog } from "../engine/catalog_document.js";
 import type { CatalogService } from "./catalog_service.js";
 import { completeHierarchy } from "../engine/hierarchy.js";
 import { cubeSecurityContext, type Principal } from "../engine/cube_security.js";
@@ -208,7 +207,7 @@ export function createRecordProjectionService(deps: {
   boards: Pick<BoardRepository, "get">;
   analyses: AnalysisRepository;
   semanticPlanning: SemanticPlanningService;
-  catalog: CatalogService;
+  catalog: Pick<CatalogService, "authorized">;
   cube: CubeGateway;
   audit: RecordProjectionAudit;
 }) {
@@ -372,7 +371,8 @@ export function createRecordProjectionService(deps: {
         throw new RecordProjectionRequestError("明细坐标与当前报告不一致，请刷新后重试");
       }
 
-      const compilerCatalog = toCompilerCatalog(await deps.catalog.document(principal));
+      const authorizedModel = await deps.catalog.authorized(principal);
+      const compilerCatalog = authorizedModel.compiler;
       const source = planMetricRecordProjection(compilerCatalog, semanticView, input.metric_id);
       if (!source) throw new RecordProjectionRequestError("当前指标没有可用的人员明细来源");
       const metric = catalogMember(compilerCatalog, input.metric_id, "measure");
@@ -382,7 +382,7 @@ export function createRecordProjectionService(deps: {
       }
 
       const cubeContext = cubeSecurityContext(principal);
-      const authViews = await deps.cube.meta(cubeContext);
+      const authViews = authorizedModel.views;
       const sourceView = authViews.find((view) => view.name === source.view);
       if (!sourceView) throw new RecordProjectionRequestError("当前身份无权查看该指标的明细");
       const target = resolveRecordProjectionTarget(sourceView, metricBinding.member);

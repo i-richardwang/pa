@@ -1,13 +1,15 @@
 /** 权限裁剪后的指标目录、检索和名录值查询服务。 */
 import {
   browseCatalogDocument,
-  buildCatalogDocument,
   searchCatalogDocument,
   toSemanticCatalog,
-  toCompilerCatalog,
-  type CatalogDocument,
   type CatalogQueryResult,
 } from "../engine/catalog_document.js";
+import {
+  authorizeCanonicalSemanticModel,
+  type AuthorizedSemanticModel,
+  type CanonicalSemanticModel,
+} from "../engine/canonical_semantic_model.js";
 import { catalogMember } from "../semantic_core/query_intent.js";
 import { normalizeCatalogInput, type CatalogToolInput } from "../engine/catalog_spec.js";
 import type { CubeGateway } from "../ports/cube_gateway.js";
@@ -28,7 +30,7 @@ import type {
 } from "../contracts/business_term_contract.js";
 import { publicTimeContext } from "./time_context.js";
 import type { BusinessTermService } from "./business_term_service.js";
-import type { SemanticTaxonomy } from "../semantic_core/semantic_taxonomy.js";
+import type { CompilerCatalog } from "../semantic_core/compiler_catalog.js";
 
 export class CatalogInputError extends Error {}
 
@@ -54,7 +56,8 @@ export type CatalogQueryPayload = {
 
 export type CatalogService = {
   query(principal: Principal, input: CatalogToolInput): Promise<CatalogQueryPayload>;
-  document(principal: Principal): Promise<CatalogDocument>;
+  authorized(principal: Principal): Promise<AuthorizedSemanticModel>;
+  compiler(principal: Principal): Promise<CompilerCatalog>;
   publicDocument(principal: Principal): Promise<PublicCatalogDocument>;
   dimensionValues(
     principal: Principal,
@@ -69,7 +72,7 @@ export type CatalogService = {
  */
 export function createCatalogService(deps: {
   cube: Pick<CubeGateway, "meta" | "load" | "timeContext">;
-  taxonomy: SemanticTaxonomy;
+  canonical: CanonicalSemanticModel;
   businessTerms?: Pick<BusinessTermService, "resolve">;
 }): CatalogService {
   const model = async (principal: Principal) => {
@@ -77,10 +80,8 @@ export function createCatalogService(deps: {
     const context = cubeSecurityContext(principal);
     try {
       const views = await deps.cube.meta(context);
-      const document = buildCatalogDocument(views, deps.taxonomy);
-      // 在统一边界内完成规范成员归并与全部 fail-closed 校验，避免下游晚失败并泄漏物理身份。
-      const compiler = toCompilerCatalog(document);
-      return { context, views, document, compiler };
+      const authorized = authorizeCanonicalSemanticModel(deps.canonical, views);
+      return { context, ...authorized };
     } catch (error) {
       console.error("[pa] 语义模型装配失败:", error);
       throw new SemanticModelUnavailableError(error);
@@ -88,6 +89,7 @@ export function createCatalogService(deps: {
   };
 
   const document = async (principal: Principal) => (await model(principal)).document;
+  const compiler = async (principal: Principal) => (await model(principal)).compiler;
 
   return {
     async query(principal, rawInput) {
@@ -151,7 +153,8 @@ export function createCatalogService(deps: {
       };
     },
 
-    document,
+    authorized: model,
+    compiler,
 
     async publicDocument(principal) {
       const catalog = await document(principal);
