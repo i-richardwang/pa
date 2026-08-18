@@ -90,7 +90,7 @@ type SceneTraits = {
   tileTable: boolean;
   /** 中段常驻口径带（只有答数态挂，瓦片与整页都不挂） */
   scopeBand: boolean;
-  /** plot 留白档位（`PLOT_PADDING` 的键）：整页比紧凑面多留一圈 */
+  /** 结果面场地档位（`PLOT_PADDING` / `PLOT_FRAME` 的键）：留白与画不画框都由它定，图与表同档 */
   plot: keyof typeof PLOT_PADDING;
 };
 
@@ -277,6 +277,7 @@ function ViewBody({
           countLabel={null}
           countBar={traits.inlineChrome}
           tile={traits.tileTable}
+          plot={traits.plot}
           canOpenCell={(_row, column) =>
             records?.canOpen(view.id, presentation.table.columns[column].formatKey) ?? false
           }

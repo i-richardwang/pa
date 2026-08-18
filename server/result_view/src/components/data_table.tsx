@@ -2,7 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, ChevronUpIcon, EllipsisIcon } from "lucide-react";
 import { compareCells, formatCell } from "../../../src/presentation_core/view_format.js";
+import type { PLOT_PADDING } from "../../../src/presentation_core/chart_config.js";
 import type { TableColumn, TableModel } from "../../../src/presentation_core/view_shape.js";
+import { PlotSlab } from "./plot_slab.js";
 
 export const INLINE_ROWS = 8;
 
@@ -72,6 +74,7 @@ export function DataTable({
   countLabel,
   countBar = true,
   tile = false,
+  plot,
   canOpenCell,
   onOpenCell,
 }: {
@@ -85,6 +88,11 @@ export function DataTable({
   countBar?: boolean;
 
   tile?: boolean;
+  /**
+   * 结果面场地档位：给了就把表格铺在与图表同一块场地上（画不画框由场景表定）。
+   * 明细名单等非结果面的清单不给，表格裸铺。
+   */
+  plot?: keyof typeof PLOT_PADDING;
   /**
    * 能否查看构成记录是列的属性，与格里的数值无关——因此不收值参数。
    * row 为该格的原始结果行下标（经 sourceRows 解析），不是表格展示行序。
@@ -254,14 +262,13 @@ export function DataTable({
   const summaryCellContent = (col: TableColumn, value: string | number | null): React.ReactNode =>
     value === null ? EMPTY_CELL : formatCell(value, col.formatKey, col.format, col.decimals);
 
-  return (
-    <div className={fill ? "flex min-h-0 flex-1 flex-col" : ""}>
-      <div className={`relative ${fill ? "flex min-h-0 flex-1 flex-col" : ""}`}>
-        <div
-          className={fill ? "min-h-0 flex-1 overflow-auto" : "overflow-x-auto"}
-          onScroll={probeScroll}
-          ref={scrollerRef}
-        >
+  const grid = (
+    <div className={`relative ${fill ? "flex min-h-0 flex-1 flex-col" : ""}`}>
+      <div
+        className={fill ? "min-h-0 flex-1 overflow-auto" : "overflow-x-auto"}
+        onScroll={probeScroll}
+        ref={scrollerRef}
+      >
         <table className="w-full border-separate border-spacing-0 text-sm tabular-nums">
           <thead ref={headRef} className={fill ? "sticky top-0 z-10" : ""}>
             {headerRows.map((headerRow, level) => (
@@ -340,15 +347,26 @@ export function DataTable({
             ))}
           </tbody>
         </table>
-        </div>
-        {/* 右缘渐隐：宽度取 40px，够把最后一列的数字化开而不遮住它。 */}
-        {scrollableRight && (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-linear-to-r from-transparent to-pa-bg"
-          />
-        )}
       </div>
+      {/* 右缘渐隐：宽度取 40px，够把最后一列的数字化开而不遮住它。 */}
+      {scrollableRight && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-linear-to-r from-transparent to-pa-bg"
+        />
+      )}
+    </div>
+  );
+
+  return (
+    <div className={fill ? "flex min-h-0 flex-1 flex-col" : ""}>
+      {plot ? (
+        <PlotSlab plot={plot} fill={fill}>
+          {grid}
+        </PlotSlab>
+      ) : (
+        grid
+      )}
       {countBar && (
         <div
           className={

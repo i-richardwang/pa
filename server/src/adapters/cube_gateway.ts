@@ -249,12 +249,18 @@ const TIME_CONTEXT_TTL_MS = 10 * 60 * 1000;
 
 export type TimeSourceAnchor = { view: string; measure: string };
 
-/** 时间锚点由执行 View 显式声明；重命名物理 View 时不会在客户端留下第二份映射。 */
+/**
+ * 时间锚点由执行 View 显式声明；重命名物理 View 时不会在客户端留下第二份映射。
+ * 哪些时间来源在场由当前语义包决定：主时钟必须在场；其余来源只要有执行 View 声明了它，
+ * 就必须给出唯一锚点；包里没有的来源不要求（公开 Demo 包没有调研域）。
+ */
 export function resolveTimeSourceAnchors(views: CubeView[]): Map<TimeSourceKey, TimeSourceAnchor> {
   const anchors = new Map<TimeSourceKey, TimeSourceAnchor>();
+  const declared = new Set<TimeSourceKey>();
   for (const view of views) {
     if (view.meta?.query_surface !== "metric_source") continue;
     const source = parseTimeSourceKey(view.meta.time_source, `执行 View ${view.name}`);
+    declared.add(source);
     const anchorMeasure = view.meta.time_anchor_measure;
     if (anchorMeasure === undefined) continue;
     if (typeof anchorMeasure !== "string" || !anchorMeasure) {
@@ -268,6 +274,7 @@ export function resolveTimeSourceAnchors(views: CubeView[]): Map<TimeSourceKey, 
     anchors.set(source, { view: view.name, measure: anchorMeasure });
   }
   for (const source of TIME_SOURCES) {
+    if (!source.primary && !declared.has(source.key)) continue;
     if (!anchors.has(source.key)) throw new Error(`时间来源 ${source.key} 缺少唯一时间锚点`);
   }
   return anchors;
@@ -311,17 +318,22 @@ async function fetchTimeContext(state: CubeGatewayState): Promise<TimeContext> {
     return state.timeContextCache.value;
   }
   const anchors = resolveTimeSourceAnchors(await fetchMeta(state, state.config.serviceContext));
+  // 只为当前包在场的时间来源取边界；不在场的来源不进上下文，客户端按目录 time_sources 感知
+  const present = TIME_SOURCES.filter((source) => anchors.has(source.key));
   const anchorMonths = new Map(
     await Promise.all(
-      TIME_SOURCES.map(async (source) => {
+      present.map(async (source) => {
         const anchor = anchors.get(source.key)!;
         return [source.key, await latestMonth(state, anchor.view, anchor.measure)] as const;
       }),
     ),
   );
   const sources: Record<string, TimeSourceContext> = {};
-  for (const source of TIME_SOURCES) {
-    const actualThrough = anchorMonths.get(source.actual_source)!;
+  for (const source of present) {
+    const actualThrough = anchorMonths.get(source.actual_source);
+    if (actualThrough === undefined) {
+      throw new Error(`时间来源 ${source.key} 依赖的实际数据时钟 ${source.actual_source} 不在场`);
+    }
     const availableThrough = anchorMonths.get(source.key)!;
     sources[source.key] = {
       actualThrough,

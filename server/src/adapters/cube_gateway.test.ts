@@ -73,12 +73,28 @@ test("数据时钟从执行 View 元数据解析，不维护物理 View 名映�
     headcount_plan: { view: "plan_execution", measure: "plan" },
     survey: { view: "sentiment_execution", measure: "sample_count" },
   });
+  // 包里没有的来源不要求锚点：公开 Demo 包没有调研域，也没有编制域时同样合法
+  expect(
+    Object.fromEntries(
+      resolveTimeSourceAnchors([
+        metricView("snapshot_execution", "workforce", "active_employee_count"),
+      ]),
+    ),
+  ).toEqual({ workforce: { view: "snapshot_execution", measure: "active_employee_count" } });
+  // 声明了某来源的执行 View 在场却没人给锚点：fail-closed
   expect(() =>
     resolveTimeSourceAnchors([
       metricView("snapshot_execution", "workforce", "active_employee_count"),
-      metricView("sentiment_execution", "survey", "sample_count"),
+      {
+        ...metricView("plan_execution", "headcount_plan", "plan"),
+        meta: { query_surface: "metric_source", time_source: "headcount_plan" },
+      },
     ]),
   ).toThrow("headcount_plan 缺少唯一时间锚点");
+  // 主时钟恒必须在场
+  expect(() =>
+    resolveTimeSourceAnchors([metricView("plan_execution", "headcount_plan", "plan")]),
+  ).toThrow("workforce 缺少唯一时间锚点");
 });
 
 describe("normalizeSqlResponse", () => {

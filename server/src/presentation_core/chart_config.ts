@@ -388,6 +388,10 @@ export const PLOT_PADDING = {
   page: { left: 0, right: 0, top: 0, bottom: 30 },
 } as const;
 
+/**
+ * 结果面场地画不画那圈圆角发丝框，按宿主场景定、不看形态：画布、排行、表格在同一场景下同框。
+ * 瓦片壳自己就是边界，故不画。框落在 DOM（`PlotSlab`）而不是 echarts 的 grid：canvas 画不出圆角。
+ */
 export const PLOT_FRAME = { compact: true, tile: false, page: true } as const;
 
 export const PLOT_RADIUS = 10;

@@ -17,6 +17,7 @@ import { plotRect } from "../chart_render.js";
 import { ViewRenderer } from "./view_renderer.js";
 import {
   compilePresentationBlock,
+  LEGEND_MARKER_CLASS,
   PLOT_FRAME,
   PLOT_PADDING,
   PLOT_RADIUS,
@@ -76,7 +77,7 @@ test("渲染器忠实呈现声明的图或表", () => {
       scene="page"
     />,
   );
-  expect(chart).toContain('data-slot="chart-plot-surface"');
+  expect(chart).toContain(LEGEND_MARKER_CLASS);
   expect(chart).not.toContain("<tbody");
 
   const table = renderToStaticMarkup(
@@ -88,7 +89,39 @@ test("渲染器忠实呈现声明的图或表", () => {
     />,
   );
   expect(table).toContain("<tbody");
-  expect(table).not.toContain('data-slot="chart-plot-surface"');
+  expect(table).not.toContain(LEGEND_MARKER_CLASS);
+});
+
+/** 场地是场景的取舍，不是形态的：同一场景里图与表落在同一块场地上、同框或同不框。 */
+test("结果面的场地按场景定，图与表同框", () => {
+  const surfaceOf = (html: string) =>
+    html.match(/<div[^>]*data-slot="plot-surface"[^>]*>/)?.[0] ?? "";
+  const tablePresentation = compilePresentationBlock(CHART_VIEW, {
+    type: "table",
+    y: [],
+  } as never);
+  const render = (presentation: typeof CHART_PRESENTATION, scene: "card" | "tile" | "page") =>
+    renderToStaticMarkup(
+      <ViewRenderer actions={{}} payload={PAYLOAD} presentation={presentation} scene={scene} />,
+    );
+
+  for (const scene of ["card", "page"] as const) {
+    const table = surfaceOf(render(tablePresentation, scene));
+    const chart = surfaceOf(render(CHART_PRESENTATION, scene));
+    expect(table, `${scene} 的表格没铺在场地上`).not.toBe("");
+    for (const slab of [table, chart]) {
+      expect(slab, scene).toContain("border-pa-line");
+      expect(slab, scene).toContain(`border-radius:${PLOT_RADIUS}px`);
+    }
+    // 框里的表格再内缩一圈：分隔线与末列的数不贴框缘；框上下留呼吸，不压题名与行数条
+    expect(table).toContain("p-4");
+    expect(table).toContain("my-3");
+  }
+  const tile = surfaceOf(render(tablePresentation, "tile"));
+  expect(tile, "瓦片里的表格没经过场地").not.toBe("");
+  expect(tile).not.toContain("border-pa-line");
+  expect(tile).not.toContain("p-4");
+  expect(tile).not.toContain("my-3");
 });
 
 /** 元素上的横向衬垫类——比的是「贴哪条左轴」，不是整串类名。 */
@@ -228,7 +261,7 @@ test("换焦点一趟发完，不经由「谁都没聚焦」那一态", () => {
 test("绘图区那块场地是圆角的，且瓦片档不画框", () => {
   const slabOf = (plot: "compact" | "tile" | "page") =>
     renderToStaticMarkup(<ViewChartCanvas chart={CHART!} plot={plot} />).match(
-      /<div[^>]*data-slot="chart-plot-surface"[^>]*>/,
+      /<div[^>]*data-slot="plot-surface"[^>]*>/,
     )?.[0] ?? "";
 
   const card = slabOf("compact");
@@ -278,7 +311,7 @@ test("排行版式逐行陈述：条长按本屏最大值归一，且不落 echa
   expect(html).toContain("width:100%");
   expect(html).toContain("width:25%");
   // 排行版式没有画布：框仍在（同一块场地），但不该有给 echarts 的那个空盒
-  expect(html).toContain('data-slot="chart-plot-surface"');
+  expect(html).toContain('data-slot="plot-surface"');
   expect(html.match(/<div/g)?.length ?? 0).toBeLessThan(20);
 
   expect(CHART!.layout, "多系列被误判成排行版式").toBeUndefined();
