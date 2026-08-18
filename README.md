@@ -110,6 +110,7 @@ bun run generate:data-capability-map
 | `server/src/semantic_core/` | 纯语义合同、时间合同和目录规格 |
 | `server/src/engine/` | 语义包加载、正式指标 Planner、Executor、Calculator 与结果变换 |
 | `server/src/application/` | MCP 与控制台共用的应用服务 |
+| `server/src/composition/` | 应用服务、端口实现与运行依赖的集中装配 |
 | `server/src/adapters/` | Cube 和网络等外部端口实现 |
 | `server/src/mcp/` | MCP 工具与 Apps 资源映射 |
 | `server/console/` | OAuth 登录、指标目录、分析、报告与看板 |

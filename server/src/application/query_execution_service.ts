@@ -1,4 +1,3 @@
-import type { ExportAuditEvent } from "../ports/export_audit.js";
 import type { Principal } from "../engine/cube_security.js";
 import type {
   CubeGateway,
@@ -8,7 +7,7 @@ import type {
   CubeView,
   TimeContext,
 } from "../ports/cube_gateway.js";
-import type { ExportRuntime } from "../engine/export.js";
+import type { ExportService } from "./export_service.js";
 import { completeHierarchy } from "../engine/hierarchy.js";
 import { memberDisplayTitle, showDimensionNote } from "../engine/member_presentation.js";
 import { structureSharesOf } from "../engine/measure_relations.js";
@@ -508,8 +507,7 @@ async function executeView(
 
 export type QueryExecutionDependencies = {
   cube: CubeGateway;
-  exports: Pick<ExportRuntime, "createDelivery">;
-  audit: (event: ExportAuditEvent) => Promise<void>;
+  exports: Pick<ExportService, "createDelivery">;
 };
 
 export function createQueryExecutionService(deps: QueryExecutionDependencies) {
@@ -523,7 +521,6 @@ export function createQueryExecutionService(deps: QueryExecutionDependencies) {
         executeView: (...args) => executeView(deps, ...args),
         cube: deps.cube,
         exports: deps.exports,
-        audit: deps.audit,
       },
       principal,
       plan,

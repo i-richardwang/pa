@@ -5,9 +5,8 @@ import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { cors } from "hono/cors";
 import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins";
 import { principalFromAttributes, type Principal } from "./engine/cube_security.js";
-import { createExportAudit } from "./storage/audit.js";
 import { buildAuth, initializeAuthSchema, type Auth } from "./auth.js";
-import { createApplicationRuntime } from "./application/runtime.js";
+import { createApplication } from "./composition/application.js";
 import { createCatalogService } from "./application/catalog_service.js";
 import { createBusinessTermService } from "./application/business_term_service.js";
 import { createFeedbackService } from "./application/feedback_service.js";
@@ -17,7 +16,10 @@ import { createCubeGateway } from "./adapters/cube_gateway.js";
 import { SERVICE_CUBE_CONTEXT } from "./engine/cube_security.js";
 import { withFormalMetricModel } from "./engine/formal_metric_gateway.js";
 import { dashboardRoutes } from "./dashboard/index.js";
-import { createExportRuntime, ExportIncompleteError } from "./engine/export.js";
+import {
+  ExportIncompleteError,
+  ExportTicketUnavailableError,
+} from "./application/export_service.js";
 import { createFeedbackStore } from "./storage/feedback.js";
 import { createBusinessTermRepository } from "./storage/business_term_repository.js";
 import { isAllowedOrigin } from "./engine/origins.js";
@@ -25,7 +27,6 @@ import { buildServer, type McpServerDependencies } from "./server.js";
 import { createUsageLog } from "./storage/usage_log.js";
 import { createUsageStats } from "./storage/usage_stats.js";
 import { openAppDatabase } from "./storage/app_database.js";
-import { createExportTicketStore } from "./storage/export_ticket.js";
 import { openSqlite, type SqliteDatabase } from "./sqlite.js";
 import { configuredSemanticPackageDir, loadSemanticPackage } from "./engine/semantic_package.js";
 import { projectDataCapabilityMap } from "./presentation_core/data_capability_map.js";
@@ -68,13 +69,6 @@ const canonicalModel = await loadCanonicalSemanticModel({
 });
 const cube = withCanonicalSemanticModel(visibilityCube, canonicalModel);
 const capabilityMap = projectDataCapabilityMap(canonicalModel.capabilities);
-const exportAudit = createExportAudit(appDb);
-const exports = createExportRuntime({
-  tickets: createExportTicketStore(appDb),
-  baseUrl: config.baseUrl,
-  cube,
-  audit: exportAudit.log,
-});
 const businessTermRepository = createBusinessTermRepository(appDb);
 const businessTermService = createBusinessTermService({
   repository: businessTermRepository,
@@ -86,22 +80,25 @@ const catalogService = createCatalogService({
   businessTerms: businessTermService,
 });
 const feedbackService = createFeedbackService({ repository: feedbackStore, usage: usageService });
-const runtime = createApplicationRuntime({
+const application = createApplication({
   db: appDb,
   usage: usageService,
   cube,
-  exports,
-  exportAudit,
   catalog: catalogService,
+  baseUrl: config.baseUrl,
 });
 const serverDependencies: McpServerDependencies = {
-  runtime,
+  analysis: application.analysis,
+  presentation: application.presentation,
   catalog: catalogService,
+  records: application.recordProjection,
+  reports: application.report,
+  exports: application.export,
   feedback: feedbackService,
   usage: usageService,
   baseUrl: config.baseUrl,
 };
-await runtime.analyses.removeExpired();
+await application.maintenance.removeExpiredAnalyses();
 
 const LOCAL_PRINCIPAL: Principal = { email: "local", roles: ["admin"], orgScope: "*" };
 
@@ -183,15 +180,15 @@ if (config.authSecret) {
         const ctx = await enabledAuth.$context;
         await ctx.internalAdapter.updateUser(userId, { org_scope: orgScope });
       },
-      analyses: runtime.analysis,
-      reportService: runtime.report,
-      presentation: runtime.presentation,
-      boardService: runtime.board,
+      analyses: application.analysis,
+      reportService: application.report,
+      presentation: application.presentation,
+      boardService: application.board,
       feedback: feedbackService,
       catalog: catalogService,
       businessTerms: businessTermService,
-      semanticPlanning: runtime.semanticPlanning,
-      records: runtime.recordProjection,
+      semanticPlanning: application.semanticPlanning,
+      records: application.recordProjection,
       capabilityMap,
     }),
   );
@@ -268,10 +265,9 @@ app.all("/mcp", async (c) => {
 // 惰性执行查询装配 CSV，明细数据不落盘。
 const exportDownload = async (c: Context<AppEnv>) => {
   const ticket = c.req.param("ticket");
-  const claims = ticket ? await exports.resolveTicket(ticket) : null;
-  if (!claims) return c.text("下载链接无效或已过期，请让助手重新生成。", 403);
+  if (!ticket) return c.text("下载链接无效或已过期，请让助手重新生成。", 403);
   try {
-    const { csv, asOf } = await exports.materialize(claims);
+    const { csv, asOf } = await application.export.download(ticket);
     return c.body(csv, 200, {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="pa_export_${asOf}.csv"`,
@@ -279,6 +275,9 @@ const exportDownload = async (c: Context<AppEnv>) => {
       "Referrer-Policy": "no-referrer",
     });
   } catch (e) {
+    if (e instanceof ExportTicketUnavailableError) {
+      return c.text("下载链接无效或已过期，请让助手重新生成。", 403);
+    }
     if (e instanceof ExportIncompleteError) {
       return c.text(`${e.message}，未生成 CSV——请让助手加过滤条件缩小范围后分批导出。`, 413);
     }

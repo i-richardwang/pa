@@ -1,5 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AnalysisService } from "./application/analysis_service.js";
+import type { CatalogService } from "./application/catalog_service.js";
+import type { ExportService } from "./application/export_service.js";
+import type { FeedbackService } from "./application/feedback_service.js";
+import type { PresentationService } from "./application/presentation_service.js";
+import type { RecordProjectionService } from "./application/record_projection_service.js";
+import type { ReportService } from "./application/report_service.js";
+import type { UsageService } from "./application/usage_service.js";
 import type { Principal } from "./engine/cube_security.js";
 import { registerAnalysisTools } from "./mcp/analysis_tools.js";
 import { registerCatalogTools } from "./mcp/catalog_tools.js";
@@ -11,7 +18,7 @@ import {
   OPENAI_WIDGET_CSP,
   TOOL_DESCRIPTIONS,
 } from "./mcp/contracts.js";
-import type { McpRegistrationContext, McpServerDependencies } from "./mcp/context.js";
+import type { McpRegistrationContext } from "./mcp/context.js";
 import { registerExportTools } from "./mcp/export_tools.js";
 import { registerFeedbackTool } from "./mcp/feedback_tool.js";
 import { registerReportTools } from "./mcp/report_tools.js";
@@ -27,7 +34,18 @@ export {
   UI_RESOURCE_URI,
   RECORDS_UI_RESOURCE_URI,
 };
-export type { McpServerDependencies };
+
+export type McpServerDependencies = {
+  analysis: Pick<AnalysisService, "run" | "rerun" | "replay" | "ensureOwned">;
+  presentation: Pick<PresentationService, "compile" | "runtimeFallbacks">;
+  catalog: Pick<CatalogService, "query" | "dimensionValues">;
+  records: Pick<RecordProjectionService, "runAnalysis">;
+  reports: Pick<ReportService, "save" | "update" | "listOwned" | "summary">;
+  exports: Pick<ExportService, "exportResult" | "readResource">;
+  feedback: Pick<FeedbackService, "submit">;
+  usage: Pick<UsageService, "wrap">;
+  baseUrl: string;
+};
 
 const LOCAL_PRINCIPAL: Principal = {
   email: "local",
@@ -38,7 +56,6 @@ const LOCAL_PRINCIPAL: Principal = {
 export function buildServer(opts: {
   dependencies: McpServerDependencies;
   principal?: Principal;
-  analysis?: Pick<AnalysisService, "run" | "rerun" | "replay" | "ensureOwned">;
 }): McpServer {
   const principal = opts.principal ?? LOCAL_PRINCIPAL;
   const server = new McpServer(
@@ -51,18 +68,37 @@ export function buildServer(opts: {
   );
   const context: McpRegistrationContext = {
     server,
-    dependencies: opts.dependencies,
     principal,
-    caller: principal.email,
-    analysis: opts.analysis ?? opts.dependencies.runtime.analysis,
   };
 
-  registerCatalogTools(context);
-  registerAnalysisTools(context);
-  registerRecordTools(context);
-  registerReportTools(context);
-  registerFeedbackTool(context);
-  registerExportTools(context);
+  registerCatalogTools({
+    ...context,
+    catalog: opts.dependencies.catalog,
+    usage: opts.dependencies.usage,
+  });
+  registerAnalysisTools({
+    ...context,
+    analysis: opts.dependencies.analysis,
+    presentation: opts.dependencies.presentation,
+    usage: opts.dependencies.usage,
+  });
+  registerRecordTools({
+    ...context,
+    records: opts.dependencies.records,
+    usage: opts.dependencies.usage,
+  });
+  registerReportTools({
+    ...context,
+    reports: opts.dependencies.reports,
+    usage: opts.dependencies.usage,
+    baseUrl: opts.dependencies.baseUrl,
+  });
+  registerFeedbackTool({
+    ...context,
+    feedback: opts.dependencies.feedback,
+    usage: opts.dependencies.usage,
+  });
+  registerExportTools({ ...context, exports: opts.dependencies.exports });
   registerWidgetResource(context);
   return server;
 }

@@ -2,10 +2,18 @@ import { z } from "zod";
 import type { FeedbackInput } from "../contracts/feedback_input.js";
 import { FEEDBACK_LIMITS } from "../contracts/dashboard_contract.js";
 import type { McpRegistrationContext } from "./context.js";
+import type { FeedbackService } from "../application/feedback_service.js";
+import type { UsageService } from "../application/usage_service.js";
 import { OAUTH_SECURITY_SCHEMES, TOOL_DESCRIPTIONS, WRITE_ANNOTATIONS } from "./contracts.js";
 
-export function registerFeedbackTool(context: McpRegistrationContext): void {
-  const { server, dependencies, principal, caller } = context;
+export function registerFeedbackTool(
+  context: McpRegistrationContext & {
+    feedback: Pick<FeedbackService, "submit">;
+    usage: Pick<UsageService, "wrap">;
+  },
+): void {
+  const { server, principal, feedback, usage } = context;
+  const caller = principal.email;
   server.registerTool(
     "feedback",
     {
@@ -32,8 +40,8 @@ export function registerFeedbackTool(context: McpRegistrationContext): void {
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    dependencies.usage.wrap({ tool: "feedback", caller }, async (input: FeedbackInput) => {
-      const payload = await dependencies.feedback.submit(principal, input);
+    usage.wrap({ tool: "feedback", caller }, async (input: FeedbackInput) => {
+      const payload = await feedback.submit(principal, input);
       return {
         content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
         structuredContent: payload,

@@ -8,6 +8,9 @@ import {
 } from "../semantic_core/semantic_analysis.js";
 import { analysisResult } from "./analysis_result.js";
 import type { McpRegistrationContext } from "./context.js";
+import type { AnalysisService } from "../application/analysis_service.js";
+import type { PresentationService } from "../application/presentation_service.js";
+import type { UsageService } from "../application/usage_service.js";
 import {
   OAUTH_SECURITY_SCHEMES,
   READ_ONLY_ANNOTATIONS,
@@ -18,8 +21,15 @@ import {
   UI_RESOURCE_URI,
 } from "./contracts.js";
 
-export function registerAnalysisTools(context: McpRegistrationContext): void {
-  const { server, dependencies, principal, caller, analysis } = context;
+export function registerAnalysisTools(
+  context: McpRegistrationContext & {
+    analysis: Pick<AnalysisService, "run" | "rerun" | "replay" | "ensureOwned">;
+    presentation: Pick<PresentationService, "compile" | "runtimeFallbacks">;
+    usage: Pick<UsageService, "wrap">;
+  },
+): void {
+  const { server, principal, analysis, presentation, usage } = context;
+  const caller = principal.email;
 
   server.registerTool(
     "run_analysis",
@@ -36,7 +46,7 @@ export function registerAnalysisTools(context: McpRegistrationContext): void {
       },
     },
     async (input: { spec: SemanticAnalysisSpec }) =>
-      analysisResult(dependencies.runtime, await analysis.run(principal, input.spec)),
+      analysisResult(presentation, await analysis.run(principal, input.spec)),
   );
 
   server.registerTool(
@@ -54,7 +64,7 @@ export function registerAnalysisTools(context: McpRegistrationContext): void {
     },
     async (input: { analysis_id: string; presentation: SemanticChart }) =>
       analysisResult(
-        dependencies.runtime,
+        presentation,
         await analysis.rerun(principal, input.analysis_id, input.presentation),
       ),
   );
@@ -81,17 +91,14 @@ export function registerAnalysisTools(context: McpRegistrationContext): void {
         "openai/toolInvocation/invoked": "分析结果卡已就绪",
       },
     },
-    dependencies.usage.wrap(
-      { tool: "show_analysis", caller },
-      async (input: { analysis_id: string }) => {
-        await analysis.ensureOwned(principal, input.analysis_id);
-        const payload = { analysis_id: input.analysis_id };
-        return {
-          content: [{ type: "text" as const, text: "分析结果卡已打开。" }],
-          structuredContent: payload,
-        };
-      },
-    ),
+    usage.wrap({ tool: "show_analysis", caller }, async (input: { analysis_id: string }) => {
+      await analysis.ensureOwned(principal, input.analysis_id);
+      const payload = { analysis_id: input.analysis_id };
+      return {
+        content: [{ type: "text" as const, text: "分析结果卡已打开。" }],
+        structuredContent: payload,
+      };
+    }),
   );
 
   registerAppTool(
@@ -111,7 +118,7 @@ export function registerAnalysisTools(context: McpRegistrationContext): void {
       },
     },
     async (input: { analysis_id: string }) =>
-      analysisResult(dependencies.runtime, await analysis.replay(principal, input.analysis_id), {
+      analysisResult(presentation, await analysis.replay(principal, input.analysis_id), {
         includeSpec: true,
       }),
   );
@@ -133,6 +140,6 @@ export function registerAnalysisTools(context: McpRegistrationContext): void {
       },
     },
     async (input: { analysis_id: string }) =>
-      analysisResult(dependencies.runtime, await analysis.replay(principal, input.analysis_id)),
+      analysisResult(presentation, await analysis.replay(principal, input.analysis_id)),
   );
 }

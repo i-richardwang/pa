@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { RecordProjectionPayload } from "../contracts/record_projection_contract.js";
 import { RECORD_PROJECTION_META_KEY } from "../contracts/record_projection_contract.js";
 import type { McpRegistrationContext } from "./context.js";
+import type { RecordProjectionService } from "../application/record_projection_service.js";
+import type { UsageService } from "../application/usage_service.js";
 import {
   OAUTH_SECURITY_SCHEMES,
   READ_ONLY_ANNOTATIONS,
@@ -34,8 +36,14 @@ const result = (analysisId: string, payload: RecordProjectionPayload) => {
   };
 };
 
-export function registerRecordTools(context: McpRegistrationContext): void {
-  const { server, dependencies, principal, caller } = context;
+export function registerRecordTools(
+  context: McpRegistrationContext & {
+    records: Pick<RecordProjectionService, "runAnalysis">;
+    usage: Pick<UsageService, "wrap">;
+  },
+): void {
+  const { server, principal, records, usage } = context;
+  const caller = principal.email;
 
   registerAppTool(
     server,
@@ -60,12 +68,12 @@ export function registerRecordTools(context: McpRegistrationContext): void {
         "openai/toolInvocation/invoked": "人员名单已就绪",
       },
     },
-    dependencies.usage.wrap(
+    usage.wrap(
       { tool: "show_records", caller },
       async (input: { analysis_id: string; metric_id?: string }) =>
         result(
           input.analysis_id,
-          await dependencies.runtime.recordProjection.runAnalysis(principal, input.analysis_id, {
+          await records.runAnalysis(principal, input.analysis_id, {
             ...(input.metric_id ? { metricId: input.metric_id } : {}),
             limit: 20,
           }),
@@ -102,7 +110,7 @@ export function registerRecordTools(context: McpRegistrationContext): void {
     }) =>
       result(
         input.analysis_id,
-        await dependencies.runtime.recordProjection.runAnalysis(principal, input.analysis_id, {
+        await records.runAnalysis(principal, input.analysis_id, {
           metricId: input.metric_id,
           dataAsOf: input.data_as_of,
           offset: input.offset,

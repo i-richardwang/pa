@@ -56,7 +56,6 @@ const execution = createQueryExecutionService({
       throw new Error("Demo 播种不创建导出");
     },
   },
-  audit: async () => undefined,
 });
 const principal: Principal = { email: owner, roles: ["admin"], orgScope: "*" };
 const document = await catalog.publicDocument(principal);

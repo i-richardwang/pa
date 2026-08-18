@@ -73,7 +73,6 @@ const cube = {
 const service = createQueryExecutionService({
   cube,
   exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
-  audit: async () => undefined,
 });
 
 /** 指标组合覆盖三种时间语义与拆腿路径。 */

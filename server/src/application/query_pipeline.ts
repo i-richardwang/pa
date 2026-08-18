@@ -1,4 +1,3 @@
-import type { ExportAuditEvent } from "../ports/export_audit.js";
 import { defaultPopulationScope } from "../engine/catalog_document.js";
 import { cubeSecurityContext, type Principal } from "../engine/cube_security.js";
 import type {
@@ -7,7 +6,7 @@ import type {
   CubeView,
   TimeContext,
 } from "../ports/cube_gateway.js";
-import type { ExportRuntime } from "../engine/export.js";
+import type { ExportService } from "./export_service.js";
 import { memberDisplayTitle } from "../engine/member_presentation.js";
 import { AGGREGATE_MODEL_ROWS, modelSampleNote } from "../engine/result_limit.js";
 import { isDerivedViewSpec, type QueryViewSpec } from "../semantic_core/analysis_spec.js";
@@ -205,8 +204,7 @@ export async function runQueryPipeline(
   deps: {
     executeView: ExecuteView;
     cube: Pick<CubeGateway, "meta" | "timeContext">;
-    exports: Pick<ExportRuntime, "createDelivery">;
-    audit: (event: ExportAuditEvent) => Promise<void>;
+    exports: Pick<ExportService, "createDelivery">;
   },
   principal: Principal,
   plan: ExecutionPlan,
@@ -313,11 +311,6 @@ export async function runQueryPipeline(
     );
     capabilities = { export: delivery.link };
     exportResource = delivery.resource;
-    await deps.audit({
-      event: "export_created",
-      caller,
-      query: deliveredResult.exportPlan,
-    });
   }
   return {
     payload: {

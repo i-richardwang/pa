@@ -168,13 +168,10 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
   const [
     { Client },
     { InMemoryTransport },
-    { createApplicationRuntime },
+    { createApplication },
     { createCatalogService },
     { createFeedbackService },
     { createFeedbackStore },
-    { createExportAudit },
-    { createExportRuntime },
-    { createExportTicketStore },
     { createUsageLog },
     { createUsageStats },
     { createUsageService },
@@ -190,13 +187,10 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
   ] = await Promise.all([
     import("@modelcontextprotocol/sdk/client/index.js"),
     import("@modelcontextprotocol/sdk/inMemory.js"),
-    import("./application/runtime.js"),
+    import("./composition/application.js"),
     import("./application/catalog_service.js"),
     import("./application/feedback_service.js"),
     import("./storage/feedback.js"),
-    import("./storage/audit.js"),
-    import("./engine/export.js"),
-    import("./storage/export_ticket.js"),
     import("./storage/usage_log.js"),
     import("./storage/usage_stats.js"),
     import("./application/usage_service.js"),
@@ -232,13 +226,6 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     sql: async () => [],
     timeContext: async () => ({ dataAsOf: "2026-07", sources: {} }),
   };
-  const exportAudit = createExportAudit(db);
-  const exports = createExportRuntime({
-    tickets: createExportTicketStore(db),
-    baseUrl: "http://127.0.0.1:8788",
-    cube,
-    audit: exportAudit.log,
-  });
   const canonical = canonicalModelFixture(
     [
       {
@@ -256,13 +243,12 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     TEST_SEMANTIC_TAXONOMY,
   );
   const catalog = createCatalogService({ cube, canonical });
-  const runtime = createApplicationRuntime({
+  const application = createApplication({
     db,
     usage,
     cube,
-    exports,
-    exportAudit,
     catalog,
+    baseUrl: "http://127.0.0.1:8788",
   });
   const feedbackStore = createFeedbackStore(db);
   const executedAnalysis = (id: string) => {
@@ -388,7 +374,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
   const ownershipChecks: string[] = [];
   const replayed: string[] = [];
   const projected: { analysisId: string; metricId?: string; offset?: number }[] = [];
-  runtime.recordProjection.runAnalysis = async (_principal, id, options = {}) => {
+  application.recordProjection.runAnalysis = async (_principal, id, options = {}) => {
     projected.push({
       analysisId: id,
       ...(options.metricId ? { metricId: options.metricId } : {}),
@@ -412,29 +398,32 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
   };
   const server = buildServer({
     dependencies: {
-      runtime,
+      analysis: {
+        run: async (_principal, spec) => {
+          const declared =
+            spec.presentation.type === "table" ? spec.presentation.columns?.[0] : undefined;
+          return executedPivot(
+            declared === "dimension:organization_name" ? unavailablePivotId : appliedPivotId,
+            spec,
+          );
+        },
+        rerun: async () => executedAnalysis(rerunAnalysisId),
+        replay: async (_principal, id) => {
+          replayed.push(id);
+          return executedAnalysis(id);
+        },
+        ensureOwned: async (_principal, id) => {
+          ownershipChecks.push(id);
+        },
+      },
+      presentation: application.presentation,
       catalog,
+      records: application.recordProjection,
+      reports: application.report,
+      exports: application.export,
       feedback: createFeedbackService({ repository: feedbackStore, usage }),
       usage,
       baseUrl: "http://127.0.0.1:8788",
-    },
-    analysis: {
-      run: async (_principal, spec) => {
-        const declared =
-          spec.presentation.type === "table" ? spec.presentation.columns?.[0] : undefined;
-        return executedPivot(
-          declared === "dimension:organization_name" ? unavailablePivotId : appliedPivotId,
-          spec,
-        );
-      },
-      rerun: async () => executedAnalysis(rerunAnalysisId),
-      replay: async (_principal, id) => {
-        replayed.push(id);
-        return executedAnalysis(id);
-      },
-      ensureOwned: async (_principal, id) => {
-        ownershipChecks.push(id);
-      },
     },
   });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

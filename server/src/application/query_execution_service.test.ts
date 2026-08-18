@@ -107,7 +107,6 @@ test("Agent 指标域拒绝手写技术维度与计算辅助指标，且不会�
     exports: {
       createDelivery: async () => Promise.reject(new Error("不应导出")),
     },
-    audit: async () => undefined,
   });
   for (const query of [
     {
@@ -181,7 +180,6 @@ test("交付边界把执行成员一次性投影为语义列与语义口径引�
     exports: {
       createDelivery: async () => Promise.reject(new Error("不应导出")),
     },
-    audit: async () => undefined,
   });
   const spec: AnalysisSpec = {
     views: [
@@ -363,7 +361,6 @@ test("分组 Top-N 按正式指标在最新逻辑时间桶排名，并保留选�
   const service = createQueryExecutionService({
     cube,
     exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
-    audit: async () => undefined,
   });
   const result = await service.execute(
     principal,
@@ -528,7 +525,6 @@ test("Top-N 先按选择粒度排名，再展开选中分组的完整展示粒�
   const service = createQueryExecutionService({
     cube,
     exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
-    audit: async () => undefined,
   });
   const result = await service.execute(
     principal,
@@ -653,7 +649,6 @@ test("年度连续区间把端点、YTD 与流量指标自动拆腿后按组织�
   const service = createQueryExecutionService({
     cube,
     exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
-    audit: async () => undefined,
   });
   const result = await service.execute(
     principal,
@@ -760,9 +755,8 @@ function resultCube(rowCount: number): CubeGateway {
   } as unknown as CubeGateway;
 }
 
-test("截断的直查结果交付导出能力、资源与审计", async () => {
+test("截断的直查结果交付导出能力与资源", async () => {
   const deliveryQueries: unknown[] = [];
-  const audits: unknown[] = [];
   const delivery = {
     link: {
       url: "https://pa.example/export/ticket",
@@ -783,7 +777,6 @@ test("截断的直查结果交付导出能力、资源与审计", async () => {
         return delivery;
       },
     },
-    audit: async (event) => void audits.push(event),
   });
   const result = await service.execute(
     principal,
@@ -807,17 +800,10 @@ test("截断的直查结果交付导出能力、资源与审计", async () => {
     (deliveryQueries[0] as { legs: Array<{ plan: { query: { limit?: number } } }> }).legs[0].plan
       .query.limit,
   ).toBeUndefined();
-  expect(audits).toEqual([
-    expect.objectContaining({
-      event: "export_created",
-      caller: principal.email,
-    }),
-  ]);
 });
 
 test("派生结果不创建导出能力或资源", async () => {
   let deliveries = 0;
-  const audits: unknown[] = [];
   const service = createQueryExecutionService({
     cube: resultCube(2),
     exports: {
@@ -826,7 +812,6 @@ test("派生结果不创建导出能力或资源", async () => {
         throw new Error("派生结果不应创建导出");
       },
     },
-    audit: async (event) => void audits.push(event),
   });
   const result = await service.execute(
     principal,
@@ -875,7 +860,6 @@ test("派生结果不创建导出能力或资源", async () => {
   expect(result.payload.capabilities).toBeUndefined();
   expect(result.exportResource).toBeUndefined();
   expect(deliveries).toBe(0);
-  expect(audits).toEqual([]);
 });
 
 const monthlyRateView: CubeView = {
@@ -935,7 +919,6 @@ test("不能整窗合并的指标退到期间终点求值，并写实其真实�
   const service = createQueryExecutionService({
     cube: totalsCube(calls, (_query, measure) => values[measure]),
     exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
-    audit: async () => undefined,
   });
   const result = await service.execute(
     principal,
@@ -985,7 +968,6 @@ test("带对照时每个指标逐期间给出合计", async () => {
       Number(query.timeDimensions?.[0]?.dateRange?.[0]?.slice(0, 4) ?? 0),
     ),
     exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
-    audit: async () => undefined,
   });
   const result = await service.execute(
     principal,
@@ -1020,7 +1002,6 @@ test("派生结果没有单一业务时间轴，因而没有整窗合计", async
   const service = createQueryExecutionService({
     cube: totalsCube(calls, () => 7),
     exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
-    audit: async () => undefined,
   });
   const result = await service.execute(
     principal,
@@ -1114,7 +1095,6 @@ test("模型成员的 meta.decimals 随列进入载荷 column_decimals，且按�
     createQueryExecutionService({
       cube: gateway(view),
       exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
-      audit: async () => undefined,
     }).execute(
       principal,
       planExecution(

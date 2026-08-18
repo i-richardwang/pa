@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { MCP_REPORT_UPDATE_ACTION, type ReportUpdateAction } from "../contracts/report_action.js";
 import type { McpRegistrationContext } from "./context.js";
+import type { ReportService } from "../application/report_service.js";
+import type { UsageService } from "../application/usage_service.js";
 import {
   OAUTH_SECURITY_SCHEMES,
   READ_ONLY_ANNOTATIONS,
@@ -8,9 +10,15 @@ import {
   WRITE_ANNOTATIONS,
 } from "./contracts.js";
 
-export function registerReportTools(context: McpRegistrationContext): void {
-  const { server, dependencies, principal, caller } = context;
-  const { runtime } = dependencies;
+export function registerReportTools(
+  context: McpRegistrationContext & {
+    reports: Pick<ReportService, "save" | "update" | "listOwned" | "summary">;
+    usage: Pick<UsageService, "wrap">;
+    baseUrl: string;
+  },
+): void {
+  const { server, principal, reports, usage, baseUrl } = context;
+  const caller = principal.email;
 
   server.registerTool(
     "save_report",
@@ -30,8 +38,8 @@ export function registerReportTools(context: McpRegistrationContext): void {
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    dependencies.usage.wrap({ tool: "save_report", caller }, async (input) => {
-      const report = await runtime.report.save({
+    usage.wrap({ tool: "save_report", caller }, async (input) => {
+      const report = await reports.save({
         principal,
         analysisId: input.analysis_id,
         name: input.name,
@@ -68,15 +76,10 @@ export function registerReportTools(context: McpRegistrationContext): void {
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    dependencies.usage.wrap(
+    usage.wrap(
       { tool: "update_report", caller },
       async (input: { id: string; action: ReportUpdateAction; if_revision?: number }) => {
-        const report = await runtime.report.update(
-          principal,
-          input.id,
-          input.action,
-          input.if_revision,
-        );
+        const report = await reports.update(principal, input.id, input.action, input.if_revision);
         const payload = {
           id: report.id,
           name: report.name,
@@ -114,12 +117,12 @@ export function registerReportTools(context: McpRegistrationContext): void {
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    dependencies.usage.wrap({ tool: "find_report", caller }, async (input: { query?: string }) => {
-      const reports = (await runtime.report.listOwned(caller, input.query)).map((report) => ({
-        ...runtime.report.summary(report),
-        url: `${dependencies.baseUrl}/dashboard#/report/${report.id}`,
+    usage.wrap({ tool: "find_report", caller }, async (input: { query?: string }) => {
+      const found = (await reports.listOwned(caller, input.query)).map((report) => ({
+        ...reports.summary(report),
+        url: `${baseUrl}/dashboard#/report/${report.id}`,
       }));
-      const payload = { reports };
+      const payload = { reports: found };
       return {
         content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
         structuredContent: payload,

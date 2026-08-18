@@ -1,10 +1,14 @@
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
+  ExportIncompleteError,
+  ExportTicketUnavailableError,
+  type ExportService,
+} from "../application/export_service.js";
+import {
   EXPORT_RESOURCE_MIME_TYPE,
   EXPORT_RESOURCE_URI_TEMPLATE,
-  ExportIncompleteError,
-} from "../engine/export.js";
+} from "../contracts/export_contract.js";
 import type { McpRegistrationContext } from "./context.js";
 import {
   EXPORT_OUTPUT,
@@ -13,9 +17,12 @@ import {
   WRITE_ANNOTATIONS,
 } from "./contracts.js";
 
-export function registerExportTools(context: McpRegistrationContext): void {
-  const { server, dependencies, principal, caller } = context;
-  const { runtime } = dependencies;
+export function registerExportTools(
+  context: McpRegistrationContext & {
+    exports: Pick<ExportService, "exportResult" | "readResource">;
+  },
+): void {
+  const { server, principal, exports } = context;
 
   server.registerTool(
     "export_result",
@@ -30,7 +37,7 @@ export function registerExportTools(context: McpRegistrationContext): void {
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
     async (input: { analysis_id: string }) => {
-      const payload = await runtime.exportResult.exportResult(principal, input.analysis_id);
+      const payload = await exports.exportResult(principal, input.analysis_id);
       return {
         content: [{ type: "text" as const, text: JSON.stringify(payload) }],
         structuredContent: payload,
@@ -49,17 +56,16 @@ export function registerExportTools(context: McpRegistrationContext): void {
     async (uri, variables) => {
       const rawTicket = variables.ticket;
       const ticket = Array.isArray(rawTicket) ? rawTicket[0] : rawTicket;
-      const claims =
-        typeof ticket === "string" ? await runtime.exports.resolveTicket(ticket) : null;
-      if (!claims || claims.caller !== caller) {
-        throw new Error("下载资源无效、已过期或不属于当前用户，请重新查询。");
-      }
       try {
-        const { csv } = await runtime.exports.materialize(claims);
+        if (typeof ticket !== "string") {
+          throw new ExportTicketUnavailableError("下载资源无效，请重新查询。");
+        }
+        const { csv } = await exports.readResource(principal, ticket);
         return {
           contents: [{ uri: uri.href, mimeType: EXPORT_RESOURCE_MIME_TYPE, text: csv }],
         };
       } catch (error) {
+        if (error instanceof ExportTicketUnavailableError) throw error;
         if (error instanceof ExportIncompleteError) {
           throw new Error(`${error.message}；请增加过滤条件后重新导出。`);
         }

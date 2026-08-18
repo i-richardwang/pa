@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { CATALOG_INPUT, type CatalogToolInput } from "../engine/catalog_spec.js";
 import type { McpRegistrationContext } from "./context.js";
+import type { CatalogService } from "../application/catalog_service.js";
+import type { UsageService } from "../application/usage_service.js";
 import {
   CATALOG_OUTPUT,
   OAUTH_SECURITY_SCHEMES,
@@ -9,8 +11,14 @@ import {
   VALUES_OUTPUT,
 } from "./contracts.js";
 
-export function registerCatalogTools(context: McpRegistrationContext): void {
-  const { server, dependencies, principal, caller } = context;
+export function registerCatalogTools(
+  context: McpRegistrationContext & {
+    catalog: Pick<CatalogService, "query" | "dimensionValues">;
+    usage: Pick<UsageService, "wrap">;
+  },
+): void {
+  const { server, principal, catalog, usage } = context;
+  const caller = principal.email;
 
   server.registerTool(
     "catalog",
@@ -22,7 +30,7 @@ export function registerCatalogTools(context: McpRegistrationContext): void {
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    dependencies.usage.wrap(
+    usage.wrap(
       {
         tool: "catalog",
         caller,
@@ -35,7 +43,7 @@ export function registerCatalogTools(context: McpRegistrationContext): void {
         }),
       },
       async (input: CatalogToolInput) => {
-        const payload = await dependencies.catalog.query(principal, input);
+        const payload = await catalog.query(principal, input);
         return {
           content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
           structuredContent: payload,
@@ -57,18 +65,14 @@ export function registerCatalogTools(context: McpRegistrationContext): void {
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    dependencies.usage.wrap(
+    usage.wrap(
       {
         tool: "values_of",
         caller,
         summarize: (result) => ({ row_count: result.structuredContent.values.length }),
       },
       async (input: { dimension: string; contains?: string }) => {
-        const payload = await dependencies.catalog.dimensionValues(
-          principal,
-          input.dimension,
-          input.contains,
-        );
+        const payload = await catalog.dimensionValues(principal, input.dimension, input.contains);
         return {
           content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
           structuredContent: payload,

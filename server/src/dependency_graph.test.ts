@@ -228,10 +228,9 @@ test("application services 与 transports 不依赖存储实现", () => {
   const applicationRoot = join(SERVER, "src", "application");
   const dashboardRoot = join(SERVER, "src", "dashboard");
   const mcpRoot = join(SERVER, "src", "mcp");
-  const applicationRuntime = join(applicationRoot, "runtime.ts");
   const subjects = files.filter(
     (file) =>
-      (file.startsWith(`${applicationRoot}${sep}`) && file !== applicationRuntime) ||
+      file.startsWith(`${applicationRoot}${sep}`) ||
       file.startsWith(`${dashboardRoot}${sep}`) ||
       file.startsWith(`${mcpRoot}${sep}`) ||
       file === join(SERVER, "src", "server.ts"),
@@ -271,7 +270,7 @@ test("SQLite 业务适配器只由 composition roots 创建", () => {
     join(SERVER, "src", "storage", "usage_stats.ts"),
   ]);
   const compositionRoots = new Set([
-    join(SERVER, "src", "application", "runtime.ts"),
+    join(SERVER, "src", "composition", "application.ts"),
     join(SERVER, "src", "index.ts"),
   ]);
   const productionServiceRoot = join(SERVER, "src");
