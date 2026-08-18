@@ -1,77 +1,52 @@
 "use client";
 
-import { cva, type VariantProps } from "class-variance-authority";
+import { CheckIcon } from "lucide-react";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
-import { Popover, PopoverPopup, PopoverTrigger } from "@/components/ui/popover";
 
-const colorPillVariants = cva(
-  "grid shrink-0 cursor-pointer place-items-center rounded-full border border-transparent outline-none hover:border-pa-faint focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring aria-pressed:border-pa-faint aria-pressed:hover:border-pa-fg",
-  {
-    defaultVariants: { size: "default" },
-    variants: {
-      size: {
-        default: "size-8 p-[3px]",
-        sm: "size-4.5 p-px",
-      },
-    },
-  },
-);
-
-function ColorPill({
+/**
+ * 色粒：一圈发丝环里一粒色点。未选是四成大的点，悬停长到五成半；选中即铺满整圆并压一枚反白勾。
+ * 全站取色只有这一件——系列配色、表格单色色阶都用它，成排摆放由调用方定间距。
+ */
+export function ColorPill({
   color,
+  selected = false,
+  size = "default",
   className,
-  size,
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> &
-  VariantProps<typeof colorPillVariants> & {
-    color: string;
-  }): React.ReactElement {
+}: Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
+  color: string;
+  selected?: boolean;
+  size?: "default" | "sm";
+}): React.ReactElement {
   return (
     <button
-      className={cn(colorPillVariants({ size }), className)}
+      aria-pressed={selected}
+      className={cn(
+        "group relative flex shrink-0 rounded-full text-pa-ink-fg ring-1 ring-pa-line ring-inset outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring",
+        selected ? "cursor-default" : "cursor-pointer",
+        size === "sm" ? "size-6" : "size-7",
+        className,
+      )}
       data-slot="color-pill"
       type="button"
       {...props}
     >
       <span
-        className="size-full rounded-full"
+        className={cn(
+          "relative m-auto aspect-square rounded-full transition-[width] duration-150",
+          selected ? "w-full" : "w-[40%] group-hover:w-[55%]",
+        )}
         style={{ backgroundColor: color }}
-      />
+      >
+        <CheckIcon
+          aria-hidden="true"
+          className={cn(
+            "absolute top-1/2 left-1/2 size-4 -translate-x-1/2 -translate-y-1/2 transition-opacity duration-150",
+            selected ? "opacity-100" : "opacity-0",
+          )}
+        />
+      </span>
     </button>
-  );
-}
-
-export function ColorSelector({
-  value,
-  colors,
-  onValueChange,
-  label,
-  size = "default",
-}: {
-  value: string;
-  colors: readonly string[];
-  onValueChange: (color: string) => void;
-  label: string;
-  size?: VariantProps<typeof colorPillVariants>["size"];
-}): React.ReactElement {
-  return (
-    <Popover>
-      <PopoverTrigger
-        render={<ColorPill aria-label={label} color={value} size={size} />}
-      />
-      <PopoverPopup className="flex max-w-88 flex-wrap gap-1 p-3">
-        {colors.map((color) => (
-          <ColorPill
-            aria-label={color}
-            aria-pressed={color === value}
-            color={color}
-            key={color}
-            onClick={() => onValueChange(color)}
-            size={size}
-          />
-        ))}
-      </PopoverPopup>
-    </Popover>
   );
 }

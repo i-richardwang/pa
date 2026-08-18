@@ -7,6 +7,7 @@
  */
 import { z } from "zod";
 import { memberShortName } from "../semantic_core/member_name.js";
+import { TABLE_SHADING_INPUT } from "../semantic_core/semantic_analysis.js";
 import { resolveTimeOutputGrain, type TimeInput } from "../semantic_core/time_contract.js";
 import type { ChartDecl, TableAxis, TableLayoutDecl } from "./view_shape.js";
 
@@ -79,6 +80,7 @@ export const CHART_INPUT = z
       .strict()
       .optional()
       .describe("line/bar 图的可选系列视觉覆盖"),
+    shading: TABLE_SHADING_INPUT.optional().describe("table 专用热力着色"),
   })
   .strict();
 
@@ -188,6 +190,9 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
   if (input.columns !== undefined && input.type !== "table") {
     throw new Error("presentation.columns 仅支持 type=table；其他图型请删除 columns");
   }
+  if (input.shading !== undefined && input.type !== "table") {
+    throw new Error("presentation.shading 仅支持 type=table；其他图型请删除 shading");
+  }
 
   if (
     input.display !== undefined &&
@@ -219,7 +224,12 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
       }
     }
     return input.type === "table"
-      ? { type: "table", y: [], tableLayout: normalizeTableLayout(input.columns, spec) }
+      ? {
+          type: "table",
+          y: [],
+          tableLayout: normalizeTableLayout(input.columns, spec),
+          ...(input.shading ? { shading: input.shading } : {}),
+        }
       : { type: "kpi", y: [], tableLayout };
   }
 

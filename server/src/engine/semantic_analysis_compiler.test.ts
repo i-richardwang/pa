@@ -475,6 +475,29 @@ describe("semantic analysis compiler", () => {
     });
   });
 
+  test("table 的热力着色原样穿过编译，其他形态拒绝", () => {
+    const shading = { palette: "traffic_lights", flipped: true, thresholds: { mid: 0.5 } };
+    const compiled = compileSemanticAnalysis(catalog, {
+      version: 2,
+      analysis: {
+        views: [{ id: "result", measures: [ACTIVE_EMPLOYEE], dimensions: [ORG], time: JULY_2026 }],
+      },
+      presentation: { type: "table", shading },
+    });
+    expect(compiled.presentation).toMatchObject({ type: "table", shading });
+    expect(() =>
+      compileSemanticAnalysis(catalog, {
+        version: 2,
+        analysis: {
+          views: [
+            { id: "result", measures: [ACTIVE_EMPLOYEE], dimensions: [ORG], time: JULY_2026 },
+          ],
+        },
+        presentation: { type: "bar", shading } as never,
+      }),
+    ).toThrow(/Unrecognized key\(s\) in object: 'shading'/);
+  });
+
   test("table 列轴支持时间，业务维度轴拒绝总体行和未查询维度", () => {
     const temporal = compileSemanticAnalysis(catalog, {
       version: 2,

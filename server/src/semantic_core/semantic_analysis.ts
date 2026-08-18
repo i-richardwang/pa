@@ -296,6 +296,33 @@ const SEMANTIC_SERIES_DISPLAY = z
   })
   .strict();
 
+/** 双向色阶名（下限→中点→上限的三停色带）；三停取值归呈现层 `table_shading.ts`。 */
+export const SHADING_PALETTE_NAMES = ["traffic_lights", "red_blue", "viridis", "magma"] as const;
+export type ShadingPaletteName = (typeof SHADING_PALETTE_NAMES)[number];
+
+/** 表格热力着色声明：一个色阶 + 可选翻转、阈值与是否印数；不含任何成员引用。 */
+export const TABLE_SHADING_INPUT = z
+  .object({
+    palette: z
+      .union([z.string().regex(/^#[0-9a-fA-F]{6}$/), z.enum(SHADING_PALETTE_NAMES)])
+      .describe(
+        "色阶：十六进制单色（值越大越深，例如 #3b6fdb），或双向色阶名 traffic_lights / red_blue / viridis / magma",
+      ),
+    flipped: z.boolean().optional().describe("翻转色阶方向（值越大越浅或反向色带）"),
+    thresholds: z
+      .object({
+        min: z.number().optional(),
+        mid: z.number().optional().describe("仅双向色阶使用；单色忽略"),
+        max: z.number().optional(),
+      })
+      .strict()
+      .optional()
+      .describe("刻度阈值覆盖；缺省按本表该指标全部数值的极值，中点取两端中点"),
+    values: z.boolean().optional().describe("false=只铺色不印数；缺省印数"),
+  })
+  .strict();
+export type TableShadingDecl = z.infer<typeof TABLE_SHADING_INPUT>;
+
 const PRESENTATION_FIELD = z
   .string()
   .min(1)
@@ -332,6 +359,7 @@ export type SemanticChart = {
   group_by?: string;
   stack?: boolean;
   display?: { series?: Record<string, z.infer<typeof SEMANTIC_SERIES_DISPLAY>> };
+  shading?: TableShadingDecl;
 };
 
 export const SEMANTIC_CHART_INPUT: z.ZodType<SemanticChart> = z
@@ -348,6 +376,9 @@ export const SEMANTIC_CHART_INPUT: z.ZodType<SemanticChart> = z
               "未进入列轴的分组维度留在行轴；指标与时间同在列轴时默认使用 [metrics, time]，" +
               "即指标在外层、年份或月份在内层；只有明确需要相反层级时才交换顺序",
           ),
+        shading: TABLE_SHADING_INPUT.optional().describe(
+          "table 专用热力着色：按值给指标格铺深浅或冷暖底色，每个指标各按自身极值定刻度",
+        ),
       })
       .strict(),
     z

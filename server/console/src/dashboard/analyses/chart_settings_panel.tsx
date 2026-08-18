@@ -20,14 +20,18 @@ import {
 } from "lucide-react";
 import type { CatalogPayload, ReplayPayload } from "@contract";
 import { SERIES_COLORS } from "@charts";
-import { isSemanticDerivedView, type SemanticChart } from "@semantic-analysis";
-import { makeTitleOf, sensibleForms, type SensibleForm } from "@shape";
+import {
+  isSemanticDerivedView,
+  type SemanticChart,
+  type TableShadingDecl,
+} from "@semantic-analysis";
+import { makeTitleOf, sensibleForms, type SensibleForm, tableShadingDefaults } from "@shape";
 import { compileTimeIntent, resolveTimeOutputGrain } from "@time";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChartTypeOption, ChartTypePicker } from "@/components/ui/chart-type-option";
-import { ColorSelector } from "@/components/ui/color-pill";
+import { ColorPill } from "@/components/ui/color-pill";
 import {
   INSPECTOR_MEMBER_INSET_CLASS,
   INSPECTOR_SECTION_CLASS,
@@ -61,6 +65,7 @@ import {
   setSemanticSummary,
   type AnalysisEditState,
 } from "./analysis_draft";
+import { TableShadingSettings } from "./table_shading_settings";
 
 const FORM_META: Record<SensibleForm, { label: string; icon: React.ReactNode }> = {
   table: { label: "表格", icon: <TableIcon /> },
@@ -80,8 +85,11 @@ const FORM_ORDER: readonly SensibleForm[] = ["line", "bar", "kpi", "table", "pie
  */
 const AXIS_ITEMS = { left: "左轴", right: "右轴" };
 const SERIES_FORM_ITEMS = { line: "折线", bar: "柱形" };
+const SHADING_STYLE_ITEMS = { none: "不着色", values: "数值与颜色", colors: "仅颜色" };
 
 const GHOST_SELECT_TRIGGER = "w-auto justify-end";
+
+const SUMMARY_TOOLTIP = "总体保留当前筛选与时间粒度，并由数据模型去掉业务分组后重新计算。";
 
 const SETTING_CONTENT_CLASS = cn(INSPECTOR_MEMBER_INSET_CLASS, "px-0 md:px-0");
 
@@ -200,8 +208,20 @@ export function ChartSettingsPanel({
 
   const update = (next: SemanticChart) => onChange(setSemanticChart(draft, next, catalog));
 
-  const setTableColumns = (columns: string[]) =>
-    update(columns.length ? { type: "table", columns } : { type: "table" });
+  const tableShading = chart.type === "table" ? chart.shading : undefined;
+  const shadingStyle = !tableShading ? "none" : tableShading.values === false ? "colors" : "values";
+  const setTable = (patch: { columns?: string[]; shading?: TableShadingDecl | null }) => {
+    const columns = patch.columns ?? (chart.type === "table" ? chart.columns : undefined);
+    const shading = patch.shading === undefined ? tableShading : (patch.shading ?? undefined);
+    update({
+      type: "table",
+      ...(columns?.length ? { columns } : {}),
+      ...(shading ? { shading } : {}),
+    });
+  };
+  const setTableColumns = (columns: string[]) => setTable({ columns });
+  const setShading = (patch: Partial<TableShadingDecl>) =>
+    setTable({ shading: { palette: SERIES_COLORS[0], ...tableShading, ...patch } });
 
   function moveTableColumn(axis: string, delta: -1 | 1) {
     const index = tableColumns.indexOf(axis);
@@ -285,121 +305,160 @@ export function ChartSettingsPanel({
 
       {showOptions ? (
         chart.type === "table" ? (
-          <InspectorSection contentClassName="px-0 md:px-0" icon={<TableIcon />} title="表格布局">
-            {/*
+          <>
+            <InspectorSection contentClassName="px-0 md:px-0" icon={<TableIcon />} title="表格布局">
+              {/*
               列轴是 PA 的交叉表契约——有序多层轴，不是单维列。
               摘要行打开浮层：排序、移出行轴、加入列轴。
             */}
-            <InspectorFieldGroup>
-              <InspectorFieldRow label="行轴">
-                {/*
+              <InspectorFieldGroup>
+                <InspectorFieldRow label="行轴">
+                  {/*
                     行轴是列轴的余数，只回显不可点。字色取 pa-muted 与右侧可点的列轴值分开：
                     同一个盒子里两行长得一样、一行能点一行不能，是最省力的误导。
                   */}
-                <span className="min-w-0 flex-1 truncate px-1.5 text-right text-sm leading-5 text-pa-muted">
-                  {tableRowSummary}
-                </span>
-              </InspectorFieldRow>
-              <InspectorFieldRow label="列轴">
-                <Popover>
-                  {/* 它是自绘的取值触发件，形仍取选择器那一份，不在这里另配一套 */}
-                  <PopoverTrigger
-                    className={cn(
-                      selectTriggerVariants({ size: "sm", variant: "ghost" }),
-                      GHOST_SELECT_TRIGGER,
-                      "w-full",
-                    )}
-                  >
-                    <span className="min-w-0 flex-1 truncate text-right">{tableColumnSummary}</span>
-                    <ChevronsUpDownIcon className={selectTriggerIconClassName} />
-                  </PopoverTrigger>
-                  <PopoverPopup align="end" className="w-64 p-1">
-                    <Hint className="px-2 py-1.5">
-                      从外到内决定交叉表列层次；未列入的维度留在行轴。
-                    </Hint>
-                    <div className="space-y-0.5">
-                      {tableColumns.map((axis, index) => (
-                        <div
-                          className="flex min-h-8 items-center gap-0.5 rounded-md px-0.5 hover:bg-pa-surface"
-                          key={axis}
-                        >
-                          <span className="min-w-0 flex-1 truncate px-1.5 text-sm leading-5 text-pa-ink">
-                            {tableAxisLabel(axis)}
-                          </span>
-                          <Button
-                            aria-label={`上移${tableAxisLabel(axis)}`}
-                            className="text-pa-muted"
-                            disabled={index === 0}
-                            onClick={() => moveTableColumn(axis, -1)}
-                            size="icon-xs"
-                            variant="subtle"
+                  <span className="min-w-0 flex-1 truncate px-1.5 text-right text-sm leading-5 text-pa-muted">
+                    {tableRowSummary}
+                  </span>
+                </InspectorFieldRow>
+                <InspectorFieldRow label="列轴">
+                  <Popover>
+                    {/* 它是自绘的取值触发件，形仍取选择器那一份，不在这里另配一套 */}
+                    <PopoverTrigger
+                      className={cn(
+                        selectTriggerVariants({ size: "sm", variant: "ghost" }),
+                        GHOST_SELECT_TRIGGER,
+                        "w-full",
+                      )}
+                    >
+                      <span className="min-w-0 flex-1 truncate text-right">
+                        {tableColumnSummary}
+                      </span>
+                      <ChevronsUpDownIcon className={selectTriggerIconClassName} />
+                    </PopoverTrigger>
+                    <PopoverPopup align="end" className="w-64 p-1">
+                      <Hint className="px-2 py-1.5">
+                        从外到内决定交叉表列层次；未列入的维度留在行轴。
+                      </Hint>
+                      <div className="space-y-0.5">
+                        {tableColumns.map((axis, index) => (
+                          <div
+                            className="flex min-h-8 items-center gap-0.5 rounded-md px-0.5 hover:bg-pa-surface"
+                            key={axis}
                           >
-                            <ChevronUpIcon />
-                          </Button>
-                          <Button
-                            aria-label={`下移${tableAxisLabel(axis)}`}
-                            className="text-pa-muted"
-                            disabled={index === tableColumns.length - 1}
-                            onClick={() => moveTableColumn(axis, 1)}
-                            size="icon-xs"
-                            variant="subtle"
-                          >
-                            <ChevronDownIcon />
-                          </Button>
-                          {axis === "metrics" ? (
-                            <span aria-hidden="true" className="size-6 shrink-0" />
-                          ) : (
+                            <span className="min-w-0 flex-1 truncate px-1.5 text-sm leading-5 text-pa-ink">
+                              {tableAxisLabel(axis)}
+                            </span>
                             <Button
-                              aria-label={`将${tableAxisLabel(axis)}移到行轴`}
+                              aria-label={`上移${tableAxisLabel(axis)}`}
                               className="text-pa-muted"
-                              onClick={() => removeTableColumn(axis)}
+                              disabled={index === 0}
+                              onClick={() => moveTableColumn(axis, -1)}
                               size="icon-xs"
                               variant="subtle"
                             >
-                              <XIcon />
+                              <ChevronUpIcon />
                             </Button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    {remainingTableAxes.length > 0 ? (
-                      <>
-                        <div className="my-1 h-px bg-pa-line" />
-                        <p className={POPUP_GROUP_LABEL}>加入列轴</p>
-                        {remainingTableAxes.map((axis) => (
-                          <button
-                            className="flex min-h-8 w-full items-center rounded-md px-2 text-left text-sm leading-5 text-pa-ink hover:bg-pa-surface"
-                            key={axis}
-                            onClick={() => addTableColumn(axis)}
-                            type="button"
-                          >
-                            {tableAxisLabel(axis)}
-                          </button>
+                            <Button
+                              aria-label={`下移${tableAxisLabel(axis)}`}
+                              className="text-pa-muted"
+                              disabled={index === tableColumns.length - 1}
+                              onClick={() => moveTableColumn(axis, 1)}
+                              size="icon-xs"
+                              variant="subtle"
+                            >
+                              <ChevronDownIcon />
+                            </Button>
+                            {axis === "metrics" ? (
+                              <span aria-hidden="true" className="size-6 shrink-0" />
+                            ) : (
+                              <Button
+                                aria-label={`将${tableAxisLabel(axis)}移到行轴`}
+                                className="text-pa-muted"
+                                onClick={() => removeTableColumn(axis)}
+                                size="icon-xs"
+                                variant="subtle"
+                              >
+                                <XIcon />
+                              </Button>
+                            )}
+                          </div>
                         ))}
-                      </>
-                    ) : summaryEnabled && dimensions.length > 0 ? (
-                      <Hint className="px-2 py-1.5">显示总体时，业务维度只能在行轴。</Hint>
-                    ) : null}
-                  </PopoverPopup>
-                </Popover>
-              </InspectorFieldRow>
-            </InspectorFieldGroup>
-            {canSummarize ? (
-              <div className="mt-2 space-y-0.5">
-                <SwitchField
-                  blocked={summaryBlocked}
-                  checked={summaryEnabled}
-                  label="显示总体"
-                  onCheckedChange={(checked) =>
-                    onChange(setSemanticSummary(draft, checked, catalog))
-                  }
-                />
-                <Hint className="px-0.5">
-                  总体保留当前筛选与时间粒度，并由数据模型去掉业务分组后重新计算。
-                </Hint>
+                      </div>
+                      {remainingTableAxes.length > 0 ? (
+                        <>
+                          <div className="my-1 h-px bg-pa-line" />
+                          <p className={POPUP_GROUP_LABEL}>加入列轴</p>
+                          {remainingTableAxes.map((axis) => (
+                            <button
+                              className="flex min-h-8 w-full items-center rounded-md px-2 text-left text-sm leading-5 text-pa-ink hover:bg-pa-surface"
+                              key={axis}
+                              onClick={() => addTableColumn(axis)}
+                              type="button"
+                            >
+                              {tableAxisLabel(axis)}
+                            </button>
+                          ))}
+                        </>
+                      ) : summaryEnabled && dimensions.length > 0 ? (
+                        <Hint className="px-2 py-1.5">显示总体时，业务维度只能在行轴。</Hint>
+                      ) : null}
+                    </PopoverPopup>
+                  </Popover>
+                </InspectorFieldRow>
+              </InspectorFieldGroup>
+            </InspectorSection>
+            <InspectorSection
+              collapsible
+              contentClassName={SETTING_CONTENT_CLASS}
+              icon={<EyeIcon />}
+              title="显示"
+            >
+              <div className="space-y-0.5">
+                {canSummarize ? (
+                  <SwitchField
+                    blocked={summaryBlocked}
+                    checked={summaryEnabled}
+                    label="显示总体"
+                    tooltip={SUMMARY_TOOLTIP}
+                    onCheckedChange={(checked) =>
+                      onChange(setSemanticSummary(draft, checked, catalog))
+                    }
+                  />
+                ) : null}
+                <Select
+                  items={SHADING_STYLE_ITEMS}
+                  onValueChange={(value) => {
+                    if (value === "none") setTable({ shading: null });
+                    else if (value === "values" || value === "colors") {
+                      setShading({ values: value === "values" ? undefined : false });
+                    }
+                  }}
+                  value={shadingStyle}
+                >
+                  <InspectorOptionRow label={<SelectLabel>着色</SelectLabel>}>
+                    <SelectTrigger className={GHOST_SELECT_TRIGGER} size="sm" variant="ghost">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectPopup>
+                      <SelectItem value="none">不着色</SelectItem>
+                      <SelectItem value="values">数值与颜色</SelectItem>
+                      <SelectItem value="colors">仅颜色</SelectItem>
+                    </SelectPopup>
+                  </InspectorOptionRow>
+                </Select>
+                {tableShading ? (
+                  <InspectorOptionRow label="配色">
+                    <TableShadingSettings
+                      defaults={tableShadingDefaults(resultView)}
+                      onChange={setShading}
+                      shading={tableShading}
+                    />
+                  </InspectorOptionRow>
+                ) : null}
               </div>
-            ) : null}
-          </InspectorSection>
+            </InspectorSection>
+          </>
         ) : chart.type === "kpi" ? (
           <InspectorSection icon={<ChartLineIcon />} title="系列">
             <p className="px-2 text-sm/4.5 text-pa-muted">
@@ -430,15 +489,6 @@ export function ChartSettingsPanel({
                             id={`${fieldId}-y-${member}`}
                             onCheckedChange={() => setY(member)}
                           />
-                          {styleable ? (
-                            <ColorSelector
-                              colors={SERIES_COLORS}
-                              label={`${titleOf(member)} 颜色`}
-                              onValueChange={(next) => setDisplay(member, { color: next })}
-                              size="sm"
-                              value={color}
-                            />
-                          ) : null}
                           <label
                             className="min-w-0 flex-1 cursor-pointer truncate text-sm text-pa-ink"
                             htmlFor={`${fieldId}-y-${member}`}
@@ -459,6 +509,23 @@ export function ChartSettingsPanel({
                         </div>
                         {open && (
                           <div className="space-y-0.5 pb-1 pl-7">
+                            <div>
+                              <span className="flex min-h-8 items-center text-sm leading-4 text-pa-muted">
+                                颜色
+                              </span>
+                              <div className="flex justify-between py-1">
+                                {SERIES_COLORS.map((option) => (
+                                  <ColorPill
+                                    aria-label={`${titleOf(member)} 颜色 ${option}`}
+                                    color={option}
+                                    key={option}
+                                    onClick={() => setDisplay(member, { color: option })}
+                                    selected={option === color}
+                                    size="sm"
+                                  />
+                                ))}
+                              </div>
+                            </div>
                             <Select
                               items={AXIS_ITEMS}
                               onValueChange={(value) => {
@@ -537,7 +604,9 @@ export function ChartSettingsPanel({
             {/* 灰标签行直接堆叠，不各自再套一套重表单块。 */}
             {showDisplaySection ? (
               <InspectorSection
+                collapsible
                 contentClassName={SETTING_CONTENT_CLASS}
+                defaultExpanded={!!chart.group_by || chart.stack === true || summaryEnabled}
                 icon={<EyeIcon />}
                 title="显示"
               >
@@ -588,17 +657,13 @@ export function ChartSettingsPanel({
                       blocked={summaryBlocked}
                       checked={summaryEnabled}
                       label="显示总体"
+                      tooltip={SUMMARY_TOOLTIP}
                       onCheckedChange={(checked) =>
                         onChange(setSemanticSummary(draft, checked, catalog))
                       }
                     />
                   ) : null}
                 </div>
-                {canSummarize ? (
-                  <Hint className="px-0.5 pt-1">
-                    总体保留当前筛选与时间粒度，并由数据模型去掉业务分组后重新计算。
-                  </Hint>
-                ) : null}
               </InspectorSection>
             ) : null}
           </>

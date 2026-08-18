@@ -176,6 +176,7 @@ const BLURRED = CHART_CHROME.blurred.light;
 
 /** 渲染端补全（tooltip 结构、饼图中心总计）需要与序列化 option 同源的 chrome 色与字体栈 */
 export { CHART_CHROME, FONT_FAMILY } from "./design_tokens.js";
+export { DIVERGING_PALETTES, shadingStops } from "./table_shading.js";
 
 /** 渲染端在宿主暗色下递归替换 option 内的已知颜色（键恒为小写亮色原值）。 */
 export const CHART_DARK_COLORS: Record<string, string> = Object.fromEntries(

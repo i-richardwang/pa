@@ -196,7 +196,11 @@ function repairedSemanticChart(
       if (axis === "metrics") return measures.length > 0;
       return dimensions.includes(axis) && !view.summary;
     });
-    return columns?.length ? { type: "table", columns } : { type: "table" };
+    return {
+      type: "table",
+      ...(columns?.length ? { columns } : {}),
+      ...(chart.shading ? { shading: chart.shading } : {}),
+    };
   }
   if (chart.type === "kpi") {
     return measures.length > 0 && dimensions.length === 0 ? chart : { type: "table" };

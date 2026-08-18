@@ -4,6 +4,7 @@ import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 import { useId } from "react";
 import type * as React from "react";
 import { BlockedHint } from "@/components/ui/inspector";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export function Switch({
@@ -27,9 +28,14 @@ export function Switch({
   );
 }
 
+/**
+ * 开关行：题在左、开关在右。`tooltip` 是这一行的说明，悬停整行时从左侧浮出，不占面板高度；
+ * `blocked` 是此刻不可开的原因，就地印一枚提示钮。
+ */
 export function SwitchField({
   label,
   blocked,
+  tooltip,
   className,
   id,
   disabled,
@@ -37,10 +43,11 @@ export function SwitchField({
 }: SwitchPrimitive.Root.Props & {
   label: React.ReactNode;
   blocked?: React.ReactNode;
+  tooltip?: React.ReactNode;
 }): React.ReactElement {
   const generated = useId();
   const controlId = id ?? generated;
-  return (
+  const row = (
     <div
       className={cn("flex min-h-8 items-center gap-0.5 text-sm", className)}
       data-slot="switch-field"
@@ -57,6 +64,15 @@ export function SwitchField({
       {blocked ? <BlockedHint reason={blocked} /> : null}
       <Switch disabled={disabled || Boolean(blocked)} id={controlId} {...props} />
     </div>
+  );
+  if (!tooltip) return row;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={row} />
+      <TooltipPopup className="max-w-56" side="left">
+        {tooltip}
+      </TooltipPopup>
+    </Tooltip>
   );
 }
 

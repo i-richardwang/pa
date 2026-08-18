@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, ChevronUpIcon, EllipsisIcon } from "lucide-react";
 import { compareCells, formatCell } from "../../../src/presentation_core/view_format.js";
 import type { PLOT_PADDING } from "../../../src/presentation_core/chart_config.js";
+import { shadeCell, type TableShading } from "../../../src/presentation_core/table_shading.js";
 import type { TableColumn, TableModel } from "../../../src/presentation_core/view_shape.js";
+import { useDarkTheme } from "../use_dark_theme.js";
 import { PlotSlab } from "./plot_slab.js";
 
 export const INLINE_ROWS = 8;
@@ -30,6 +32,39 @@ const frozenCell = "sticky left-0 z-[1] bg-pa-bg group-hover:bg-pa-wash-solid";
 const EMPTY_CELL = <span className="text-pa-faint">—</span>;
 /** 组边界线：单边工具类，理由同上。 */
 const groupEdge = "border-l border-l-pa-line";
+const shadeText = { ink: "text-pa-ink", inverse: "text-pa-ink-fg" } as const;
+
+/**
+ * 热力格：底色铺在格内一块圆角片上而不是整格——片与片之间留出格内衬的一圈，行线不被色片
+ * 压断，深浅在网格里各自成块可辨。字色按底色对比选墨色或反白（`shadeCell` 决定）；
+ * 「仅颜色」档把数字藏起来只留色。明暗档只有着色的表才需要问，故订阅在本件而不在表上。
+ */
+function ShadeChip({
+  value,
+  formatKey,
+  shading,
+  children,
+}: {
+  value: string | number | null;
+  formatKey: string;
+  shading: TableShading;
+  children: React.ReactNode;
+}) {
+  const dark = useDarkTheme();
+  const shade = shadeCell(value, formatKey, shading, dark);
+  if (!shade) return children;
+  return (
+    <div
+      className={`-mx-1.5 -my-1.5 rounded-sm px-1.5 py-1.5 ${shadeText[shade.foreground]} ${
+        shading.values ? "" : "text-transparent select-none"
+      }`}
+      data-slot="shade-chip"
+      style={{ backgroundColor: shade.background }}
+    >
+      {children}
+    </div>
+  );
+}
 
 type HeaderCell = {
   key: string;
@@ -229,17 +264,25 @@ export function DataTable({
       // 记录入口不进静息态：染色的数字会被读成"这个值有名堂"，而能否查看记录是列的属性，
       // 与格里的数值无关。静息一律本色，悬停/聚焦才现形：
       // 格子不画可点性，可点性靠交互暴露）。空格没有数字可点，钮也就不存在。
-      return cellSource !== null && canOpenCell?.(cellSource, i) ? (
-        <button
-          aria-label={`查看明细：${col.label} ${text ?? ""}`}
-          className="block w-full cursor-pointer rounded-sm text-right underline-offset-2 hover:text-pa-accent hover:underline focus-visible:text-pa-accent focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pa-accent"
-          onClick={() => onOpenCell?.(cellSource, i)}
-          type="button"
-        >
-          {text}
-        </button>
+      const content =
+        cellSource !== null && canOpenCell?.(cellSource, i) ? (
+          <button
+            aria-label={`查看明细：${col.label} ${text ?? ""}`}
+            className="block w-full cursor-pointer rounded-sm text-right underline-offset-2 hover:text-pa-accent hover:underline focus-visible:text-pa-accent focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pa-accent"
+            onClick={() => onOpenCell?.(cellSource, i)}
+            type="button"
+          >
+            {text}
+          </button>
+        ) : (
+          text
+        );
+      return model.shading ? (
+        <ShadeChip formatKey={col.formatKey} shading={model.shading} value={value}>
+          {content}
+        </ShadeChip>
       ) : (
-        text
+        content
       );
     }
     return (

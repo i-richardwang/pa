@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import type * as React from "react";
-import { InfoIcon } from "lucide-react";
+import { ChevronRightIcon, InfoIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Hint } from "@/components/ui/hint";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
@@ -42,6 +43,8 @@ export function InspectorSection({
   blocked,
   description,
   actions,
+  collapsible = false,
+  defaultExpanded = true,
   children,
   className,
   contentClassName,
@@ -53,14 +56,18 @@ export function InspectorSection({
   blocked?: React.ReactNode;
   description?: React.ReactNode;
   actions?: React.ReactNode;
+  /** 可折叠节：题行整行可点，题后跟一枚折角；收起时内容只隐藏不卸载 */
+  collapsible?: boolean;
+  defaultExpanded?: boolean;
   children?: React.ReactNode;
   className?: string;
   contentClassName?: string;
 }): React.ReactElement {
-  return (
-    <section className={cn(SECTION_CLASS, className)} data-slot="inspector-section">
-      <header className={SECTION_HEADER_CLASS} data-slot="inspector-section-header">
-        {icon ? (
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const open = !collapsible || expanded;
+  const heading = (
+    <>
+      {icon ? (
           <span
             aria-hidden="true"
             className="flex shrink-0 items-center text-pa-faint [&_svg]:size-4"
@@ -80,11 +87,40 @@ export function InspectorSection({
               {title}
             </h3>
             {blocked ? <BlockedHint reason={blocked} /> : null}
+            {collapsible ? (
+              <ChevronRightIcon
+                aria-hidden="true"
+                className={cn(
+                  "size-3 shrink-0 text-pa-faint transition-transform duration-150 group-hover/disclosure:text-pa-ink",
+                  expanded && "rotate-90",
+                )}
+              />
+            ) : null}
           </div>
           {description ? (
             <Hint className="truncate">{description}</Hint>
           ) : null}
         </div>
+    </>
+  );
+  return (
+    <section className={cn(SECTION_CLASS, className)} data-slot="inspector-section">
+      <header
+        className={cn(SECTION_HEADER_CLASS, collapsible && "group/disclosure")}
+        data-slot="inspector-section-header"
+      >
+        {collapsible ? (
+          <button
+            aria-expanded={expanded}
+            className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-md text-left outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring"
+            onClick={() => setExpanded((value) => !value)}
+            type="button"
+          >
+            {heading}
+          </button>
+        ) : (
+          heading
+        )}
         {actions ? (
           <div className="flex shrink-0 items-center gap-1" data-slot="inspector-section-actions">
             {actions}
@@ -93,7 +129,7 @@ export function InspectorSection({
       </header>
       {children ? (
         <div
-          className={cn(SECTION_CONTENT_CLASS, contentClassName)}
+          className={cn(SECTION_CONTENT_CLASS, contentClassName, !open && "hidden")}
           data-slot="inspector-section-content"
         >
           {children}

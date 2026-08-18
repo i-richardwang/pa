@@ -21,6 +21,7 @@ import {
   PLOT_FRAME,
   PLOT_PADDING,
   PLOT_RADIUS,
+  SERIES_COLORS,
   SERIES_Z,
   haloZ,
   seriesZ,
@@ -122,6 +123,47 @@ test("结果面的场地按场景定，图与表同框", () => {
   expect(tile).not.toContain("border-pa-line");
   expect(tile).not.toContain("p-4");
   expect(tile).not.toContain("my-3");
+});
+
+test("热力着色随 table 声明：指标格铺色片、字色随底色、仅颜色档不印数", () => {
+  const shaded = compilePresentationBlock(CHART_VIEW, {
+    type: "table",
+    y: [],
+    shading: { palette: SERIES_COLORS[0] },
+  } as never);
+  const html = renderToStaticMarkup(
+    <ViewRenderer actions={{}} payload={PAYLOAD} presentation={shaded} scene="page" />,
+  );
+  const chips = html.match(/<div[^>]*data-slot="shade-chip"[^>]*>/g) ?? [];
+  // 两行 × 两个指标列 = 四片；维度列不着色
+  expect(chips).toHaveLength(4);
+  const darkest = chips.find((chip) => chip.includes("1.000"));
+  const lightest = chips.find((chip) => chip.includes("0.050"));
+  expect(darkest, "极大值该是全浓底色").toContain("text-pa-ink-fg");
+  expect(lightest, "极小值该是淡底墨字").toContain("text-pa-ink");
+  expect(html).toContain(">120<");
+
+  const colorsOnly = compilePresentationBlock(CHART_VIEW, {
+    type: "table",
+    y: [],
+    shading: { palette: SERIES_COLORS[0], values: false },
+  } as never);
+  const hidden = renderToStaticMarkup(
+    <ViewRenderer actions={{}} payload={PAYLOAD} presentation={colorsOnly} scene="page" />,
+  );
+  const hiddenChips = hidden.match(/<div[^>]*data-slot="shade-chip"[^>]*>/g) ?? [];
+  expect(hiddenChips).toHaveLength(4);
+  for (const chip of hiddenChips) expect(chip).toContain("text-transparent");
+
+  const plain = renderToStaticMarkup(
+    <ViewRenderer
+      actions={{}}
+      payload={PAYLOAD}
+      presentation={compilePresentationBlock(CHART_VIEW, { type: "table", y: [] } as never)}
+      scene="page"
+    />,
+  );
+  expect(plain).not.toContain("shade-chip");
 });
 
 /** 元素上的横向衬垫类——比的是「贴哪条左轴」，不是整串类名。 */

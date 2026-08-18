@@ -4,6 +4,7 @@
  */
 import {
   cellLabel,
+  columnDecimals,
   columnFormat,
   isBlankCell,
   isRateColumn,
@@ -13,6 +14,13 @@ import {
 } from "./view_format.js";
 import { memberShortName } from "../semantic_core/member_name.js";
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
+import {
+  compileTableShading,
+  type ShadingScale,
+  shadingDataScale,
+  type TableShading,
+  type TableShadingDecl,
+} from "./table_shading.js";
 
 /** 感知极限：折线超出此系列数缠绕不可读，声明的折线编译失败并退回表格 */
 export const MAX_LINE_SERIES = 5;
@@ -150,6 +158,8 @@ export type ChartDecl = {
   stack?: boolean;
 
   display?: Record<string, SeriesDisplay>;
+  /** table 的热力着色声明；刻度在编译期按本表数据定 */
+  shading?: TableShadingDecl;
 };
 
 export type TableAxis =
@@ -191,6 +201,8 @@ export type TableModel = {
    * 记录投影据此取回该格的业务坐标（时间与维度值），与图表侧 chartSourceRow 同一语义。
    */
   sourceRows?: (number | null)[][];
+  /** 热力着色（只随 table 声明下发）：刻度按指标列键各立一把，见 `table_shading.ts`。 */
+  shading?: TableShading;
 };
 
 export type TableLayoutStatus =
@@ -1368,13 +1380,22 @@ export function compileTableWithStatus(
   decl?: ChartDecl,
 ): TableCompilation {
   const roles = detectRoles(view);
-  if (!decl?.tableLayout) {
-    return {
-      table: flatTable(view, titleOf),
-      layout: { state: "applied", leafColumns: tableValueIndices(roles).length },
-    };
-  }
-  return compileTableLayout(view, roles, titleOf, decl.tableLayout);
+  const compiled = decl?.tableLayout
+    ? compileTableLayout(view, roles, titleOf, decl.tableLayout)
+    : {
+        table: flatTable(view, titleOf),
+        layout: { state: "applied" as const, leafColumns: tableValueIndices(roles).length },
+      };
+  if (decl?.type !== "table" || !decl.shading) return compiled;
+  // 只给指标列上色：交叉表的值列沿用度量列作 formatKey，长表的度量列即其本身
+  const measureKeys = new Set(roles.measureIdx.map((index) => view.columns[index]));
+  const shading = compileTableShading(
+    decl.shading,
+    compiled.table.columns,
+    compiled.table.rows,
+    measureKeys,
+  );
+  return { ...compiled, table: { ...compiled.table, shading } };
 }
 
 export function compileTable(
@@ -1383,6 +1404,31 @@ export function compileTable(
   decl?: ChartDecl,
 ): TableModel {
   return compileTableWithStatus(view, titleOf, decl).table;
+}
+
+/** 着色刻度的缺省读法及其量纲：指标列的数据极值，格式与小数位在各指标一致时沿用，否则按普通数值。 */
+export type TableShadingDefaults = {
+  scale: ShadingScale;
+  format: ColumnFormat;
+  decimals: number;
+};
+
+export function tableShadingDefaults(view: ViewBlock): TableShadingDefaults | null {
+  const measures = detectRoles(view).measureIdx.map((index) => view.columns[index]);
+  const scale = shadingDataScale(
+    view.columns.map((column) => ({ formatKey: column })),
+    view.rows,
+    new Set(measures),
+  );
+  if (!scale) return null;
+  const formats = new Set(measures.map((column) => columnFormat(column, view.column_formats)));
+  const decimals = new Set(measures.map((column) => columnDecimals(column, view.column_decimals)));
+  const format = formats.size === 1 ? [...formats][0] : "number";
+  return {
+    scale,
+    format,
+    decimals: decimals.size === 1 ? [...decimals][0] : columnDecimals(""),
+  };
 }
 
 /** 图表确定性编译：只执行已声明图型；table/kpi 不经过图表编译器。 */

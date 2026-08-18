@@ -9,7 +9,8 @@ import {
   TooltipComponent,
 } from "echarts/components";
 import { SVGRenderer } from "echarts/renderers";
-import { isDarkTheme, plotRect, prepareOption, watchTheme } from "../chart_render.js";
+import { plotRect, prepareOption } from "../chart_render.js";
+import { useDarkTheme } from "../use_dark_theme.js";
 import { PlotSlab } from "./plot_slab.js";
 import { RankRows } from "./rank_rows.js";
 import { observeElementSize } from "../element_size.js";
@@ -221,9 +222,7 @@ export function ViewChartCanvas({
   const container = useRef<HTMLDivElement>(null);
   const instance = useRef<echarts.ECharts | null>(null);
   const size = useRef({ width: 0, height: 0 });
-  const [dark, setDark] = useState(isDarkTheme);
-
-  useEffect(() => watchTheme(() => setDark(isDarkTheme())), []);
+  const dark = useDarkTheme();
 
   useEffect(() => {
     const el = container.current;

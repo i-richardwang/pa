@@ -196,6 +196,18 @@ describe("归一与缺省补齐", () => {
 });
 
 describe("可行动报错", () => {
+  test("shading 只随 table：图型带它就报错，table 带它原样进声明", () => {
+    expect(() =>
+      validateChartDecl({ type: "bar", shading: { palette: "#3b6fdb" } }, CATEGORY),
+    ).toThrow(/presentation\.shading 仅支持 type=table/);
+    expect(
+      validateChartDecl(
+        { type: "table", shading: { palette: "red_blue", flipped: true, values: false } },
+        CATEGORY,
+      ).shading,
+    ).toEqual({ palette: "red_blue", flipped: true, values: false });
+  });
+
   test("y 引用未查询度量", () => {
     expect(() => validateChartDecl({ type: "line", y: ["active_employee_count"] }, TREND)).toThrow(
       /presentation\.y 的「active_employee_count」不在本视图 measures 中/,

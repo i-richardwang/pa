@@ -252,7 +252,7 @@ function compileBoundChart(
       chart.group_by ||
       chart.stack !== undefined ||
       chart.display ||
-      (chart.type === "kpi" && chart.columns)
+      (chart.type === "kpi" && (chart.columns || chart.shading))
     ) {
       throw new Error(`${chart.type} 呈现不接受数据通道绑定`);
     }
@@ -265,6 +265,7 @@ function compileBoundChart(
             ),
           }
         : {}),
+      ...(chart.type === "table" && chart.shading ? { shading: chart.shading } : {}),
     };
   }
   if (chart.columns) throw new Error("columns 仅支持 table 呈现");
@@ -467,13 +468,14 @@ function compileDerivedChart(chart: SemanticChart): ChartDeclInput {
       chart.group_by ||
       chart.stack !== undefined ||
       chart.display ||
-      (chart.type === "kpi" && chart.columns)
+      (chart.type === "kpi" && (chart.columns || chart.shading))
     ) {
       throw new Error(`${chart.type} 呈现不接受数据通道绑定`);
     }
     return {
       type: chart.type,
       ...(chart.type === "table" && chart.columns ? { columns: chart.columns } : {}),
+      ...(chart.type === "table" && chart.shading ? { shading: chart.shading } : {}),
     };
   }
   if (chart.columns) throw new Error("columns 仅支持 table 呈现");
