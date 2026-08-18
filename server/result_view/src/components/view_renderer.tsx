@@ -3,10 +3,8 @@
  * 控制台查看面）共用。
  * 呈现形态全部消费服务端编译的 PresentationBlock，本组件只摆放，不做形态判定；
  * 图 = 服务端下发的 echarts 配置，表 = 服务端下发的 TableModel。
- * 一个回答只有一个用户可见结果；图和表是同一结果的两种呈现，有图时出图标分段切换
- *（`ViewModeToggle`，默认图），表恒忠实在册。内部执行腿不进入交付面。
- * 切换钮住哪由宿主定：答数卡摆在中段（那里没有别的 chrome 收留它），瓦片归题条动作槽、
- * 整页归页面底栏——两处都在结果框之外，故档位受控、状态归宿主。
+ * 一个回答只有一个用户可见结果，形态由作者在规格里声明：声明图就出图，声明表就出表。
+ * 内部执行腿不进入交付面。
  *
  * 宿主身份是**一个枚举**：`scene` 取 card / tile / page，chrome 的每项取舍由
  * `VIEW_SCENES` 一张表答完。新增场景 = 表里加一行。
@@ -16,8 +14,7 @@
  * 配色只认 pa-* 语义令牌，每个宿主在自己的样式表里映射到本宿主调色板；
  * 直接使用宿主专有令牌会让类名在而 CSS 规则不在（由 source_boundary.test.ts 机械校验）。
  */
-import { useState } from "react";
-import { ChartBarIcon, ChartLineIcon, CircleAlertIcon, TableIcon } from "lucide-react";
+import { CircleAlertIcon } from "lucide-react";
 import { QueryNotesDetails } from "./query_notes.js";
 import { DataTable } from "./data_table.js";
 import { Kpis } from "./kpis.js";
@@ -49,13 +46,6 @@ export type ViewRendererProps = {
   fullscreen?: boolean;
   /** 容器正被拖拽或缩放：重图冻结重渲，交互结束后补渲。 */
   interacting?: boolean;
-  /**
-   * 图/表切换的受控档位。页态由宿主持有——底栏是页面 chrome，住在结果框之外
-   *（见 `ViewPageFooter`），切换钮既然在框外，档位就不能锁在框内。
-   * 不传时本组件自持状态（答数卡与瓦片的内联切换）。
-   */
-  mode?: "chart" | "table";
-  onModeChange?: (mode: "chart" | "table") => void;
   /** 浏览器报告页注入的格子明细能力；MCP Widget 不注入，因而没有明细请求入口。 */
   records?: {
     /** 能否查看构成记录由指标的人员记录绑定决定，与具体值无关——零值同样开放，名单为空是诚实答案。 */
@@ -77,7 +67,7 @@ export type ViewRendererProps = {
 /**
  * 三个宿主场景：
  * - `card` MCP 结果卡 / 查询页结果：答数态，标题与口径都常驻，高度由内容撑
- * - `tile` 看板瓦片：概览态，标题与图/表切换都归瓦片题条，高度取容器；不挂口径
+ * - `tile` 看板瓦片：概览态，标题归瓦片题条，高度取容器；不挂口径
  * - `page` 控制台整页查看面：中段裸铺，标题归页头、其余 chrome 归宿主的页面底栏
  *   （`ViewPageFooter`，住在结果框之外），高度取容器
  */
@@ -88,11 +78,6 @@ type SceneTraits = {
   inset: string;
   /** 空态纵向呼吸 */
   emptyPad: string;
-  /**
-   * 图/表切换钮由中段自己摆。关掉不等于没有切换：瓦片与整页都把它交给了宿主 chrome
-   *（瓦片题条的动作槽 / 页面底栏），中段只管内容。
-   */
-  inlineToggle: boolean;
   /** 图表高度取容器而非 chart.height，表格转为自带内滚——需容器给定确定高度 */
   fill: boolean;
   /** 表格允许超出 INLINE_ROWS 全量渲染 */
@@ -117,7 +102,6 @@ export const VIEW_SCENES: Record<ViewScene, SceneTraits> = {
     fullscreen: false,
     title: true,
     inlineChrome: true,
-    inlineToggle: true,
     tileTable: false,
     scopeBand: true,
     plot: "compact",
@@ -130,7 +114,6 @@ export const VIEW_SCENES: Record<ViewScene, SceneTraits> = {
     fullscreen: true,
     title: false,
     inlineChrome: true,
-    inlineToggle: false,
     tileTable: true,
     scopeBand: false,
     plot: "tile",
@@ -142,7 +125,6 @@ export const VIEW_SCENES: Record<ViewScene, SceneTraits> = {
     fullscreen: true,
     title: false,
     inlineChrome: false,
-    inlineToggle: false,
     tileTable: false,
     scopeBand: false,
     plot: "page",
@@ -171,52 +153,6 @@ function analyze(payload: QueryPayload, presentation: PresentationBlock): Analys
   return { view, titleOf, presentation };
 }
 
-export function ViewModeToggle({
-  mode,
-  onChange,
-  form,
-}: {
-  mode: "chart" | "table";
-  onChange: (mode: "chart" | "table") => void;
-  form: ViewChart["form"];
-}) {
-  const item = (value: "chart" | "table", label: string, icon: React.ReactNode) => (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={mode === value}
-      onClick={() => onChange(value)}
-      className={`relative inline-flex cursor-pointer items-center justify-center rounded-sm px-2.5 py-1 transition-colors [&_svg]:size-3.5 ${
-        mode === value ? "text-pa-fg" : "text-pa-muted hover:text-pa-fg-soft"
-      }`}
-    >
-      {icon}
-    </button>
-  );
-  return (
-    <div className="inline-flex rounded-md border border-pa-line p-0.5">
-      <div className="relative grid grid-cols-2">
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-0 w-1/2 rounded-sm bg-pa-selected transition-transform duration-250 ease-in-out"
-          data-slot="view-mode-slider"
-          style={{ transform: mode === "table" ? "translateX(100%)" : undefined }}
-        />
-        {item(
-          "chart",
-          "图表",
-          form === "line" ? (
-            <ChartLineIcon aria-hidden="true" />
-          ) : (
-            <ChartBarIcon aria-hidden="true" />
-          ),
-        )}
-        {item("table", "数据明细", <TableIcon aria-hidden="true" />)}
-      </div>
-    </div>
-  );
-}
-
 /**
  * 派生视图标记：载荷声明该视图由公式派生而非直接查询得来。
  *
@@ -237,7 +173,7 @@ function DerivedBadge() {
  */
 const LIVE_RESIZE_MAX_ROWS = 10;
 
-/** 单个视图的内容体：指标卡 / 图表(+表) / 表格 + 随附提示；页态下切换与提示让位给页脚带 */
+/** 单个视图的内容体：指标卡 / 图表 / 表格 + 随附提示；页态下提示让位给页脚带 */
 function ViewBody({
   payload,
   analysis,
@@ -246,8 +182,6 @@ function ViewBody({
   exportResource,
   traits,
   interacting,
-  mode,
-  onModeChange,
   records,
 }: {
   payload: QueryPayload;
@@ -257,8 +191,6 @@ function ViewBody({
   exportResource?: ExportResourceLink;
   traits: SceneTraits;
   interacting: boolean;
-  mode: "chart" | "table";
-  onModeChange: (mode: "chart" | "table") => void;
   records?: ViewRendererProps["records"];
 }) {
   const { view, presentation } = analysis;
@@ -302,7 +234,6 @@ function ViewBody({
     );
   }
 
-  const showChart = chart !== null && mode === "chart";
   const canFullscreen = !!actions.requestFullscreen;
   const notices = traits.inlineChrome &&
     noticesVisible(view, presentation.table.rows.length, fullscreen, canFullscreen) && (
@@ -320,12 +251,7 @@ function ViewBody({
 
   return (
     <div className={`flex flex-col ${fill ? "min-h-0 flex-1" : ""}`}>
-      {chart && traits.inlineToggle && (
-        <div className={`flex shrink-0 items-center justify-end ${inset} pt-3 pb-2`}>
-          <ViewModeToggle mode={mode} onChange={onModeChange} form={chart.form} />
-        </div>
-      )}
-      {showChart ? (
+      {chart ? (
         <div className={fill ? "flex min-h-0 flex-1 flex-col" : ""}>
           <ViewChartCanvas
             chart={chart}
@@ -377,7 +303,7 @@ export function PageFooterBand({
 }) {
   return (
     <div className="flex min-h-8 shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-pa-line border-t px-3 py-3">
-      {/* 左槽在场即吃掉全部余量（时间栏优先，右段只取内容宽）；缺席则退化为「图表切换居左」的查看形 */}
+      {/* 左槽在场即吃掉全部余量（时间栏优先，右段只取内容宽） */}
       {leading && <div className="flex min-w-0 grow items-center gap-2">{leading}</div>}
       {children}
     </div>
@@ -385,40 +311,32 @@ export function PageFooterBand({
 }
 
 /**
- * 查看面页面底栏：左段承接宿主注入的时间栏，
- * 中段图/表切换，行数与导出提示居右。
+ * 查看面页面底栏：左段承接宿主注入的时间栏，行数与导出提示居右。
  *
  * **不陈述数据截至**：整页有常驻时间栏，那里已经写着这份结果读的是哪一段时间；
  * 底栏再报一次数据边界，读者会把它当成本次结果的时间，与自己刚选的期间对不上。
  * 边界本身收进时间栏期间药丸的 Tooltip——要查的时候查得到，不占常驻版面。
  *
- * 它由宿主摆在结果框外（工作台经 `ChartStage` 的 `footer` 槽），因而图/表档位是受控的：
- * 状态归宿主，本件只呈现。
+ * 它由宿主摆在结果框外（工作台经 `ChartStage` 的 `footer` 槽）。
  */
 export function ViewPageFooter({
   payload,
   presentation,
-  mode,
-  onModeChange,
   actions,
   exportResource,
   leading,
 }: {
   payload: QueryPayload;
   presentation: PresentationBlock;
-  mode: "chart" | "table";
-  onModeChange: (mode: "chart" | "table") => void;
   actions: CardActions;
   exportResource?: ExportResourceLink;
   leading?: React.ReactNode;
 }) {
   const analysis = analyze(payload, presentation);
   const { view } = analysis;
-  const chart = presentation.chart ?? null;
   const count = countStatement(analysis);
   return (
     <PageFooterBand leading={leading}>
-      {chart && <ViewModeToggle mode={mode} onChange={onModeChange} form={chart.form} />}
       {/* 右段恒为内容宽度靠右：定占四成会在窄舞台把左槽的时间栏挤到换行 */}
       <div className="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 text-pa-muted text-xs">
         {view.provenance && <DerivedBadge />}
@@ -446,22 +364,10 @@ export function ViewRenderer({
   scene = "card",
   fullscreen,
   interacting = false,
-  mode: controlledMode,
-  onModeChange,
   records,
 }: ViewRendererProps) {
   const traits =
     fullscreen === undefined ? VIEW_SCENES[scene] : { ...VIEW_SCENES[scene], fullscreen };
-  // 图/表切换状态在此而非 ViewBody——内联切换钮由 ViewBody 摆，档位却要跨中段与提示共用。
-  const [ownMode, setOwnMode] = useState<"chart" | "table">("chart");
-  // 载荷本体一换即回到默认图，不继承上一份结果的 chrome。受控时归宿主重置。
-  const [prevPayload, setPrevPayload] = useState(payload);
-  if (prevPayload !== payload) {
-    setPrevPayload(payload);
-    setOwnMode("chart");
-  }
-  const mode = controlledMode ?? ownMode;
-  const setMode = onModeChange ?? setOwnMode;
   const analysis = analyze(payload, presentation);
   const { view, titleOf } = analysis;
   const chart = presentation.chart ?? null;
@@ -493,8 +399,6 @@ export function ViewRenderer({
         exportResource={exportResource ?? undefined}
         traits={traits}
         interacting={interacting}
-        mode={mode}
-        onModeChange={setMode}
         records={records}
       />
       {/* 口径带只在答数态常驻 */}

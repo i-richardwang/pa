@@ -60,28 +60,21 @@ test("console components style themselves only through design tokens", async () 
   }
 });
 
-const SLIDER_FACES = [
-  { file: "../console/src/components/ui/toggle-group.tsx", label: "文字段" },
-  { file: "../result_view/src/components/view_renderer.tsx", label: "图标段" },
-] as const;
+const SLIDER_FACE_FILE = "../console/src/components/ui/toggle-group.tsx";
 
 const sliderFace = (source: string): string[] =>
   [...source.matchAll(/pointer-events-none absolute[^"]*/g)].flatMap((match) =>
     [...match[0].matchAll(/\bbg-[a-z0-9-]+/g)].map((bg) => bg[0]),
   );
 
-test("两条渲染栈的分段控件选中面是同一个令牌", async () => {
+test("分段控件的选中面出自面料令牌，不是手写色", async () => {
   expect(sliderFace('"pointer-events-none absolute left-0 bg-pa-surface"')).toEqual([
     "bg-pa-surface",
   ]);
   expect(sliderFace('className="pointer-events-none absolute inset-0"')).toEqual([]);
 
-  for (const { file, label } of SLIDER_FACES) {
-    const source = await readFile(new URL(file, import.meta.url), "utf8");
-    expect(sliderFace(source), `${label}的罩层没找到，本用例失去着力点`).toEqual([
-      "bg-pa-selected",
-    ]);
-  }
+  const source = await readFile(new URL(SLIDER_FACE_FILE, import.meta.url), "utf8");
+  expect(sliderFace(source), "分段控件的罩层没找到，本用例失去着力点").toEqual(["bg-pa-selected"]);
 });
 
 const RENDER_STACKS = [

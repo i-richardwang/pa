@@ -114,7 +114,7 @@ bun run generate:data-capability-map
 | `server/src/mcp/` | MCP 工具与 Apps 资源映射 |
 | `server/console/` | OAuth 登录、指标目录、分析、报告与看板 |
 | `server/result_view/` | 控制台与 MCP widget 共用的结果渲染包 |
-| `docs/` | 指标、时间、呈现、存储与 UI 规格 |
+| `docs/` | 指标、时间、呈现、存储、UI 与代码质量规格 |
 
 ## 安全
 

@@ -60,11 +60,36 @@ const PAYLOAD = {
   time_context: [],
 } as unknown as Parameters<typeof ViewRenderer>[0]["payload"];
 
-const CHART = compilePresentationBlock(CHART_VIEW, {
+const CHART_PRESENTATION = compilePresentationBlock(CHART_VIEW, {
   type: "bar",
   x: "organization_name",
   y: ["active_employee_count", "new_hire_count"],
-} as never).chart;
+} as never);
+const CHART = CHART_PRESENTATION.chart;
+
+test("渲染器忠实呈现声明的图或表", () => {
+  const chart = renderToStaticMarkup(
+    <ViewRenderer
+      actions={{}}
+      payload={PAYLOAD}
+      presentation={CHART_PRESENTATION}
+      scene="page"
+    />,
+  );
+  expect(chart).toContain('data-slot="chart-plot-surface"');
+  expect(chart).not.toContain("<tbody");
+
+  const table = renderToStaticMarkup(
+    <ViewRenderer
+      actions={{}}
+      payload={PAYLOAD}
+      presentation={compilePresentationBlock(CHART_VIEW, { type: "table", y: [] } as never)}
+      scene="page"
+    />,
+  );
+  expect(table).toContain("<tbody");
+  expect(table).not.toContain('data-slot="chart-plot-surface"');
+});
 
 /** 元素上的横向衬垫类——比的是「贴哪条左轴」，不是整串类名。 */
 const padX = (className: string) =>

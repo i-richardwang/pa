@@ -1,7 +1,6 @@
 export { LoadingMark } from "./components/loading_mark.js";
 export {
   PageFooterBand,
-  ViewModeToggle,
   ViewPageFooter,
   ViewRenderer,
   type ViewRendererProps,

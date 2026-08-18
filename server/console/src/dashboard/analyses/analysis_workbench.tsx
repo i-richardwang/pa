@@ -174,22 +174,12 @@ export function AnalysisWorkbench({
     copyText: async (text) => navigator.clipboard.writeText(text),
   };
 
-  // 图/表档位归本页：切换钮住在结果框外的底栏里，档位不能锁在框内。
-  // 结果本体一换即回默认图，不继承上一份结果的 chrome。
-  const [mode, setMode] = useState<"chart" | "table">("chart");
-  const [prevPayload, setPrevPayload] = useState(replay?.payload);
-  if (prevPayload !== replay?.payload) {
-    setPrevPayload(replay?.payload);
-    setMode("chart");
-  }
   const presentation = replay ? (session.preview.presentation ?? replay.presentation) : null;
   const footer =
     replay && presentation ? (
       <ViewPageFooter
         actions={viewActions}
         leading={timeBar ?? undefined}
-        mode={mode}
-        onModeChange={setMode}
         payload={replay.payload}
         presentation={presentation}
       />
@@ -244,8 +234,6 @@ export function AnalysisWorkbench({
               payload={replay.payload}
               presentation={presentation}
               actions={viewActions}
-              mode={mode}
-              onModeChange={setMode}
               records={records}
               scene="page"
             />

@@ -15,7 +15,7 @@ export function ChartStage({
 }: {
   /** 题名区：Explore 式 22/26 + 灰副文，恒在结果之上。 */
   heading?: ReactNode;
-  /** 页面底栏：时间栏 + 图/表切换 + 结果元信息。通栏落在结果区之外。 */
+  /** 页面底栏：时间栏 + 结果元信息。通栏落在结果区之外。 */
   footer?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -50,10 +50,6 @@ export function ChartStage({
   );
 }
 
-/**
- * 题名块：主名一行、灰副文一行。水平位置归上层 `chart-stage-body` 的
- * MAIN_CARD_BODY_INSET，本件不自带横向外边距。
- */
 /**
  * 题名块：名字一行，其下一行灰字答「这张图看的是哪一段时间」——**副行只出观察窗口**。
  * 粒度与对比不进副行：它们在底栏上是可点的控件，题下复述一遍既改不动又与控件抢读。

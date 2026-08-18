@@ -7,7 +7,6 @@
  * draggableCancel 豁免，见 board_page 的 GridCanvas。
  * 瓦片菜单与整板「编辑看板」分立：查看「打开报告」/「调整并另存」，整板编辑里「编辑报告」。
  */
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDownIcon,
@@ -22,7 +21,7 @@ import {
 import { REPLAY_PAYLOAD_SCHEMA } from "@contract";
 import type { TimeIntent } from "@time";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { LoadingMark, type CardActions, ViewModeToggle, ViewRenderer } from "pa-result-view";
+import { LoadingMark, type CardActions, ViewRenderer } from "pa-result-view";
 import { Button } from "@/components/ui/button";
 import {
   Menu,
@@ -183,13 +182,6 @@ export function BoardTile({
   );
 
   const showMenu = editing || hasReportAction;
-  /**
-   * 图/表档位归本容器：切换钮摆在题条动作槽里（结果框之外），档位就不能锁在框内。
-   * 换成同一块瓦片的另一份取数（板级时间覆盖）不重置——那是同一个结果换了窗口，
-   * 用户选的「看明细」仍然成立。
-   */
-  const chart = data?.presentation.chart ?? null;
-  const [mode, setMode] = useState<"chart" | "table">("chart");
 
   return (
     <TileShell
@@ -198,51 +190,46 @@ export function BoardTile({
       affordance={editing ? "pinned" : "hover"}
       frame="xl"
       actions={
-        chart || showMenu ? (
-          <>
-            {chart ? <ViewModeToggle mode={mode} onChange={setMode} form={chart.form} /> : null}
-            {showMenu ? (
-              <Menu>
-                <MenuTrigger
-                  render={
-                    <Button
-                      aria-label="瓦片操作"
-                      size="icon-xs"
-                      variant="subtle"
-                      className={tileEditMenuTriggerClass}
-                    />
-                  }
-                >
-                  <EllipsisIcon aria-hidden="true" />
-                </MenuTrigger>
-                <MenuPopup align="end">
-                  {editing ? (
-                    <>
-                      <MenuItem disabled={!canMoveUp} onClick={onMoveUp}>
-                        <ArrowUpIcon aria-hidden="true" />
-                        上移
+        showMenu ? (
+          <Menu>
+            <MenuTrigger
+              render={
+                <Button
+                  aria-label="瓦片操作"
+                  size="icon-xs"
+                  variant="subtle"
+                  className={tileEditMenuTriggerClass}
+                />
+              }
+            >
+              <EllipsisIcon aria-hidden="true" />
+            </MenuTrigger>
+            <MenuPopup align="end">
+              {editing ? (
+                <>
+                  <MenuItem disabled={!canMoveUp} onClick={onMoveUp}>
+                    <ArrowUpIcon aria-hidden="true" />
+                    上移
+                  </MenuItem>
+                  <MenuItem disabled={!canMoveDown} onClick={onMoveDown}>
+                    <ArrowDownIcon aria-hidden="true" />
+                    下移
+                  </MenuItem>
+                  {reportMenuItem}
+                  {onRemove ? (
+                    <MenuDangerGroup>
+                      <MenuItem onClick={onRemove}>
+                        <Trash2Icon aria-hidden="true" />
+                        删除
                       </MenuItem>
-                      <MenuItem disabled={!canMoveDown} onClick={onMoveDown}>
-                        <ArrowDownIcon aria-hidden="true" />
-                        下移
-                      </MenuItem>
-                      {reportMenuItem}
-                      {onRemove ? (
-                        <MenuDangerGroup>
-                          <MenuItem onClick={onRemove}>
-                            <Trash2Icon aria-hidden="true" />
-                            删除
-                          </MenuItem>
-                        </MenuDangerGroup>
-                      ) : null}
-                    </>
-                  ) : (
-                    reportMenuItem
-                  )}
-                </MenuPopup>
-              </Menu>
-            ) : null}
-          </>
+                    </MenuDangerGroup>
+                  ) : null}
+                </>
+              ) : (
+                reportMenuItem
+              )}
+            </MenuPopup>
+          </Menu>
         ) : undefined
       }
     >
@@ -257,8 +244,6 @@ export function BoardTile({
           actions={TILE_ACTIONS}
           records={records}
           interacting={!!interacting}
-          mode={mode}
-          onModeChange={setMode}
           scene="tile"
         />
       )}
