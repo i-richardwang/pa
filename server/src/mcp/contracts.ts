@@ -10,6 +10,7 @@ import {
 } from "../semantic_core/semantic_analysis.js";
 import { TIME_CAPABILITIES_INPUT } from "../semantic_core/time_contract.js";
 import { BUSINESS_TERM_RESOLUTION_SCHEMA } from "../contracts/business_term_contract.js";
+import { EXPORT_TICKET_TTL_MINUTES } from "../contracts/export_contract.js";
 
 export const SERVER_INSTRUCTIONS =
   "PA 是权限裁剪的封闭查询面。成员只引用 catalog 的语义 id；先用 catalog(terms) 读取 term_resolutions，名录值不确定时用 values_of。" +
@@ -30,7 +31,7 @@ export const TOOL_DESCRIPTIONS = {
   show_records:
     "为单结果格、单时间桶的本人分析打开受控构成记录；分类条件应在分析 filters 中表达，不能用 dimensions 展开名单。",
   load_records_page: "按 view_id 加载受控构成记录分页，仅供 PA 名单卡渲染。",
-  export_result: "从本人不可变 View 对应的分析生成 24 小时有效的 CSV 交付。",
+  export_result: `从本人不可变 View 对应的分析生成 ${EXPORT_TICKET_TTL_MINUTES} 分钟有效的 CSV 交付。`,
   save_report: "把本人不可变 View 保存为报告；不重新执行查询。",
   update_report: "修改本人报告的名称、当前 view_id 指针或归档状态。",
   find_report: "按名称查找本人未归档报告，返回当前 analysis_id、view_id 与控制台深链。",

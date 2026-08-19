@@ -24,9 +24,11 @@ import {
 } from "../presentation_core/presentation_spec.js";
 import {
   parseAnalysisDefinition,
+  parseSemanticViewIntent,
   isSemanticDerivedView,
   semanticAnalysisSink,
-  SEMANTIC_VIEW_INTENT_INPUT,
+  AnalysisDefinitionError,
+  ViewIntentError,
   type AnalysisDefinition,
   type SemanticAnalysisView,
   type SemanticViewIntent,
@@ -54,7 +56,7 @@ import type {
 import { planMetricRecordProjection } from "../semantic_core/record_projection_planner.js";
 import { compileTimeIntent, timeOutputColumns } from "../semantic_core/time_contract.js";
 import { projectPresentation } from "../presentation_core/presentation_projection.js";
-import type { ChartDecl } from "../presentation_core/view_shape.js";
+import type { ChartDecl } from "../presentation_core/chart_decl.js";
 
 /**
  * 结果血缘（对外）：只讲业务事实——单来源直查 / 跨来源组合（来源标题 + 关联键） / 不可行原因。
@@ -223,10 +225,10 @@ function memberForIntent(
 ): CompilerCatalogMember {
   const allowed = kind === "measure" ? (intent.measures ?? []) : (intent.dimensions ?? []);
   if (!allowed.includes(reference)) {
-    throw new Error(`呈现引用的语义字段 ${reference} 不在查询中`);
+    throw new ViewIntentError(`呈现引用的语义字段 ${reference} 不在查询中`);
   }
   const member = catalogMember(catalog, reference, kind);
-  if (!member) throw new Error(`catalog 中不存在语义字段 ${reference}`);
+  if (!member) throw new ViewIntentError(`catalog 中不存在语义字段 ${reference}`);
   return member;
 }
 
@@ -264,7 +266,7 @@ function compileBoundChart(
       chart.stack !== undefined ||
       (chart.type === "kpi" && chart.columns)
     ) {
-      throw new Error(`${chart.type} 呈现不接受数据通道绑定`);
+      throw new ViewIntentError(`${chart.type} 呈现不接受数据通道绑定`);
     }
     return {
       type: chart.type,
@@ -278,9 +280,9 @@ function compileBoundChart(
       ...(chart.type === "table" && style.table_shading ? { shading: style.table_shading } : {}),
     };
   }
-  if (chart.columns) throw new Error("columns 仅支持 table 呈现");
+  if (chart.columns) throw new ViewIntentError("columns 仅支持 table 呈现");
   if (chart.type === "line" && chart.category) {
-    throw new Error("line 呈现的横轴恒为时间，不接受 category 通道");
+    throw new ViewIntentError("line 呈现的横轴恒为时间，不接受 category 通道");
   }
   const queried = [...(intent.measures ?? []), ...calculated.keys()];
   const relationOf = (id: string) => {
@@ -296,18 +298,18 @@ function compileBoundChart(
       const relation = relationOf(id);
       return !(relation?.kind === "structure_share" && queried.includes(relation.numerator_id));
     });
-  if (!series.length) throw new Error(`${chart.type} 呈现至少需要一个主系列`);
+  if (!series.length) throw new ViewIntentError(`${chart.type} 呈现至少需要一个主系列`);
   const annotations = chart.annotations ?? [];
   if (chart.type !== "bar" && annotations.length) {
-    throw new Error("辅助标注通道只支持 bar 呈现");
+    throw new ViewIntentError("辅助标注通道只支持 bar 呈现");
   }
   if (annotations.some((id) => series.includes(id))) {
-    throw new Error("同一指标不能同时是主系列和辅助标注");
+    throw new ViewIntentError("同一指标不能同时是主系列和辅助标注");
   }
   for (const id of annotations) {
     const relation = relationOf(id);
     if (relation?.kind !== "structure_share" || !series.includes(relation.numerator_id)) {
-      throw new Error(`辅助指标「${titleOf(id)}」必须是当前主系列的结构占比`);
+      throw new ViewIntentError(`辅助指标「${titleOf(id)}」必须是当前主系列的结构占比`);
     }
   }
   const expectedAnnotations =
@@ -321,14 +323,14 @@ function compileBoundChart(
     annotations.length !== expectedAnnotations.length ||
     expectedAnnotations.some((id) => !annotations.includes(id))
   ) {
-    throw new Error("结构占比与分子同查时必须进入辅助标注通道");
+    throw new ViewIntentError("结构占比与分子同查时必须进入辅助标注通道");
   }
   const display = style.series
     ? {
         series: Object.fromEntries(
           Object.entries(style.series).map(([id, value]) => {
             if (!series.includes(id)) {
-              throw new Error(`系列视觉设置引用的指标「${titleOf(id)}」不在当前主系列中`);
+              throw new ViewIntentError(`系列视觉设置引用的指标「${titleOf(id)}」不在当前主系列中`);
             }
             return [
               bind(id, "measure"),
@@ -377,14 +379,18 @@ function physicalReference(
   if (operand.member === "year" || operand.member === "month") return operand.member;
   const intent = intents.get(operand.source);
   const query = queries.get(operand.source);
-  if (!intent || !query) throw new Error(`派生视图引用的查询视图 ${operand.source} 不存在`);
+  if (!intent || !query) {
+    throw new AnalysisDefinitionError(`派生视图引用的查询视图 ${operand.source} 不存在`);
+  }
   if (intent.measures?.includes(operand.member)) {
     return memberShortName(bindSemantic(catalog, intent, query, operand.member, "measure"));
   }
   if (intent.dimensions?.includes(operand.member)) {
     return memberShortName(bindSemantic(catalog, intent, query, operand.member, "dimension"));
   }
-  throw new Error(`派生视图引用的成员 ${operand.member} 不在查询视图 ${operand.source} 中`);
+  throw new AnalysisDefinitionError(
+    `派生视图引用的成员 ${operand.member} 不在查询视图 ${operand.source} 中`,
+  );
 }
 
 function physicalExpressionOperand(
@@ -466,7 +472,7 @@ function compileDerivedView(
         "member" in column && catalogMember(catalog, column.member, "dimension") !== undefined,
     );
     if (!hasMeasure || !hasDimension) {
-      throw new Error(
+      throw new AnalysisDefinitionError(
         `派生视图「${view.view_title}」的总体行只适用于同时包含指标与业务分组维度的结果`,
       );
     }
@@ -493,7 +499,7 @@ function compileDerivedChart(chart: SemanticViewIntent, style: ViewPreferences):
       chart.stack !== undefined ||
       (chart.type === "kpi" && chart.columns)
     ) {
-      throw new Error(`${chart.type} 呈现不接受数据通道绑定`);
+      throw new ViewIntentError(`${chart.type} 呈现不接受数据通道绑定`);
     }
     return {
       type: chart.type,
@@ -501,10 +507,12 @@ function compileDerivedChart(chart: SemanticViewIntent, style: ViewPreferences):
       ...(chart.type === "table" && style.table_shading ? { shading: style.table_shading } : {}),
     };
   }
-  if (chart.columns) throw new Error("columns 仅支持 table 呈现");
+  if (chart.columns) throw new ViewIntentError("columns 仅支持 table 呈现");
   if (style.series && chart.series) {
     const unknown = Object.keys(style.series).find((id) => !chart.series?.includes(id));
-    if (unknown) throw new Error(`系列视觉设置引用的派生列「${unknown}」不在当前主系列中`);
+    if (unknown) {
+      throw new ViewIntentError(`系列视觉设置引用的派生列「${unknown}」不在当前主系列中`);
+    }
   }
   return {
     type: chart.type,
@@ -537,7 +545,7 @@ function validateSemanticTableLayout(view: SemanticAnalysisView, chart: Semantic
   if (chart.type !== "table" || !chart.columns) return;
   const businessColumns = chart.columns.filter((axis) => axis !== "time" && axis !== "metrics");
   if (view.summary && businessColumns.length) {
-    throw new Error(
+    throw new ViewIntentError(
       "presentation.columns 的业务维度列轴与 summary 互斥；请关闭总体行，或仅保留 time / metrics",
     );
   }
@@ -570,14 +578,20 @@ function percentOfTotalCalculation(
   const calculation = intent.calculations?.[0];
   if (!calculation) return undefined;
   const measure = catalogMember(catalog, calculation.measure, "measure");
-  if (!measure) throw new Error(`catalog 中不存在基础指标 ${calculation.measure}`);
+  if (!measure) {
+    throw new AnalysisDefinitionError(`catalog 中不存在基础指标 ${calculation.measure}`);
+  }
   if (!measure.report_calculations?.includes("percent_of_total")) {
-    throw new Error(`指标「${measure.title}」不支持报告级构成占比`);
+    throw new AnalysisDefinitionError(`指标「${measure.title}」不支持报告级构成占比`);
   }
   const category = catalogMember(catalog, calculation.category_dimension, "dimension");
-  if (!category) throw new Error(`catalog 中不存在构成维度 ${calculation.category_dimension}`);
+  if (!category) {
+    throw new AnalysisDefinitionError(`catalog 中不存在构成维度 ${calculation.category_dimension}`);
+  }
   if (category.dimension_kind === "individual" || category.dimension_kind === "overlapping") {
-    throw new Error(`维度「${category.title}」不是互斥分类，不能计算合计为 100% 的构成占比`);
+    throw new AnalysisDefinitionError(
+      `维度「${category.title}」不是互斥分类，不能计算合计为 100% 的构成占比`,
+    );
   }
   return calculation;
 }
@@ -743,7 +757,7 @@ export function compileAnalysisView(
   rawPreferences: ViewPreferences = EMPTY_VIEW_PREFERENCES,
 ): CompiledAnalysisView {
   const definition = parseAnalysisDefinition(input.analysis);
-  const intent = SEMANTIC_VIEW_INTENT_INPUT.parse(input.view);
+  const intent = parseSemanticViewIntent(input.view);
   const preferences = validateViewPreferences(intent, rawPreferences);
   const calculationIntent = definition.views.find(
     (view): view is SemanticQueryView =>

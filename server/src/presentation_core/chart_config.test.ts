@@ -14,9 +14,15 @@ import {
   type PaChartExtension,
 } from "./chart_config.js";
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
-import type { SeriesDisplay } from "./view_shape.js";
+import type { ChartDecl, SeriesDisplay } from "./chart_decl.js";
+import { compileChart, makeTitleOf } from "./view_shape.js";
 
 type Cell = string | number | null;
+
+const completeDecl = (decl: Omit<ChartDecl, "tableLayout">): ChartDecl => ({
+  ...decl,
+  tableLayout: { rows: [], columns: [] },
+});
 
 function view(
   columns: string[],
@@ -288,6 +294,23 @@ describe("趋势折线", () => {
         { row: 2, column: "active_employee_count" },
       ],
     ]);
+  });
+
+  test("原始行映射是可序列化值，不依赖对象身份", () => {
+    const source = view(
+      ["year", "month", "active_employee_count"],
+      [
+        [2026, 1, 100],
+        [2026, 2, 120],
+      ],
+    );
+    const spec = compileChart(source, makeTitleOf(source), {
+      type: "line",
+      y: ["active_employee_count"],
+    });
+    expect(JSON.parse(JSON.stringify(spec))).toMatchObject({
+      sourceRows: [{ row: 0 }, { row: 1 }],
+    });
   });
 });
 
@@ -647,10 +670,10 @@ describe("无图形态与回答级块", () => {
   });
 
   test("完整呈现块始终带表格，图表只在声明成立时出现", () => {
-    const kpi = compilePresentationBlock(view(["active_employee_count"], [[1]]), {
-      type: "kpi",
-      y: [],
-    });
+    const kpi = compilePresentationBlock(
+      view(["active_employee_count"], [[1]]),
+      completeDecl({ type: "kpi", y: [] }),
+    );
     expect(kpi).toMatchObject({ type: "kpi", table: { rows: [[1]] } });
     const block = compilePresentationBlock(
       view(
@@ -660,7 +683,7 @@ describe("无图形态与回答级块", () => {
           [2026, 2],
         ],
       ),
-      { type: "line", y: ["active_employee_count"] },
+      completeDecl({ type: "line", y: ["active_employee_count"] }),
     );
     expect(block).toMatchObject({ type: "line", chart: { form: "line" } });
     expect(isPresentationBlock(block)).toBe(true);
@@ -730,10 +753,10 @@ describe("无图形态与回答级块", () => {
   });
 
   test("完整呈现块的声明类型必须与编译图表一致", () => {
-    const table = compilePresentationBlock(view(["active_employee_count"], [[10]]), {
-      type: "table",
-      y: [],
-    }).table;
+    const table = compilePresentationBlock(
+      view(["active_employee_count"], [[10]]),
+      completeDecl({ type: "table", y: [] }),
+    ).table;
     expect(
       isPresentationBlock({
         type: "line",
@@ -745,10 +768,10 @@ describe("无图形态与回答级块", () => {
   });
 
   test("table_layout 只接受完整的 applied/unavailable 状态", () => {
-    const table = compilePresentationBlock(view(["active_employee_count"], [[10]]), {
-      type: "table",
-      y: [],
-    }).table;
+    const table = compilePresentationBlock(
+      view(["active_employee_count"], [[10]]),
+      completeDecl({ type: "table", y: [] }),
+    ).table;
     expect(
       isPresentationBlock({
         type: "table",
@@ -1030,14 +1053,19 @@ describe("服务端物理呈现声明", () => {
   });
 
   test("compilePresentationBlock 使用唯一结果的呈现声明", () => {
-    expect(compilePresentationBlock(trendView, { type: "table", y: [] })).toMatchObject({
+    expect(
+      compilePresentationBlock(trendView, completeDecl({ type: "table", y: [] })),
+    ).toMatchObject({
       type: "table",
     });
     expect(
-      compilePresentationBlock(trendView, {
-        type: "line",
-        y: ["new_hire_count", "leave_count"],
-      }),
+      compilePresentationBlock(
+        trendView,
+        completeDecl({
+          type: "line",
+          y: ["new_hire_count", "leave_count"],
+        }),
+      ),
     ).toMatchObject({ type: "line", chart: { form: "line" } });
   });
 });
@@ -1073,10 +1101,13 @@ describe("对照叠加折线的交付形态", () => {
   };
 
   test("两个期间成两条系列，横轴八个位置，下钻点位逐系列回指原行", () => {
-    const block = compilePresentationBlock(comparisonView, {
-      type: "line",
-      y: ["ytd_primary_event_rate"],
-    });
+    const block = compilePresentationBlock(
+      comparisonView,
+      completeDecl({
+        type: "line",
+        y: ["ytd_primary_event_rate"],
+      }),
+    );
     expect(block.type).toBe("line");
     const option = block.chart?.option as {
       series: { name: string; data: (number | null | { value: number | null })[] }[];
@@ -1153,23 +1184,26 @@ describe("整窗读数进呈现块", () => {
   });
 
   test("整窗读数只随指标卡下发：图与表之上不摆第二个口径的读数", () => {
-    const kpi = compilePresentationBlock(seriesView(), { type: "kpi", y: [] });
+    const kpi = compilePresentationBlock(seriesView(), completeDecl({ type: "kpi", y: [] }));
     expect(kpi.type).toBe("kpi");
     expect(kpi.totals?.metrics[0]).toMatchObject({
       value: 22,
       period: { label: "2026年1—2月", from: "2026-01", to: "2026-02" },
     });
-    const line = compilePresentationBlock(seriesView(), { type: "line", y: ["turnover_count"] });
+    const line = compilePresentationBlock(
+      seriesView(),
+      completeDecl({ type: "line", y: ["turnover_count"] }),
+    );
     expect(line.type).toBe("line");
     expect(line.totals).toBeUndefined();
-    const table = compilePresentationBlock(seriesView(), { type: "table", y: [] });
+    const table = compilePresentationBlock(seriesView(), completeDecl({ type: "table", y: [] }));
     expect(table.totals).toBeUndefined();
     expect(isPresentationBlock(line)).toBe(true);
     expect(isPresentationBlock(kpi)).toBe(true);
   });
 
   test("宿主边界拒收残缺整窗读数，也拒收没有数可读的指标卡", () => {
-    const block = compilePresentationBlock(seriesView(), { type: "kpi", y: [] });
+    const block = compilePresentationBlock(seriesView(), completeDecl({ type: "kpi", y: [] }));
     expect(isPresentationBlock({ ...block, totals: undefined })).toBe(false);
     expect(
       isPresentationBlock({

@@ -3,8 +3,12 @@
  * Run 只在需要新数据时执行；仅创建 View 时不得触碰执行器。
  */
 import { describe, expect, test } from "bun:test";
-import type { Principal } from "../engine/cube_security.js";
-import { STRUCTURE_ARGS, createTestAppDatabase } from "../test_support/dashboard.js";
+import type { Principal } from "../contracts/principal.js";
+import {
+  STRUCTURE_ARGS,
+  createTestAppDatabase,
+  semanticAccessStub,
+} from "../test_support/dashboard.js";
 import { planExecution } from "../semantic_core/execution_plan.js";
 import { compilePresentationBlock } from "../presentation_core/chart_config.js";
 import type { ViewBlock } from "../semantic_core/query_payload.js";
@@ -15,7 +19,7 @@ import { createAnalysisService } from "./analysis_service.js";
 import type { QueryRunResult } from "./query_pipeline.js";
 import type { ViewPreferences } from "../presentation_core/view_preferences.js";
 
-const principal: Principal = { email: "alice@x", roles: [], orgScope: "*" };
+const principal: Principal = { email: "alice@x", roles: ["user"], orgScope: "*" };
 const definition: AnalysisDefinition = semanticAnalysisOf(STRUCTURE_ARGS).analysis;
 const barIntent: SemanticViewIntent = {
   type: "bar",
@@ -25,10 +29,21 @@ const barIntent: SemanticViewIntent = {
 
 const compiled = {
   plan: planExecution(STRUCTURE_ARGS),
-  presentation: { type: "bar" as const, x: "category_level", y: ["active_employee_count"] },
-  render_decl: { type: "bar" as const, x: "category_level", y: ["active_employee_count"] },
+  presentation: {
+    type: "bar" as const,
+    x: "category_level",
+    y: ["active_employee_count"],
+    tableLayout: { rows: [], columns: [] },
+  },
+  render_decl: {
+    type: "bar" as const,
+    x: "category_level",
+    y: ["active_employee_count"],
+    tableLayout: { rows: [], columns: [] },
+  },
   routes: [{ status: "direct" as const, result_view_id: "structure" }],
   record_projection_bindings: { views: [] },
+  access: semanticAccessStub(principal),
 };
 
 const pivotDefinition: AnalysisDefinition = {
@@ -102,12 +117,20 @@ function serviceWith(rows: ViewBlock["rows"]) {
       executions += 1;
       return resultOf(rows);
     },
-    compile: async (_principal, _definition, intent) =>
+    plan: async (_principal, _definition, intent) =>
       intent.type === "table"
         ? {
             ...compiled,
-            presentation: { type: "table" as const, y: [] },
-            render_decl: { type: "table" as const, y: [] },
+            presentation: {
+              type: "table" as const,
+              y: [],
+              tableLayout: { rows: [], columns: [] },
+            },
+            render_decl: {
+              type: "table" as const,
+              y: [],
+              tableLayout: { rows: [], columns: [] },
+            },
           }
         : compiled,
     usage: { log: async () => {} },
@@ -146,7 +169,7 @@ function pivotServiceWith(rows: ViewBlock["rows"]) {
   const service = createAnalysisService({
     repository,
     execute: async () => pivotResultOf(rows),
-    compile: async () => pivotCompiled,
+    plan: async () => pivotCompiled,
     usage: { log: async () => {} },
   });
   return { repository, service };
@@ -192,7 +215,6 @@ describe("analysis service 身份与呈现边界", () => {
       definition,
       barIntent,
       humanPreferences,
-      compiled,
     );
     expect(executed.preferences).toEqual(humanPreferences);
     expect(
@@ -208,7 +230,6 @@ describe("analysis service 身份与呈现边界", () => {
       definition,
       barIntent,
       humanPreferences,
-      compiled,
     );
     expect(fallback.intent).toEqual(barIntent);
     expect(fallback.preferences).toEqual(humanPreferences);
@@ -240,7 +261,6 @@ describe("analysis service 身份与呈现边界", () => {
       definition,
       barIntent,
       humanPreferences,
-      compiled,
     );
     expect(current.executions()).toBe(1);
 
@@ -266,7 +286,6 @@ describe("analysis service 身份与呈现边界", () => {
       definition,
       barIntent,
       humanPreferences,
-      compiled,
     );
     const rerun = await current.service.rerun(principal, original.analysis_id, { type: "table" });
 

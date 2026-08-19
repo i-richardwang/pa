@@ -6,7 +6,7 @@ import { createTestAppDatabase } from "../test_support/app_database.js";
 import { createReportService } from "../application/report_service.js";
 
 const usage = { log: async () => {} };
-import type { Principal } from "../engine/cube_security.js";
+import type { Principal } from "../contracts/principal.js";
 import { semanticAnalysisOf } from "../test_support/report.js";
 import type { AnalysisSpec } from "../semantic_core/analysis_spec.js";
 import { planExecution } from "../semantic_core/execution_plan.js";
@@ -14,6 +14,7 @@ import { createAnalysisRepository } from "./analysis_repository.js";
 import { ReportConflictError, createReportRepository } from "./report_repository.js";
 import type { AnalysisRepository } from "../ports/analysis_repository.js";
 import type { AnalysisDefinition, SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
+import { semanticAccessStub } from "../test_support/dashboard.js";
 
 const path = () => join(tmpdir(), `pa_repository_${randomUUID()}.db`);
 const spec = (id = "result") => ({
@@ -40,19 +41,16 @@ const execution = {
 };
 const presentation = { renderShape: () => null };
 const semanticPlanning = {
-  compile: async (
-    _principal: unknown,
-    semantic: AnalysisDefinition,
-    _intent: SemanticViewIntent,
-  ) => ({
+  plan: async (caller: Principal, semantic: AnalysisDefinition, _intent: SemanticViewIntent) => ({
     plan: planExecution({
       ...(semantic.title ? { title: semantic.title } : {}),
       views: semantic.views.filter((view) => !("from" in view)),
     } as AnalysisSpec),
-    presentation: { type: "table" as const, y: [] },
-    render_decl: { type: "table" as const, y: [] },
+    presentation: { type: "table" as const, y: [], tableLayout: { rows: [], columns: [] } },
+    render_decl: { type: "table" as const, y: [], tableLayout: { rows: [], columns: [] } },
     routes: [],
     record_projection_bindings: { views: [] },
+    access: semanticAccessStub(caller),
   }),
 };
 
@@ -135,6 +133,92 @@ describe("report aggregate", () => {
     expect(archived.archived_at).not.toBeNull();
     expect(await reports.listOwned("alice@x")).toEqual([]);
     expect(await reports.listOwned("alice@x", undefined, true)).toHaveLength(1);
+  });
+
+  test("报告重放只解析一次 Analysis/View 身份", async () => {
+    const db = createTestAppDatabase();
+    const analyses = createAnalysisRepository(db);
+    const reports = createReportRepository(db);
+    const identity = await createOwned(analyses, "alice@x", spec());
+    const report = await reports.create({
+      owner: "alice@x",
+      name: "组织报告",
+      viewId: identity.view.id,
+    });
+    let viewReads = 0;
+    let analysisReads = 0;
+    const countingAnalyses: AnalysisRepository = {
+      ...analyses,
+      getView: async (id) => {
+        viewReads += 1;
+        return analyses.getView(id);
+      },
+      getAnalysis: async (id) => {
+        analysisReads += 1;
+        return analyses.getAnalysis(id);
+      },
+    };
+    const resultView = {
+      id: "result",
+      columns: [],
+      column_roles: {},
+      rows: [],
+      row_count: 0,
+      time: {
+        grain: "total" as const,
+        coordinates: [{ role: "primary" as const, from: "2026-07", to: "2026-07" }],
+        buckets: [{ key: null, from: "2026-07", to: "2026-07" }],
+      },
+      query_notes: [],
+    };
+    const service = createReportService({
+      reports,
+      analyses: countingAnalyses,
+      semanticPlanning: {
+        plan: async (caller) => ({
+          plan: planExecution(spec()),
+          presentation: {
+            type: "table" as const,
+            y: [],
+            tableLayout: { rows: [], columns: [] },
+          },
+          render_decl: {
+            type: "table" as const,
+            y: [],
+            tableLayout: { rows: [], columns: [] },
+          },
+          routes: [],
+          record_projection_bindings: { views: [] },
+          access: semanticAccessStub(caller),
+        }),
+      },
+      presentation,
+      usage,
+      execution: {
+        executeReferenced: async (_caller, current, planned) => ({
+          analysis_id: current.analysis.id,
+          view_id: current.view.id,
+          definition: current.analysis.definition,
+          intent: current.view.intent,
+          preferences: current.view.preferences,
+          presentation: planned.presentation,
+          record_projection_bindings: planned.record_projection_bindings,
+          payload: {
+            analysis_id: current.analysis.id,
+            view_id: current.view.id,
+            default_population_scope: "统计范围",
+            data_as_of: "2026-07",
+            time_context: [],
+            view: resultView,
+          },
+          fullRowViewBlock: resultView,
+          decl: planned.render_decl,
+        }),
+      },
+    });
+
+    expect((await service.runOwned(principal("alice@x"), report.id)).report.id).toBe(report.id);
+    expect({ viewReads, analysisReads }).toEqual({ viewReads: 1, analysisReads: 1 });
   });
 
   test("并发更新由 SQL revision 条件保证只有一方提交", async () => {

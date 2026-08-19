@@ -4,6 +4,7 @@ import { FEEDBACK_LIMITS } from "../contracts/feedback_contract.js";
 import type { McpRegistrationContext } from "./context.js";
 import type { FeedbackService } from "../application/feedback_service.js";
 import type { UsageService } from "../application/usage_service.js";
+import { safeMcpHandler } from "./errors.js";
 import { OAUTH_SECURITY_SCHEMES, TOOL_DESCRIPTIONS, WRITE_ANNOTATIONS } from "./contracts.js";
 
 export function registerFeedbackTool(
@@ -40,12 +41,15 @@ export function registerFeedbackTool(
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    usage.wrap({ tool: "feedback", caller }, async (input: FeedbackInput) => {
-      const payload = await feedback.submit(principal, input);
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
-        structuredContent: payload,
-      };
-    }),
+    safeMcpHandler(
+      "feedback",
+      usage.wrap({ tool: "feedback", caller }, async (input: FeedbackInput) => {
+        const payload = await feedback.submit(principal, input);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
+          structuredContent: payload,
+        };
+      }),
+    ),
   );
 }

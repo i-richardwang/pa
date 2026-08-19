@@ -15,17 +15,16 @@ import {
   makeTitleOf,
   type BarSpec,
   type CategoryComboSpec,
-  type ChartDecl,
   type ChartRow,
-  chartSourceRow,
+  type ChartSourceRow,
   type PieSpec,
   type SeriesDef,
-  type SeriesDisplay,
   type TableLayoutStatus,
   type TableModel,
   type TotalBand,
   type TrendSpec,
 } from "./view_shape.js";
+import type { ChartDecl, ChartRenderDecl, SeriesDisplay } from "./chart_decl.js";
 import { formatSeriesValue, toNumber } from "./view_format.js";
 import { CHART_CHROME, CHART_SERIES, FONT_FAMILY } from "./design_tokens.js";
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
@@ -82,11 +81,16 @@ export type PaChartExtension = {
   records?: { points: ({ row: number; column: string } | null)[][] };
 };
 
-function recordProjectionPoints(rows: ChartRow[], series: SeriesDef[]) {
+function recordProjectionPoints(
+  rows: ChartRow[],
+  sourceRows: ChartSourceRow[],
+  series: SeriesDef[],
+) {
   return {
     points: series.map((item) =>
-      rows.map((row) => {
-        const value = chartSourceRow(row, item.key) ?? chartSourceRow(row);
+      rows.map((_, rowIndex) => {
+        const source = sourceRows[rowIndex];
+        const value = source?.series?.[item.key] ?? source?.row;
         return typeof value === "number" && item.column
           ? { row: value, column: item.column }
           : null;
@@ -663,7 +667,7 @@ function trendOption(spec: TrendSpec): ViewChart {
       latestRow ? spec.series.map((s) => cellNumber(latestRow[s.key])) : undefined,
     ),
     ...(latestRow ? { legend_latest_label: String(latestRow.t ?? "") } : {}),
-    records: recordProjectionPoints(spec.rows, spec.series),
+    records: recordProjectionPoints(spec.rows, spec.sourceRows, spec.series),
   };
   return {
     form: "line",
@@ -738,7 +742,7 @@ function categoryComboOption(spec: CategoryComboSpec): ViewChart {
       spec.series.map((series) => series.name),
       seriesColorAt,
     ),
-    records: recordProjectionPoints(spec.rows, spec.series),
+    records: recordProjectionPoints(spec.rows, spec.sourceRows, spec.series),
   };
   return {
     form: "bar",
@@ -805,7 +809,7 @@ function barOption(spec: BarSpec): ViewChart {
       spec.series.map((s) => s.name),
       seriesColorAt,
     ),
-    records: recordProjectionPoints(spec.rows, spec.series),
+    records: recordProjectionPoints(spec.rows, spec.sourceRows, spec.series),
   };
   // 单系列（不堆叠）改走排行版式：一行说一个类目，值与占比各占一列
   if (!multi && !spec.stacked) {
@@ -891,8 +895,8 @@ function pieOption(spec: PieSpec): ViewChart {
     ),
     records: {
       points: [
-        spec.rows.map((row) => {
-          const source = chartSourceRow(row);
+        spec.rows.map((_, rowIndex) => {
+          const source = spec.sourceRows[rowIndex]?.row;
           return source === undefined ? null : { row: source, column: spec.column };
         }),
       ],
@@ -931,7 +935,7 @@ function pieOption(spec: PieSpec): ViewChart {
 }
 
 /** 按显式声明编译图表配置；不声明图表的 table/kpi 直接返回 null。 */
-export function buildViewChart(view: ViewBlock, decl: ChartDecl): ViewChart | null {
+export function buildViewChart(view: ViewBlock, decl: ChartRenderDecl): ViewChart | null {
   const shape = compileChart(view, makeTitleOf(view), decl);
   if (!shape) return null;
   // 垫层最后补：显式覆盖可以把一条折线改成柱，改完才知道谁还是折线

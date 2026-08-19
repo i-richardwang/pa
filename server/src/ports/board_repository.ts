@@ -28,7 +28,7 @@ export type BoardRepository = {
   list(): Promise<BoardRecord[]>;
   update(
     id: string,
-    patch: { name?: string; tiles?: unknown },
+    patch: { name?: string; tiles?: StoredTile[] },
     ifRevision: number,
   ): Promise<BoardRecord | null>;
   remove(id: string): Promise<boolean>;

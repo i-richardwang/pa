@@ -55,6 +55,7 @@ import {
   addBoardReport,
   applyBoardLayout,
   beginBoardEdit,
+  boardMutationTiles,
   changeBoardText,
   isBoardEditDirty,
   moveBoardTile,
@@ -172,8 +173,11 @@ export function BoardPage({
 
   // 保存看板：写回详情缓存并失效看板列表（名称/瓦片数变化随之刷新）。
   const saveBoard = useMutation({
-    mutationFn: (body: { if_revision: number; name: string; tiles: BoardTileData[] }) =>
-      patchJson(`/dashboard/api/boards/${encodeURIComponent(id)}`, body, BOARD_PAYLOAD_SCHEMA),
+    mutationFn: (body: {
+      if_revision: number;
+      name: string;
+      tiles: ReturnType<typeof boardMutationTiles>;
+    }) => patchJson(`/dashboard/api/boards/${encodeURIComponent(id)}`, body, BOARD_PAYLOAD_SCHEMA),
     onSuccess: (updated) => {
       queryClient.setQueryData(dashboardKeys.board(id), updated);
       void queryClient.invalidateQueries({ queryKey: dashboardKeys.boards });
@@ -248,7 +252,7 @@ export function BoardPage({
       await saveBoard.mutateAsync({
         if_revision: data.revision,
         name: draft.name,
-        tiles: draft.tiles,
+        tiles: boardMutationTiles(draft.tiles),
       });
       setDraft(null);
       closeAddDialogs();

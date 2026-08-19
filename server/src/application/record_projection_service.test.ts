@@ -1,17 +1,19 @@
 import { expect, test } from "bun:test";
-import type { CatalogService } from "./catalog_service.js";
 import {
   buildCatalogDocument as buildRawCatalogDocument,
   toCompilerCatalog,
   type CatalogDocument,
 } from "../engine/catalog_document.js";
-import type { Principal } from "../engine/cube_security.js";
+import type { Principal } from "../contracts/principal.js";
 import type { CubeGateway, CubeQuery, CubeView, LoadResponse } from "../ports/cube_gateway.js";
 import { memberShortName } from "../semantic_core/member_name.js";
 import { compileAnalysisView } from "../engine/semantic_analysis_compiler.js";
 import type { AnalysisDefinition, SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
 import { createRecordProjectionService } from "./record_projection_service.js";
 import { TEST_SEMANTIC_TAXONOMY } from "../test_support/semantic_taxonomy.js";
+import { cubeSecurityContext } from "../engine/cube_security.js";
+import type { CompiledAnalysisView } from "../engine/semantic_analysis_compiler.js";
+import type { AuthorizedAnalysisPlan } from "./semantic_planning_service.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
   buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY);
@@ -178,14 +180,25 @@ const workforce_metrics: CubeView = {
 };
 
 const fixtureViews = [workforce_metrics, test_people_metrics];
-const catalogFixture = (document: CatalogDocument) =>
-  ({
-    authorized: async () => ({
-      views: fixtureViews,
-      document,
-      compiler: toCompilerCatalog(document),
-    }),
-  }) satisfies Pick<CatalogService, "authorized">;
+const authorizedPlan = (
+  compiled: CompiledAnalysisView,
+  document: CatalogDocument,
+  caller: Principal = principal,
+): AuthorizedAnalysisPlan => ({
+  ...compiled,
+  access: {
+    principal: caller,
+    cubeContext: cubeSecurityContext(caller),
+    views: fixtureViews,
+    compiler: toCompilerCatalog(document),
+    timeContext: {
+      dataAsOf: "2026-07",
+      sources: {
+        workforce: { actualThrough: "2026-07", availableThrough: "2026-07" },
+      },
+    },
+  },
+});
 const noBoards = { get: async () => null } as never;
 const currentMonth = (anchor: string) => ({
   window: { kind: "current_month" as const, month: anchor },
@@ -322,12 +335,11 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
     } as never,
     analyses: analysisRepositoryOf(spec),
     semanticPlanning: {
-      compile: async (_principal: Principal, effectiveDefinition: AnalysisDefinition) => {
+      plan: async (_principal: Principal, effectiveDefinition: AnalysisDefinition) => {
         compiledDefinitions.push(effectiveDefinition);
-        return compiled;
+        return authorizedPlan(compiled, document, _principal);
       },
     } as never,
-    catalog: catalogFixture(document),
     cube,
     audit: { log: async (event: unknown) => void audit.push(event) },
   });
@@ -427,7 +439,6 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
 });
 
 test("报告修订漂移时 fail-closed，记录失败审计且不执行查询", async () => {
-  const document = buildCatalogDocument(fixtureViews);
   let loads = 0;
   const audit: unknown[] = [];
   const service = createRecordProjectionService({
@@ -437,9 +448,8 @@ test("报告修订漂移时 fail-closed，记录失败审计且不执行查询",
     boards: noBoards,
     analyses: analysisRepositoryOf(spec),
     semanticPlanning: {
-      compile: async () => Promise.reject(new Error("不应编译")),
+      plan: async () => Promise.reject(new Error("不应规划")),
     } as never,
-    catalog: catalogFixture(document),
     cube: {
       load: async () => {
         loads += 1;
@@ -507,8 +517,7 @@ test("率指标只投影分子名单，YTD 时间仍由指标口径解释", asyn
     } as never,
     boards: noBoards,
     analyses: analysisRepositoryOf(rateSpec, "analysis_rate"),
-    semanticPlanning: { compile: async () => compiled } as never,
-    catalog: catalogFixture(document),
+    semanticPlanning: { plan: async () => authorizedPlan(compiled, document) } as never,
     cube,
     audit: { log: async () => undefined },
   });
@@ -657,8 +666,7 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
     } as never,
     boards: noBoards,
     analyses: analysisRepositoryOf(entitySpec, "analysis_entities"),
-    semanticPlanning: { compile: async () => compiled } as never,
-    catalog: catalogFixture(document),
+    semanticPlanning: { plan: async () => authorizedPlan(compiled, document) } as never,
     cube,
     audit: { log: async () => undefined },
   });
@@ -758,8 +766,7 @@ test("分组坐标缺失时不能把单个格子扩大成整份名单", async ()
     } as never,
     boards: noBoards,
     analyses: analysisRepositoryOf(spec),
-    semanticPlanning: { compile: async () => compiled } as never,
-    catalog: catalogFixture(document),
+    semanticPlanning: { plan: async () => authorizedPlan(compiled, document) } as never,
     cube: {
       load: async () => {
         loads += 1;
@@ -830,12 +837,11 @@ test("隐藏 source 不是交付结果，不能通过手写 result_view_id 投�
     boards: noBoards,
     analyses: analysisRepositoryOf(derivedSpec, "analysis_derived"),
     semanticPlanning: {
-      compile: async () => {
+      plan: async () => {
         compiles += 1;
-        return compiled;
+        return authorizedPlan(compiled, document);
       },
     } as never,
-    catalog: catalogFixture(document),
     cube: {
       load: async () => {
         loads += 1;
@@ -903,16 +909,15 @@ test("Agent 名单从单一聚合结果格投影记录，分类条件保留在�
       },
     } as never,
     semanticPlanning: {
-      compile: async (
+      plan: async (
         _principal: Principal,
         analysis: AnalysisDefinition,
         view: SemanticViewIntent,
       ) => {
         compiles += 1;
-        return compileAnalysisView(catalog, { analysis, view });
+        return authorizedPlan(compileAnalysisView(catalog, { analysis, view }), document);
       },
     } as never,
-    catalog: catalogFixture(document),
     cube: {
       meta: async () => fixtureViews,
       timeContext: async () => ({

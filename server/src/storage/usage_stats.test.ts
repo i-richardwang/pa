@@ -22,17 +22,6 @@ function freshPath() {
   return join(tmpdir(), `pa_usage_stats_test_${runId}_${seq}.db`);
 }
 
-/** 结构查询的真实入参：AnalysisDefinition 与 ViewIntent 分列。 */
-const STRUCTURE_ARGS = semanticAnalysisOf({
-  views: [
-    {
-      id: "result",
-      measures: ["test_people_metrics.active_employee_count"],
-      time: { cutoff: "2026-07" },
-    },
-  ],
-});
-
 /** 经写入方落一批代表性日志：分析成功（带 title）、换呈现重跑、目录零命中/命中、分析报错 */
 async function seed(path: string) {
   const usage = createUsage(createTestAppDatabase(path));
@@ -40,7 +29,7 @@ async function seed(path: string) {
     caller: "alice",
     tool: "run_analysis",
     title: "全公司各职级人员结构",
-    args: STRUCTURE_ARGS,
+    query_fingerprint: "q-1111111111",
     outcome: "ok",
     row_count: 7,
     has_more: false,
@@ -50,7 +39,6 @@ async function seed(path: string) {
     caller: "alice",
     tool: "rerun_analysis",
     title: "研发部在职人数趋势",
-    args: { analysis_id: "a-trend", presentation: { type: "line" } },
     outcome: "ok",
     row_count: 42,
     duration_ms: 100,
@@ -58,7 +46,7 @@ async function seed(path: string) {
   await usage.log({
     caller: "bob",
     tool: "catalog",
-    args: { terms: ["离职率", "加班时长"] },
+    term_count: 2,
     outcome: "ok",
     row_count: 1,
     unmatched_terms: ["加班时长"],
@@ -67,7 +55,7 @@ async function seed(path: string) {
   await usage.log({
     caller: "bob",
     tool: "catalog",
-    args: { terms: ["离职率"] },
+    term_count: 1,
     outcome: "ok",
     row_count: 4,
     unmatched_terms: [],
@@ -76,7 +64,6 @@ async function seed(path: string) {
   await usage.log({
     caller: "bob",
     tool: "run_analysis",
-    args: {},
     outcome: "error",
     error: "Cube 'x' not found",
     duration_ms: 20,
@@ -146,7 +133,6 @@ describe("usage_stats", () => {
       caller: "alice",
       tool: "run_analysis",
       title: "组织人数",
-      args: { analysis: identity.analysis.definition, view: identity.view.intent },
       outcome: "ok",
       duration_ms: 1,
       analysis_id: identity.analysis.id,
@@ -199,6 +185,8 @@ describe("usage_stats", () => {
     const { cells } = await stats.overview(30);
     expect(cells.every((c) => c.tool === "run_analysis" || c.tool === "rerun_analysis")).toBe(true);
     expect((await stats.unanswered(30)).zero_hits).toEqual([]);
-    expect((await stats.unanswered(366)).zero_hits).toHaveLength(1);
+    const clamped = await stats.unanswered(366);
+    expect(clamped.days).toBe(90);
+    expect(clamped.zero_hits).toEqual([]);
   });
 });

@@ -1,7 +1,7 @@
 /** CatalogService 集成纯桩：授权模型读取 /meta，翻值复用同一 context 走 /load 与上限协议。 */
 import { describe, expect, spyOn, test } from "bun:test";
 import { DIMENSION_VALUES_CAP, DIMENSION_VALUES_SCAN_LIMIT } from "../engine/dimension_values.js";
-import type { Principal } from "../engine/cube_security.js";
+import type { Principal } from "../contracts/principal.js";
 import type { CubeSecurityContext, CubeView, LoadResponse } from "../ports/cube_gateway.js";
 import {
   buildCatalogDocument as buildRawCatalogDocument,
@@ -72,7 +72,7 @@ const dimId = (title: string) => {
 };
 
 describe("CatalogService", () => {
-  test("authorized 只用调用者 context 读取 /meta", async () => {
+  test("授权上下文只用调用者身份读取 /meta", async () => {
     const seen: CubeSecurityContext[] = [];
     const service = createCatalogService({
       canonical,
@@ -87,9 +87,9 @@ describe("CatalogService", () => {
         timeContext: async () => ({ dataAsOf: "2026-07", sources: {} }),
       },
     });
-    expect((await service.authorized(principal)).document.views.map((view) => view.name)).toEqual([
-      "employee_attributes_fixture",
+    expect((await service.context(principal)).views.map((view) => view.name)).toEqual([
       "test_people_metrics",
+      "employee_attributes_fixture",
     ]);
     expect(seen).toEqual([context]);
   });
@@ -285,7 +285,7 @@ describe("CatalogService", () => {
     });
 
     try {
-      await service.authorized(principal);
+      await service.context(principal);
       throw new Error("预期模型装配失败");
     } catch (error) {
       expect(error).toBeInstanceOf(SemanticModelUnavailableError);

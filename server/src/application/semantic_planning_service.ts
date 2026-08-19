@@ -1,8 +1,9 @@
 /** 当前主体可见语义目录上的唯一分析与视图规划入口。 */
-import type { Principal } from "../engine/cube_security.js";
+import type { Principal } from "../contracts/principal.js";
 import { compileAnalysisView } from "../engine/semantic_analysis_compiler.js";
 import type { AnalysisDefinition, SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
-import type { CatalogService } from "./catalog_service.js";
+import type { AuthorizedSemanticContext, CatalogService } from "./catalog_service.js";
+import type { CompiledAnalysisView } from "../engine/semantic_analysis_compiler.js";
 import {
   EMPTY_VIEW_PREFERENCES,
   type ViewPreferences,
@@ -12,21 +13,25 @@ import {
  * 服务端规划是查询兼容性与呈现绑定的唯一权威，只编译纯工件。
  * AnalysisService 负责执行与身份创建；Web 可用同一规划入口创建新 View。
  */
-export function createSemanticPlanningService(deps: { catalog: Pick<CatalogService, "compiler"> }) {
-  async function compile(
+export type AuthorizedAnalysisPlan = CompiledAnalysisView & {
+  access: AuthorizedSemanticContext;
+};
+
+export function createSemanticPlanningService(deps: { catalog: Pick<CatalogService, "context"> }) {
+  async function plan(
     principal: Principal,
     definition: AnalysisDefinition,
     intent: SemanticViewIntent,
     preferences: ViewPreferences = EMPTY_VIEW_PREFERENCES,
   ) {
-    return compileAnalysisView(
-      await deps.catalog.compiler(principal),
-      { analysis: definition, view: intent },
-      preferences,
-    );
+    const access = await deps.catalog.context(principal);
+    return {
+      ...compileAnalysisView(access.compiler, { analysis: definition, view: intent }, preferences),
+      access,
+    };
   }
 
-  return { compile };
+  return { plan };
 }
 
 export type SemanticPlanningService = ReturnType<typeof createSemanticPlanningService>;

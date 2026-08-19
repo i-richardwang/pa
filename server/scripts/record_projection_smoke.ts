@@ -6,7 +6,8 @@ import { createCubeGateway } from "../src/adapters/cube_gateway.js";
 import { createCatalogService } from "../src/application/catalog_service.js";
 import { createRecordProjectionService } from "../src/application/record_projection_service.js";
 import { createSemanticPlanningService } from "../src/application/semantic_planning_service.js";
-import { SERVICE_CUBE_CONTEXT, type Principal } from "../src/engine/cube_security.js";
+import { SERVICE_CUBE_CONTEXT } from "../src/engine/cube_security.js";
+import type { Principal } from "../src/contracts/principal.js";
 import { withFormalMetricModel } from "../src/engine/formal_metric_gateway.js";
 import {
   loadCanonicalSemanticModel,
@@ -52,8 +53,9 @@ const principal: Principal = {
   roles: ["user"],
   orgScope: ["Aurora Labs"],
 };
-const context = await cube.timeContext();
-const compiler = await catalog.compiler(principal);
+const semanticContext = await catalog.context(principal);
+const context = semanticContext.timeContext;
+const compiler = semanticContext.compiler;
 const active = compiler.measures.find((metric) => metric.title === "在职人数");
 const organization = compiler.dimensions.find((dimension) => dimension.title === "组织");
 assert(active?.records_available === true && organization, "在职人数或组织明细合同缺失");
@@ -70,7 +72,7 @@ const definition: AnalysisDefinition = {
   ],
 };
 const view = { type: "table" as const };
-const compiled = await planning.compile(principal, definition, view);
+const compiled = await planning.plan(principal, definition, view);
 assert(compiled.routes[0]?.status === "direct", "聚合查询未形成正式指标计划");
 const binding = compiled.record_projection_bindings.views[0];
 assert(binding, "分析没有生成记录投影绑定");
@@ -79,7 +81,7 @@ const appDb = await openAppDatabase(join(tmpdir(), `pa_demo_records_${randomUUID
 try {
   const reports = createReportRepository(appDb);
   const analyses = createAnalysisRepository(appDb);
-  const boards = createBoardRepository(appDb, reports);
+  const boards = createBoardRepository(appDb);
   const analysis = await analyses.create(principal.email, definition, view);
   const report = await reports.create({
     owner: principal.email,
@@ -91,7 +93,6 @@ try {
     boards,
     analyses,
     semanticPlanning: planning,
-    catalog,
     cube,
     audit: createRecordProjectionAudit(appDb),
   });

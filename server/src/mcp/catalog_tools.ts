@@ -3,6 +3,7 @@ import { CATALOG_INPUT, type CatalogToolInput } from "../engine/catalog_spec.js"
 import type { McpRegistrationContext } from "./context.js";
 import type { CatalogService } from "../application/catalog_service.js";
 import type { UsageService } from "../application/usage_service.js";
+import { safeMcpHandler } from "./errors.js";
 import {
   CATALOG_OUTPUT,
   OAUTH_SECURITY_SCHEMES,
@@ -30,25 +31,28 @@ export function registerCatalogTools(
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    usage.wrap(
-      {
-        tool: "catalog",
-        caller,
-        summarize: (result) => ({
-          row_count:
-            result.structuredContent.measures.length + result.structuredContent.dimensions.length,
-          ...(result.structuredContent.unmatched_terms.length
-            ? { unmatched_terms: result.structuredContent.unmatched_terms }
-            : {}),
-        }),
-      },
-      async (input: CatalogToolInput) => {
-        const payload = await catalog.query(principal, input);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
-          structuredContent: payload,
-        };
-      },
+    safeMcpHandler(
+      "catalog",
+      usage.wrap(
+        {
+          tool: "catalog",
+          caller,
+          summarize: (result) => ({
+            row_count:
+              result.structuredContent.measures.length + result.structuredContent.dimensions.length,
+            ...(result.structuredContent.unmatched_terms.length
+              ? { unmatched_terms: result.structuredContent.unmatched_terms }
+              : {}),
+          }),
+        },
+        async (input: CatalogToolInput) => {
+          const payload = await catalog.query(principal, input);
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
+            structuredContent: payload,
+          };
+        },
+      ),
     ),
   );
 
@@ -65,19 +69,22 @@ export function registerCatalogTools(
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    usage.wrap(
-      {
-        tool: "values_of",
-        caller,
-        summarize: (result) => ({ row_count: result.structuredContent.values.length }),
-      },
-      async (input: { dimension: string; contains?: string }) => {
-        const payload = await catalog.dimensionValues(principal, input.dimension, input.contains);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
-          structuredContent: payload,
-        };
-      },
+    safeMcpHandler(
+      "values_of",
+      usage.wrap(
+        {
+          tool: "values_of",
+          caller,
+          summarize: (result) => ({ row_count: result.structuredContent.values.length }),
+        },
+        async (input: { dimension: string; contains?: string }) => {
+          const payload = await catalog.dimensionValues(principal, input.dimension, input.contains);
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
+            structuredContent: payload,
+          };
+        },
+      ),
     ),
   );
 }

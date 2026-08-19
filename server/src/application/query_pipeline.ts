@@ -1,11 +1,6 @@
 import { defaultPopulationScope } from "../engine/catalog_document.js";
-import { cubeSecurityContext, type Principal } from "../engine/cube_security.js";
-import type {
-  CubeGateway,
-  CubeSecurityContext,
-  CubeView,
-  TimeContext,
-} from "../ports/cube_gateway.js";
+import type { Principal } from "../contracts/principal.js";
+import type { CubeSecurityContext, CubeView, TimeContext } from "../ports/cube_gateway.js";
 import type { ExportService } from "./export_service.js";
 import { memberDisplayTitle } from "../engine/member_presentation.js";
 import { AGGREGATE_MODEL_ROWS, modelSampleNote } from "../engine/result_limit.js";
@@ -20,7 +15,7 @@ import type {
   QueryPayload,
   ViewBlock,
 } from "../semantic_core/query_payload.js";
-import type { ChartDecl } from "../presentation_core/view_shape.js";
+import type { ChartDecl } from "../presentation_core/chart_decl.js";
 import { projectPresentation } from "../presentation_core/presentation_projection.js";
 import type { MetricQueryPlan } from "../engine/metric_planner.js";
 import {
@@ -29,6 +24,7 @@ import {
   type EngineViewBlock,
 } from "../engine/transform.js";
 import { publicTimeContext, timeSourced, viewsForMembers } from "./time_context.js";
+import type { AuthorizedSemanticContext } from "./catalog_service.js";
 
 export type ExecutedViewResult = {
   block: EngineViewBlock;
@@ -174,19 +170,16 @@ function projectOutputBlock(
 export async function runQueryPipeline(
   deps: {
     executeView: ExecuteView;
-    cube: Pick<CubeGateway, "meta" | "timeContext">;
     exports: Pick<ExportService, "createDelivery">;
   },
-  principal: Principal,
+  access: AuthorizedSemanticContext,
   plan: ExecutionPlan,
   presentation: PresentationSpec,
 ): Promise<QueryRunResult> {
   // 执行器只消费已解析的不透明 plan，呈现按其唯一 output 投影。
+  const { principal, cubeContext, views: authViews, timeContext: context } = access;
   const caller = principal.email;
-  const cubeContext = cubeSecurityContext(principal);
   const specs = plan.nodes;
-  const authViews = await deps.cube.meta(cubeContext);
-  const context = await deps.cube.timeContext();
   const queryEntries = specs.flatMap((spec) =>
     isDerivedViewSpec(spec) ? [] : [{ id: spec.id, spec }],
   );
@@ -275,11 +268,7 @@ export async function runQueryPipeline(
   let capabilities: OutputCapabilities | undefined;
   let exportResource: ExportResourceLink | undefined;
   if (deliveredResult.exportPlan) {
-    const delivery = await deps.exports.createDelivery(
-      deliveredResult.exportPlan,
-      caller,
-      cubeContext,
-    );
+    const delivery = await deps.exports.createDelivery(deliveredResult.exportPlan, caller);
     capabilities = { export: delivery.link };
     exportResource = delivery.resource;
   }

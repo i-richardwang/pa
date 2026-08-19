@@ -40,13 +40,15 @@ const SCHEMA_DDL = `
       caller TEXT NOT NULL,
       tool TEXT NOT NULL,
       title TEXT,
-      args TEXT NOT NULL CHECK (json_valid(args)),
       outcome TEXT NOT NULL CHECK (outcome IN ('ok', 'error')),
       error TEXT,
       row_count INTEGER,
       has_more INTEGER CHECK (has_more IN (0, 1)),
       duration_ms INTEGER NOT NULL CHECK (duration_ms >= 0),
+      term_count INTEGER CHECK (term_count IS NULL OR term_count >= 0),
       query_fingerprint TEXT,
+      derived_formulas TEXT
+        CHECK (derived_formulas IS NULL OR (json_valid(derived_formulas) AND json_type(derived_formulas) = 'array')),
       unmatched_terms TEXT CHECK (unmatched_terms IS NULL OR json_valid(unmatched_terms)),
       analysis_id TEXT,
       view_id TEXT
@@ -145,8 +147,7 @@ const SCHEMA_DDL = `
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       caller TEXT NOT NULL,
-      query TEXT NOT NULL CHECK (json_valid(query)),
-      security_context TEXT NOT NULL CHECK (json_valid(security_context))
+      query TEXT NOT NULL CHECK (json_valid(query))
     );
     CREATE INDEX export_ticket_expiry ON export_ticket (expires_at);
 

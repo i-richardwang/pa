@@ -101,18 +101,22 @@ function replay(view: ReplayPayload["view"] = { type: "table" }): ReplayPayload 
   return {
     at: "2026-07-21T00:00:00Z",
     caller: "alice@x",
-    analysis_id: "a2",
-    view_id: "v2",
+    analysis_id: "11111111-1111-4111-8111-111111111111",
+    view_id: "22222222-2222-4222-8222-222222222222",
     analysis: definition,
     view,
     view_preferences: {},
+    record_projection_bindings: { views: [] },
     payload: {
       view: rawView,
       default_population_scope: "统计口径",
       data_as_of: "2026-07",
       time_context: [],
     },
-    render_bundle: { view: rawView, decl: { type: "table", y: [] } },
+    render_bundle: {
+      view: rawView,
+      decl: { type: "table", y: [], tableLayout: { rows: [], columns: [] } },
+    },
     presentation: {
       type: "table",
       table_layout: { state: "applied", leafColumns: 2 },

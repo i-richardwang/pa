@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { MCP_REPORT_UPDATE_ACTION, type ReportUpdateAction } from "../contracts/report_action.js";
+import { REPORT_ID_SCHEMA, REPORT_NAME_SCHEMA } from "../contracts/report_contract.js";
 import type { McpRegistrationContext } from "./context.js";
 import type { ReportService } from "../application/report_service.js";
 import type { UsageService } from "../application/usage_service.js";
 import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
+import { safeMcpHandler } from "./errors.js";
 import {
   OAUTH_SECURITY_SCHEMES,
   READ_ONLY_ANNOTATIONS,
@@ -28,10 +30,10 @@ export function registerReportTools(
       description: TOOL_DESCRIPTIONS.save_report,
       inputSchema: {
         view_id: z.string().uuid(),
-        name: z.string().min(1).max(100),
+        name: REPORT_NAME_SCHEMA,
       },
       outputSchema: {
-        id: z.string(),
+        id: REPORT_ID_SCHEMA,
         name: z.string(),
         revision: z.number().int().positive(),
         updated_at: z.string(),
@@ -39,7 +41,7 @@ export function registerReportTools(
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    async (input) => {
+    safeMcpHandler("save_report", async (input) => {
       const report = await reports.save({
         principal,
         viewId: input.view_id,
@@ -55,7 +57,7 @@ export function registerReportTools(
         content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
         structuredContent: payload,
       };
-    },
+    }),
   );
 
   server.registerTool(
@@ -64,12 +66,12 @@ export function registerReportTools(
       title: "更新报告",
       description: TOOL_DESCRIPTIONS.update_report,
       inputSchema: {
-        id: z.string().uuid(),
+        id: REPORT_ID_SCHEMA,
         action: MCP_REPORT_UPDATE_ACTION,
         if_revision: z.number().int().positive().optional(),
       },
       outputSchema: {
-        id: z.string(),
+        id: REPORT_ID_SCHEMA,
         name: z.string(),
         revision: z.number().int(),
         updated_at: z.string(),
@@ -77,19 +79,22 @@ export function registerReportTools(
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    async (input: { id: string; action: ReportUpdateAction; if_revision?: number }) => {
-      const report = await reports.update(principal, input.id, input.action, input.if_revision);
-      const payload = {
-        id: report.id,
-        name: report.name,
-        revision: report.revision,
-        updated_at: report.updated_at,
-      };
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(payload) }],
-        structuredContent: payload,
-      };
-    },
+    safeMcpHandler(
+      "update_report",
+      async (input: { id: string; action: ReportUpdateAction; if_revision?: number }) => {
+        const report = await reports.update(principal, input.id, input.action, input.if_revision);
+        const payload = {
+          id: report.id,
+          name: report.name,
+          revision: report.revision,
+          updated_at: report.updated_at,
+        };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(payload) }],
+          structuredContent: payload,
+        };
+      },
+    ),
   );
 
   server.registerTool(
@@ -101,7 +106,7 @@ export function registerReportTools(
       outputSchema: {
         reports: z.array(
           z.object({
-            id: z.string(),
+            id: REPORT_ID_SCHEMA,
             name: z.string(),
             analysis_id: z.string().uuid(),
             view_id: z.string().uuid(),
@@ -116,16 +121,19 @@ export function registerReportTools(
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    usage.wrap({ tool: "find_report", caller }, async (input: { query?: string }) => {
-      const found = (await reports.listOwned(caller, input.query)).map((report) => ({
-        ...reports.summary(report),
-        url: `${baseUrl}/dashboard#/report/${report.id}`,
-      }));
-      const payload = { reports: found };
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
-        structuredContent: payload,
-      };
-    }),
+    safeMcpHandler(
+      "find_report",
+      usage.wrap({ tool: "find_report", caller }, async (input: { query?: string }) => {
+        const found = (await reports.listOwned(caller, input.query)).map((report) => ({
+          ...reports.summary(report),
+          url: `${baseUrl}/dashboard#/report/${report.id}`,
+        }));
+        const payload = { reports: found };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
+          structuredContent: payload,
+        };
+      }),
+    ),
   );
 }

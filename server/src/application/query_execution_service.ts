@@ -1,4 +1,3 @@
-import type { Principal } from "../engine/cube_security.js";
 import type {
   CubeGateway,
   CubeMember,
@@ -7,6 +6,7 @@ import type {
   CubeView,
   TimeContext,
 } from "../ports/cube_gateway.js";
+import type { Principal } from "../contracts/principal.js";
 import type { ExportService } from "./export_service.js";
 import { completeHierarchy } from "../engine/hierarchy.js";
 import { memberDisplayTitle, showDimensionNote } from "../engine/member_presentation.js";
@@ -19,8 +19,6 @@ import {
   type QueryRunResult,
 } from "./query_pipeline.js";
 import type { QueryViewSpec } from "../semantic_core/analysis_spec.js";
-import type { ExecutionPlan } from "../semantic_core/execution_plan.js";
-import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
 import {
   COLUMN_DECIMALS_SCHEMA,
   COLUMN_FORMATS,
@@ -40,6 +38,7 @@ import { computeMetricTotals } from "./view_totals.js";
 import { applyValueOrder } from "../engine/value_order.js";
 import { memberSemanticId } from "../engine/model_contract.js";
 import { memberShortName, memberViewName } from "../semantic_core/member_name.js";
+import type { AuthorizedAnalysisPlan } from "./semantic_planning_service.js";
 
 function displayDescription(
   members: CubeMember[],
@@ -511,20 +510,15 @@ export type QueryExecutionDependencies = {
 };
 
 export function createQueryExecutionService(deps: QueryExecutionDependencies) {
-  const execute = (
-    principal: Principal,
-    plan: ExecutionPlan,
-    presentation: PresentationSpec,
-  ): Promise<QueryRunResult> =>
+  const execute = (planned: AuthorizedAnalysisPlan): Promise<QueryRunResult> =>
     runQueryPipeline(
       {
         executeView: (...args) => executeView(deps, ...args),
-        cube: deps.cube,
         exports: deps.exports,
       },
-      principal,
-      plan,
-      presentation,
+      planned.access,
+      planned.plan,
+      planned.presentation,
     );
   return { execute };
 }

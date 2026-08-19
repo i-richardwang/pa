@@ -4,7 +4,8 @@ import { completeHierarchy } from "../engine/hierarchy.js";
 import { filterMembers } from "../engine/query_contract.js";
 import { publicTimeContext, timeSourced, viewsForMembers } from "./time_context.js";
 import { EXPORT_MAX_ROWS, type MaterializedExport } from "../engine/export.js";
-import { cubeSecurityContext, type Principal } from "../engine/cube_security.js";
+import type { Principal } from "../contracts/principal.js";
+import { cubeSecurityContext } from "../engine/cube_security.js";
 import type { CubeGateway, CubeQuery, CubeSecurityContext } from "../ports/cube_gateway.js";
 import { assertMeasureFilterCompatibility } from "../engine/query_contract.js";
 import { prepareMetricQueryExecution } from "../engine/metric_executor.js";
@@ -15,12 +16,13 @@ import type { UsageLog } from "../ports/usage_log.js";
 import type { SemanticPlanningService } from "./semantic_planning_service.js";
 import { EXPORT_RESOURCE_MIME_TYPE, exportResourceUri } from "../contracts/export_contract.js";
 import type { ExportLink, ExportResourceLink } from "../semantic_core/query_payload.js";
+import { LimitExceededError, NotFoundError } from "./errors.js";
 
-export class ExportTicketUnavailableError extends Error {
+export class ExportTicketUnavailableError extends NotFoundError {
   override name = "ExportTicketUnavailableError";
 }
 
-export class ExportIncompleteError extends Error {
+export class ExportIncompleteError extends LimitExceededError {
   override name = "ExportIncompleteError";
 
   constructor(readonly rowCount: number) {
@@ -35,7 +37,7 @@ type ExportDelivery = {
 
 export function createExportService(deps: {
   analyses: Pick<AnalysisRepository, "resolveOwnedView">;
-  semanticPlanning: Pick<SemanticPlanningService, "compile">;
+  semanticPlanning: Pick<SemanticPlanningService, "plan">;
   usage: Pick<UsageLog, "log">;
   cube: CubeGateway;
   tickets: ExportTicketRepository<MetricQueryPlan>;
@@ -46,12 +48,8 @@ export function createExportService(deps: {
     securityContext: CubeSecurityContext,
   ) => Promise<MaterializedExport>;
 }) {
-  async function createDelivery(
-    plan: MetricQueryPlan,
-    caller: string,
-    securityContext: CubeSecurityContext,
-  ): Promise<ExportDelivery> {
-    const ticket = await deps.tickets.create(plan, caller, securityContext);
+  async function createDelivery(plan: MetricQueryPlan, caller: string): Promise<ExportDelivery> {
+    const ticket = await deps.tickets.create(plan, caller);
     await deps.audit({ event: "export_created", caller, query: plan });
     return {
       link: {
@@ -67,13 +65,16 @@ export function createExportService(deps: {
     };
   }
 
-  async function materialize(claims: {
-    plan: MetricQueryPlan;
-    caller: string;
-    securityContext: CubeSecurityContext;
-  }) {
+  async function materialize(
+    claims: { plan: MetricQueryPlan; caller: string },
+    principal: Principal,
+  ) {
+    if (claims.caller !== principal.email) {
+      throw new ExportTicketUnavailableError("下载资源无效、已过期或不属于当前用户，请重新查询。");
+    }
+    const securityContext = cubeSecurityContext(principal);
     try {
-      const result = await deps.runExport(claims.plan, claims.securityContext);
+      const result = await deps.runExport(claims.plan, securityContext);
       if (!result.complete) {
         await deps
           .audit({
@@ -110,16 +111,9 @@ export function createExportService(deps: {
     return claims;
   }
 
-  async function download(ticket: string) {
-    return materialize(await resolve(ticket));
-  }
-
   async function readResource(principal: Principal, ticket: string) {
     const claims = await resolve(ticket);
-    if (claims.caller !== principal.email) {
-      throw new ExportTicketUnavailableError("下载资源无效、已过期或不属于当前用户，请重新查询。");
-    }
-    return materialize(claims);
+    return materialize(claims, principal);
   }
 
   async function exportResult(principal: Principal, requestedViewId: string) {
@@ -130,20 +124,18 @@ export function createExportService(deps: {
       const current = await deps.analyses.resolveOwnedView(requestedViewId, principal.email);
       analysisId = current.analysis.id;
       viewId = current.view.id;
-      const executionPlan = (
-        await deps.semanticPlanning.compile(
-          principal,
-          current.analysis.definition,
-          current.view.intent,
-          current.view.preferences,
-        )
-      ).plan;
+      const planned = await deps.semanticPlanning.plan(
+        principal,
+        current.analysis.definition,
+        current.view.intent,
+        current.view.preferences,
+      );
+      const executionPlan = planned.plan;
       const view = exportableOutput(executionPlan);
       if (!view) {
         throw new Error("该分析结果不支持导出底层明细（组合或派生结果无底层明细可导）");
       }
-      const cubeContext = cubeSecurityContext(principal);
-      const authViews = await deps.cube.meta(cubeContext);
+      const { cubeContext, views: authViews, timeContext: context } = planned.access;
       const order = view.order?.map(({ member, direction }): [string, "asc" | "desc"] => [
         member,
         direction,
@@ -156,7 +148,6 @@ export function createExportService(deps: {
       };
       assertMeasureFilterCompatibility(query, authViews);
       const shaped = completeHierarchy(query, authViews).query;
-      const context = await deps.cube.timeContext();
       const { plan } = await prepareMetricQueryExecution({
         cube: deps.cube,
         query: shaped,
@@ -167,7 +158,7 @@ export function createExportService(deps: {
         timeView: view.time_view,
         selection: view.selection,
       });
-      const { link } = await createDelivery(plan, principal.email, cubeContext);
+      const { link } = await createDelivery(plan, principal.email);
       const members = [
         ...(view.measures ?? []),
         ...(view.dimensions ?? []),
@@ -185,7 +176,6 @@ export function createExportService(deps: {
       await deps.usage.log({
         caller: principal.email,
         tool: "export_result",
-        args: { view_id: requestedViewId },
         outcome: "ok",
         duration_ms: performance.now() - started,
         ...(analysisId ? { analysis_id: analysisId } : {}),
@@ -196,7 +186,6 @@ export function createExportService(deps: {
       await deps.usage.log({
         caller: principal.email,
         tool: "export_result",
-        args: { view_id: requestedViewId },
         outcome: "error",
         error: error instanceof Error ? error.message : String(error),
         duration_ms: performance.now() - started,
@@ -207,7 +196,7 @@ export function createExportService(deps: {
     }
   }
 
-  return { createDelivery, exportResult, download, readResource };
+  return { createDelivery, exportResult, readResource };
 }
 
 export type ExportService = ReturnType<typeof createExportService>;

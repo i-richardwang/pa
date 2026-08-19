@@ -1,10 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import type { BoardRecord, BoardRepository } from "../ports/board_repository.js";
 import type { ReportDocument, ReportService } from "./report_service.js";
-import { BoardForbiddenError, BoardNotFoundError, createBoardService } from "./board_service.js";
+import {
+  BoardForbiddenError,
+  BoardNotFoundError,
+  BoardRequestError,
+  createBoardService,
+} from "./board_service.js";
+import { ReportNotFoundError } from "../ports/report_repository.js";
 
 const report = {
-  id: "report_1",
+  id: "33333333-3333-4333-8333-333333333333",
   owner: "alice@x",
   name: "组织人数",
   analysis_id: "analysis_1",
@@ -28,7 +34,7 @@ const report = {
   intent: { type: "table" },
 } satisfies ReportDocument;
 
-function harness(initialTiles: BoardRecord["tiles"] = []) {
+function harness(initialTiles: BoardRecord["tiles"] = [], reportAccessError?: Error) {
   let board: BoardRecord | null = {
     id: "11111111-1111-4111-8111-111111111111",
     name: "人委会看板",
@@ -38,7 +44,10 @@ function harness(initialTiles: BoardRecord["tiles"] = []) {
     created_at: "2026-08-13T00:00:00.000Z",
     updated_at: "2026-08-13T00:00:00.000Z",
   };
-  const updates: Array<{ patch: { name?: string; tiles?: unknown }; revision: number }> = [];
+  const updates: Array<{
+    patch: Parameters<BoardRepository["update"]>[1];
+    revision: number;
+  }> = [];
   const repository: BoardRepository = {
     create: async () => board!,
     get: async (id) => (board?.id === id ? board : null),
@@ -49,7 +58,7 @@ function harness(initialTiles: BoardRecord["tiles"] = []) {
       board = {
         ...board,
         ...(patch.name !== undefined ? { name: patch.name } : {}),
-        ...(patch.tiles !== undefined ? { tiles: patch.tiles as BoardRecord["tiles"] } : {}),
+        ...(patch.tiles !== undefined ? { tiles: patch.tiles } : {}),
         revision: revision + 1,
       };
       return board;
@@ -62,16 +71,18 @@ function harness(initialTiles: BoardRecord["tiles"] = []) {
   const runCalls: string[] = [];
   const reports = {
     get: async (id: string) => (id === report.id ? report : null),
-    resolveOwned: async (id: string, owner: string) => {
-      if (id !== report.id || owner !== report.owner) throw new Error("无权访问");
-      return report;
+    ensureOwned: async (id: string, owner: string) => {
+      if (reportAccessError) throw reportAccessError;
+      if (id !== report.id || owner !== report.owner) {
+        throw new ReportNotFoundError("报告不存在或无权访问");
+      }
     },
     summary: () => ({ presentation_type: "table" as const }),
     runShared: async (_principal: unknown, id: string) => {
       runCalls.push(id);
       return { report };
     },
-  } as unknown as Pick<ReportService, "get" | "resolveOwned" | "summary" | "runShared">;
+  } as unknown as Pick<ReportService, "get" | "ensureOwned" | "summary" | "runShared">;
   const logs: unknown[] = [];
   const service = createBoardService({
     boards: repository,
@@ -146,5 +157,32 @@ describe("board application service", () => {
       ),
     ).rejects.toBeInstanceOf(BoardNotFoundError);
     expect(runCalls).toEqual([]);
+  });
+
+  test("报告引用归属在应用边界校验，基础设施异常不伪装成输入错误", async () => {
+    const tile = {
+      kind: "report" as const,
+      tile_id: "22222222-2222-4222-8222-222222222222",
+      report_id: "44444444-4444-4444-8444-444444444444",
+      place: { x: 0, y: 0, w: 24, h: 6 },
+    };
+    await expect(
+      harness().service.update(
+        "11111111-1111-4111-8111-111111111111",
+        "alice@x",
+        { tiles: [tile] },
+        1,
+      ),
+    ).rejects.toBeInstanceOf(BoardRequestError);
+
+    const storageError = new Error("SQLITE_BUSY");
+    await expect(
+      harness([], storageError).service.addReport({
+        id: "11111111-1111-4111-8111-111111111111",
+        owner: "alice@x",
+        reportId: report.id,
+        ifRevision: 1,
+      }),
+    ).rejects.toBe(storageError);
   });
 });

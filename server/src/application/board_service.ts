@@ -1,11 +1,17 @@
-import type { Principal } from "../engine/cube_security.js";
+import type { Principal } from "../contracts/principal.js";
+import { REPORT_ID_SCHEMA } from "../contracts/report_contract.js";
 import type {
   BoardPayload,
   BoardRow,
   BoardTile,
+  BoardMutationTile,
   UpdateBoardBody,
 } from "../contracts/board_contract.js";
-import { BOARD_ID_PATTERN } from "../contracts/board_contract.js";
+import {
+  BOARD_ID_SCHEMA,
+  BOARD_NAME_SCHEMA,
+  MAX_BOARD_NAME_LENGTH,
+} from "../contracts/board_contract.js";
 import { bottomPlace } from "./board_layout.js";
 import type { TimeIntent } from "../semantic_core/time_contract.js";
 import {
@@ -15,22 +21,23 @@ import {
   type StoredTile,
 } from "../ports/board_repository.js";
 import type { ReportService } from "./report_service.js";
+import { ConflictError, ForbiddenError, InvalidRequestError, NotFoundError } from "./errors.js";
+import { ReportNotFoundError } from "../ports/report_repository.js";
 
-export class BoardRequestError extends Error {}
-export class BoardNotFoundError extends Error {}
-export class BoardForbiddenError extends Error {}
-export class BoardRevisionConflictError extends Error {}
+export class BoardRequestError extends InvalidRequestError {}
+export class BoardNotFoundError extends NotFoundError {}
+export class BoardForbiddenError extends ForbiddenError {}
+export class BoardRevisionConflictError extends ConflictError {}
 
 type BoardUsageEvent = {
   caller: string;
   tool: "board";
   title: string;
-  args: unknown;
   outcome: "ok";
   duration_ms: number;
 };
 
-type BoardReportService = Pick<ReportService, "get" | "resolveOwned" | "summary" | "runShared">;
+type BoardReportService = Pick<ReportService, "get" | "ensureOwned" | "summary" | "runShared">;
 
 /** 看板用例边界：属主、成员关系、报告引用、版本写入和载荷装配只在这里编排。 */
 export function createBoardService(deps: {
@@ -63,7 +70,50 @@ export function createBoardService(deps: {
   }
 
   function assertId(id: string): void {
-    if (!BOARD_ID_PATTERN.test(id)) throw new BoardRequestError("无效的看板 id");
+    if (!BOARD_ID_SCHEMA.safeParse(id).success) throw new BoardRequestError("无效的看板 id");
+  }
+
+  function boardName(name: string): string {
+    const parsed = BOARD_NAME_SCHEMA.safeParse(name);
+    if (!parsed.success) {
+      throw new BoardRequestError(`看板名称不能为空且最长 ${MAX_BOARD_NAME_LENGTH} 个字符`);
+    }
+    return parsed.data;
+  }
+
+  function assertRevision(revision: number): void {
+    if (!Number.isInteger(revision) || revision < 1) {
+      throw new BoardRequestError("if_revision 应为正整数");
+    }
+  }
+
+  async function storedTiles(
+    tiles: readonly BoardMutationTile[],
+    owner: string,
+  ): Promise<StoredTile[]> {
+    const reportIds = [
+      ...new Set(tiles.flatMap((tile) => (tile.kind === "report" ? [tile.report_id] : []))),
+    ];
+    for (const reportId of reportIds) {
+      try {
+        await deps.reports.ensureOwned(reportId, owner);
+      } catch (error) {
+        if (error instanceof ReportNotFoundError) {
+          throw new BoardRequestError(`报告不存在或无权访问：${reportId}`);
+        }
+        throw error;
+      }
+    }
+    return tiles.map((tile) =>
+      tile.kind === "report"
+        ? {
+            kind: "report",
+            tile_id: tile.tile_id,
+            report_id: tile.report_id,
+            place: tile.place,
+          }
+        : { kind: "text", tile_id: tile.tile_id, md: tile.md, place: tile.place },
+    );
   }
 
   async function owned(id: string, owner: string): Promise<BoardRecord> {
@@ -76,12 +126,11 @@ export function createBoardService(deps: {
     return board;
   }
 
-  async function log(owner: string, title: string, args: unknown): Promise<void> {
+  async function log(owner: string, title: string): Promise<void> {
     await deps.usage.log({
       caller: owner,
       tool: "board",
       title,
-      args,
       outcome: "ok",
       duration_ms: 0,
     });
@@ -89,7 +138,7 @@ export function createBoardService(deps: {
 
   async function persistUpdate(
     id: string,
-    patch: { name?: string; tiles?: unknown },
+    patch: { name?: string; tiles?: StoredTile[] },
     ifRevision: number,
   ): Promise<BoardRecord | null> {
     try {
@@ -120,12 +169,8 @@ export function createBoardService(deps: {
   }
 
   async function create(name: string, owner: string): Promise<BoardPayload> {
-    const board = await deps.boards.create(name, owner);
-    await log(owner, `新建看板：${board.name}`, {
-      action: "create",
-      id: board.id,
-      name: board.name,
-    });
+    const board = await deps.boards.create(boardName(name), owner);
+    await log(owner, `新建看板：${board.name}`);
     return document(board);
   }
 
@@ -135,22 +180,18 @@ export function createBoardService(deps: {
     patch: Pick<UpdateBoardBody, "name" | "tiles">,
     ifRevision: number,
   ): Promise<BoardPayload> {
+    assertRevision(ifRevision);
     const current = await owned(id, owner);
     const updated = await persistUpdate(
       current.id,
       {
-        ...(patch.name !== undefined ? { name: patch.name } : {}),
-        ...(patch.tiles !== undefined ? { tiles: patch.tiles } : {}),
+        ...(patch.name !== undefined ? { name: boardName(patch.name) } : {}),
+        ...(patch.tiles !== undefined ? { tiles: await storedTiles(patch.tiles, owner) } : {}),
       },
       ifRevision,
     );
     if (!updated) throw new BoardNotFoundError("看板不存在");
-    await log(owner, `修改看板：${updated.name}`, {
-      action: "update",
-      id: updated.id,
-      ...(patch.name !== undefined ? { name: updated.name } : {}),
-      ...(patch.tiles !== undefined ? { tiles: updated.tiles } : {}),
-    });
+    await log(owner, `修改看板：${updated.name}`);
     return document(updated);
   }
 
@@ -160,16 +201,22 @@ export function createBoardService(deps: {
     reportId: string;
     ifRevision: number;
   }): Promise<{ added: boolean; board: BoardPayload }> {
+    assertRevision(input.ifRevision);
     const board = await owned(input.id, input.owner);
     const reportId = input.reportId.trim();
-    if (!reportId) throw new BoardRequestError("缺少报告标识");
+    if (!REPORT_ID_SCHEMA.safeParse(reportId).success) {
+      throw new BoardRequestError("报告标识无效");
+    }
     if (board.tiles.some((tile) => tile.kind === "report" && tile.report_id === reportId)) {
       return { added: false, board: await document(board) };
     }
     try {
-      await deps.reports.resolveOwned(reportId, input.owner);
-    } catch {
-      throw new BoardRequestError(`报告不存在或无权访问：${reportId}`);
+      await deps.reports.ensureOwned(reportId, input.owner);
+    } catch (error) {
+      if (error instanceof ReportNotFoundError) {
+        throw new BoardRequestError(`报告不存在或无权访问：${reportId}`);
+      }
+      throw error;
     }
     const place = bottomPlace(board.tiles);
     const tile: StoredTile = {
@@ -184,22 +231,14 @@ export function createBoardService(deps: {
       input.ifRevision,
     );
     if (!updated) throw new BoardNotFoundError("看板不存在");
-    await log(input.owner, `加入看板：${updated.name}`, {
-      action: "add_item",
-      id: updated.id,
-      report_id: reportId,
-    });
+    await log(input.owner, `加入看板：${updated.name}`);
     return { added: true, board: await document(updated) };
   }
 
   async function remove(id: string, owner: string): Promise<void> {
     const board = await owned(id, owner);
     await deps.boards.remove(board.id);
-    await log(owner, `删除看板：${board.name}`, {
-      action: "delete",
-      id: board.id,
-      name: board.name,
-    });
+    await log(owner, `删除看板：${board.name}`);
   }
 
   async function runReport(

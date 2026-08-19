@@ -19,8 +19,8 @@ export type MyAnalysesPayload = { days: number; rows: MyAnalysisRow[]; total: nu
 const MY_ANALYSIS_ROW_SCHEMA: z.ZodType<MyAnalysisRow> = z
   .object({
     id: z.number(),
-    analysis_id: z.string().nullable(),
-    view_id: z.string().nullable(),
+    analysis_id: z.string().uuid().nullable(),
+    view_id: z.string().uuid().nullable(),
     at: z.string(),
     title: z.string(),
     row_count: z.number().nullable(),

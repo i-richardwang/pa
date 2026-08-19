@@ -3,6 +3,14 @@
  * HTTP、JWT、缓存、重试和原始响应归一属于外部适配器实现，不进入本模块。
  */
 
+export class CubeGatewayError extends Error {
+  override name = "CubeGatewayError";
+
+  constructor(message: string, cause?: unknown) {
+    super(message, { cause });
+  }
+}
+
 export type SqlParameter = string | number | boolean | null;
 
 export type GeneratedSqlStatement = {
@@ -101,21 +109,6 @@ export type CubeSecurityContext = {
   groups: string[];
   orgScope: "*" | string[];
 };
-
-export function isCubeSecurityContext(value: unknown): value is CubeSecurityContext {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const candidate = value as Record<string, unknown>;
-  const scope = candidate.orgScope;
-  return (
-    typeof candidate.subject === "string" &&
-    candidate.subject.length > 0 &&
-    Array.isArray(candidate.groups) &&
-    candidate.groups.length > 0 &&
-    candidate.groups.every((group) => typeof group === "string") &&
-    (scope === "*" ||
-      (Array.isArray(scope) && scope.length > 0 && scope.every((org) => typeof org === "string")))
-  );
-}
 
 export type CubeGateway = {
   meta(context: CubeSecurityContext): Promise<CubeView[]>;

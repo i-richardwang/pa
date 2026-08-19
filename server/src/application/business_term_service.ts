@@ -12,8 +12,9 @@ import type {
   StoredBusinessTerm,
 } from "../ports/business_term_repository.js";
 import type { UsageLog } from "../ports/usage_log.js";
+import { InvalidRequestError } from "./errors.js";
 
-export class BusinessTermInputError extends Error {}
+export class BusinessTermInputError extends InvalidRequestError {}
 
 type VisibleMember = Pick<PublicCatalogMember, "id" | "kind" | "title">;
 
@@ -104,7 +105,6 @@ export function createBusinessTermService(deps: {
       caller: actor,
       tool: "business_term_admin",
       title: `新建业务术语：「${row.canonical_term}」`,
-      args: { action: "create", id: row.id },
       outcome: "ok",
       duration_ms: 0,
     });
@@ -125,7 +125,6 @@ export function createBusinessTermService(deps: {
       caller: actor,
       tool: "business_term_admin",
       title: `更新业务术语：「${row.canonical_term}」`,
-      args: { action: "update", id: row.id },
       outcome: "ok",
       duration_ms: 0,
     });
@@ -138,7 +137,6 @@ export function createBusinessTermService(deps: {
       caller: actor,
       tool: "business_term_admin",
       title: `删除业务术语：「${row.canonical_term}」`,
-      args: { action: "delete", id: row.id },
       outcome: "ok",
       duration_ms: 0,
     });

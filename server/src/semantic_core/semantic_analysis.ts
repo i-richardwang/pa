@@ -395,6 +395,14 @@ export const ANALYSIS_DEFINITION_INPUT = z
 
 export type AnalysisDefinition = z.infer<typeof ANALYSIS_DEFINITION_INPUT>;
 
+export class AnalysisDefinitionError extends Error {
+  override name = "AnalysisDefinitionError";
+}
+
+export class ViewIntentError extends Error {
+  override name = "ViewIntentError";
+}
+
 function semanticOperands(column: SemanticDerivedColumn): SemanticColumnOperand[] {
   if ("member" in column) return [column];
   const operands: SemanticColumnOperand[] = [];
@@ -422,32 +430,49 @@ function validateSemanticDerivedView(
 export function parseAnalysisDefinition(value: unknown): AnalysisDefinition {
   const parsed = ANALYSIS_DEFINITION_INPUT.safeParse(value);
   if (!parsed.success) {
-    throw new Error(
+    throw new AnalysisDefinitionError(
       `分析定义无效：${parsed.error.issues.map((issue) => issue.message).join("；")}`,
     );
   }
-  const ids = new Set(parsed.data.views.map((view) => view.id));
-  if (ids.size !== parsed.data.views.length) throw new Error("分析定义的视图 id 不得重复");
-  const queryCount = parsed.data.views.filter((view) => !isSemanticDerivedView(view)).length;
-  if (!queryCount) throw new Error("语义分析至少需要一个查询视图作为数据来源");
-  for (const view of parsed.data.views) {
-    if (isSemanticDerivedView(view)) {
-      validateSemanticDerivedView(view, parsed.data.views);
+  try {
+    const ids = new Set(parsed.data.views.map((view) => view.id));
+    if (ids.size !== parsed.data.views.length) throw new Error("分析定义的视图 id 不得重复");
+    const queryCount = parsed.data.views.filter((view) => !isSemanticDerivedView(view)).length;
+    if (!queryCount) throw new Error("语义分析至少需要一个查询视图作为数据来源");
+    for (const view of parsed.data.views) {
+      if (isSemanticDerivedView(view)) {
+        validateSemanticDerivedView(view, parsed.data.views);
+      }
     }
+    const outputId = semanticAnalysisSink(parsed.data.views);
+    const calculationView = parsed.data.views.find(
+      (view) => !isSemanticDerivedView(view) && view.calculations?.length,
+    );
+    if (calculationView && (calculationView.id !== outputId || parsed.data.views.length > 1)) {
+      throw new Error("报告级构成占比只能声明在唯一直接结果视图中");
+    }
+    const internalGroupSort = parsed.data.views.find(
+      (view) => !isSemanticDerivedView(view) && view.group_sort && view.id !== outputId,
+    );
+    if (internalGroupSort) {
+      throw new Error(
+        `分组排序只能声明在唯一直接结果视图；中间查询视图 ${internalGroupSort.id} 不能独立选择分组`,
+      );
+    }
+    return parsed.data;
+  } catch (error) {
+    if (error instanceof AnalysisDefinitionError) throw error;
+    throw new AnalysisDefinitionError(error instanceof Error ? error.message : "分析定义无效", {
+      cause: error,
+    });
   }
-  const outputId = semanticAnalysisSink(parsed.data.views);
-  const calculationView = parsed.data.views.find(
-    (view) => !isSemanticDerivedView(view) && view.calculations?.length,
-  );
-  if (calculationView && (calculationView.id !== outputId || parsed.data.views.length > 1)) {
-    throw new Error("报告级构成占比只能声明在唯一直接结果视图中");
-  }
-  const internalGroupSort = parsed.data.views.find(
-    (view) => !isSemanticDerivedView(view) && view.group_sort && view.id !== outputId,
-  );
-  if (internalGroupSort) {
-    throw new Error(
-      `分组排序只能声明在唯一直接结果视图；中间查询视图 ${internalGroupSort.id} 不能独立选择分组`,
+}
+
+export function parseSemanticViewIntent(value: unknown): SemanticViewIntent {
+  const parsed = SEMANTIC_VIEW_INTENT_INPUT.safeParse(value);
+  if (!parsed.success) {
+    throw new ViewIntentError(
+      `视图意图无效：${parsed.error.issues.map((issue) => issue.message).join("；")}`,
     );
   }
   return parsed.data;

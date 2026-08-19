@@ -20,9 +20,9 @@ import {
   type ShadingScale,
   shadingDataScale,
   type TableShading,
-  type TableShadingPreferences,
 } from "./table_shading.js";
 import type { RenderShape } from "./render_shape.js";
+import type { ChartDecl, ChartRenderDecl, TableAxis, TableLayoutDecl } from "./chart_decl.js";
 
 export type { RenderShape } from "./render_shape.js";
 
@@ -72,25 +72,16 @@ export type SeriesDef = {
   shareKey?: string;
 };
 export type ChartRow = Record<string, Cell>;
-
-const chartSources = new WeakMap<object, Map<string, number>>();
-
-function markChartSource<T extends object>(row: T, source: number | undefined, series = ""): T {
-  if (source === undefined) return row;
-  const sources = chartSources.get(row) ?? new Map<string, number>();
-  sources.set(series, source);
-  chartSources.set(row, sources);
-  return row;
-}
-
-export function chartSourceRow(row: object, series = ""): number | undefined {
-  return chartSources.get(row)?.get(series);
-}
+export type ChartSourceRow = {
+  row?: number;
+  series?: Record<string, number>;
+};
 
 export type TrendSpec = {
   kind: "line";
   /** { t: 时间标签, s0: 值, … } 按时间升序 */
   rows: ChartRow[];
+  sourceRows: ChartSourceRow[];
   series: SeriesDef[];
   /** 量与率并存 → 双 y 轴，量系列带 mark="bar"（柱线组合） */
   mixedAxes: boolean;
@@ -104,6 +95,7 @@ export type BarSpec = {
   kind: "bar";
   /** { label: 分类值, s0: 值, …[, share: 该分类占比] } 保持查询返回顺序（排行由查询 order 决定） */
   rows: ChartRow[];
+  sourceRows: ChartSourceRow[];
   series: SeriesDef[];
   /** 全系列共用的确切显示单位。 */
   format: ColumnFormat;
@@ -119,6 +111,7 @@ export type CategoryComboSpec = {
   kind: "category_combo";
   /** { label: 分类值, s0: 值, … } 保持查询返回顺序。 */
   rows: ChartRow[];
+  sourceRows: ChartSourceRow[];
   series: SeriesDef[];
   countFormat: ColumnFormat;
   rateFormat: ColumnFormat;
@@ -129,6 +122,7 @@ export type PieSpec = {
   kind: "pie";
   /** { label: 切片分类值, value: 度量值 } 保持查询返回顺序 */
   rows: { label: string; value: number | null }[];
+  sourceRows: ChartSourceRow[];
   /** 度量来源列（载荷列短名）；字段绑定消费方（报告呈现编译）只认本字段 */
   column: string;
   /** 切片分类来源列（载荷列短名） */
@@ -137,44 +131,6 @@ export type PieSpec = {
   seriesName: string;
   format: ColumnFormat;
   decimals?: number;
-};
-
-export type SeriesDisplay = {
-  color?: string;
-  type?: "line" | "bar";
-  yAxis?: "left" | "right";
-};
-
-export type ChartDecl = {
-  type: PresentationType;
-  /** 完整内部表格布局；Agent 的简洁 columns 或确定性默认值已在输入边界归一为本结构。 */
-  tableLayout?: TableLayoutDecl;
-  /** bar/pie 的分类轴（切片）列；line 不用（时间恒为横轴） */
-  x?: string;
-  /** 参与画图的度量列（保序）；校验层已把缺省补齐为全部查询度量 */
-  y: string[];
-  /** bar 的辅助标注列；空数组表示显式关闭自动关系推断。 */
-  annotations?: string[];
-  /** 拆系列的分类列：line=分组折线，bar=分组/堆叠段 */
-  groupBy?: string;
-  /** bar + groupBy 时段是否堆叠（缺省并列） */
-  stack?: boolean;
-
-  display?: Record<string, SeriesDisplay>;
-  /** 图级数值标签：main=仅第一主系列，all=全部系列（含拆分系列）；缺省不印 */
-  valueLabels?: "main" | "all";
-  /** table 的热力着色声明；刻度在编译期按本表数据定 */
-  shading?: TableShadingPreferences;
-};
-
-export type TableAxis =
-  | { kind: "field"; column: string }
-  | { kind: "time"; level: "bucket" | "year" | "month" }
-  | { kind: "metrics" };
-
-export type TableLayoutDecl = {
-  rows: TableAxis[];
-  columns: TableAxis[];
 };
 
 export type TableHeaderPart = {
@@ -203,7 +159,7 @@ export type TableModel = {
   /**
    * 每格回指原始结果行下标（null=该格无来源行，如轴标签列与缺席格）。
    * 缺省即「模型行 = 原始行」的恒等映射（长表）；交叉表重排了行列，必须携带本映射，
-   * 记录投影据此取回该格的业务坐标（时间与维度值），与图表侧 chartSourceRow 同一语义。
+   * 记录投影据此取回该格的业务坐标（时间与维度值），与图表规格的 sourceRows 同一语义。
    */
   sourceRows?: (number | null)[][];
   /** 热力着色（只随 table 声明下发）：刻度按指标列键各立一把，见 `table_shading.ts`。 */
@@ -353,9 +309,10 @@ function timeSeriesLine(
   );
   const rows = roles.timePoints.map((t) => {
     const source = byKey.get(t.key);
-    return markChartSource({ t: t.label, ...source?.values }, source?.source);
+    return { t: t.label, ...source?.values };
   });
-  return withAxes(rows, series);
+  const sourceRows = roles.timePoints.map((t) => ({ row: byKey.get(t.key)?.source }));
+  return withAxes(rows, sourceRows, series);
 }
 
 type ResultTime = NonNullable<ViewBlock["time"]>;
@@ -452,18 +409,21 @@ function comparisonLine(
     if (cells.has(cellId)) return null;
     cells.set(cellId, { value: toNumber(view.rows[r][valIdx]), source: r });
   }
+  const sourceRows: ChartSourceRow[] = [];
   const rows = periods[0].buckets.map((bucket, position) => {
     const row: ChartRow = {
       t: timeLabel(bucket.key?.year ?? null, bucket.key?.month ?? null).label,
     };
+    const sources: Record<string, number> = {};
     for (const item of series) {
       const cell = cells.get(`${position}|${item.key}`);
       row[item.key] = cell?.value ?? null;
-      markChartSource(row, cell?.source, item.key);
+      if (cell) sources[item.key] = cell.source;
     }
+    sourceRows.push(Object.keys(sources).length ? { series: sources } : {});
     return row;
   });
-  return withAxes(rows, series);
+  return withAxes(rows, sourceRows, series);
 }
 
 /** 分组趋势折线：单分类 × 单度量，分类值各成一系列 */
@@ -497,19 +457,27 @@ function groupedLine(
       rowAt.set(key, r);
     }
   }
+  const sourceRows: ChartSourceRow[] = [];
   const rows = roles.timePoints.map((t) => {
     const row: ChartRow = { t: t.label };
+    const sources: Record<string, number> = {};
     for (const s of series) {
       const key = `${t.key}|${s.key}`;
       row[s.key] = valueAt.get(key) ?? null;
-      markChartSource(row, rowAt.get(key), s.key);
+      const source = rowAt.get(key);
+      if (source !== undefined) sources[s.key] = source;
     }
+    sourceRows.push(Object.keys(sources).length ? { series: sources } : {});
     return row;
   });
-  return withAxes(rows, series);
+  return withAxes(rows, sourceRows, series);
 }
 
-function withAxes(rows: ChartRow[], series: SeriesDef[]): TrendSpec | null {
+function withAxes(
+  rows: ChartRow[],
+  sourceRows: ChartSourceRow[],
+  series: SeriesDef[],
+): TrendSpec | null {
   const hasRate = series.some((s) => s.isRate);
   const hasCount = series.some((s) => !s.isRate);
   const rateFormats = [...new Set(series.filter((s) => s.isRate).map((s) => s.format))];
@@ -522,6 +490,7 @@ function withAxes(rows: ChartRow[], series: SeriesDef[]): TrendSpec | null {
   return {
     kind: "line",
     rows,
+    sourceRows,
     series,
     mixedAxes: mixed,
     allRate: hasRate && !hasCount,
@@ -594,8 +563,8 @@ function categoryBar(
       ...(shareCol >= 0 ? { shareKey: `p${si}` } : {}),
     };
   });
-  const rows = view.rows.map((r, rowIndex) => {
-    const row: ChartRow = markChartSource({ label: cellLabel(r[catIdx]) }, rowIndex);
+  const rows = view.rows.map((r) => {
+    const row: ChartRow = { label: cellLabel(r[catIdx]) };
     measureIdx.forEach((colIdx, si) => {
       row[`s${si}`] = toNumber(r[colIdx]);
       const shareCol = declaredShareIdx(view, colIdx, annotations);
@@ -613,6 +582,7 @@ function categoryBar(
     return {
       kind: "category_combo",
       rows,
+      sourceRows: view.rows.map((_, row) => ({ row })),
       series,
       countFormat: series.find((item) => !item.isRate)?.format ?? "number",
       rateFormat: rateFormats[0],
@@ -623,6 +593,7 @@ function categoryBar(
   return {
     kind: "bar",
     rows,
+    sourceRows: view.rows.map((_, row) => ({ row })),
     series,
     format: formats[0],
     isRate: formats[0] !== "number",
@@ -677,6 +648,9 @@ function categorySeriesBar(
       ]) as ChartRow,
     ]),
   );
+  const sourcesByLabel = new Map<string, Record<string, number>>(
+    labels.map((label) => [label, {}]),
+  );
   const seen = new Set<string>();
   for (let rowIndex = 0; rowIndex < view.rows.length; rowIndex += 1) {
     const r = view.rows[rowIndex];
@@ -688,7 +662,8 @@ function categorySeriesBar(
     if (seen.has(pair)) return null; // 同一格多行：结构不成矩阵
     seen.add(pair);
     row[sk] = toNumber(r[valIdx]) ?? (isRate ? null : 0);
-    markChartSource(row, rowIndex, sk);
+    const sources = sourcesByLabel.get(label);
+    if (sources) sources[sk] = rowIndex;
     if (shareCol >= 0) {
       const s = toNumber(r[shareCol]);
       if (s !== null) row.share = ((row.share as number | null) ?? 0) + s;
@@ -697,6 +672,7 @@ function categorySeriesBar(
   return {
     kind: "bar",
     rows: labels.map((l) => byLabel.get(l) as ChartRow),
+    sourceRows: labels.map((label) => ({ series: sourcesByLabel.get(label) ?? {} })),
     series,
     format,
     isRate,
@@ -724,15 +700,11 @@ function pieChart(
   if (names.length !== view.rows.length) return null; // 每分类恰一行才成构成
   return {
     kind: "pie",
-    rows: view.rows.map((r, row) =>
-      markChartSource(
-        {
-          label: cellLabel(r[catIdx]),
-          value: toNumber(r[valIdx]),
-        },
-        row,
-      ),
-    ),
+    rows: view.rows.map((r) => ({
+      label: cellLabel(r[catIdx]),
+      value: toNumber(r[valIdx]),
+    })),
+    sourceRows: view.rows.map((_, row) => ({ row })),
     column: view.columns[valIdx],
     categoryColumn: view.columns[catIdx],
     seriesName: titleOf(view.columns[valIdx]),
@@ -1303,7 +1275,7 @@ function declaredChart(
   view: ViewBlock,
   roles: Roles,
   titleOf: (c: string) => string,
-  decl: ChartDecl,
+  decl: ChartRenderDecl,
 ): ChartSpec | null {
   const measureIdx = decl.y.map((y) => declaredIdx(view, roles.measureIdx, y));
   if (measureIdx.some((i) => i === undefined)) return null;
@@ -1385,7 +1357,7 @@ export function compileTableWithStatus(
   decl?: ChartDecl,
 ): TableCompilation {
   const roles = detectRoles(view);
-  const compiled = decl?.tableLayout
+  const compiled = decl
     ? compileTableLayout(view, roles, titleOf, decl.tableLayout)
     : {
         table: flatTable(view, titleOf),
@@ -1440,7 +1412,7 @@ export function tableShadingDefaults(view: ViewBlock): TableShadingDefaults | nu
 export function compileChart(
   view: ViewBlock,
   titleOf: (c: string) => string,
-  decl: ChartDecl,
+  decl: ChartRenderDecl,
 ): ChartSpec | null {
   if (decl.type === "table" || decl.type === "kpi" || !view.rows.length) return null;
   return declaredChart(view, detectRoles(view), titleOf, decl);
@@ -1468,7 +1440,7 @@ export function sensibleForms(view: ViewBlock): SensibleForm[] {
   const categories = roles.catIdx.map((index) => view.columns[index]);
   const candidates: Array<{
     form: Exclude<SensibleForm, "table" | "kpi">;
-    decl: ChartDecl;
+    decl: ChartRenderDecl;
   }> = [];
   if (roles.timePoints.length >= 2 && measures.length) {
     candidates.push({

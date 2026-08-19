@@ -10,6 +10,7 @@ import {
   createReports,
   createTestAppDatabase,
   createTestUsage,
+  dashboardTestDependencies,
   dashboardRoutes,
   freshPath,
   semanticPlanningStub,
@@ -28,14 +29,18 @@ describe("dashboard board routes", () => {
     const db = createTestAppDatabase(path);
     const reportRepository = createReports(db);
     const analysisRepository = createAnalysisRepository(db);
-    const fixture = semanticAnalysisOf(STRUCTURE_ARGS, { type: "table", y: [] });
+    const fixture = semanticAnalysisOf(STRUCTURE_ARGS, {
+      type: "table",
+      y: [],
+      tableLayout: { rows: [], columns: [] },
+    });
     const analysis = await analysisRepository.create("alice@x", fixture.analysis, fixture.view);
     const report = await reportRepository.create({
       owner: "alice@x",
       name: "组织人数",
       viewId: analysis.view.id,
     });
-    const boards = createBoardRepository(db, reportRepository);
+    const boards = createBoardRepository(db);
     const usage = { log: async () => {} };
     const view = {
       id: "structure",
@@ -70,7 +75,7 @@ describe("dashboard board routes", () => {
     };
     const analyses = createAnalysisService({
       repository: analysisRepository,
-      compile: semanticPlanningStub.compile,
+      plan: semanticPlanningStub.plan,
       execute: async () => ({
         payload: {
           title: "组织人数",
@@ -80,7 +85,7 @@ describe("dashboard board routes", () => {
           view,
         },
         fullRowViewBlock: view,
-        decl: { type: "table" as const, y: ["active_employee_count"] },
+        decl: { type: "table" as const, y: [], tableLayout: { rows: [], columns: [] } },
       }),
       usage,
     });
@@ -101,32 +106,32 @@ describe("dashboard board routes", () => {
     });
     const recordProjectionCalls: unknown[][] = [];
     const app = (email: string) =>
-      dashboardRoutes({
-        auth: { api: { getSession: async () => ({ user: { email, name: email } }) } },
-        usage: createTestUsage(db),
-        html: async () => "",
-        reportService,
-        boardService,
-        analyses,
-        presentation,
-        semanticPlanning: semanticPlanningStub,
-        records: {
-          runBoard: async (...args: unknown[]) => {
-            recordProjectionCalls.push(args);
-            return {
-              metric_id: "measure:active_employee_count",
-              metric_title: "在职人数",
-              columns: ["工号"],
-              column_keys: ["employee_id"],
-              rows: [["e_01"]],
-              offset: 0,
-              has_more: false,
-              data_as_of: "2026-07",
-              data_changed: false,
-            };
-          },
-        } as never,
-      });
+      dashboardRoutes(
+        dashboardTestDependencies({ email, name: email }, path, {
+          usage: createTestUsage(db),
+          html: async () => "",
+          reportService,
+          boardService,
+          analyses,
+          presentation,
+          records: {
+            runBoard: async (...args: unknown[]) => {
+              recordProjectionCalls.push(args);
+              return {
+                metric_id: "measure:active_employee_count",
+                metric_title: "在职人数",
+                columns: ["工号"],
+                column_keys: ["employee_id"],
+                rows: [["e_01"]],
+                offset: 0,
+                has_more: false,
+                data_as_of: "2026-07",
+                data_changed: false,
+              };
+            },
+          } as never,
+        }),
+      );
     const alice = app("alice@x");
     const bob = app("bob@x");
     const json = (body: unknown) => ({
@@ -217,7 +222,7 @@ describe("dashboard board routes", () => {
       method: "POST",
       ...json({ view_id: analysis.view.id, name: "错误副本" }),
     });
-    expect(foreignPointer.status).toBe(400);
+    expect(foreignPointer.status).toBe(404);
 
     const forked = await bob.request("/api/analyses", {
       method: "POST",

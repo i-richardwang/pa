@@ -147,8 +147,8 @@ describe("normalizeSqlResponse", () => {
     ]);
   });
 
-  test("SQL 缺失或窗口数量不一致时拒绝", () => {
-    expect(() => normalizeSqlResponse({}, { sql: {} })).toThrow("缺少 SQL");
+  test("SQL 缺失或窗口数量不一致时以稳定网关错误拒绝", () => {
+    expect(() => normalizeSqlResponse({}, { sql: {} })).toThrow("数据引擎暂时不可用");
     expect(() =>
       normalizeSqlResponse(
         {
@@ -164,6 +164,6 @@ describe("normalizeSqlResponse", () => {
         },
         { sql: { sql: ["select 1", []] } },
       ),
-    ).toThrow("窗口数异常");
+    ).toThrow("数据引擎暂时不可用");
   });
 });

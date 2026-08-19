@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CubeGateway } from "./ports/cube_gateway.js";
 import { MAX_PLAN_NODES, parseAnalysisSpec } from "./semantic_core/analysis_spec.js";
-import type { SemanticViewIntent } from "./semantic_core/semantic_analysis.js";
+import {
+  parseAnalysisDefinition,
+  type SemanticViewIntent,
+} from "./semantic_core/semantic_analysis.js";
+import { ExportIncompleteError } from "./application/export_service.js";
 import { semanticAnalysisOf } from "./test_support/report.js";
 import { createTestAppDatabase } from "./test_support/app_database.js";
 import { TEST_SEMANTIC_TAXONOMY } from "./test_support/semantic_taxonomy.js";
@@ -169,12 +173,6 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     { Client },
     { InMemoryTransport },
     { createApplication },
-    { createCatalogService },
-    { createFeedbackService },
-    { createFeedbackStore },
-    { createUsageLog },
-    { createUsageStats },
-    { createUsageService },
     {
       buildServer,
       SERVER_INSTRUCTIONS,
@@ -188,12 +186,6 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     import("@modelcontextprotocol/sdk/client/index.js"),
     import("@modelcontextprotocol/sdk/inMemory.js"),
     import("./composition/application.js"),
-    import("./application/catalog_service.js"),
-    import("./application/feedback_service.js"),
-    import("./storage/feedback.js"),
-    import("./storage/usage_log.js"),
-    import("./storage/usage_stats.js"),
-    import("./application/usage_service.js"),
     import("./server.js"),
   ]);
   const client = new Client({
@@ -212,12 +204,9 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     type: "bar" as const,
     x: "organization_name",
     y: ["active_employee_count"],
+    tableLayout: { rows: [], columns: [] },
   };
   const db = createTestAppDatabase(join(tmpdir(), `pa_server_${randomUUID()}.db`));
-  const usage = createUsageService({
-    log: createUsageLog(db),
-    statistics: createUsageStats(db),
-  });
   const cube: CubeGateway = {
     meta: async () => [],
     load: async () => ({
@@ -244,15 +233,13 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     ],
     TEST_SEMANTIC_TAXONOMY,
   );
-  const catalog = createCatalogService({ cube, canonical });
   const application = createApplication({
     db,
-    usage,
     cube,
-    catalog,
+    visibilityCube: cube,
+    canonical,
     baseUrl: "http://127.0.0.1:8788",
   });
-  const feedbackStore = createFeedbackStore(db);
   const executedAnalysis = (viewId: string, analysisId = baseAnalysisId) => {
     const view = {
       id: "result",
@@ -298,7 +285,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
         view,
       },
       fullRowViewBlock: view,
-      decl: { type: "bar" as const, x: "organization_name", y: ["active_employee_count"] },
+      decl: renderedPresentation,
       record_projection_bindings: { views: [] },
     };
   };
@@ -405,7 +392,8 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
   const server = buildServer({
     dependencies: {
       analysis: {
-        run: async (_principal, _definition, intent) => {
+        run: async (_principal, definition, intent) => {
+          parseAnalysisDefinition(definition);
           if (intent.type !== "table") throw new Error("本测试桩只执行表格呈现");
           const declared = intent.columns?.[0];
           return executedPivot(
@@ -428,12 +416,12 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
         },
       },
       presentation: application.presentation,
-      catalog,
+      catalog: application.catalog,
       records: application.recordProjection,
       reports: application.report,
       exports: application.export,
-      feedback: createFeedbackService({ repository: feedbackStore, usage }),
-      usage,
+      feedback: application.feedback,
+      usage: application.usage,
       baseUrl: "http://127.0.0.1:8788",
     },
   });
@@ -678,6 +666,33 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
         (candidate) => candidate.uriTemplate === "pa://export/{ticket}",
       )?.mimeType,
     ).toBe("text/csv; charset=utf-8");
+
+    const invalidAnalysis = await client.callTool({
+      name: "run_analysis",
+      arguments: {
+        analysis: {
+          views: [
+            { ...pivotDefinition.views[0], id: "first" },
+            { ...pivotDefinition.views[0], id: "second" },
+          ],
+        },
+        view: { type: "table" },
+      },
+    });
+    expect(invalidAnalysis.isError).toBe(true);
+    expect(invalidAnalysis.content).toEqual([
+      {
+        type: "text",
+        text: expect.stringContaining("一次分析只能回答一个问题"),
+      },
+    ]);
+
+    application.export.readResource = async () => {
+      throw new ExportIncompleteError(100_000);
+    };
+    await expect(client.readResource({ uri: "pa://export/test-ticket" })).rejects.toThrow(
+      "请增加过滤条件后重新导出",
+    );
   } finally {
     await client.close();
   }

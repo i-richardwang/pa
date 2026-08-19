@@ -1,14 +1,11 @@
-import type { Principal } from "../engine/cube_security.js";
+import type { Principal } from "../contracts/principal.js";
 import type { QueryRunResult } from "./query_pipeline.js";
-import type { ExecutionPlan } from "../semantic_core/execution_plan.js";
-import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
 import {
   parseAnalysisDefinition,
-  SEMANTIC_VIEW_INTENT_INPUT,
+  parseSemanticViewIntent,
   type AnalysisDefinition,
   type SemanticViewIntent,
 } from "../semantic_core/semantic_analysis.js";
-import type { CompiledAnalysisView } from "../engine/semantic_analysis_compiler.js";
 import type {
   AnalysisRecord,
   AnalysisRepository,
@@ -21,21 +18,20 @@ import {
   validateViewPreferences,
   type ViewPreferences,
 } from "../presentation_core/view_preferences.js";
-import type { ChartDecl } from "../presentation_core/view_shape.js";
+import type { ChartDecl } from "../presentation_core/chart_decl.js";
+import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
+import { derivedFormulaSummaries, queryFingerprint } from "../engine/query_fingerprint.js";
+import type { AuthorizedAnalysisPlan } from "./semantic_planning_service.js";
 
 /** Run 只消费编译工件，不认识持久化身份。 */
-type ExecuteAnalysis = (
-  principal: Principal,
-  plan: ExecutionPlan,
-  presentation: PresentationSpec,
-) => Promise<QueryRunResult>;
+type ExecuteAnalysis = (planned: AuthorizedAnalysisPlan) => Promise<QueryRunResult>;
 
-type CompileAnalysisView = (
+type PlanAnalysisView = (
   principal: Principal,
   definition: AnalysisDefinition,
   intent: SemanticViewIntent,
   preferences?: ViewPreferences,
-) => Promise<CompiledAnalysisView>;
+) => Promise<AuthorizedAnalysisPlan>;
 
 export type MaterializedAnalysisView = OwnedAnalysisView & {
   render_decl: ChartDecl;
@@ -57,7 +53,7 @@ export type ExecutedAnalysis = QueryRunResult & {
 export function createAnalysisService(deps: {
   repository: AnalysisRepository;
   execute: ExecuteAnalysis;
-  compile: CompileAnalysisView;
+  plan: PlanAnalysisView;
   usage: Pick<UsageLog, "log">;
 }) {
   async function executeAndLog(input: {
@@ -65,21 +61,20 @@ export function createAnalysisService(deps: {
     definition: AnalysisDefinition;
     intent: SemanticViewIntent;
     preferences: ViewPreferences;
-    compiled: CompiledAnalysisView;
+    planned: AuthorizedAnalysisPlan;
     tool: "run_analysis" | "rerun_analysis" | "report_replay" | "replay";
     analysis?: AnalysisRecord;
     identity?: OwnedAnalysisView;
     createIdentity: "analysis" | "view" | "none";
-    args: unknown;
+    usage: {
+      query_fingerprint?: string;
+      derived_formulas?: string[];
+    };
   }): Promise<ExecutedAnalysis> {
     const started = performance.now();
     const title = input.definition.title;
     try {
-      const result = await deps.execute(
-        input.principal,
-        input.compiled.plan,
-        input.compiled.presentation,
-      );
+      const result = await deps.execute(input.planned);
       const identity =
         input.createIdentity === "analysis"
           ? await deps.repository.create(
@@ -106,7 +101,7 @@ export function createAnalysisService(deps: {
         caller: input.principal.email,
         tool: input.tool,
         ...(title ? { title } : {}),
-        args: input.args,
+        ...input.usage,
         outcome: "ok",
         row_count: payload.view.row_count,
         has_more: payload.view.has_more,
@@ -122,15 +117,15 @@ export function createAnalysisService(deps: {
         definition: identity.analysis.definition,
         intent: identity.view.intent,
         preferences: identity.view.preferences,
-        presentation: input.compiled.presentation,
-        record_projection_bindings: input.compiled.record_projection_bindings,
+        presentation: input.planned.presentation,
+        record_projection_bindings: input.planned.record_projection_bindings,
       };
     } catch (error) {
       await deps.usage.log({
         caller: input.principal.email,
         tool: input.tool,
         ...(title ? { title } : {}),
-        args: input.args,
+        ...input.usage,
         outcome: "error",
         error: error instanceof Error ? error.message : String(error),
         duration_ms: performance.now() - started,
@@ -151,18 +146,21 @@ export function createAnalysisService(deps: {
     rawIntent: SemanticViewIntent,
   ): Promise<ExecutedAnalysis> {
     const definition = parseAnalysisDefinition(rawDefinition);
-    const intent = SEMANTIC_VIEW_INTENT_INPUT.parse(rawIntent);
+    const intent = parseSemanticViewIntent(rawIntent);
     const preferences = EMPTY_VIEW_PREFERENCES;
-    const compiled = await deps.compile(principal, definition, intent, preferences);
+    const planned = await deps.plan(principal, definition, intent, preferences);
     return executeAndLog({
       principal,
       definition,
       intent,
       preferences,
-      compiled,
+      planned,
       tool: "run_analysis",
       createIdentity: "analysis",
-      args: { analysis: definition, view: intent },
+      usage: {
+        query_fingerprint: queryFingerprint(definition),
+        derived_formulas: derivedFormulaSummaries(definition),
+      },
     });
   }
 
@@ -172,19 +170,19 @@ export function createAnalysisService(deps: {
     rawIntent: SemanticViewIntent,
   ): Promise<ExecutedAnalysis> {
     const analysis = await deps.repository.resolveOwnedAnalysis(analysisId, principal.email);
-    const intent = SEMANTIC_VIEW_INTENT_INPUT.parse(rawIntent);
+    const intent = parseSemanticViewIntent(rawIntent);
     const preferences = EMPTY_VIEW_PREFERENCES;
-    const compiled = await deps.compile(principal, analysis.definition, intent, preferences);
+    const planned = await deps.plan(principal, analysis.definition, intent, preferences);
     return executeAndLog({
       principal,
       definition: analysis.definition,
       intent,
       preferences,
-      compiled,
+      planned,
       tool: "rerun_analysis",
       analysis,
       createIdentity: "view",
-      args: { analysis_id: analysisId, view: intent },
+      usage: {},
     });
   }
 
@@ -195,9 +193,9 @@ export function createAnalysisService(deps: {
     rawPreferences: ViewPreferences,
   ): Promise<MaterializedAnalysisView> {
     const analysis = await deps.repository.resolveOwnedAnalysis(analysisId, principal.email);
-    const intent = SEMANTIC_VIEW_INTENT_INPUT.parse(rawIntent);
+    const intent = parseSemanticViewIntent(rawIntent);
     const preferences = validateViewPreferences(intent, rawPreferences);
-    const compiled = await deps.compile(principal, analysis.definition, intent, preferences);
+    const planned = await deps.plan(principal, analysis.definition, intent, preferences);
     const identity = await deps.repository.createView(
       principal.email,
       analysis.id,
@@ -206,9 +204,9 @@ export function createAnalysisService(deps: {
     );
     return {
       ...identity,
-      render_decl: compiled.render_decl,
-      presentation: compiled.presentation,
-      record_projection_bindings: compiled.record_projection_bindings,
+      render_decl: planned.render_decl,
+      presentation: planned.presentation,
+      record_projection_bindings: planned.record_projection_bindings,
     };
   }
 
@@ -217,27 +215,29 @@ export function createAnalysisService(deps: {
     rawDefinition: AnalysisDefinition,
     rawIntent: SemanticViewIntent,
     rawPreferences: ViewPreferences,
-    compiled?: CompiledAnalysisView,
   ): Promise<ExecutedAnalysis> {
     const definition = parseAnalysisDefinition(rawDefinition);
-    const intent = SEMANTIC_VIEW_INTENT_INPUT.parse(rawIntent);
+    const intent = parseSemanticViewIntent(rawIntent);
     const preferences = validateViewPreferences(intent, rawPreferences);
-    const planned = compiled ?? (await deps.compile(principal, definition, intent, preferences));
+    const planned = await deps.plan(principal, definition, intent, preferences);
     return executeAndLog({
       principal,
       definition,
       intent,
       preferences,
-      compiled: planned,
+      planned,
       tool: "run_analysis",
       createIdentity: "analysis",
-      args: { analysis: definition, source: "editor" },
+      usage: {
+        query_fingerprint: queryFingerprint(definition),
+        derived_formulas: derivedFormulaSummaries(definition),
+      },
     });
   }
 
   async function replay(principal: Principal, viewId: string): Promise<ExecutedAnalysis> {
     const identity = await deps.repository.resolveOwnedView(viewId, principal.email);
-    const compiled = await deps.compile(
+    const planned = await deps.plan(
       principal,
       identity.analysis.definition,
       identity.view.intent,
@@ -248,11 +248,11 @@ export function createAnalysisService(deps: {
       definition: identity.analysis.definition,
       intent: identity.view.intent,
       preferences: identity.view.preferences,
-      compiled,
+      planned,
       tool: "replay",
       identity,
       createIdentity: "none",
-      args: { view_id: viewId },
+      usage: {},
     });
   }
 
@@ -263,19 +263,18 @@ export function createAnalysisService(deps: {
   async function executeReferenced(
     principal: Principal,
     identity: OwnedAnalysisView,
-    compiled: CompiledAnalysisView,
-    reportId: string,
+    planned: AuthorizedAnalysisPlan,
   ): Promise<ExecutedAnalysis> {
     return executeAndLog({
       principal,
       definition: identity.analysis.definition,
       intent: identity.view.intent,
       preferences: identity.view.preferences,
-      compiled,
+      planned,
       tool: "report_replay",
       identity,
       createIdentity: "none",
-      args: { report_id: reportId },
+      usage: {},
     });
   }
 

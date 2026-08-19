@@ -24,21 +24,11 @@ import {
   RECORD_PROJECTION_BINDINGS_SCHEMA,
   type RecordProjectionBindings,
 } from "./record_projection_contract.js";
-import type { ChartDecl } from "../presentation_core/view_shape.js";
+import { CHART_DECL_SCHEMA, type ChartDecl } from "../presentation_core/chart_decl.js";
+
+export { CHART_DECL_SCHEMA } from "../presentation_core/chart_decl.js";
 
 export type RenderBundle = { view: ViewBlock; decl: ChartDecl };
-
-const isChartDecl = (value: unknown): value is ChartDecl => {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as { type?: unknown; y?: unknown };
-  return (
-    ["table", "kpi", "line", "bar", "pie"].includes(String(candidate.type)) &&
-    Array.isArray(candidate.y) &&
-    candidate.y.every((item) => typeof item === "string")
-  );
-};
-
-export const CHART_DECL_SCHEMA = z.custom<ChartDecl>(isChartDecl);
 
 export type ReplayPayload = {
   at: string;
@@ -51,7 +41,7 @@ export type ReplayPayload = {
   view: SemanticViewIntent;
   /** 人类作者视觉偏好；控制台编辑使用，不进入 Agent MCP 结果。 */
   view_preferences: ViewPreferences;
-  record_projection_bindings?: RecordProjectionBindings;
+  record_projection_bindings: RecordProjectionBindings;
   payload: QueryPayload;
   /** 本次 Run 的完整聚合行与公共呈现声明；只随 Web 响应存在，不持久化。 */
   render_bundle: RenderBundle;
@@ -64,13 +54,13 @@ export const REPLAY_PAYLOAD_SCHEMA: z.ZodType<ReplayPayload, z.ZodTypeDef, unkno
   .object({
     at: z.string(),
     caller: z.string(),
-    analysis_id: z.string(),
-    view_id: z.string(),
+    analysis_id: z.string().uuid(),
+    view_id: z.string().uuid(),
     revision: z.number().int().positive().optional(),
     analysis: ANALYSIS_DEFINITION_INPUT,
     view: SEMANTIC_VIEW_INTENT_INPUT,
     view_preferences: VIEW_PREFERENCES_INPUT,
-    record_projection_bindings: RECORD_PROJECTION_BINDINGS_SCHEMA.optional(),
+    record_projection_bindings: RECORD_PROJECTION_BINDINGS_SCHEMA,
     payload: QUERY_PAYLOAD_SCHEMA,
     render_bundle: z
       .object({

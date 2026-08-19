@@ -4,13 +4,9 @@ import { StreamableHTTPTransport } from "@hono/mcp";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { cors } from "hono/cors";
 import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins";
-import { principalFromAttributes, type Principal } from "./engine/cube_security.js";
+import { principalFromAttributes, type Principal } from "./contracts/principal.js";
 import { buildAuth, initializeAuthSchema, type Auth } from "./auth.js";
 import { createApplication } from "./composition/application.js";
-import { createCatalogService } from "./application/catalog_service.js";
-import { createBusinessTermService } from "./application/business_term_service.js";
-import { createFeedbackService } from "./application/feedback_service.js";
-import { createUsageService } from "./application/usage_service.js";
 import { config } from "./config.js";
 import { createCubeGateway } from "./adapters/cube_gateway.js";
 import { SERVICE_CUBE_CONTEXT } from "./engine/cube_security.js";
@@ -20,16 +16,11 @@ import {
   ExportIncompleteError,
   ExportTicketUnavailableError,
 } from "./application/export_service.js";
-import { createFeedbackStore } from "./storage/feedback.js";
-import { createBusinessTermRepository } from "./storage/business_term_repository.js";
 import { isAllowedOrigin } from "./engine/origins.js";
 import { buildServer, type McpServerDependencies } from "./server.js";
-import { createUsageLog } from "./storage/usage_log.js";
-import { createUsageStats } from "./storage/usage_stats.js";
 import { openAppDatabase } from "./storage/app_database.js";
 import { openSqlite, type SqliteDatabase } from "./sqlite.js";
 import { configuredSemanticPackageDir, loadSemanticPackage } from "./engine/semantic_package.js";
-import { projectDataCapabilityMap } from "./presentation_core/data_capability_map.js";
 import {
   loadCanonicalSemanticModel,
   withCanonicalSemanticModel,
@@ -47,12 +38,6 @@ type AppEnv = { Variables: { principal: Principal } };
 const app = new Hono<AppEnv>();
 
 const appDb = await openAppDatabase(config.appDb);
-const usageLog = createUsageLog(appDb);
-const usageService = createUsageService({
-  log: usageLog,
-  statistics: createUsageStats(appDb),
-});
-const feedbackStore = createFeedbackStore(appDb);
 const semanticPackage = await loadSemanticPackage(configuredSemanticPackageDir());
 const visibilityCube = withFormalMetricModel(
   createCubeGateway({
@@ -68,34 +53,22 @@ const canonicalModel = await loadCanonicalSemanticModel({
   service_context: SERVICE_CUBE_CONTEXT,
 });
 const cube = withCanonicalSemanticModel(visibilityCube, canonicalModel);
-const capabilityMap = projectDataCapabilityMap(canonicalModel.capabilities);
-const businessTermRepository = createBusinessTermRepository(appDb);
-const businessTermService = createBusinessTermService({
-  repository: businessTermRepository,
-  usage: usageService,
-});
-const catalogService = createCatalogService({
-  cube: visibilityCube,
-  canonical: canonicalModel,
-  businessTerms: businessTermService,
-});
-const feedbackService = createFeedbackService({ repository: feedbackStore, usage: usageService });
 const application = createApplication({
   db: appDb,
-  usage: usageService,
   cube,
-  catalog: catalogService,
+  visibilityCube,
+  canonical: canonicalModel,
   baseUrl: config.baseUrl,
 });
 const serverDependencies: McpServerDependencies = {
   analysis: application.analysis,
   presentation: application.presentation,
-  catalog: catalogService,
+  catalog: application.catalog,
   records: application.recordProjection,
   reports: application.report,
   exports: application.export,
-  feedback: feedbackService,
-  usage: usageService,
+  feedback: application.feedback,
+  usage: application.usage,
   baseUrl: config.baseUrl,
 };
 await application.maintenance.removeExpiredAnalyses();
@@ -174,7 +147,7 @@ if (config.authSecret) {
     "/dashboard",
     dashboardRoutes({
       auth: enabledAuth,
-      usage: usageService,
+      usage: application.usage,
       html: pageLoader("dashboard.html"),
       setOrgScope: async (userId, orgScope) => {
         const ctx = await enabledAuth.$context;
@@ -184,12 +157,11 @@ if (config.authSecret) {
       reportService: application.report,
       presentation: application.presentation,
       boardService: application.board,
-      feedback: feedbackService,
-      catalog: catalogService,
-      businessTerms: businessTermService,
-      semanticPlanning: application.semanticPlanning,
+      feedback: application.feedback,
+      catalog: application.catalog,
+      businessTerms: application.businessTerms,
       records: application.recordProjection,
-      capabilityMap,
+      capabilityMap: application.capabilityMap,
     }),
   );
 }
@@ -261,13 +233,19 @@ app.all("/mcp", async (c) => {
   return transport.handleRequest(c);
 });
 
-// 导出下载：短票据即限时能力凭证，无需会话——用户浏览器可直开，CLI Agent 也可转述；
-// 惰性执行查询装配 CSV，明细数据不落盘。
+// 导出下载重新认证票据所有者，并按当前权限惰性生成 CSV；明细数据不落盘。
 const exportDownload = async (c: Context<AppEnv>) => {
   const ticket = c.req.param("ticket");
   if (!ticket) return c.text("下载链接无效或已过期，请让助手重新生成。", 403);
   try {
-    const { csv, asOf } = await application.export.download(ticket);
+    const session = auth ? await auth.api.getSession({ headers: c.req.raw.headers }) : null;
+    const principal = auth
+      ? session
+        ? principalFromAttributes(session.user)
+        : null
+      : LOCAL_PRINCIPAL;
+    if (!principal) return c.text("请先登录后再下载。", 401);
+    const { csv, asOf } = await application.export.readResource(principal, ticket);
     return c.body(csv, 200, {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="pa_export_${asOf}.csv"`,

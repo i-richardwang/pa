@@ -5,6 +5,7 @@ import { compileTableWithStatus, tableShadingDefaults } from "./view_shape.js";
 import type { ViewBlock } from "../semantic_core/query_payload.js";
 
 const BLUE = CHART_SERIES[0].light;
+const tableLayout = { rows: [], columns: [] };
 
 const columns = [
   { formatKey: "org" },
@@ -157,12 +158,13 @@ describe("随表格模型下发", () => {
     const shaded = compileTableWithStatus(view, titleOf, {
       type: "table",
       y: [],
+      tableLayout,
       shading: { palette: BLUE },
     });
     expect(shaded.table.shading?.scales).toEqual({
       "hr.headcount": { min: 20, mid: 70, max: 120 },
     });
-    const plain = compileTableWithStatus(view, titleOf, { type: "table", y: [] });
+    const plain = compileTableWithStatus(view, titleOf, { type: "table", y: [], tableLayout });
     expect(plain.table.shading).toBeUndefined();
   });
 

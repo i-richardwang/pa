@@ -29,62 +29,11 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 USAGE_ERROR_GROUP_TEXT_LIMIT = 200
+USAGE_LOG_RETENTION_DAYS = 90
 
 
 def section(title: str) -> None:
     print(f"\n## {title}\n")
-
-
-OP_LABEL = {"+": "+", "-": "−", "*": "×", "/": "÷"}
-
-
-def render_operand(node: dict, views: list[dict], nested: bool = False) -> str:
-    if "lit" in node:
-        return str(node["lit"])
-    if "member" in node:
-        source = node.get("source")
-        title = str(source or "未知视图")
-        matched = next((view for view in views if view.get("id") == source), None)
-        if matched:
-            title = matched.get("view_title") or source
-        return f"{node['member']}({title})"
-    if node.get("op") in OP_LABEL:
-        text = (
-            f"{render_operand(node['left'], views, True)} "
-            f"{OP_LABEL[node['op']]} "
-            f"{render_operand(node['right'], views, True)}"
-        )
-        return f"({text})" if nested else text
-    return "?"
-
-
-def derived_formulas(args_json: str) -> str:
-    try:
-        spec = json.loads(args_json)["spec"]
-        views = spec.get("analysis", {}).get("views", [])
-    except (json.JSONDecodeError, KeyError, AttributeError):
-        return "（规格无法解析）"
-    formulas = []
-    for view in views:
-        if "from" not in view:
-            continue
-        expressions = [
-            f"{column['as']} = {render_operand(column['expr'], views)}"
-            for column in view.get("columns", [])
-            if "expr" in column and "as" in column
-        ]
-        if expressions:
-            formulas.extend(expressions)
-        elif join := view.get("join"):
-            source_titles = []
-            for source in view.get("from", []):
-                matched = next(
-                    (candidate for candidate in views if candidate.get("id") == source), None
-                )
-                source_titles.append((matched or {}).get("view_title") or source)
-            joiner = f" {join.get('how', '?')} join "
-            formulas.append(f"{joiner.join(source_titles)}（{' + '.join(join.get('on', []))}）")
-    return "；".join(formulas) or "（仅投影）"
 
 
 def main() -> int:
@@ -92,11 +41,12 @@ def main() -> int:
     parser.add_argument("--days", type=int, default=30, help="统计最近 N 天（默认 30）")
     parser.add_argument("--db", type=Path, default=REPO / "server" / "data" / "app.db")
     args = parser.parse_args()
+    days = min(max(args.days, 1), USAGE_LOG_RETENTION_DAYS)
 
     if not args.db.exists():
         print(f"未找到日志库：{args.db}", file=sys.stderr)
         return 1
-    since = (datetime.now(timezone.utc) - timedelta(days=args.days)).isoformat()
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
 
@@ -107,9 +57,7 @@ def main() -> int:
         print("usage_log 表尚无数据（服务未产生调用）", file=sys.stderr)
         return 1
 
-    print(
-        f"# MCP 使用报告（最近 {args.days} 天，截至 {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC）"
-    )
+    print(f"# MCP 使用报告（最近 {days} 天，截至 {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC）")
 
     section("调用量（tool × outcome）")
     for r in conn.execute(
@@ -128,9 +76,7 @@ def main() -> int:
     multi = conn.execute(
         """SELECT COUNT(*) AS n, SUM(CASE WHEN row_count = 0 THEN 1 ELSE 0 END) AS zero
            FROM usage_log
-           WHERE at >= ? AND tool = 'catalog' AND (
-             json_type(args, '$.terms') = 'array' AND json_array_length(args, '$.terms') > 1
-           )""",
+           WHERE at >= ? AND tool = 'catalog' AND term_count > 1""",
         (since,),
     ).fetchone()
     if multi["n"]:
@@ -224,21 +170,18 @@ def main() -> int:
     section("派生查询排行（正式指标建模候选）")
     rows = conn.execute(
         """WITH derived AS (
-             SELECT query_fingerprint, args, at
+             SELECT query_fingerprint, derived_formulas, at
              FROM usage_log AS u
              WHERE at >= ? AND tool = 'run_analysis' AND outcome = 'ok'
                AND query_fingerprint IS NOT NULL
-               AND EXISTS (
-                 SELECT 1 FROM json_each(u.args, '$.spec.analysis.views') AS v
-                 WHERE json_type(v.value, '$.from') = 'array'
-               )
+               AND json_array_length(derived_formulas) > 0
            ), ranked AS (
-             SELECT query_fingerprint, args, at,
+             SELECT query_fingerprint, derived_formulas, at,
                     COUNT(*) OVER (PARTITION BY query_fingerprint) AS n,
                     ROW_NUMBER() OVER (PARTITION BY query_fingerprint ORDER BY at DESC) AS recency
              FROM derived
            )
-           SELECT query_fingerprint, args, n, at AS last_at
+           SELECT query_fingerprint, derived_formulas, n, at AS last_at
            FROM ranked WHERE recency = 1
            ORDER BY n DESC, last_at DESC LIMIT 30""",
         (since,),
@@ -247,7 +190,8 @@ def main() -> int:
         print("（无）")
     for r in rows:
         print(
-            f"- `{r['query_fingerprint']}` ×{r['n']}：{derived_formulas(r['args'])}"
+            f"- `{r['query_fingerprint']}` ×{r['n']}："
+            f"{'；'.join(json.loads(r['derived_formulas']))}"
             f"（最近 {r['last_at'][:16]}）"
         )
 

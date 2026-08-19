@@ -18,6 +18,8 @@ import { compilePresentationBlock } from "../../../src/presentation_core/chart_c
 import type { QueryPayload, ViewBlock } from "../../../src/semantic_core/query_payload.js";
 
 const NO_ACTIONS = {};
+const TABLE_DECL = { type: "table" as const, y: [], tableLayout: { rows: [], columns: [] } };
+const KPI_DECL = { type: "kpi" as const, y: [], tableLayout: { rows: [], columns: [] } };
 
 function view(overrides: Partial<ViewBlock> = {}): ViewBlock {
   const columns = overrides.columns ?? ["hr.organization_name", "hr.active_employee_count"];
@@ -58,8 +60,7 @@ const render = (props: Partial<ViewRendererProps> & { payload?: QueryPayload }) 
     <ViewRenderer
       payload={renderedPayload}
       presentation={
-        props.presentation ??
-        compilePresentationBlock(renderedPayload.view, { type: "table", y: [] })
+        props.presentation ?? compilePresentationBlock(renderedPayload.view, TABLE_DECL)
       }
       actions={NO_ACTIONS}
       {...props}
@@ -154,7 +155,7 @@ test("KPI：双居中大数、单指标无标签、多指标标签在值上方",
   const singlePayload = payload({ view: kpiView(["hr.active_employee_count"], [120]) });
   const single = render({
     payload: singlePayload,
-    presentation: compilePresentationBlock(singlePayload.view, { type: "kpi", y: [] }),
+    presentation: compilePresentationBlock(singlePayload.view, KPI_DECL),
     scene: "tile",
   });
   // 值的排印签名：字号按容器分档（不量、不内联 style），等宽数字，格宽由父容器均分
@@ -172,7 +173,7 @@ test("KPI：双居中大数、单指标无标签、多指标标签在值上方",
   });
   const multi = render({
     payload: multiPayload,
-    presentation: compilePresentationBlock(multiPayload.view, { type: "kpi", y: [] }),
+    presentation: compilePresentationBlock(multiPayload.view, KPI_DECL),
     scene: "tile",
   });
   expect(multi).toContain(KPI_LABEL);
@@ -190,7 +191,7 @@ test("底栏是页面 chrome：任何 scene 的内容栈都不渲染它，行数
       actions={NO_ACTIONS}
       leading={leading}
       payload={payload()}
-      presentation={compilePresentationBlock(payload().view, { type: "table", y: [] })}
+      presentation={compilePresentationBlock(payload().view, TABLE_DECL)}
     />,
   );
   expect(footer).toContain("time-bar-probe");
@@ -278,7 +279,7 @@ function totalsPayload(): QueryPayload {
 
 test("图与表之上不摆读数条：整窗合计只属于指标卡这一位", () => {
   const same = totalsPayload();
-  const presentation = compilePresentationBlock(same.view, { type: "table", y: [] });
+  const presentation = compilePresentationBlock(same.view, TABLE_DECL);
   const page = render({ payload: same, presentation, scene: "page" });
   const card = render({ payload: same, presentation, scene: "card" });
   const tile = render({ payload: same, presentation, scene: "tile" });
@@ -293,7 +294,7 @@ test("图与表之上不摆读数条：整窗合计只属于指标卡这一位",
 
 test("指标卡是整窗读数的唯一形态：大数读整窗合计而非某一行", () => {
   const same = totalsPayload();
-  const kpi = compilePresentationBlock(same.view, { type: "kpi", y: [] });
+  const kpi = compilePresentationBlock(same.view, KPI_DECL);
   expect(kpi.type).toBe("kpi");
   const page = render({ payload: same, presentation: kpi, scene: "page" });
   // 大数读的是整窗合计而非某一行（末月 12 不出现），且期间与差值只出现一次
@@ -307,7 +308,7 @@ test("空结果的查看面只有空态：不摆一排破折号", () => {
   const emptyView = { ...empty.view, rows: [], row_count: 0 };
   const page = render({
     payload: { ...empty, view: emptyView },
-    presentation: compilePresentationBlock(emptyView, { type: "table", y: [] }),
+    presentation: compilePresentationBlock(emptyView, TABLE_DECL),
     scene: "page",
   });
   expect(text(page)).toContain("没有找到符合这些条件的数据");
@@ -339,14 +340,14 @@ test("整窗读数随形态在场：同一份数据声明为表看不到期间�
   });
   const table = render({
     payload: single,
-    presentation: compilePresentationBlock(single.view, { type: "table", y: [] }),
+    presentation: compilePresentationBlock(single.view, TABLE_DECL),
     scene: "page",
   });
   expect(text(table)).not.toContain("2026年8月");
   expect(cells(table)).toEqual(["19,873"]);
   const kpi = render({
     payload: single,
-    presentation: compilePresentationBlock(single.view, { type: "kpi", y: [] }),
+    presentation: compilePresentationBlock(single.view, KPI_DECL),
     scene: "page",
   });
   expect(text(kpi)).toContain("2026年8月");

@@ -3,36 +3,7 @@
  * 唯一执行。这里不读取模型、不改写查询，也不复刻 Cube 的授权判断。
  */
 import type { CubeSecurityContext } from "../ports/cube_gateway.js";
-
-/** 调用者身份与运营侧授权属性（Better Auth user.role / user.org_scope）。 */
-export type Principal = {
-  email: string;
-  roles: string[];
-  orgScope: "*" | string[];
-};
-
-export type PrincipalAttributes = {
-  email: string;
-  role?: string | null;
-  org_scope?: string | null;
-};
-
-/** Better Auth 的持久化字段到产品 Principal 的唯一解析边界，供 session、OAuth 与 API key 共用。 */
-export function principalFromAttributes(attributes: PrincipalAttributes): Principal {
-  const roles = String(attributes.role ?? "")
-    .split(",")
-    .map((role) => role.trim())
-    .filter(Boolean);
-  const rawScope = String(attributes.org_scope ?? "");
-  const orgScope: Principal["orgScope"] =
-    rawScope === "*"
-      ? "*"
-      : rawScope
-          .split(",")
-          .map((scope) => scope.trim())
-          .filter(Boolean);
-  return { email: attributes.email, roles, orgScope };
-}
+import type { Principal } from "../contracts/principal.js";
 
 export const CUBE_ACCESS_GROUP = {
   full: "pa_full",

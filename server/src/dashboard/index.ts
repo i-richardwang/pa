@@ -1,10 +1,6 @@
-/**
- * /dashboard 浏览器面总装：只负责页面入口、会话身份与资源路由注册。
- * 各资源的输入校验和业务错误映射归本目录下对应的资源路由模块。
- */
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
-import { principalFromAttributes, type Principal } from "../engine/cube_security.js";
+import { principalFromAttributes, type Principal } from "../contracts/principal.js";
 import { registerAnalysisRoutes } from "./analyses.js";
 import { registerBoardRoutes } from "./boards.js";
 import { registerCatalogRoutes } from "./catalog.js";
@@ -12,6 +8,7 @@ import { registerReportRoutes } from "./reports.js";
 import type { DashboardDependencies, DashboardEnv, SessionUser } from "./types.js";
 import { registerUsageRoutes } from "./usage.js";
 import type { MePayload } from "../contracts/session_contract.js";
+import { dashboardError } from "./errors.js";
 
 function toMe(user: SessionUser, principal: Principal): MePayload {
   return {
@@ -25,6 +22,8 @@ function toMe(user: SessionUser, principal: Principal): MePayload {
 
 export function dashboardRoutes(deps: DashboardDependencies) {
   const dashboard = new Hono<DashboardEnv>();
+
+  dashboard.onError((error, c) => dashboardError(c, error));
 
   dashboard.get("/", async (c) => {
     const session = await deps.auth.api.getSession({ headers: c.req.raw.headers });

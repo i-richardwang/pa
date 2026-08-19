@@ -12,6 +12,9 @@ import { createHash } from "node:crypto";
 import {
   isSemanticDerivedView,
   parseAnalysisDefinition,
+  type SemanticColumnOperand,
+  type SemanticExprNode,
+  type SemanticLiteralOperand,
   type AnalysisDefinition,
 } from "../semantic_core/semantic_analysis.js";
 
@@ -72,4 +75,41 @@ export function queryFingerprint(input: unknown): string | undefined {
   });
   const digest = createHash("sha256").update(canonical({ views })).digest("hex");
   return `q-${digest.slice(0, 10)}`;
+}
+
+const OPERATOR_LABEL = { "+": "+", "-": "−", "*": "×", "/": "÷" } as const;
+
+function renderOperand(
+  node: SemanticExprNode | SemanticColumnOperand | SemanticLiteralOperand,
+  titles: ReadonlyMap<string, string>,
+  nested = false,
+): string {
+  if ("lit" in node) return String(node.lit);
+  if ("member" in node) return `${node.member}(${titles.get(node.source) ?? node.source})`;
+  const expression =
+    `${renderOperand(node.left, titles, true)} ${OPERATOR_LABEL[node.op]} ` +
+    renderOperand(node.right, titles, true);
+  return nested ? `(${expression})` : expression;
+}
+
+/** 周期报告只持久化派生公式摘要，不保存完整分析筛选与入参。 */
+export function derivedFormulaSummaries(input: unknown): string[] {
+  let definition: AnalysisDefinition;
+  try {
+    definition = parseAnalysisDefinition(input);
+  } catch {
+    return [];
+  }
+  const titles = new Map(
+    definition.views.map((view) => [view.id, view.view_title ?? view.id] as const),
+  );
+  return definition.views.flatMap((view) => {
+    if (!isSemanticDerivedView(view)) return [];
+    const expressions = view.columns.flatMap((column) =>
+      "expr" in column ? [`${column.as} = ${renderOperand(column.expr, titles)}`] : [],
+    );
+    if (expressions.length || !view.join) return expressions;
+    const sources = view.from.map((source) => titles.get(source) ?? source);
+    return [`${sources.join(` ${view.join.how} join `)}（${view.join.on.join(" + ")}）`];
+  });
 }

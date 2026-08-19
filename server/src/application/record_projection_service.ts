@@ -1,6 +1,5 @@
-import type { CatalogService } from "./catalog_service.js";
 import { completeHierarchy } from "../engine/hierarchy.js";
-import { cubeSecurityContext, type Principal } from "../engine/cube_security.js";
+import type { Principal } from "../contracts/principal.js";
 import type {
   CubeGateway,
   CubeFilter,
@@ -43,11 +42,12 @@ import type { AnalysisRepository } from "../ports/analysis_repository.js";
 import { ReportConflictError, ReportNotFoundError } from "../ports/report_repository.js";
 import type { SemanticPlanningService } from "./semantic_planning_service.js";
 import { applyBoardTimeOverride } from "./board_time_override.js";
-import type { CompiledAnalysisView } from "../engine/semantic_analysis_compiler.js";
 import type { ViewPreferences } from "../presentation_core/view_preferences.js";
+import type { AuthorizedAnalysisPlan } from "./semantic_planning_service.js";
+import { InvalidRequestError } from "./errors.js";
 
 /** 可安全原样返回浏览器的业务请求错误；引擎与模型异常由路由统一收口。 */
-export class RecordProjectionRequestError extends Error {
+export class RecordProjectionRequestError extends InvalidRequestError {
   override name = "RecordProjectionRequestError";
 }
 
@@ -209,7 +209,6 @@ export function createRecordProjectionService(deps: {
   boards: Pick<BoardRepository, "get">;
   analyses: AnalysisRepository;
   semanticPlanning: SemanticPlanningService;
-  catalog: Pick<CatalogService, "authorized">;
   cube: CubeGateway;
   audit: RecordProjectionAudit;
 }) {
@@ -266,7 +265,7 @@ export function createRecordProjectionService(deps: {
 
   function directRequest(
     definition: AnalysisDefinition,
-    compiled: CompiledAnalysisView,
+    planned: AuthorizedAnalysisPlan,
     options: { metricId?: string; offset?: number; limit?: number; dataAsOf?: string },
   ): ProjectionRequest {
     const resultViewId = semanticResultViewId(definition);
@@ -279,7 +278,7 @@ export function createRecordProjectionService(deps: {
         "直接查看名单不能声明分组维度；请把分类条件移入 filters 后重试",
       );
     }
-    const binding = compiled.record_projection_bindings.views.find(
+    const binding = planned.record_projection_bindings.views.find(
       (item) => item.result_view_id === resultViewId,
     );
     const available = Object.values(binding?.metrics ?? {});
@@ -342,7 +341,7 @@ export function createRecordProjectionService(deps: {
     input: ProjectionRequest,
     resolve: () => Promise<{
       access: ProjectionContext;
-      compiled?: CompiledAnalysisView;
+      planned?: AuthorizedAnalysisPlan;
     }>,
   ): Promise<RecordProjectionPayload> {
     const auditBase = {
@@ -365,15 +364,15 @@ export function createRecordProjectionService(deps: {
       if (!semanticView || isSemanticDerivedView(semanticView)) {
         throw new RecordProjectionRequestError("当前结果列没有可追溯的基础指标");
       }
-      const compiled =
-        prepared.compiled ??
-        (await deps.semanticPlanning.compile(
+      const planned =
+        prepared.planned ??
+        (await deps.semanticPlanning.plan(
           principal,
           access.definition,
           access.intent,
           access.preferences,
         ));
-      const binding = compiled.record_projection_bindings.views.find(
+      const binding = planned.record_projection_bindings.views.find(
         (view) => view.result_view_id === input.result_view_id,
       );
       const allowedMetrics = new Set(
@@ -394,8 +393,7 @@ export function createRecordProjectionService(deps: {
         throw new RecordProjectionRequestError("明细坐标与当前报告不一致，请刷新后重试");
       }
 
-      const authorizedModel = await deps.catalog.authorized(principal);
-      const compilerCatalog = authorizedModel.compiler;
+      const compilerCatalog = planned.access.compiler;
       const source = planMetricRecordProjection(compilerCatalog, semanticView, input.metric_id);
       if (!source) throw new RecordProjectionRequestError("当前指标没有可用的人员明细来源");
       const metric = catalogMember(compilerCatalog, input.metric_id, "measure");
@@ -404,8 +402,7 @@ export function createRecordProjectionService(deps: {
         throw new RecordProjectionRequestError("当前指标在该报告中已不可用");
       }
 
-      const cubeContext = cubeSecurityContext(principal);
-      const authViews = authorizedModel.views;
+      const { cubeContext, views: authViews, timeContext: context } = planned.access;
       const sourceView = authViews.find((view) => view.name === source.view);
       if (!sourceView) throw new RecordProjectionRequestError("当前身份无权查看该指标的明细");
       const target = resolveRecordProjectionTarget(sourceView, metricBinding.member);
@@ -426,7 +423,6 @@ export function createRecordProjectionService(deps: {
               values: [String(coordinate.value)],
             };
       });
-      const context = await deps.cube.timeContext();
       const timeCoordinate =
         input.time_coordinate ??
         directTimeCoordinate({
@@ -547,18 +543,18 @@ export function createRecordProjectionService(deps: {
       intent: current.view.intent,
       preferences: current.view.preferences,
     };
-    const compiled = await deps.semanticPlanning.compile(
+    const planned = await deps.semanticPlanning.plan(
       principal,
       access.definition,
       access.intent,
       access.preferences,
     );
-    const request = directRequest(access.definition, compiled, options);
+    const request = directRequest(access.definition, planned, options);
     return runWithContext(
       principal,
       { kind: "analysis", id: viewId, revision: 1 },
       request,
-      async () => ({ access, compiled }),
+      async () => ({ access, planned }),
     );
   }
 

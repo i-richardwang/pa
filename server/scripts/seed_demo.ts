@@ -5,7 +5,8 @@ import { createCatalogService } from "../src/application/catalog_service.js";
 import { createQueryExecutionService } from "../src/application/query_execution_service.js";
 import { createSemanticPlanningService } from "../src/application/semantic_planning_service.js";
 import { createCubeGateway } from "../src/adapters/cube_gateway.js";
-import { SERVICE_CUBE_CONTEXT, type Principal } from "../src/engine/cube_security.js";
+import { SERVICE_CUBE_CONTEXT } from "../src/engine/cube_security.js";
+import type { Principal } from "../src/contracts/principal.js";
 import { withFormalMetricModel } from "../src/engine/formal_metric_gateway.js";
 import {
   loadCanonicalSemanticModel,
@@ -155,8 +156,8 @@ try {
   );
   const reportIds = new Map<string, string>();
   for (const demo of demos) {
-    const compiled = await planning.compile(principal, demo.analysis, demo.view);
-    const result = await execution.execute(principal, compiled.plan, compiled.presentation);
+    const compiled = await planning.plan(principal, demo.analysis, demo.view);
+    const result = await execution.execute(compiled);
     if (!result.fullRowViewBlock.rows.length) throw new Error(`Demo「${demo.name}」实跑零行`);
     const analysis = await analyses.create(owner, demo.analysis, demo.view);
     const previous = existing.get(demo.name);
@@ -181,7 +182,7 @@ try {
     if (!reportId) throw new Error(`看板引用了未播种的报告：${name}`);
     return { kind: "report" as const, tile_id: randomUUID(), report_id: reportId, place };
   });
-  const boards = createBoardRepository(appDb, reports);
+  const boards = createBoardRepository(appDb);
   const boardName = "公开 Demo 总览";
   const previousBoard = (await boards.list()).find(
     (board) => board.name === boardName && board.created_by === owner,

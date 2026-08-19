@@ -7,7 +7,7 @@ import type { PresentationService } from "./application/presentation_service.js"
 import type { RecordProjectionService } from "./application/record_projection_service.js";
 import type { ReportService } from "./application/report_service.js";
 import type { UsageService } from "./application/usage_service.js";
-import type { Principal } from "./engine/cube_security.js";
+import type { Principal } from "./contracts/principal.js";
 import { registerAnalysisTools } from "./mcp/analysis_tools.js";
 import { registerCatalogTools } from "./mcp/catalog_tools.js";
 import {
@@ -70,7 +70,6 @@ export function buildServer(opts: {
     server,
     principal,
   };
-
   registerCatalogTools({
     ...context,
     catalog: opts.dependencies.catalog,

@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
-import type { Principal } from "../engine/cube_security.js";
+import type { Principal } from "../contracts/principal.js";
 import type { CubeGateway, CubeQuery, CubeView } from "../ports/cube_gateway.js";
 import type { AnalysisSpec } from "../semantic_core/analysis_spec.js";
-import { planExecution } from "../semantic_core/execution_plan.js";
+import { planExecution, type ExecutionPlan } from "../semantic_core/execution_plan.js";
+import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
+import { authorizeTestAnalysisPlan } from "../test_support/dashboard.js";
 import { createQueryExecutionService } from "./query_execution_service.js";
 
 const principal: Principal = {
@@ -10,7 +12,11 @@ const principal: Principal = {
   roles: ["user"],
   orgScope: ["研发"],
 };
-const TABLE_PRESENTATION = { type: "table" as const, y: [] };
+const TABLE_PRESENTATION: PresentationSpec = {
+  type: "table",
+  y: [],
+  tableLayout: { rows: [], columns: [] },
+};
 
 const publicView: CubeView = {
   name: "test_people_metrics",
@@ -83,6 +89,21 @@ const publicView: CubeView = {
   ],
 };
 
+const timeContext = {
+  dataAsOf: "2026-07",
+  sources: {
+    workforce: { actualThrough: "2026-07", availableThrough: "2026-07" },
+  },
+};
+
+function planned(
+  plan: ExecutionPlan,
+  presentation: PresentationSpec = TABLE_PRESENTATION,
+  views: CubeView[] = [publicView],
+) {
+  return authorizeTestAnalysisPlan({ principal, plan, presentation, views, timeContext });
+}
+
 test("Agent 指标域拒绝手写技术维度与计算辅助指标，且不会向 Cube 发起查询", async () => {
   let loads = 0;
   const cube = {
@@ -121,9 +142,9 @@ test("Agent 指标域拒绝手写技术维度与计算辅助指标，且不会�
     const spec: AnalysisSpec = {
       views: [{ id: "result", ...query, time: { cutoff: "2026-07" } }],
     };
-    await expect(
-      service.execute(principal, planExecution(spec), TABLE_PRESENTATION),
-    ).rejects.toThrow("所选字段不在当前可用的数据目录中");
+    await expect(service.execute(planned(planExecution(spec)))).rejects.toThrow(
+      "所选字段不在当前可用的数据目录中",
+    );
   }
   expect(loads).toBe(0);
 });
@@ -200,17 +221,23 @@ test("交付边界把执行成员一次性投影为语义列与语义口径引�
       },
     },
   });
-  const result = await service.execute(principal, plan, {
-    type: "table",
-    y: [],
-    tableLayout: {
-      rows: [{ kind: "field", column: "test_people_metrics.organization_name" }],
-      columns: [
-        { kind: "field", column: "test_people_metrics.category_level" },
-        { kind: "metrics" },
-      ],
-    },
-  });
+  const result = await service.execute(
+    planned(
+      plan,
+      {
+        type: "table",
+        y: [],
+        tableLayout: {
+          rows: [{ kind: "field", column: "test_people_metrics.organization_name" }],
+          columns: [
+            { kind: "field", column: "test_people_metrics.category_level" },
+            { kind: "metrics" },
+          ],
+        },
+      },
+      [projectionView],
+    ),
+  );
   expect(result.payload.view.columns).toEqual([DIMENSION, PIVOT_DIMENSION, METRIC]);
   expect(result.decl).toEqual({
     type: "table",
@@ -363,27 +390,27 @@ test("分组 Top-N 按正式指标在最新逻辑时间桶排名，并保留选�
     exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
   const result = await service.execute(
-    principal,
-    planExecution({
-      views: [
-        {
-          id: "result",
-          measures: ["test_people_metrics.active_employee_count"],
-          dimensions: ["test_people_metrics.organization_name"],
-          time: { cutoff: "2026-07", compare: [{ cutoff: "2025-07" }] },
-          selection: {
-            type: "top_n",
+    planned(
+      planExecution({
+        views: [
+          {
+            id: "result",
+            measures: ["test_people_metrics.active_employee_count"],
             dimensions: ["test_people_metrics.organization_name"],
-            by: "test_people_metrics.active_employee_count",
-            window: "anchor",
-            count: 2,
-            direction: "desc",
+            time: { cutoff: "2026-07", compare: [{ cutoff: "2025-07" }] },
+            selection: {
+              type: "top_n",
+              dimensions: ["test_people_metrics.organization_name"],
+              by: "test_people_metrics.active_employee_count",
+              window: "anchor",
+              count: 2,
+              direction: "desc",
+            },
+            summary: { mode: "grand_total" },
           },
-          summary: { mode: "grand_total" },
-        },
-      ],
-    }),
-    TABLE_PRESENTATION,
+        ],
+      }),
+    ),
   );
 
   // 明细与总体各带两个对照窗口走 loadMulti；合计位逐期间求值，故各自是单窗查询。
@@ -527,29 +554,29 @@ test("Top-N 先按选择粒度排名，再展开选中分组的完整展示粒�
     exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
   const result = await service.execute(
-    principal,
-    planExecution({
-      views: [
-        {
-          id: "result",
-          measures: ["test_people_metrics.active_employee_count"],
-          dimensions: [
-            "test_people_metrics.organization_name",
-            "test_people_metrics.category_level",
-          ],
-          time: { cutoff: "2026-07" },
-          selection: {
-            type: "top_n",
-            dimensions: ["test_people_metrics.organization_name"],
-            by: "test_people_metrics.active_employee_count",
-            window: "anchor",
-            count: 2,
-            direction: "desc",
+    planned(
+      planExecution({
+        views: [
+          {
+            id: "result",
+            measures: ["test_people_metrics.active_employee_count"],
+            dimensions: [
+              "test_people_metrics.organization_name",
+              "test_people_metrics.category_level",
+            ],
+            time: { cutoff: "2026-07" },
+            selection: {
+              type: "top_n",
+              dimensions: ["test_people_metrics.organization_name"],
+              by: "test_people_metrics.active_employee_count",
+              window: "anchor",
+              count: 2,
+              direction: "desc",
+            },
           },
-        },
-      ],
-    }),
-    TABLE_PRESENTATION,
+        ],
+      }),
+    ),
   );
 
   // 合计位是无分组腿，排名与展示两条粒度腿仍各只发一次。
@@ -651,23 +678,23 @@ test("年度连续区间把端点、YTD 与流量指标自动拆腿后按组织�
     exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
   const result = await service.execute(
-    principal,
-    planExecution({
-      views: [
-        {
-          id: "result",
-          measures: [
-            "test_people_metrics.ytd_event_rate",
-            "test_people_metrics.active_employee_count",
-            "test_people_metrics.ytd_secondary_event_rate",
-            "test_people_metrics.turnover_count",
-          ],
-          dimensions: ["test_people_metrics.organization_name"],
-          time: { cutoff: "2026-07", last: { years: 3 }, grain: "year" },
-        },
-      ],
-    }),
-    TABLE_PRESENTATION,
+    planned(
+      planExecution({
+        views: [
+          {
+            id: "result",
+            measures: [
+              "test_people_metrics.ytd_event_rate",
+              "test_people_metrics.active_employee_count",
+              "test_people_metrics.ytd_secondary_event_rate",
+              "test_people_metrics.turnover_count",
+            ],
+            dimensions: ["test_people_metrics.organization_name"],
+            time: { cutoff: "2026-07", last: { years: 3 }, grain: "year" },
+          },
+        ],
+      }),
+    ),
   );
 
   // 合计位另走无分组腿；按年展示的拆腿仍是这两条。
@@ -779,18 +806,18 @@ test("截断的直查结果交付导出能力与资源", async () => {
     },
   });
   const result = await service.execute(
-    principal,
-    planExecution({
-      views: [
-        {
-          id: "result",
-          measures: ["test_people_metrics.active_employee_count"],
-          dimensions: ["test_people_metrics.organization_name"],
-          time: { cutoff: "2026-07" },
-        },
-      ],
-    }),
-    TABLE_PRESENTATION,
+    planned(
+      planExecution({
+        views: [
+          {
+            id: "result",
+            measures: ["test_people_metrics.active_employee_count"],
+            dimensions: ["test_people_metrics.organization_name"],
+            time: { cutoff: "2026-07" },
+          },
+        ],
+      }),
+    ),
   );
 
   expect(result.payload.capabilities).toEqual({ export: delivery.link });
@@ -814,40 +841,40 @@ test("派生结果不创建导出能力或资源", async () => {
     },
   });
   const result = await service.execute(
-    principal,
-    planExecution(
-      {
-        views: [
-          {
-            id: "source",
-            view_title: "组织在职人数数据",
-            measures: ["test_people_metrics.active_employee_count"],
-            dimensions: ["test_people_metrics.organization_name"],
-            time: { cutoff: "2026-07" },
-          },
-          {
-            id: "result",
-            view_title: "在职人数",
-            from: ["source"],
-            columns: [
-              { col: "organization_name", source: "source" },
-              { col: "active_employee_count", source: "source" },
-            ],
-            summary: { mode: "grand_total" },
-          },
-        ],
-      },
-      {
-        delivery: {
-          columns: {
-            organization_name: "organization_name",
-            active_employee_count: "active_employee_count",
-          },
-          provenance: { sources: [{ title: "人员总览" }], join_keys: [] },
+    planned(
+      planExecution(
+        {
+          views: [
+            {
+              id: "source",
+              view_title: "组织在职人数数据",
+              measures: ["test_people_metrics.active_employee_count"],
+              dimensions: ["test_people_metrics.organization_name"],
+              time: { cutoff: "2026-07" },
+            },
+            {
+              id: "result",
+              view_title: "在职人数",
+              from: ["source"],
+              columns: [
+                { col: "organization_name", source: "source" },
+                { col: "active_employee_count", source: "source" },
+              ],
+              summary: { mode: "grand_total" },
+            },
+          ],
         },
-      },
+        {
+          delivery: {
+            columns: {
+              organization_name: "organization_name",
+              active_employee_count: "active_employee_count",
+            },
+            provenance: { sources: [{ title: "人员总览" }], join_keys: [] },
+          },
+        },
+      ),
     ),
-    TABLE_PRESENTATION,
   );
 
   expect(result.payload.view.id).toBe("result");
@@ -921,22 +948,24 @@ test("不能整窗合并的指标退到期间终点求值，并写实其真实�
     exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
   const result = await service.execute(
-    principal,
-    planExecution({
-      views: [
-        {
-          id: "result",
-          measures: [
-            "test_people_metrics.active_employee_count",
-            "test_people_metrics.ytd_event_rate",
-            "test_people_metrics.monthly_turnover_rate",
-          ],
-          dimensions: ["test_people_metrics.organization_name"],
-          time: { range: { from: "2025-06", to: "2026-07" }, grain: "month" },
-        },
-      ],
-    }),
-    TABLE_PRESENTATION,
+    planned(
+      planExecution({
+        views: [
+          {
+            id: "result",
+            measures: [
+              "test_people_metrics.active_employee_count",
+              "test_people_metrics.ytd_event_rate",
+              "test_people_metrics.monthly_turnover_rate",
+            ],
+            dimensions: ["test_people_metrics.organization_name"],
+            time: { range: { from: "2025-06", to: "2026-07" }, grain: "month" },
+          },
+        ],
+      }),
+      TABLE_PRESENTATION,
+      [monthlyRateView],
+    ),
   );
 
   expect(result.payload.view.totals).toEqual({
@@ -970,18 +999,18 @@ test("带对照时每个指标逐期间给出合计", async () => {
     exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
   const result = await service.execute(
-    principal,
-    planExecution({
-      views: [
-        {
-          id: "result",
-          measures: ["test_people_metrics.active_employee_count"],
-          dimensions: ["test_people_metrics.organization_name"],
-          time: { cutoff: "2026-07", compare: [{ cutoff: "2025-07" }] },
-        },
-      ],
-    }),
-    TABLE_PRESENTATION,
+    planned(
+      planExecution({
+        views: [
+          {
+            id: "result",
+            measures: ["test_people_metrics.active_employee_count"],
+            dimensions: ["test_people_metrics.organization_name"],
+            time: { cutoff: "2026-07", compare: [{ cutoff: "2025-07" }] },
+          },
+        ],
+      }),
+    ),
   );
 
   expect(result.payload.view.totals).toEqual({
@@ -1004,41 +1033,41 @@ test("派生结果没有单一业务时间轴，因而没有整窗合计", async
     exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
   const result = await service.execute(
-    principal,
-    planExecution(
-      {
-        views: [
-          {
-            id: "base",
-            view_title: "在职",
-            measures: ["test_people_metrics.active_employee_count"],
-            time: { cutoff: "2026-07" },
-          },
-          {
-            id: "result",
-            view_title: "在职翻倍",
-            from: ["base"],
-            columns: [
-              {
-                as: "double_headcount",
-                expr: {
-                  op: "+",
-                  left: { col: "active_employee_count", source: "base" },
-                  right: { col: "active_employee_count", source: "base" },
+    planned(
+      planExecution(
+        {
+          views: [
+            {
+              id: "base",
+              view_title: "在职",
+              measures: ["test_people_metrics.active_employee_count"],
+              time: { cutoff: "2026-07" },
+            },
+            {
+              id: "result",
+              view_title: "在职翻倍",
+              from: ["base"],
+              columns: [
+                {
+                  as: "double_headcount",
+                  expr: {
+                    op: "+",
+                    left: { col: "active_employee_count", source: "base" },
+                    right: { col: "active_employee_count", source: "base" },
+                  },
                 },
-              },
-            ],
-          },
-        ],
-      },
-      {
-        delivery: {
-          columns: { double_headcount: "double_headcount" },
-          provenance: { sources: [{ title: "在职" }], join_keys: [] },
+              ],
+            },
+          ],
         },
-      },
+        {
+          delivery: {
+            columns: { double_headcount: "double_headcount" },
+            provenance: { sources: [{ title: "在职" }], join_keys: [] },
+          },
+        },
+      ),
     ),
-    TABLE_PRESENTATION,
   );
 
   expect(result.payload.view.totals).toBeUndefined();
@@ -1096,25 +1125,30 @@ test("模型成员的 meta.decimals 随列进入载荷 column_decimals，且按�
       cube: gateway(view),
       exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
     }).execute(
-      principal,
-      planExecution(
-        {
-          views: [
-            {
-              id: "result",
-              measures: ["test_people_metrics.organization_recommendation_index"],
-              dimensions: ["test_people_metrics.organization_name"],
-              time: { cutoff: "2026-07" },
-            },
-          ],
-        },
-        {
-          delivery: {
-            columns: { organization_recommendation_index: METRIC, organization_name: DIMENSION },
+      planned(
+        planExecution(
+          {
+            views: [
+              {
+                id: "result",
+                measures: ["test_people_metrics.organization_recommendation_index"],
+                dimensions: ["test_people_metrics.organization_name"],
+                time: { cutoff: "2026-07" },
+              },
+            ],
           },
-        },
+          {
+            delivery: {
+              columns: {
+                organization_recommendation_index: METRIC,
+                organization_name: DIMENSION,
+              },
+            },
+          },
+        ),
+        TABLE_PRESENTATION,
+        [view],
       ),
-      { type: "table", y: [] },
     );
   const result = await run(surveyView);
   expect(result.payload.view.column_formats).toEqual({ [METRIC]: "percent" });

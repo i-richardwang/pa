@@ -1,7 +1,7 @@
 /** 把物理呈现成员投影为稳定公共列身份；结果数据与呈现声明共用同一交付映射。 */
 import { memberShortName } from "../semantic_core/member_name.js";
 import type { OutputDelivery } from "../semantic_core/execution_plan.js";
-import type { ChartDecl } from "./view_shape.js";
+import type { ChartDecl } from "./chart_decl.js";
 
 function publicColumnId(delivery: OutputDelivery, internal: string): string | undefined {
   return delivery.columns[internal] ?? delivery.columns[memberShortName(internal)];
@@ -25,18 +25,14 @@ export function projectPresentation(
   const project = (column: string) => requiredPublicColumnId(delivery, column, outputId);
   return {
     ...declaration,
-    ...(declaration.tableLayout
-      ? {
-          tableLayout: {
-            rows: declaration.tableLayout.rows.map((axis) =>
-              axis.kind === "field" ? { ...axis, column: project(axis.column) } : axis,
-            ),
-            columns: declaration.tableLayout.columns.map((axis) =>
-              axis.kind === "field" ? { ...axis, column: project(axis.column) } : axis,
-            ),
-          },
-        }
-      : {}),
+    tableLayout: {
+      rows: declaration.tableLayout.rows.map((axis) =>
+        axis.kind === "field" ? { ...axis, column: project(axis.column) } : axis,
+      ),
+      columns: declaration.tableLayout.columns.map((axis) =>
+        axis.kind === "field" ? { ...axis, column: project(axis.column) } : axis,
+      ),
+    },
     ...(declaration.x ? { x: project(declaration.x) } : {}),
     y: declaration.y.map(project),
     ...(declaration.annotations ? { annotations: declaration.annotations.map(project) } : {}),

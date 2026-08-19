@@ -6,6 +6,7 @@
 import type { SqliteDatabase } from "../sqlite.js";
 import { ANALYSIS_RETENTION_DAYS } from "../ports/analysis_repository.js";
 import type { UsageStatistics } from "../ports/usage_statistics.js";
+import { USAGE_LOG_RETENTION_DAYS } from "../ports/usage_log.js";
 import type {
   ErrorRow,
   UnansweredPayload,
@@ -26,7 +27,7 @@ export type { UsageStatistics } from "../ports/usage_statistics.js";
 
 export function createUsageStats(db: SqliteDatabase): UsageStatistics {
   function clampDays(days: number): number {
-    return Math.min(Math.max(Math.trunc(days) || 30, 1), 366);
+    return Math.min(Math.max(Math.trunc(days) || 30, 1), USAGE_LOG_RETENTION_DAYS);
   }
 
   function since(clampedDays: number): string {

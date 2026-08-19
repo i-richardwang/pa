@@ -7,7 +7,8 @@ import {
   type AnalysisViewSpec,
 } from "../semantic_core/analysis_spec.js";
 import { memberShortName } from "../semantic_core/member_name.js";
-import type { ChartDecl } from "./view_shape.js";
+import { ViewIntentError } from "../semantic_core/semantic_analysis.js";
+import type { ChartDecl } from "./chart_decl.js";
 
 /** 编译后的物理呈现规格：字段绑定已归一，执行器只消费这一份声明。 */
 export type PresentationSpec = ChartDecl;
@@ -52,7 +53,7 @@ export function chartContextForView(
 export function parsePresentationSpec(value: unknown, analysis: AnalysisSpec): PresentationSpec {
   const parsed = CHART_INPUT.safeParse(value);
   if (!parsed.success) {
-    throw new Error(
+    throw new ViewIntentError(
       `呈现规格无效：${parsed.error.issues.map((issue) => issue.message).join("；")}`,
     );
   }
@@ -62,6 +63,10 @@ export function parsePresentationSpec(value: unknown, analysis: AnalysisSpec): P
   try {
     return validateChartDecl(parsed.data, chartContextForView(view, analysis));
   } catch (error) {
-    throw new Error(`结果呈现声明无效：${error instanceof Error ? error.message : String(error)}`);
+    if (error instanceof ViewIntentError) throw error;
+    throw new ViewIntentError(
+      `结果呈现声明无效：${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
   }
 }

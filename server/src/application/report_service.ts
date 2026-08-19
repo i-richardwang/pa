@@ -1,4 +1,4 @@
-import type { Principal } from "../engine/cube_security.js";
+import type { Principal } from "../contracts/principal.js";
 import type { AnalysisService } from "./analysis_service.js";
 import type { PresentationService } from "./presentation_service.js";
 import type { AnalysisRepository, OwnedAnalysisView } from "../ports/analysis_repository.js";
@@ -29,6 +29,11 @@ export type ReportDocument = ReportRecord & {
   view_preferences: ViewPreferences;
 };
 
+type ResolvedReport = {
+  report: ReportDocument;
+  identity: OwnedAnalysisView;
+};
+
 export function createReportService(deps: {
   reports: ReportRepository;
   analyses: AnalysisRepository;
@@ -45,8 +50,7 @@ export function createReportService(deps: {
     return { analysis, view };
   }
 
-  async function document(report: ReportRecord): Promise<ReportDocument> {
-    const current = await identity(report);
+  function document(report: ReportRecord, current: OwnedAnalysisView): ReportDocument {
     return {
       ...report,
       analysis_id: current.analysis.id,
@@ -56,13 +60,22 @@ export function createReportService(deps: {
     };
   }
 
+  async function resolve(report: ReportRecord): Promise<ResolvedReport> {
+    const current = await identity(report);
+    return { report: document(report, current), identity: current };
+  }
+
   async function get(id: string): Promise<ReportDocument | null> {
     const report = await deps.reports.get(id);
-    return report ? document(report) : null;
+    return report ? (await resolve(report)).report : null;
   }
 
   async function resolveOwned(id: string, owner: string): Promise<ReportDocument> {
-    return document(await deps.reports.resolveOwned(id, owner));
+    return (await resolve(await deps.reports.resolveOwned(id, owner))).report;
+  }
+
+  async function ensureOwned(id: string, owner: string): Promise<void> {
+    await deps.reports.resolveOwned(id, owner);
   }
 
   async function listOwned(
@@ -70,7 +83,11 @@ export function createReportService(deps: {
     query?: string,
     includeArchived = false,
   ): Promise<ReportDocument[]> {
-    return Promise.all((await deps.reports.listOwned(owner, query, includeArchived)).map(document));
+    return Promise.all(
+      (await deps.reports.listOwned(owner, query, includeArchived)).map(
+        async (report) => (await resolve(report)).report,
+      ),
+    );
   }
 
   async function listRevisions(id: string, owner: string): Promise<ReportRevision[]> {
@@ -95,18 +112,18 @@ export function createReportService(deps: {
   }): Promise<ReportDocument> {
     const started = performance.now();
     const current = await deps.analyses.resolveOwnedView(input.viewId, input.principal.email);
-    const report = await document(
+    const report = document(
       await deps.reports.create({
         owner: input.principal.email,
         name: input.name,
         viewId: input.viewId,
       }),
+      current,
     );
     await deps.usage.log({
       caller: input.principal.email,
       tool: "save_report",
       title: report.name,
-      args: { view_id: input.viewId, name: input.name },
       outcome: "ok",
       duration_ms: performance.now() - started,
       analysis_id: current.analysis.id,
@@ -124,47 +141,47 @@ export function createReportService(deps: {
     const started = performance.now();
     let report: ReportDocument;
     if (action.type === "rename") {
-      report = await document(
-        await deps.reports.update(id, principal.email, { name: action.name }, ifRevision),
-      );
+      report = (
+        await resolve(
+          await deps.reports.update(id, principal.email, { name: action.name }, ifRevision),
+        )
+      ).report;
     } else if (action.type === "replace_view") {
       await deps.reports.resolveOwned(id, principal.email);
       await deps.analyses.resolveOwnedView(action.view_id, principal.email);
-      report = await document(
-        await deps.reports.update(
-          id,
-          principal.email,
-          {
-            viewId: action.view_id,
-            ...(action.name !== undefined ? { name: action.name } : {}),
-          },
-          ifRevision,
-        ),
-      );
+      report = (
+        await resolve(
+          await deps.reports.update(
+            id,
+            principal.email,
+            {
+              viewId: action.view_id,
+              ...(action.name !== undefined ? { name: action.name } : {}),
+            },
+            ifRevision,
+          ),
+        )
+      ).report;
     } else if (action.type === "restore") {
-      report = await document(
-        await deps.reports.restore(id, principal.email, action.revision, ifRevision),
-      );
+      report = (
+        await resolve(await deps.reports.restore(id, principal.email, action.revision, ifRevision))
+      ).report;
     } else {
-      report = await document(
-        await deps.reports.update(
-          id,
-          principal.email,
-          { archivedAt: new Date().toISOString() },
-          ifRevision,
-        ),
-      );
+      report = (
+        await resolve(
+          await deps.reports.update(
+            id,
+            principal.email,
+            { archivedAt: new Date().toISOString() },
+            ifRevision,
+          ),
+        )
+      ).report;
     }
     await deps.usage.log({
       caller: principal.email,
       tool: "update_report",
       title: report.name,
-      args: {
-        source: "editor",
-        action: action.type,
-        ...(action.type === "restore" ? { revision: action.revision } : {}),
-        ...(ifRevision === undefined ? {} : { if_revision: ifRevision }),
-      },
       outcome: "ok",
       duration_ms: performance.now() - started,
       analysis_id: report.analysis_id,
@@ -179,17 +196,17 @@ export function createReportService(deps: {
 
   async function runRecord(
     principal: Principal,
-    report: ReportDocument,
+    resolved: ResolvedReport,
     timeOverride?: TimeIntent,
   ) {
-    const current = await identity(report);
+    const { report, identity: current } = resolved;
     const overridden = timeOverride
       ? applyBoardTimeOverride(current.analysis.definition, timeOverride)
       : {
           definition: current.analysis.definition,
           status: undefined as BoardTimeOverrideStatus | undefined,
         };
-    const compiled = await deps.semanticPlanning.compile(
+    const planned = await deps.semanticPlanning.plan(
       principal,
       overridden.definition,
       current.view.intent,
@@ -199,12 +216,7 @@ export function createReportService(deps: {
       analysis: { ...current.analysis, definition: overridden.definition },
       view: current.view,
     };
-    const executed = await deps.execution.executeReferenced(
-      principal,
-      effectiveIdentity,
-      compiled,
-      report.id,
-    );
+    const executed = await deps.execution.executeReferenced(principal, effectiveIdentity, planned);
     if (principal.email === report.owner && !timeOverride) {
       await cacheRenderShape(report, deps.presentation.renderShape(executed));
     }
@@ -214,25 +226,27 @@ export function createReportService(deps: {
           ? { ...report, definition: overridden.definition }
           : report,
       executed,
-      presentation: compiled.presentation,
-      recordProjectionBindings: compiled.record_projection_bindings,
       ...(overridden.status ? { time_override: overridden.status } : {}),
     };
   }
 
   async function runOwned(principal: Principal, id: string) {
-    return runRecord(principal, await resolveOwned(id, principal.email));
+    return runRecord(
+      principal,
+      await resolve(await deps.reports.resolveOwned(id, principal.email)),
+    );
   }
 
   async function runShared(principal: Principal, id: string, timeOverride?: TimeIntent) {
-    const report = await get(id);
-    if (!report) throw new ReportNotFoundError("报告不存在");
-    return runRecord(principal, report, timeOverride);
+    const record = await deps.reports.get(id);
+    if (!record) throw new ReportNotFoundError("报告不存在");
+    return runRecord(principal, await resolve(record), timeOverride);
   }
 
   return {
     get,
     resolveOwned,
+    ensureOwned,
     listOwned,
     listRevisions,
     summary,

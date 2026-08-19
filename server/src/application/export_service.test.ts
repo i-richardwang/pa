@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { MetricQueryPlan } from "../engine/metric_planner.js";
-import type { CubeGateway, CubeSecurityContext } from "../ports/cube_gateway.js";
+import type { CubeGateway } from "../ports/cube_gateway.js";
+import type { Principal } from "../contracts/principal.js";
 import type { AnalysisSpec } from "../semantic_core/analysis_spec.js";
 import { exportableOutput, planExecution } from "../semantic_core/execution_plan.js";
 import {
@@ -88,11 +89,7 @@ const plan: MetricQueryPlan = {
   ],
 };
 
-const securityContext: CubeSecurityContext = {
-  subject: "owner@example.com",
-  groups: [],
-  orgScope: "*",
-};
+const owner: Principal = { email: "owner@example.com", roles: ["user"], orgScope: "*" };
 
 const cube = {
   meta: async () => [],
@@ -122,7 +119,7 @@ function exportServiceFixture(input: {
       },
     },
     semanticPlanning: {
-      compile: async () => {
+      plan: async () => {
         throw new Error("测试不编译分析");
       },
     },
@@ -135,8 +132,6 @@ function exportServiceFixture(input: {
           ? {
               plan,
               caller: input.resolvedCaller,
-              securityContext,
-              exp: Date.UTC(2026, 6, 31),
             }
           : null,
     },
@@ -156,7 +151,7 @@ function exportServiceFixture(input: {
 describe("export service", () => {
   test("签发链接和 MCP 资源时统一记录创建审计", async () => {
     const { service, audits } = exportServiceFixture({});
-    const delivery = await service.createDelivery(plan, "owner@example.com", securityContext);
+    const delivery = await service.createDelivery(plan, "owner@example.com");
 
     expect(delivery).toEqual({
       link: {
@@ -187,7 +182,7 @@ describe("export service", () => {
 
   test("下载成功与不完整结果分别记录唯一终态审计", async () => {
     const complete = exportServiceFixture({ resolvedCaller: "owner@example.com" });
-    await expect(complete.service.download("ticket")).resolves.toEqual({
+    await expect(complete.service.readResource(owner, "ticket")).resolves.toEqual({
       csv: "csv",
       rowCount: 1,
       asOf: "2026-07",
@@ -205,7 +200,7 @@ describe("export service", () => {
       resolvedCaller: "owner@example.com",
       runExport: async () => ({ csv: "", rowCount: 50_000, asOf: "2026-07", complete: false }),
     });
-    await expect(incomplete.service.download("ticket")).rejects.toBeInstanceOf(
+    await expect(incomplete.service.readResource(owner, "ticket")).rejects.toBeInstanceOf(
       ExportIncompleteError,
     );
     expect(incomplete.audits).toEqual([
@@ -227,7 +222,7 @@ describe("export service", () => {
       },
     });
 
-    await expect(service.download("ticket")).rejects.toBe(failure);
+    await expect(service.readResource(owner, "ticket")).rejects.toBe(failure);
     expect(audits).toEqual([{ event: "export_failed", caller: "owner@example.com", query: plan }]);
   });
 });

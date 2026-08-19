@@ -87,7 +87,24 @@ describe("app database", () => {
       "expires_at",
       "caller",
       "query",
-      "security_context",
+    ]);
+    expect(names(db, "usage_log")).toEqual([
+      "id",
+      "at",
+      "caller",
+      "tool",
+      "title",
+      "outcome",
+      "error",
+      "row_count",
+      "has_more",
+      "duration_ms",
+      "term_count",
+      "query_fingerprint",
+      "derived_formulas",
+      "unmatched_terms",
+      "analysis_id",
+      "view_id",
     ]);
     expect(names(db, "record_projection_audit")).toEqual([
       "id",

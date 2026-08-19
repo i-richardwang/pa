@@ -8,6 +8,7 @@ import {
   createReports,
   createTestAppDatabase,
   createTestUsage,
+  dashboardTestDependencies,
   dashboardRoutes,
   freshPath,
   semanticPlanningStub,
@@ -24,6 +25,18 @@ import { SemanticQueryIncompatibleError } from "../engine/semantic_analysis_comp
 import type { AnalysisDefinition, SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
 import { createAnalysisRepository } from "../storage/analysis_repository.js";
 import type { AnalysisRepository } from "../ports/analysis_repository.js";
+import type { DashboardDependencies } from "./types.js";
+import type { UsageRecord } from "../ports/usage_log.js";
+import type { Principal } from "../contracts/principal.js";
+import { CubeGatewayError } from "../ports/cube_gateway.js";
+
+function dashboardApp(
+  user: Parameters<typeof dashboardTestDependencies>[0],
+  path: string,
+  overrides: Partial<DashboardDependencies>,
+) {
+  return dashboardRoutes(dashboardTestDependencies(user, path, overrides));
+}
 
 async function createOwned(
   repository: AnalysisRepository,
@@ -57,7 +70,7 @@ const result = {
     view: emptyStructureView,
   },
   fullRowViewBlock: emptyStructureView,
-  decl: { type: "table" as const, y: [] },
+  decl: { type: "table" as const, y: [], tableLayout: { rows: [], columns: [] } },
 };
 
 const emptyChartResult = {
@@ -66,6 +79,7 @@ const emptyChartResult = {
     type: "bar" as const,
     x: "test_people_metrics.category_level",
     y: ["test_people_metrics.active_employee_count"],
+    tableLayout: { rows: [], columns: [] },
   },
 };
 
@@ -80,16 +94,7 @@ describe("dashboard report routes", () => {
   };
 
   test("明细路由只返回业务错误，不向浏览器泄漏模型或引擎异常", async () => {
-    const app = dashboardRoutes({
-      auth: {
-        api: {
-          getSession: async () => ({
-            user: { email: "alice@x", name: "Alice" },
-          }),
-        },
-      },
-      usage: createTestUsage(createTestAppDatabase()),
-      html: async () => "",
+    const app = dashboardApp({ email: "alice@x", name: "Alice" }, freshPath(), {
       records: {
         runReport: async () => {
           throw new Error(
@@ -105,21 +110,13 @@ describe("dashboard report routes", () => {
     });
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
-      error: "人员明细暂时无法加载，请稍后重试",
+      error: "服务暂时无法完成请求，请稍后重试",
+      code: "internal",
     });
   });
 
   test("明细业务校验错误保留可执行改法", async () => {
-    const app = dashboardRoutes({
-      auth: {
-        api: {
-          getSession: async () => ({
-            user: { email: "alice@x", name: "Alice" },
-          }),
-        },
-      },
-      usage: createTestUsage(createTestAppDatabase()),
-      html: async () => "",
+    const app = dashboardApp({ email: "alice@x", name: "Alice" }, freshPath(), {
       records: {
         runReport: async () => {
           throw new RecordProjectionRequestError("当前指标不提供人员明细");
@@ -132,20 +129,14 @@ describe("dashboard report routes", () => {
       body: JSON.stringify(recordProjectionBody),
     });
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: "当前指标不提供人员明细" });
+    expect(await response.json()).toEqual({
+      error: "当前指标不提供人员明细",
+      code: "invalid_request",
+    });
   });
 
   test("报告列表读取失败时返回统一执行错误", async () => {
-    const app = dashboardRoutes({
-      auth: {
-        api: {
-          getSession: async () => ({
-            user: { email: "alice@x", name: "Alice" },
-          }),
-        },
-      },
-      usage: createTestUsage(createTestAppDatabase()),
-      html: async () => "",
+    const app = dashboardApp({ email: "alice@x", name: "Alice" }, freshPath(), {
       reportService: {
         listOwned: async () => {
           throw new Error("报告规格无法读取");
@@ -154,8 +145,11 @@ describe("dashboard report routes", () => {
     });
 
     const response = await app.request("/api/reports");
-    expect(response.status).toBe(502);
-    expect(await response.json()).toEqual({ error: "报告规格无法读取" });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "服务暂时无法完成请求，请稍后重试",
+      code: "internal",
+    });
   });
 
   test("从本人 View 保存、列出、查看并重放报告", async () => {
@@ -165,7 +159,7 @@ describe("dashboard report routes", () => {
     const usage = { log: async () => {} };
     const analyses = createAnalysisService({
       repository,
-      compile: semanticPlanningStub.compile,
+      plan: semanticPlanningStub.plan,
       execute: async () => result,
       usage,
     });
@@ -179,14 +173,7 @@ describe("dashboard report routes", () => {
       usage,
     });
     const identity = await createOwned(repository, "alice@x", semanticAnalysisOf(STRUCTURE_ARGS));
-    const app = dashboardRoutes({
-      auth: {
-        api: {
-          getSession: async () => ({
-            user: { email: "alice@x", name: "Alice" },
-          }),
-        },
-      },
+    const app = dashboardApp({ email: "alice@x", name: "Alice" }, path, {
       usage: createTestUsage(createTestAppDatabase(path)),
       html: async () => "",
       analyses,
@@ -239,12 +226,6 @@ describe("dashboard report routes", () => {
     const reports = createReports(createTestAppDatabase(path));
     const presentation = createPresentationService();
     const usage = { log: async () => {} };
-    const analyses = createAnalysisService({
-      repository,
-      compile: semanticPlanningStub.compile,
-      execute: async () => emptyChartResult,
-      usage,
-    });
     const semanticAnalysis: AnalysisDefinition = {
       views: [
         {
@@ -266,13 +247,14 @@ describe("dashboard report routes", () => {
       type: "bar" as const,
       x: "test_people_metrics.category_level",
       y: ["test_people_metrics.active_employee_count"],
+      tableLayout: { rows: [], columns: [] },
     };
     const plannedFor: string[] = [];
     const semanticPlanning = {
-      compile: async (
-        principal: { email: string },
+      plan: async (
+        principal: Principal,
         candidate: AnalysisDefinition,
-        _view: SemanticViewIntent,
+        view: SemanticViewIntent,
       ) => {
         plannedFor.push(principal.email);
         if (candidate.title === "不兼容") {
@@ -284,7 +266,9 @@ describe("dashboard report routes", () => {
             },
           ]);
         }
+        const planned = await semanticPlanningStub.plan(principal, candidate, view);
         return {
+          ...planned,
           plan: planExecution(STRUCTURE_ARGS),
           presentation: compiledPresentation,
           render_decl: compiledPresentation,
@@ -293,6 +277,12 @@ describe("dashboard report routes", () => {
         };
       },
     };
+    const analyses = createAnalysisService({
+      repository,
+      plan: semanticPlanning.plan,
+      execute: async () => emptyChartResult,
+      usage,
+    });
     const reportService = createReportService({
       reports,
       analyses: repository,
@@ -307,20 +297,12 @@ describe("dashboard report routes", () => {
       name: "待更新",
       viewId: initialAnalysis.view.id,
     });
-    const app = dashboardRoutes({
-      auth: {
-        api: {
-          getSession: async () => ({
-            user: { email: "alice@x", name: "Alice" },
-          }),
-        },
-      },
+    const app = dashboardApp({ email: "alice@x", name: "Alice" }, path, {
       usage: createTestUsage(createTestAppDatabase(path)),
       html: async () => "",
       analyses,
       reportService,
       presentation,
-      semanticPlanning,
     });
 
     const preview = await app.request("/api/analyses", {
@@ -358,6 +340,7 @@ describe("dashboard report routes", () => {
     expect(incompatible.status).toBe(400);
     expect(await incompatible.json()).toEqual({
       error: "所选业务字段无法安全组合",
+      code: "invalid_request",
       routes: [
         {
           status: "incompatible",
@@ -404,15 +387,15 @@ describe("dashboard report routes", () => {
     const path = freshPath();
     const repository = createAnalysisRepository(createTestAppDatabase(path));
     const reports = createReports(createTestAppDatabase(path));
-    const logs: Array<{ args: unknown }> = [];
+    const logs: UsageRecord[] = [];
     const usage = {
-      log: async (entry: { args: unknown }) => {
+      log: async (entry: UsageRecord) => {
         logs.push(entry);
       },
     };
     const analyses = createAnalysisService({
       repository,
-      compile: semanticPlanningStub.compile,
+      plan: semanticPlanningStub.plan,
       execute: async () => result,
       usage,
     });
@@ -443,14 +426,7 @@ describe("dashboard report routes", () => {
       name: "含派生汇总",
       viewId: initial.view.id,
     });
-    const app = dashboardRoutes({
-      auth: {
-        api: {
-          getSession: async () => ({
-            user: { email: "alice@x", name: "Alice" },
-          }),
-        },
-      },
+    const app = dashboardApp({ email: "alice@x", name: "Alice" }, path, {
       usage: createTestUsage(createTestAppDatabase(path)),
       html: async () => "",
       analyses,
@@ -476,10 +452,11 @@ describe("dashboard report routes", () => {
       name: "派生报告新名",
       revision: 2,
     });
-    expect(logs.at(-1)?.args).toMatchObject({
-      source: "editor",
-      action: "replace_view",
-      if_revision: report.revision,
+    expect(logs.at(-1)).toMatchObject({
+      tool: "update_report",
+      title: "派生报告新名",
+      analysis_id: next.analysis.id,
+      view_id: next.view.id,
     });
   });
 
@@ -493,7 +470,7 @@ describe("dashboard report routes", () => {
       analyses: repository,
       execution: createAnalysisService({
         repository,
-        compile: semanticPlanningStub.compile,
+        plan: semanticPlanningStub.plan,
         execute: async () => result,
         usage: { log: async () => {} },
       }),
@@ -507,14 +484,7 @@ describe("dashboard report routes", () => {
       name: "原名",
       viewId: initial.view.id,
     });
-    const app = dashboardRoutes({
-      auth: {
-        api: {
-          getSession: async () => ({
-            user: { email: "alice@x", name: "Alice" },
-          }),
-        },
-      },
+    const app = dashboardApp({ email: "alice@x", name: "Alice" }, path, {
       usage: createTestUsage(createTestAppDatabase(path)),
       html: async () => "",
       reportService,
@@ -611,7 +581,7 @@ describe("dashboard report routes", () => {
     const presentation = createPresentationService();
     const analyses = createAnalysisService({
       repository,
-      compile: semanticPlanningStub.compile,
+      plan: semanticPlanningStub.plan,
       execute: async () => result,
       usage: { log: async () => {} },
     });
@@ -629,14 +599,7 @@ describe("dashboard report routes", () => {
       name: "Bob 报告",
       viewId: bob.view.id,
     });
-    const app = dashboardRoutes({
-      auth: {
-        api: {
-          getSession: async () => ({
-            user: { email: "alice@x", name: "Alice", role: "admin" },
-          }),
-        },
-      },
+    const app = dashboardApp({ email: "alice@x", name: "Alice", role: "admin" }, path, {
       usage: createTestUsage(createTestAppDatabase(path)),
       html: async () => "",
       reportService,
@@ -649,7 +612,7 @@ describe("dashboard report routes", () => {
           body: JSON.stringify({ view_id: bob.view.id, name: "越权报告" }),
         })
       ).status,
-    ).toBe(400);
+    ).toBe(404);
     expect((await app.request(`/api/reports/${bobReport.id}`)).status).toBe(404);
     expect((await app.request(`/api/reports/${bobReport.id}/replay`)).status).toBe(404);
   });
@@ -666,21 +629,14 @@ describe("dashboard report routes", () => {
     });
     const analyses = createAnalysisService({
       repository,
-      compile: semanticPlanningStub.compile,
+      plan: semanticPlanningStub.plan,
       execute: async () => {
-        throw new Error("Cube 暂不可用");
+        throw new CubeGatewayError("数据查询服务暂时不可用");
       },
       usage: { log: async () => {} },
     });
     const presentation = createPresentationService();
-    const app = dashboardRoutes({
-      auth: {
-        api: {
-          getSession: async () => ({
-            user: { email: "alice@x", name: "Alice" },
-          }),
-        },
-      },
+    const app = dashboardApp({ email: "alice@x", name: "Alice" }, path, {
       usage: createTestUsage(createTestAppDatabase(path)),
       html: async () => "",
       reportService: createReportService({
@@ -693,7 +649,10 @@ describe("dashboard report routes", () => {
       }),
     });
     const response = await app.request(`/api/reports/${report.id}/replay`);
-    expect(response.status).toBe(502);
-    expect(await response.json()).toEqual({ error: "Cube 暂不可用" });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: "数据查询服务暂时不可用",
+      code: "unavailable",
+    });
   });
 });

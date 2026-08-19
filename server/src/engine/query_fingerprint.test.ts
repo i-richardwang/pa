@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { QUERY_FINGERPRINT_PATTERN, queryFingerprint } from "./query_fingerprint.js";
+import {
+  derivedFormulaSummaries,
+  QUERY_FINGERPRINT_PATTERN,
+  queryFingerprint,
+} from "./query_fingerprint.js";
 
 const queryView = (id = "source", cutoff = "2026-07") => ({
   id,
@@ -110,5 +114,37 @@ describe("queryFingerprint", () => {
         ],
       }),
     ).toBeUndefined();
+  });
+
+  test("派生观察只生成公式摘要，不复制完整分析入参", () => {
+    const current = queryView("current");
+    current.view_title = "当期";
+    const previous = queryView("previous", "2025-07");
+    previous.view_title = "上年同期";
+    expect(
+      derivedFormulaSummaries(
+        spec([
+          current,
+          previous,
+          {
+            id: "delta",
+            view_title: "变化",
+            from: ["current", "previous"],
+            join: { on: ["organization_name"], how: "left" },
+            columns: [
+              {
+                expr: {
+                  op: "-",
+                  left: { member: "active_employee_count", source: "current" },
+                  right: { member: "active_employee_count", source: "previous" },
+                },
+                as: "人数变化",
+              },
+            ],
+          },
+        ]),
+      ),
+    ).toEqual(["人数变化 = active_employee_count(当期) − active_employee_count(上年同期)"]);
+    expect(derivedFormulaSummaries({ invalid: true })).toEqual([]);
   });
 });

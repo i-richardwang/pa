@@ -3,7 +3,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createExportTicketStore } from "./export_ticket.js";
-import type { CubeSecurityContext } from "../ports/cube_gateway.js";
 import type { MetricQueryPlan } from "../engine/metric_planner.js";
 import type { PlannedQuery } from "../engine/time_plan.js";
 import { createTestAppDatabase } from "../test_support/app_database.js";
@@ -54,12 +53,6 @@ const metricPlan = (query: PlannedQuery["query"]): MetricQueryPlan => {
   };
 };
 
-const securityContext: CubeSecurityContext = {
-  subject: "tester@example.com",
-  groups: ["pa_scoped"],
-  orgScope: ["Aurora Labs"],
-};
-
 const dirs: string[] = [];
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
@@ -85,7 +78,7 @@ describe("导出短票据", () => {
       measures: ["test_people_metrics.active_employee_count"],
       filters: [],
     });
-    const ticket = await store.create(plan, "tester@example.com", securityContext);
+    const ticket = await store.create(plan, "tester@example.com");
 
     expect(ticket.id).toMatch(/^e_[A-Za-z0-9_-]{32}$/);
     expect(ticket.id).not.toContain("tester");
@@ -93,7 +86,7 @@ describe("导出短票据", () => {
     const claims = await store.resolve(ticket.id);
     expect(claims?.caller).toBe("tester@example.com");
     expect(claims?.plan).toEqual(plan);
-    expect(claims?.securityContext).toEqual(securityContext);
+    expect(claims).not.toHaveProperty("securityContext");
   });
 
   test("过期与非法票据均拒绝", async () => {
@@ -101,7 +94,6 @@ describe("导出短票据", () => {
     const ticket = await store.create(
       metricPlan({ dimensions: ["individual_fixture.employee_name"] }),
       "tester",
-      securityContext,
     );
     expect(await store.resolve("not-a-ticket")).toBeNull();
     advance(60_001);
@@ -113,7 +105,6 @@ describe("导出短票据", () => {
     const ticket = await store.create(
       metricPlan({ measures: ["test_people_metrics.active_employee_count"] }),
       "tester",
-      securityContext,
     );
     db.prepare("UPDATE export_ticket SET query = ? WHERE id = ?").run(
       JSON.stringify({ query: {}, time: { view: "test_people_metrics" } }),

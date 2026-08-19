@@ -5,6 +5,7 @@ import {
   ExportTicketUnavailableError,
   type ExportService,
 } from "../application/export_service.js";
+import { LimitExceededError } from "../application/errors.js";
 import {
   EXPORT_RESOURCE_MIME_TYPE,
   EXPORT_RESOURCE_URI_TEMPLATE,
@@ -16,6 +17,7 @@ import {
   TOOL_DESCRIPTIONS,
   WRITE_ANNOTATIONS,
 } from "./contracts.js";
+import { safeMcpHandler } from "./errors.js";
 
 export function registerExportTools(
   context: McpRegistrationContext & {
@@ -36,13 +38,13 @@ export function registerExportTools(
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    async (input: { view_id: string }) => {
+    safeMcpHandler("export_result", async (input: { view_id: string }) => {
       const payload = await exports.exportResult(principal, input.view_id);
       return {
         content: [{ type: "text" as const, text: JSON.stringify(payload) }],
         structuredContent: payload,
       };
-    },
+    }),
   );
 
   server.registerResource(
@@ -53,7 +55,7 @@ export function registerExportTools(
       description: "读取当前查询生成的限时 CSV 导出资源。",
       mimeType: EXPORT_RESOURCE_MIME_TYPE,
     },
-    async (uri, variables) => {
+    safeMcpHandler("export_csv", async (uri, variables) => {
       const rawTicket = variables.ticket;
       const ticket = Array.isArray(rawTicket) ? rawTicket[0] : rawTicket;
       try {
@@ -65,13 +67,11 @@ export function registerExportTools(
           contents: [{ uri: uri.href, mimeType: EXPORT_RESOURCE_MIME_TYPE, text: csv }],
         };
       } catch (error) {
-        if (error instanceof ExportTicketUnavailableError) throw error;
         if (error instanceof ExportIncompleteError) {
-          throw new Error(`${error.message}；请增加过滤条件后重新导出。`);
+          throw new LimitExceededError(`${error.message}；请增加过滤条件后重新导出。`);
         }
-        console.error("[pa] MCP export resource failed:", error);
-        throw new Error("导出执行失败，请重新查询后再试。");
+        throw error;
       }
-    },
+    }),
   );
 }

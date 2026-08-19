@@ -9,7 +9,7 @@ import { z } from "zod";
 import { memberShortName } from "../semantic_core/member_name.js";
 import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
 import { resolveTimeOutputGrain, type TimeInput } from "../semantic_core/time_contract.js";
-import type { ChartDecl, TableAxis, TableLayoutDecl } from "./view_shape.js";
+import type { ChartDecl, TableAxis, TableLayoutDecl } from "./chart_decl.js";
 import { TABLE_SHADING_PREFERENCES_INPUT } from "./view_preferences.js";
 
 export const CHART_INPUT = z

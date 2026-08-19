@@ -45,7 +45,7 @@ Report、ReportRevision 与 UsageLog 都不复制这些 JSON。
 - 保存 Report 只校验 View 属主并创建命名指针，不重新编译、不执行、不复制领域值。
 - Report 改名只更新名称；替换呈现原子切换 `view_id`；归档只更新生命周期状态。
 - 每次 Report 修改先把更新前的名称与 `view_id` 写入 ReportRevision，再递增 revision；最多保留最近 20 版。
-- Board Application Service 负责创建者校验、Report 归属、重复加入、瓦片摘要与使用记录；HTTP 路由只做协议映射，repository 只承担结构、引用完整性与 revision CAS。
+- Board Application Service 负责创建者校验、Report 归属、重复加入、瓦片摘要与使用记录；HTTP 路由只做协议映射，repository 只承担 JSON 存储解码与 revision CAS。
 
 CAS 冲突直接拒绝。保存、替换、恢复、Report 重放与 Board 重放都不复制 Analysis 或 View。
 
@@ -73,6 +73,8 @@ CAS 冲突直接拒绝。保存、替换、恢复、Report 重放与 Board 重�
 - Analysis 的 180 天保留期只清理超过期限且没有任何 View 被当前 Report 或保留历史引用的值。
 - 被当前 Report 或 ReportRevision 引用的 View 会保护其 Analysis；历史版本被裁剪后，未被引用的 Analysis 才可在后续清理中删除。
 - UsageLog 可以保留已经清理的身份作为历史坐标，但不提供重放入口。
+- UsageLog 只保留最小化观察字段，90 天后清理；不保存原始工具入参或查询结果。
+- ExportTicket 只保存查询计划、所有者与 15 分钟时效，不保存权限快照；读取时必须重新认证所有者并按当前权限执行。
 - Report 归档不等于删除，Board 引用与版本历史继续有效。
 
 `app_database.ts` 的最终 DDL 是应用库唯一结构基线；空库直接建立当前结构，非空库的结构印记不一致时

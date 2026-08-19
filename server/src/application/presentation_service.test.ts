@@ -4,10 +4,13 @@ import type { PresentationSpec } from "../presentation_core/presentation_spec.js
 import type { ViewBlock } from "../semantic_core/query_payload.js";
 import { createPresentationService } from "./presentation_service.js";
 
+const flatTableLayout = { rows: [], columns: [] };
+
 const presentation: PresentationSpec = {
   type: "bar",
   x: "organization_name",
   y: ["active_employee_count"],
+  tableLayout: flatTableLayout,
 };
 
 const tableLayout = {
@@ -38,7 +41,12 @@ const result = (rows: ViewBlock["rows"]): QueryRunResult => {
       view,
     },
     fullRowViewBlock: view,
-    decl: { type: "bar", x: "organization_name", y: ["active_employee_count"] },
+    decl: {
+      type: "bar",
+      x: "organization_name",
+      y: ["active_employee_count"],
+      tableLayout: flatTableLayout,
+    },
   };
 };
 

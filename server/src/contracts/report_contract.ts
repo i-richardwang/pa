@@ -16,6 +16,9 @@ import {
   type ViewPreferences,
 } from "../presentation_core/view_preferences.js";
 
+export const REPORT_ID_SCHEMA = z.string().uuid();
+export const REPORT_NAME_SCHEMA = z.string().trim().min(1).max(100);
+
 export type ReportRow = {
   id: string;
   name: string;
@@ -32,8 +35,8 @@ type ReportsPayload = { rows: ReportRow[]; total: number };
 
 export const CREATE_REPORT_BODY = z
   .object({
-    view_id: z.string().min(1),
-    name: z.string().trim().min(1),
+    view_id: z.string().uuid(),
+    name: REPORT_NAME_SCHEMA,
   })
   .strict();
 export type CreateReportBody = z.infer<typeof CREATE_REPORT_BODY>;
@@ -62,10 +65,10 @@ type ReportRevisionRow = {
 export type ReportRevisionsPayload = { rows: ReportRevisionRow[] };
 
 const REPORT_ROW_FIELDS = {
-  id: z.string(),
+  id: REPORT_ID_SCHEMA,
   name: z.string(),
-  analysis_id: z.string(),
-  view_id: z.string(),
+  analysis_id: z.string().uuid(),
+  view_id: z.string().uuid(),
   result_view_id: z.string(),
   presentation_type: PRESENTATION_TYPE_SCHEMA,
   render_shape: RENDER_SHAPE_SCHEMA.nullable(),

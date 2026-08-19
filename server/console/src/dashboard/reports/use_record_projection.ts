@@ -39,12 +39,7 @@ export function useRecordProjection({
   onRequest,
 }: RecordProjectionInput): ViewRendererProps["records"] {
   return useMemo(() => {
-    if (
-      !replay?.record_projection_bindings ||
-      replay.revision === undefined ||
-      disabled ||
-      (scope === "board" && !boardId)
-    ) {
+    if (!replay || replay.revision === undefined || disabled || (scope === "board" && !boardId)) {
       return undefined;
     }
     const revision = replay.revision;

@@ -5,7 +5,7 @@
  * 服务端只在最终渲染边界把二者合成物理 PresentationSpec。
  */
 import { z } from "zod";
-import type { SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
+import { ViewIntentError, type SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
 
 const PREFERENCE_FIELD = z
   .string()
@@ -88,7 +88,7 @@ export const EMPTY_VIEW_PREFERENCES: ViewPreferences = Object.freeze({});
 export function parseViewPreferences(value: unknown): ViewPreferences {
   const parsed = VIEW_PREFERENCES_INPUT.safeParse(value);
   if (!parsed.success) {
-    throw new Error(
+    throw new ViewIntentError(
       `视觉偏好无效：${parsed.error.issues.map((issue) => issue.message).join("；")}`,
     );
   }
@@ -115,24 +115,24 @@ export function validateViewPreferences(
   const hasSeries = preferences.series !== undefined;
   if (intent.type === "table") {
     if (hasSeries || preferences.value_labels !== undefined) {
-      throw new Error("表格视觉偏好不接受系列样式或数值标签");
+      throw new ViewIntentError("表格视觉偏好不接受系列样式或数值标签");
     }
     return preferences;
   }
   if (preferences.table_shading !== undefined) {
-    throw new Error("表格热力着色只支持 table 呈现");
+    throw new ViewIntentError("表格热力着色只支持 table 呈现");
   }
   if (intent.type === "kpi" || intent.type === "pie") {
     if (hasSeries || preferences.value_labels !== undefined) {
-      throw new Error(`${intent.type} 呈现不接受系列视觉偏好`);
+      throw new ViewIntentError(`${intent.type} 呈现不接受系列视觉偏好`);
     }
     return preferences;
   }
   if (intent.group_by && hasSeries) {
-    throw new Error("拆分系列由分类值动态产生，不能声明固定指标系列偏好");
+    throw new ViewIntentError("拆分系列由分类值动态产生，不能声明固定指标系列偏好");
   }
   if (intent.group_by && preferences.value_labels === "main") {
-    throw new Error("拆分系列没有主系列；数值标签请改用 all 或删除");
+    throw new ViewIntentError("拆分系列没有主系列；数值标签请改用 all 或删除");
   }
   return preferences;
 }

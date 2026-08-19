@@ -5,6 +5,7 @@ import {
   parseTimeSourceKey,
   type TimeSourceKey,
 } from "../semantic_core/time_source.js";
+import { CubeGatewayError } from "../ports/cube_gateway.js";
 import type {
   CubeGateway,
   CubeMember,
@@ -17,6 +18,12 @@ import type {
   TimeContext,
   TimeSourceContext,
 } from "../ports/cube_gateway.js";
+
+const unavailable = (diagnostic: string, cause?: unknown): CubeGatewayError =>
+  new CubeGatewayError("数据引擎暂时不可用，请稍后重试", {
+    diagnostic,
+    cause,
+  });
 
 export type CubeGatewayConfig = {
   cubeUrl: string;
@@ -83,19 +90,19 @@ async function request(
       },
     });
   } catch (e) {
-    throw new Error(`Cube 引擎不可达（${state.config.cubeUrl}）：${(e as Error).message}`);
+    throw unavailable(`Cube 引擎不可达：${state.config.cubeUrl}`, e);
   }
   const text = await res.text();
   let body: unknown;
   try {
     body = JSON.parse(text);
   } catch {
-    throw new Error(`Cube 引擎返回非 JSON 应答（HTTP ${res.status}），引擎可能未就绪`);
+    throw unavailable(`Cube 引擎返回非 JSON 应答（HTTP ${res.status}）`);
   }
   if (!isRecord(body) && !Array.isArray(body)) {
-    throw new Error(`Cube 引擎应答格式异常（HTTP ${res.status}）`);
+    throw unavailable(`Cube 引擎应答格式异常（HTTP ${res.status}）`);
   }
-  if (!res.ok && !(isRecord(body) && body.error)) throw new Error(`Cube HTTP ${res.status}`);
+  if (!res.ok && !(isRecord(body) && body.error)) throw unavailable(`Cube HTTP ${res.status}`);
   return body;
 }
 
@@ -125,10 +132,10 @@ async function fetchMeta(
   const cached = state.metaCache.get(key);
   if (cached && Date.now() - cached.fetchedAt < META_TTL_MS) return cached.views;
   const raw = await request(state, "/meta", context);
-  if (!isRecord(raw)) throw new Error("Cube /meta 应答格式异常");
+  if (!isRecord(raw)) throw unavailable("Cube /meta 应答格式异常");
   const body = raw;
-  if (body.error) throw new Error(`Cube /meta 错误：${String(body.error)}`);
-  if (!Array.isArray(body.cubes)) throw new Error("Cube /meta 应答缺少 cubes");
+  if (body.error) throw unavailable(`Cube /meta 错误：${String(body.error)}`);
+  if (!Array.isArray(body.cubes)) throw unavailable("Cube /meta 应答缺少 cubes");
   const views = normalizeMetaViews(body.cubes as (CubeView & { type: string })[]);
   state.metaCache.set(key, { views, fetchedAt: Date.now() });
   return views;
@@ -145,16 +152,16 @@ async function loadRaw(
       method: "POST",
       body: JSON.stringify({ query, ...payload }),
     });
-    if (!isRecord(raw)) throw new Error("Cube /load 应答格式异常");
+    if (!isRecord(raw)) throw unavailable("Cube /load 应答格式异常");
     const body = raw;
     if (body.error === "Continue wait") {
       await new Promise((r) => setTimeout(r, 1000));
       continue;
     }
-    if (body.error) throw new Error(String(body.error));
+    if (body.error) throw unavailable(`Cube /load 错误：${String(body.error)}`);
     return body;
   }
-  throw new Error("Cube 查询超时（Continue wait 重试耗尽）");
+  throw unavailable("Cube 查询超时（Continue wait 重试耗尽）");
 }
 
 /** /v1/load：带 Continue wait 重试。 */
@@ -165,7 +172,7 @@ async function fetchLoad(
 ): Promise<LoadResponse> {
   const body = await loadRaw(state, query, {}, context);
   if (!Array.isArray(body.data) || typeof body.annotation !== "object" || !body.annotation) {
-    throw new Error("Cube /load 应答缺少 data/annotation");
+    throw unavailable("Cube /load 应答缺少 data/annotation");
   }
   return body as unknown as LoadResponse;
 }
@@ -180,10 +187,10 @@ async function fetchLoadMulti(
   context: CubeSecurityContext,
 ): Promise<LoadResponse[]> {
   const body = await loadRaw(state, query, { queryType: "multi" }, context);
-  if (!Array.isArray(body.results)) throw new Error("Cube /load 多窗应答缺少 results");
+  if (!Array.isArray(body.results)) throw unavailable("Cube /load 多窗应答缺少 results");
   return (body.results as Record<string, unknown>[]).map((r) => {
     if (!Array.isArray(r.data) || typeof r.annotation !== "object" || !r.annotation) {
-      throw new Error("Cube /load 多窗应答缺少 data/annotation");
+      throw unavailable("Cube /load 多窗应答缺少 data/annotation");
     }
     return r as unknown as LoadResponse;
   });
@@ -216,12 +223,12 @@ export function normalizeSqlResponse(query: CubeQuery, body: unknown): Generated
   const direct = sqlPair(body);
   const rawStatements = direct ? [body] : Array.isArray(body) ? body : [body];
   const pairs = rawStatements.map(sqlPair);
-  if (pairs.some((pair) => pair === null)) throw new Error("Cube /sql 应答缺少 SQL 或参数");
+  if (pairs.some((pair) => pair === null)) throw unavailable("Cube /sql 应答缺少 SQL 或参数");
 
   const time = query.timeDimensions?.[0];
   const ranges = time?.compareDateRange ?? (time?.dateRange ? [time.dateRange] : [null]);
   if (pairs.length !== ranges.length) {
-    throw new Error(`Cube /sql 应答窗口数异常：期望 ${ranges.length}，实际 ${pairs.length}`);
+    throw unavailable(`Cube /sql 应答窗口数异常：期望 ${ranges.length}，实际 ${pairs.length}`);
   }
   return pairs.map((pair, index) => ({
     window: ranges[index] ? { from: ranges[index]![0], to: ranges[index]![1] } : null,
@@ -241,7 +248,7 @@ async function fetchSql(
     `/sql?query=${encodeURIComponent(JSON.stringify(query))}`,
     context,
   );
-  if (isRecord(body) && body.error) throw new Error(String(body.error));
+  if (isRecord(body) && body.error) throw unavailable(`Cube /sql 错误：${String(body.error)}`);
   return normalizeSqlResponse(query, body);
 }
 

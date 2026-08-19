@@ -13,7 +13,8 @@ import {
 import { catalogMember } from "../semantic_core/query_intent.js";
 import { normalizeCatalogInput, type CatalogToolInput } from "../engine/catalog_spec.js";
 import type { CubeGateway } from "../ports/cube_gateway.js";
-import { cubeSecurityContext, type Principal } from "../engine/cube_security.js";
+import { cubeSecurityContext } from "../engine/cube_security.js";
+import type { Principal } from "../contracts/principal.js";
 import {
   DIMENSION_VALUES_CAP,
   DIMENSION_VALUES_SCAN_LIMIT,
@@ -30,17 +31,18 @@ import type {
 } from "../contracts/business_term_contract.js";
 import { publicTimeContext } from "./time_context.js";
 import type { BusinessTermService } from "./business_term_service.js";
-import type { CompilerCatalog } from "../semantic_core/compiler_catalog.js";
+import type { CubeSecurityContext, TimeContext } from "../ports/cube_gateway.js";
+import { InvalidRequestError, UnavailableError } from "./errors.js";
 
-export class CatalogInputError extends Error {}
+export class CatalogInputError extends InvalidRequestError {}
 
 /**
  * 用户入口只暴露稳定的可恢复状态；完整模型装配诊断保留在 cause 与服务端日志中。
  * 这道边界覆盖 MCP、控制台与所有复用 CatalogService 的应用服务。
  */
-export class SemanticModelUnavailableError extends Error {
+export class SemanticModelUnavailableError extends UnavailableError {
   constructor(cause: unknown) {
-    super("数据模型暂时不可用，请稍后重试", { cause });
+    super("数据模型暂时不可用，请稍后重试", cause);
     this.name = "SemanticModelUnavailableError";
   }
 }
@@ -54,10 +56,15 @@ export type CatalogQueryPayload = {
   ambiguous_terms: string[];
 } & CatalogQueryResult;
 
+export type AuthorizedSemanticContext = Pick<AuthorizedSemanticModel, "views" | "compiler"> & {
+  principal: Principal;
+  cubeContext: CubeSecurityContext;
+  timeContext: TimeContext;
+};
+
 export type CatalogService = {
   query(principal: Principal, input: CatalogToolInput): Promise<CatalogQueryPayload>;
-  authorized(principal: Principal): Promise<AuthorizedSemanticModel>;
-  compiler(principal: Principal): Promise<CompilerCatalog>;
+  context(principal: Principal): Promise<AuthorizedSemanticContext>;
   publicDocument(principal: Principal): Promise<PublicCatalogDocument>;
   dimensionValues(
     principal: Principal,
@@ -89,7 +96,22 @@ export function createCatalogService(deps: {
   };
 
   const document = async (principal: Principal) => (await model(principal)).document;
-  const compiler = async (principal: Principal) => (await model(principal)).compiler;
+  const context = async (principal: Principal): Promise<AuthorizedSemanticContext> => {
+    const [authorized, timeContext] = await Promise.all([
+      model(principal),
+      deps.cube.timeContext().catch((error) => {
+        console.error("[pa] 时间上下文读取失败:", error);
+        throw new SemanticModelUnavailableError(error);
+      }),
+    ]);
+    return {
+      principal,
+      cubeContext: authorized.context,
+      views: authorized.views,
+      compiler: authorized.compiler,
+      timeContext,
+    };
+  };
 
   return {
     async query(principal, rawInput) {
@@ -153,8 +175,7 @@ export function createCatalogService(deps: {
       };
     },
 
-    authorized: model,
-    compiler,
+    context,
 
     async publicDocument(principal) {
       const catalog = await document(principal);

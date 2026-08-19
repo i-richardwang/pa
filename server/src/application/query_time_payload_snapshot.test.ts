@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
 import type { CubeGateway, CubeQuery, CubeView } from "../ports/cube_gateway.js";
-import type { Principal } from "../engine/cube_security.js";
+import type { Principal } from "../contracts/principal.js";
 import type { TimeInput } from "../semantic_core/time_contract.js";
 import { planExecution } from "../semantic_core/execution_plan.js";
 import { createQueryExecutionService } from "./query_execution_service.js";
+import { authorizeTestAnalysisPlan } from "../test_support/dashboard.js";
+import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
 
 /**
  * 公共交付协议的逻辑时间黄金对：结果列、列角色与业务桶。
@@ -13,7 +15,11 @@ import { createQueryExecutionService } from "./query_execution_service.js";
 const GOLDEN_PATH = new URL("./query_time_payload.golden.json", import.meta.url);
 
 const principal: Principal = { email: "viewer@example.com", roles: ["user"], orgScope: ["研发"] };
-const TABLE_PRESENTATION = { type: "table" as const, y: [] };
+const TABLE_PRESENTATION: PresentationSpec = {
+  type: "table",
+  y: [],
+  tableLayout: { rows: [], columns: [] },
+};
 const VIEW = "test_people_metrics";
 const TIME_SOURCE = "workforce";
 
@@ -105,11 +111,15 @@ const TIME_INPUTS: Record<string, TimeInput> = {
 async function deliverTimeContract(measures: string[], time: TimeInput): Promise<string> {
   try {
     const result = await service.execute(
-      principal,
-      planExecution({
-        views: [{ id: "result", measures, dimensions: [`${VIEW}.organization_name`], time }],
+      authorizeTestAnalysisPlan({
+        principal,
+        plan: planExecution({
+          views: [{ id: "result", measures, dimensions: [`${VIEW}.organization_name`], time }],
+        }),
+        presentation: TABLE_PRESENTATION,
+        views: [view],
+        timeContext: await cube.timeContext(),
       }),
-      TABLE_PRESENTATION,
     );
     const block = result.fullRowViewBlock;
     return JSON.stringify({

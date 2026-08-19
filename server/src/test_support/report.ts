@@ -76,7 +76,11 @@ function testTimeIntent(time: TimeInput, grouped: boolean): TimeIntent {
 /** 为不关心 catalog 路由的存储与 HTTP 测试构造同成员名语义规格。 */
 export function semanticAnalysisOf(
   analysis: AnalysisSpec,
-  presentation: PresentationSpec = { type: "table", y: [] },
+  presentation: PresentationSpec = {
+    type: "table",
+    y: [],
+    tableLayout: { rows: [], columns: [] },
+  },
 ): { analysis: AnalysisDefinition; view: SemanticViewIntent } {
   const queryViews = analysis.views.filter(
     (view): view is QueryViewSpec => !isDerivedViewSpec(view),

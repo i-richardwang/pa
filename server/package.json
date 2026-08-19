@@ -30,7 +30,7 @@
     "lint": "bun run lint:ts && bun run lint:python && bun run lint:shell",
     "typecheck": "tsc --noEmit && tsc -p result_view --noEmit && tsc -p widget --noEmit && tsc -p console --noEmit && tsc -p scripts",
     "typecheck:tests": "tsc -p tsconfig.test.json && tsc -p result_view/tsconfig.test.json && tsc -p widget/tsconfig.test.json && tsc -p console/tsconfig.test.json",
-    "test:python": "uv run ../demo/test_generate_demo_data.py",
+    "test:python": "uv run ../demo/test_generate_demo_data.py && uv run ../scripts/test_usage_report.py",
     "audit:dependencies": "bun audit",
     "check:open-source": "uv run ../scripts/check_open_source_boundary.py",
     "check": "bun run format:check && bun run lint && bun run typecheck && bun run typecheck:tests && bun test && bun run test:python && bun run build && bun run check:open-source"

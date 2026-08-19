@@ -4,9 +4,8 @@ import {
   CUBE_ACCESS_GROUP,
   SERVICE_CUBE_CONTEXT,
   cubeSecurityContext,
-  principalFromAttributes,
-  type Principal,
 } from "./cube_security.js";
+import { principalFromAttributes, type Principal } from "../contracts/principal.js";
 
 describe("Cube securityContext 映射", () => {
   test("Better Auth 字段统一解析角色与组织范围", () => {

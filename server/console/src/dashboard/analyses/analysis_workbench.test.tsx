@@ -70,11 +70,12 @@ const rawView = {
 const tableReplay: ReplayPayload = {
   at: "2026-07-21T00:00:00Z",
   caller: "demo@pa.local",
-  analysis_id: "a1",
-  view_id: "v1",
+  analysis_id: "11111111-1111-4111-8111-111111111111",
+  view_id: "22222222-2222-4222-8222-222222222222",
   analysis: blankAnalysisDefinition("未命名分析"),
   view: { type: "table" },
   view_preferences: {},
+  record_projection_bindings: { views: [] },
   presentation: {
     type: "table",
     table_layout: { state: "applied", leafColumns: 1 },
@@ -86,7 +87,10 @@ const tableReplay: ReplayPayload = {
     data_as_of: "2026-07",
     time_context: [],
   },
-  render_bundle: { view: rawView, decl: { type: "table", y: [] } },
+  render_bundle: {
+    view: rawView,
+    decl: { type: "table", y: [], tableLayout: { rows: [], columns: [] } },
+  },
 };
 
 /** 折线呈现才会渲染「系列」节；拿表格呈现去验节题重名等于没验。呈现类型取自草稿规格。 */

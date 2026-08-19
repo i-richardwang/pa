@@ -16,6 +16,7 @@ export function createUsageService(deps: { log: UsageLog; statistics: UsageStati
     return async (args, ...rest) => {
       const started = performance.now();
       const analysisTitle = (args.analysis as { title?: unknown } | undefined)?.title;
+      const termCount = Array.isArray(args.terms) ? args.terms.length : undefined;
       const base = {
         caller: span.caller,
         tool: span.tool,
@@ -29,7 +30,7 @@ export function createUsageService(deps: { log: UsageLog; statistics: UsageStati
               : typeof args.ask === "string"
                 ? args.ask
                 : undefined,
-        args,
+        ...(termCount === undefined ? {} : { term_count: termCount }),
       };
       try {
         const result = await handler(args, ...rest);

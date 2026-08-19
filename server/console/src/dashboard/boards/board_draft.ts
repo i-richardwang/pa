@@ -4,14 +4,16 @@
  * crypto.randomUUID——后者仅安全上下文可用，控制台可经局域网明文 http 访问。
  * 落位与尺寸沿用 tile_sizing 的形态映射：新瓦片按 presentation_type 粗分尺寸、堆到画布底部整列排开。
  */
-import type { BoardPayload, BoardTile, Place } from "@contracts/board_contract";
+import type { BoardMutationTile, BoardPayload, BoardTile, Place } from "@contracts/board_contract";
 import type { ReportRow } from "@contracts/report_contract";
 import { reportTileSize, TILE_SIZES } from "./tile_sizing";
 
-/** 生成合法 tile_id（8-4-4-4-12 hex，匹配服务端 BOARD_ID_PATTERN），不依赖安全上下文。 */
+/** 生成合法 UUID v4 tile_id，不依赖安全上下文。 */
 function newTileId(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0"));
   return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
 }
@@ -66,6 +68,19 @@ export type DraftLayoutItem = Pick<Place, "x" | "y" | "w" | "h"> & { i: string }
 
 export function beginBoardEdit(board: BoardPayload): BoardEditState {
   return { name: board.name, tiles: board.tiles };
+}
+
+export function boardMutationTiles(tiles: readonly BoardTile[]): BoardMutationTile[] {
+  return tiles.map((tile) =>
+    tile.kind === "report"
+      ? {
+          kind: "report",
+          tile_id: tile.tile_id,
+          report_id: tile.report_id,
+          place: tile.place,
+        }
+      : { kind: "text", tile_id: tile.tile_id, md: tile.md, place: tile.place },
+  );
 }
 
 export function isBoardEditDirty(draft: BoardEditState, board: BoardPayload): boolean {

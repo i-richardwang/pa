@@ -26,6 +26,14 @@ import { createUsageStats } from "../storage/usage_stats.js";
 import { createUsageService } from "../application/usage_service.js";
 import type { SqliteDatabase } from "../sqlite.js";
 import { compileTimeIntent } from "../semantic_core/time_contract.js";
+import type { Principal } from "../contracts/principal.js";
+import type { DashboardDependencies } from "../dashboard/types.js";
+import { createPresentationService } from "../application/presentation_service.js";
+import type { AuthorizedSemanticContext } from "../application/catalog_service.js";
+import type { AuthorizedAnalysisPlan } from "../application/semantic_planning_service.js";
+import type { CubeView, TimeContext } from "../ports/cube_gateway.js";
+import { cubeSecurityContext } from "../engine/cube_security.js";
+import type { ExecutionPlan } from "../semantic_core/execution_plan.js";
 
 export {
   CatalogInputError,
@@ -71,7 +79,7 @@ export async function seedUsage(path: string): Promise<void> {
     caller: "alice",
     tool: "run_analysis",
     title: "全公司各职级人员结构",
-    args: STRUCTURE_ARGS,
+    query_fingerprint: "q-1111111111",
     outcome: "ok",
     row_count: 7,
     has_more: false,
@@ -81,7 +89,6 @@ export async function seedUsage(path: string): Promise<void> {
     caller: "alice",
     tool: "run_analysis",
     title: "研发部在职人数",
-    args: {},
     outcome: "ok",
     row_count: 42,
     duration_ms: 100,
@@ -90,7 +97,6 @@ export async function seedUsage(path: string): Promise<void> {
     caller: "alice",
     tool: "rerun_analysis",
     title: "全公司各职级人员结构",
-    args: { analysis_id: "a-structure", presentation: { type: "bar" } },
     outcome: "ok",
     row_count: 7,
     duration_ms: 40,
@@ -98,7 +104,7 @@ export async function seedUsage(path: string): Promise<void> {
   await usage.log({
     caller: "bob",
     tool: "catalog",
-    args: { terms: ["离职率", "加班时长"] },
+    term_count: 2,
     outcome: "ok",
     row_count: 1,
     unmatched_terms: ["加班时长"],
@@ -107,7 +113,7 @@ export async function seedUsage(path: string): Promise<void> {
   await usage.log({
     caller: "bob",
     tool: "catalog",
-    args: { terms: ["离职率"] },
+    term_count: 1,
     outcome: "ok",
     row_count: 4,
     unmatched_terms: [],
@@ -116,7 +122,6 @@ export async function seedUsage(path: string): Promise<void> {
   await usage.log({
     caller: "bob",
     tool: "run_analysis",
-    args: {},
     outcome: "error",
     error: "Cube 'x' not found",
     duration_ms: 20,
@@ -132,6 +137,46 @@ export type StubUser = {
 };
 
 export const scopeWrites: { userId: string; orgScope: string }[] = [];
+
+export function semanticAccessStub(principal: Principal): AuthorizedSemanticContext {
+  return {
+    principal,
+    cubeContext: cubeSecurityContext(principal),
+    views: [],
+    compiler: {
+      default_population_scope: "测试口径",
+      views: [],
+      metric_domains: [],
+      measures: [],
+      dimensions: [],
+    },
+    timeContext: { dataAsOf: "2026-07", sources: {} },
+  };
+}
+
+/** 测试里的执行服务也只接收正式的已授权规划工件。 */
+export function authorizeTestAnalysisPlan(input: {
+  principal: Principal;
+  plan: ExecutionPlan;
+  presentation: PresentationSpec;
+  views: CubeView[];
+  timeContext: TimeContext;
+}): AuthorizedAnalysisPlan {
+  const cubeContext = cubeSecurityContext(input.principal);
+  return {
+    plan: input.plan,
+    presentation: input.presentation,
+    render_decl: input.presentation,
+    routes: [],
+    record_projection_bindings: { views: [] },
+    access: {
+      ...semanticAccessStub(input.principal),
+      cubeContext,
+      views: input.views,
+      timeContext: input.timeContext,
+    },
+  };
+}
 
 const testExpressionOperand = (
   node: SemanticExprNode | SemanticColumnOperand | SemanticLiteralOperand,
@@ -152,8 +197,8 @@ const testExpression = (node: SemanticExprNode): ExprNode => ({
 });
 
 export const semanticPlanningStub = {
-  compile: async (
-    _principal: unknown,
+  plan: async (
+    principal: Principal,
     semantic: AnalysisDefinition,
     declared: SemanticViewIntent,
     preferences: ViewPreferences = {},
@@ -223,12 +268,14 @@ export const semanticPlanningStub = {
         ? {
             type: declared.type,
             y: [],
+            tableLayout: { rows: [], columns: [] },
             ...(declared.type === "table" && preferences.table_shading
               ? { shading: preferences.table_shading }
               : {}),
           }
         : {
             type: declared.type,
+            tableLayout: { rows: [], columns: [] },
             ...(declared.category ? { x: declared.category } : {}),
             y: declared.series ?? [],
             ...(declared.annotations ? { annotations: declared.annotations } : {}),
@@ -257,18 +304,50 @@ export const semanticPlanningStub = {
       render_decl: presentation,
       routes: [],
       record_projection_bindings: { views: [] },
+      access: {
+        ...semanticAccessStub(principal),
+      },
     };
   },
 };
 
-export function buildDashboardApp(user: StubUser | null, dbPath = freshPath()) {
+function unavailableService<T extends object>(label: string): T {
+  return new Proxy({} as T, {
+    get() {
+      return () => {
+        throw new Error(`测试未提供 ${label} 服务`);
+      };
+    },
+  });
+}
+
+export function dashboardTestDependencies(
+  user: StubUser | null,
+  dbPath = freshPath(),
+  overrides: Partial<DashboardDependencies> = {},
+): DashboardDependencies {
   const db = createTestAppDatabase(dbPath);
-  return dashboardRoutes({
-    auth: { api: { getSession: async () => (user ? { user } : null) } },
+  const sessionUser = user ? { role: "user", org_scope: "*", ...user } : null;
+  return {
+    auth: { api: { getSession: async () => (sessionUser ? { user: sessionUser } : null) } },
     usage: createTestUsage(db),
     html: async () => "<!doctype html><title>console</title>",
     setOrgScope: async (userId, orgScope) => {
       scopeWrites.push({ userId, orgScope });
     },
-  });
+    analyses: unavailableService("analysis"),
+    reportService: unavailableService("report"),
+    presentation: createPresentationService(),
+    boardService: unavailableService("board"),
+    feedback: unavailableService("feedback"),
+    catalog: unavailableService("catalog"),
+    businessTerms: unavailableService("business term"),
+    records: unavailableService("record projection"),
+    capabilityMap: { facts: [], dimension_groups: [], metric_domains: [] },
+    ...overrides,
+  };
+}
+
+export function buildDashboardApp(user: StubUser | null, dbPath = freshPath()) {
+  return dashboardRoutes(dashboardTestDependencies(user, dbPath));
 }

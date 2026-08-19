@@ -37,6 +37,8 @@ Object.assign(globalThis, {
   window: { matchMedia: () => ({ matches: false }) },
 });
 
+const TABLE_LAYOUT = { rows: [], columns: [] };
+
 /** 两个系列的柱图：单系列不出读数条，得有两条才验得到版式。 */
 const CHART_VIEW = {
   id: "result",
@@ -66,7 +68,8 @@ const CHART_PRESENTATION = compilePresentationBlock(CHART_VIEW, {
   type: "bar",
   x: "organization_name",
   y: ["active_employee_count", "new_hire_count"],
-} as never);
+  tableLayout: TABLE_LAYOUT,
+});
 const CHART = CHART_PRESENTATION.chart;
 
 test("渲染器忠实呈现声明的图或表", () => {
@@ -85,7 +88,11 @@ test("渲染器忠实呈现声明的图或表", () => {
     <ViewRenderer
       actions={{}}
       payload={PAYLOAD}
-      presentation={compilePresentationBlock(CHART_VIEW, { type: "table", y: [] } as never)}
+      presentation={compilePresentationBlock(CHART_VIEW, {
+        type: "table",
+        y: [],
+        tableLayout: TABLE_LAYOUT,
+      })}
       scene="page"
     />,
   );
@@ -100,7 +107,8 @@ test("结果面的场地按场景定，图与表同框", () => {
   const tablePresentation = compilePresentationBlock(CHART_VIEW, {
     type: "table",
     y: [],
-  } as never);
+    tableLayout: TABLE_LAYOUT,
+  });
   const render = (presentation: typeof CHART_PRESENTATION, scene: "card" | "tile" | "page") =>
     renderToStaticMarkup(
       <ViewRenderer actions={{}} payload={PAYLOAD} presentation={presentation} scene={scene} />,
@@ -129,8 +137,9 @@ test("热力着色随 table 声明：指标格铺色片、字色随底色、仅�
   const shaded = compilePresentationBlock(CHART_VIEW, {
     type: "table",
     y: [],
+    tableLayout: TABLE_LAYOUT,
     shading: { palette: SERIES_COLORS[0] },
-  } as never);
+  });
   const html = renderToStaticMarkup(
     <ViewRenderer actions={{}} payload={PAYLOAD} presentation={shaded} scene="page" />,
   );
@@ -146,8 +155,9 @@ test("热力着色随 table 声明：指标格铺色片、字色随底色、仅�
   const colorsOnly = compilePresentationBlock(CHART_VIEW, {
     type: "table",
     y: [],
+    tableLayout: TABLE_LAYOUT,
     shading: { palette: SERIES_COLORS[0], values: false },
-  } as never);
+  });
   const hidden = renderToStaticMarkup(
     <ViewRenderer actions={{}} payload={PAYLOAD} presentation={colorsOnly} scene="page" />,
   );
@@ -159,7 +169,11 @@ test("热力着色随 table 声明：指标格铺色片、字色随底色、仅�
     <ViewRenderer
       actions={{}}
       payload={PAYLOAD}
-      presentation={compilePresentationBlock(CHART_VIEW, { type: "table", y: [] } as never)}
+      presentation={compilePresentationBlock(CHART_VIEW, {
+        type: "table",
+        y: [],
+        tableLayout: TABLE_LAYOUT,
+      })}
       scene="page"
     />,
   );
@@ -197,7 +211,11 @@ test("读数条、题名与 plot 框左缘同轴", () => {
       <ViewRenderer
         actions={{}}
         payload={PAYLOAD}
-        presentation={compilePresentationBlock(CHART_VIEW, { type: "table", y: [] } as never)}
+        presentation={compilePresentationBlock(CHART_VIEW, {
+          type: "table",
+          y: [],
+          tableLayout: TABLE_LAYOUT,
+        })}
         scene="card"
       />,
     ).match(/<div class="((?:px|pt|pb)-[^"]*)">\s*<div class="flex min-w-0/)?.[1] ?? "";
@@ -243,7 +261,8 @@ test("触屏上图例兼作读数位：末桶的值与桶名随图例交付，�
   const trend = compilePresentationBlock(TREND_VIEW, {
     type: "line",
     y: ["active_employee_count", "new_hire_count"],
-  } as never).chart;
+    tableLayout: TABLE_LAYOUT,
+  }).chart;
   if (!trend) throw new Error("趋势图没编译出来，下面全部落空");
   const html = renderToStaticMarkup(<ViewChartCanvas chart={trend} plot="page" />);
 
@@ -342,7 +361,12 @@ test("排行版式逐行陈述：条长按本屏最大值归一，且不落 echa
       row_count: 2,
       query_notes: [],
     } as unknown as Parameters<typeof compilePresentationBlock>[0],
-    { type: "bar", x: "organization_name", y: ["active_employee_count"] } as never,
+    {
+      type: "bar",
+      x: "organization_name",
+      y: ["active_employee_count"],
+      tableLayout: TABLE_LAYOUT,
+    },
   ).chart;
   expect(rank?.layout, "单系列横排条形没走排行版式").toBe("rank");
 
@@ -363,7 +387,8 @@ test("排行版式逐行陈述：条长按本屏最大值归一，且不落 echa
 const LINE_CHART = compilePresentationBlock(TREND_VIEW, {
   type: "line",
   y: ["active_employee_count", "new_hire_count"],
-} as never).chart;
+  tableLayout: TABLE_LAYOUT,
+}).chart;
 
 test("值轴档数随绘图区尺度走，不是编译期那个定数", () => {
   const patches: Record<string, unknown>[] = [];

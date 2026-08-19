@@ -14,12 +14,21 @@ import {
   buildDashboardApp as buildApp,
   createFeedbackStore,
   createTestAppDatabase,
-  createTestUsage,
+  dashboardTestDependencies,
   dashboardRoutes,
   freshPath,
   scopeWrites,
   seedUsage as seed,
 } from "../test_support/dashboard.js";
+import type { DashboardDependencies } from "./types.js";
+import { AnalysisDefinitionError } from "../semantic_core/semantic_analysis.js";
+
+function dashboardApp(
+  user: Parameters<typeof dashboardTestDependencies>[0],
+  overrides: Partial<DashboardDependencies> = {},
+) {
+  return dashboardRoutes(dashboardTestDependencies(user, freshPath(), overrides));
+}
 
 describe("dashboard app routes and access control", () => {
   test("未登录：页面 302 到登录页带回跳，API 401", async () => {
@@ -62,62 +71,56 @@ describe("dashboard app routes and access control", () => {
 
   test("指标字典：PA 用户按同一 Principal 读取公共投影，真实值按需透传行权限", async () => {
     const contexts: unknown[] = [];
-    const app = dashboardRoutes({
-      auth: {
-        api: {
-          getSession: async () => ({
-            user: {
-              email: "h@x.com",
-              name: "h",
-              role: "user",
-              org_scope: "Aurora Labs,Harbor Works",
-            },
-          }),
+    const app = dashboardApp(
+      {
+        email: "h@x.com",
+        name: "h",
+        role: "user",
+        org_scope: "Aurora Labs,Harbor Works",
+      },
+      {
+        catalog: {
+          publicDocument: async (context) => {
+            contexts.push(context);
+            return {
+              default_population_scope: "统计范围",
+              data_as_of: "2026-07",
+              time_context: [],
+              metric_domains: [
+                {
+                  id: "metric_domain:workforce_movement" as const,
+                  title: "人员流动",
+                  query_contract: "含业务时间坐标的 Agent 说明",
+                  synonyms: ["流失率"],
+                  measure_ids: ["measure:ytd_primary_event_rate"],
+                  dimension_ids: ["dimension:organization_name"],
+                },
+              ],
+              measures: [
+                {
+                  id: "measure:ytd_primary_event_rate",
+                  kind: "measure" as const,
+                  title: "YTD主要事件率",
+                  description: "主要事件数除以月均基数。",
+                  ai_context: "只供 Agent",
+                },
+              ],
+              dimensions: [],
+            };
+          },
+          dimensionValues: async (context, member, contains) => {
+            contexts.push(context);
+            expect(member).toBe("test_people_metrics.organization_name");
+            expect(contains).toBe("网约");
+            return {
+              dimension: member,
+              title: "组织",
+              values: ["Aurora Labs"],
+            };
+          },
         },
       },
-      usage: createTestUsage(createTestAppDatabase()),
-      html: async () => "",
-      catalog: {
-        publicDocument: async (context) => {
-          contexts.push(context);
-          return {
-            default_population_scope: "统计范围",
-            data_as_of: "2026-07",
-            time_context: [],
-            metric_domains: [
-              {
-                id: "metric_domain:workforce_movement" as const,
-                title: "人员流动",
-                query_contract: "含业务时间坐标的 Agent 说明",
-                synonyms: ["流失率"],
-                measure_ids: ["measure:ytd_primary_event_rate"],
-                dimension_ids: ["dimension:organization_name"],
-              },
-            ],
-            measures: [
-              {
-                id: "measure:ytd_primary_event_rate",
-                kind: "measure" as const,
-                title: "YTD主要事件率",
-                description: "主要事件数除以月均基数。",
-                ai_context: "只供 Agent",
-              },
-            ],
-            dimensions: [],
-          };
-        },
-        dimensionValues: async (context, member, contains) => {
-          contexts.push(context);
-          expect(member).toBe("test_people_metrics.organization_name");
-          expect(contains).toBe("网约");
-          return {
-            dimension: member,
-            title: "组织",
-            values: ["Aurora Labs"],
-          };
-        },
-      },
-    });
+    );
 
     const catalog = await app.request("/api/catalog");
     expect(catalog.status).toBe(200);
@@ -159,40 +162,24 @@ describe("dashboard app routes and access control", () => {
     ]);
   });
 
-  test("指标字典：未登录 401、无数据角色 403、输入错误 400、未接线 501", async () => {
+  test("指标字典：未登录 401、无数据角色 403、输入错误 400", async () => {
     expect((await buildApp(null).request("/api/catalog")).status).toBe(401);
-    expect(
-      (
-        await buildApp({
-          email: "u@x",
-          name: "u",
-          role: "user",
-          org_scope: "*",
-        }).request("/api/catalog")
-      ).status,
-    ).toBe(501);
 
     const wired = (role: string) =>
-      dashboardRoutes({
-        auth: {
-          api: {
-            getSession: async () => ({
-              user: { email: `${role}@x`, name: role, role, org_scope: "*" },
-            }),
+      dashboardApp(
+        { email: `${role}@x`, name: role, role, org_scope: "*" },
+        {
+          catalog: {
+            publicDocument: async (principal) => {
+              cubeSecurityContext(principal);
+              throw new Error("不应调用");
+            },
+            dimensionValues: async () => {
+              throw new CatalogInputError("未开放值清单");
+            },
           },
         },
-        usage: createTestUsage(createTestAppDatabase()),
-        html: async () => "",
-        catalog: {
-          publicDocument: async (principal) => {
-            cubeSecurityContext(principal);
-            throw new Error("不应调用");
-          },
-          dimensionValues: async () => {
-            throw new CatalogInputError("未开放值清单");
-          },
-        },
-      });
+      );
     expect((await wired("unknown").request("/api/catalog")).status).toBe(403);
     expect((await wired("user").request("/api/catalog/values")).status).toBe(400);
     expect(
@@ -201,27 +188,15 @@ describe("dashboard app routes and access control", () => {
     ).toBe(400);
   });
 
-  test("数据能力地图：仅管理员读取当前语义包投影，未接线时 fail-closed", async () => {
+  test("数据能力地图：仅管理员读取当前语义包投影", async () => {
     const capabilityMap = { facts: [], dimension_groups: [], metric_domains: [] };
-    const routes = (role: string, enabled: boolean) =>
-      dashboardRoutes({
-        auth: {
-          api: {
-            getSession: async () => ({ user: { email: `${role}@x`, name: role, role } }),
-          },
-        },
-        usage: createTestUsage(createTestAppDatabase()),
-        html: async () => "",
-        ...(enabled ? { capabilityMap } : {}),
-      });
+    const routes = (role: string) =>
+      dashboardApp({ email: `${role}@x`, name: role, role }, { capabilityMap });
 
-    expect((await routes("user", true).request("/api/admin/data-capability-map")).status).toBe(403);
-    const loaded = await routes("admin", true).request("/api/admin/data-capability-map");
+    expect((await routes("user").request("/api/admin/data-capability-map")).status).toBe(403);
+    const loaded = await routes("admin").request("/api/admin/data-capability-map");
     expect(loaded.status).toBe(200);
     expect(await loaded.json()).toEqual(capabilityMap);
-    expect((await routes("admin", false).request("/api/admin/data-capability-map")).status).toBe(
-      501,
-    );
   });
 
   test("管理员：设置某用户行权限（org_scope）即时落到直写回调", async () => {
@@ -234,6 +209,67 @@ describe("dashboard app routes and access control", () => {
     });
     expect(res.status).toBe(200);
     expect(scopeWrites).toEqual([{ userId: "u1", orgScope: "Aurora Labs" }]);
+  });
+
+  test("全局错误边界覆盖未做局部捕获的 Dashboard 端点", async () => {
+    const failure = new Error("SQLITE_CANTOPEN /private/path");
+    const logged = spyOn(console, "error").mockImplementation(() => undefined);
+    const app = dashboardApp(
+      { email: "u@x", name: "u", role: "user" },
+      {
+        usage: {
+          mine: async () => {
+            throw failure;
+          },
+        } as never,
+      },
+    );
+    try {
+      const response = await app.request("/api/usage/mine");
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({
+        error: "服务暂时无法完成请求，请稍后重试",
+        code: "internal",
+      });
+      expect(logged).toHaveBeenCalledWith("[pa] dashboard 请求失败:", failure);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  test("Web 分析输入错误保留可执行提示", async () => {
+    const app = dashboardApp(
+      { email: "u@x", name: "u", role: "user" },
+      {
+        analyses: {
+          preview: async () => {
+            throw new AnalysisDefinitionError("一次分析只能回答一个问题；请拆分分析");
+          },
+        } as never,
+      },
+    );
+    const response = await app.request("/api/analyses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        analysis: {
+          views: [
+            {
+              id: "result",
+              measures: ["measure:active_employee_count"],
+              time: { window: { kind: "current_month", month: "2026-07" } },
+            },
+          ],
+        },
+        view: { type: "table" },
+        view_preferences: {},
+      }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "一次分析只能回答一个问题；请拆分分析",
+      code: "invalid_request",
+    });
   });
 
   test("本人分析记录：caller 锁定会话 email，只见自己不见他人", async () => {
@@ -287,18 +323,7 @@ describe("dashboard app routes and access control", () => {
       },
     });
     const routes = (role: string) =>
-      dashboardRoutes({
-        auth: {
-          api: {
-            getSession: async () => ({
-              user: { email: `${role}@x`, name: role, role },
-            }),
-          },
-        },
-        usage: createTestUsage(createTestAppDatabase()),
-        html: async () => "",
-        feedback,
-      });
+      dashboardApp({ email: `${role}@x`, name: role, role }, { feedback });
     expect((await routes("user").request("/api/feedback")).status).toBe(403);
     const admin = routes("admin");
     const listed = await admin.request("/api/feedback");
@@ -345,43 +370,40 @@ describe("dashboard app routes and access control", () => {
       },
     };
     const routes = (role: string) =>
-      dashboardRoutes({
-        auth: {
-          api: {
-            getSession: async () => ({ user: { email: `${role}@x`, name: role, role } }),
+      dashboardApp(
+        { email: `${role}@x`, name: role, role },
+        {
+          catalog,
+          businessTerms: {
+            listPublic: async () => ({ rows: [publicRow] }).rows,
+            listAdmin: async () => {
+              if (listError) throw listError;
+              return [publicRow];
+            },
+            resolve: async () => [],
+            create: async (input, _members, actor) => {
+              if (input.canonical_term === "重复")
+                throw new BusinessTermInputError("术语叫法已存在");
+              writes.push({ action: "create", input });
+              logged.push({ tool: "business_term_admin", title: "新建业务术语：「Band C+」" });
+              expect(actor).toBe("admin@x");
+              return publicRow;
+            },
+            update: async (termId, input, _members, actor) => {
+              writes.push({ action: "update", termId, input });
+              logged.push({ tool: "business_term_admin", title: "更新业务术语：「Band C+」" });
+              expect(actor).toBe("admin@x");
+              return { ...publicRow, ...input };
+            },
+            remove: async (termId, actor) => {
+              writes.push({ action: "delete", termId });
+              logged.push({ tool: "business_term_admin", title: "删除业务术语：「Band C+」" });
+              expect(actor).toBe("admin@x");
+              return publicRow;
+            },
           },
         },
-        usage: createTestUsage(createTestAppDatabase()),
-        html: async () => "",
-        catalog,
-        businessTerms: {
-          listPublic: async () => ({ rows: [publicRow] }).rows,
-          listAdmin: async () => {
-            if (listError) throw listError;
-            return [publicRow];
-          },
-          resolve: async () => [],
-          create: async (input, _members, actor) => {
-            if (input.canonical_term === "重复") throw new BusinessTermInputError("术语叫法已存在");
-            writes.push({ action: "create", input });
-            logged.push({ tool: "business_term_admin", title: "新建业务术语：「Band C+」" });
-            expect(actor).toBe("admin@x");
-            return publicRow;
-          },
-          update: async (termId, input, _members, actor) => {
-            writes.push({ action: "update", termId, input });
-            logged.push({ tool: "business_term_admin", title: "更新业务术语：「Band C+」" });
-            expect(actor).toBe("admin@x");
-            return { ...publicRow, ...input };
-          },
-          remove: async (termId, actor) => {
-            writes.push({ action: "delete", termId });
-            logged.push({ tool: "business_term_admin", title: "删除业务术语：「Band C+」" });
-            expect(actor).toBe("admin@x");
-            return publicRow;
-          },
-        },
-      });
+      );
     const content = {
       canonical_term: "Band C+",
       definition: "职级处于 Band C及以上的示例人群。",
@@ -437,15 +459,21 @@ describe("dashboard app routes and access control", () => {
       json("POST", { ...content, canonical_term: "重复" }),
     );
     expect(duplicate.status).toBe(400);
-    expect(await duplicate.json()).toEqual({ error: "术语叫法已存在" });
+    expect(await duplicate.json()).toEqual({
+      error: "术语叫法已存在",
+      code: "invalid_request",
+    });
 
     listError = new Error("SQLITE_CANTOPEN");
     const errorLog = spyOn(console, "error").mockImplementation(() => {});
     try {
       const failed = await admin.request("/api/admin/business_terms");
-      expect(failed.status).toBe(502);
-      expect(await failed.json()).toEqual({ error: "业务术语服务暂时不可用，请稍后重试" });
-      expect(errorLog).toHaveBeenCalledWith("[pa] dashboard business term 读取失败:", listError);
+      expect(failed.status).toBe(500);
+      expect(await failed.json()).toEqual({
+        error: "服务暂时无法完成请求，请稍后重试",
+        code: "internal",
+      });
+      expect(errorLog).toHaveBeenCalledWith("[pa] dashboard 请求失败:", listError);
     } finally {
       errorLog.mockRestore();
     }

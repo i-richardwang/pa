@@ -55,6 +55,7 @@ function payload(
 }
 
 const titleOf = (column: string) => column;
+const tableLayout = { rows: [], columns: [] };
 const percent = (...columns: string[]): Record<string, ColumnFormat> =>
   Object.fromEntries(columns.map((column) => [column, "percent"]));
 const headerPathsOf = (table: { columns: { headerPath: Array<{ label: string }> }[] }) =>
@@ -662,8 +663,8 @@ describe("显式呈现能力与形态标签", () => {
     const view = payload(["active_employee_count"], [[12345]]);
     expect(canCompileKpi(view)).toBe(true);
     expect(sensibleForms(view)).toEqual(["table", "kpi"]);
-    expect(renderShapeOfView(view, { type: "table", y: [] })).toBe("table");
-    expect(renderShapeOfView(view, { type: "kpi", y: [] })).toBe("kpi");
+    expect(renderShapeOfView(view, { type: "table", y: [], tableLayout })).toBe("table");
+    expect(renderShapeOfView(view, { type: "kpi", y: [], tableLayout })).toBe("kpi");
   });
 
   test("推荐候选不拥有执行权：同一结果按声明分别得到表格或柱图", () => {
@@ -675,19 +676,24 @@ describe("显式呈现能力与形态标签", () => {
       ],
     );
     expect(sensibleForms(view)).toEqual(["table", "bar", "pie"]);
-    expect(renderShapeOfView(view, { type: "table", y: [] })).toBe("table");
+    expect(renderShapeOfView(view, { type: "table", y: [], tableLayout })).toBe("table");
     expect(
       renderShapeOfView(view, {
         type: "bar",
         x: "organization_name",
         y: ["active_employee_count"],
+        tableLayout,
       }),
     ).toBe("bar");
   });
 
   test("空结果无运行时形态，声明仍由规格保留", () => {
     expect(
-      renderShapeOfView(payload(["active_employee_count"], []), { type: "kpi", y: [] }),
+      renderShapeOfView(payload(["active_employee_count"], []), {
+        type: "kpi",
+        y: [],
+        tableLayout,
+      }),
     ).toBeNull();
   });
 });

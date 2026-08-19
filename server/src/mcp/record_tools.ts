@@ -5,6 +5,7 @@ import { RECORD_PROJECTION_META_KEY } from "../contracts/record_projection_contr
 import type { McpRegistrationContext } from "./context.js";
 import type { RecordProjectionService } from "../application/record_projection_service.js";
 import type { UsageService } from "../application/usage_service.js";
+import { safeMcpHandler } from "./errors.js";
 import {
   OAUTH_SECURITY_SCHEMES,
   READ_ONLY_ANNOTATIONS,
@@ -68,16 +69,19 @@ export function registerRecordTools(
         "openai/toolInvocation/invoked": "人员名单已就绪",
       },
     },
-    usage.wrap(
-      { tool: "show_records", caller },
-      async (input: { view_id: string; metric_id?: string }) =>
-        result(
-          input.view_id,
-          await records.runAnalysis(principal, input.view_id, {
-            ...(input.metric_id ? { metricId: input.metric_id } : {}),
-            limit: 20,
-          }),
-        ),
+    safeMcpHandler(
+      "show_records",
+      usage.wrap(
+        { tool: "show_records", caller },
+        async (input: { view_id: string; metric_id?: string }) =>
+          result(
+            input.view_id,
+            await records.runAnalysis(principal, input.view_id, {
+              ...(input.metric_id ? { metricId: input.metric_id } : {}),
+              limit: 20,
+            }),
+          ),
+      ),
     ),
   );
 
@@ -101,21 +105,24 @@ export function registerRecordTools(
         ui: { visibility: ["app"] },
       },
     },
-    async (input: {
-      view_id: string;
-      metric_id: string;
-      data_as_of: string;
-      offset: number;
-      limit: number;
-    }) =>
-      result(
-        input.view_id,
-        await records.runAnalysis(principal, input.view_id, {
-          metricId: input.metric_id,
-          dataAsOf: input.data_as_of,
-          offset: input.offset,
-          limit: input.limit,
-        }),
-      ),
+    safeMcpHandler(
+      "load_records_page",
+      async (input: {
+        view_id: string;
+        metric_id: string;
+        data_as_of: string;
+        offset: number;
+        limit: number;
+      }) =>
+        result(
+          input.view_id,
+          await records.runAnalysis(principal, input.view_id, {
+            metricId: input.metric_id,
+            dataAsOf: input.data_as_of,
+            offset: input.offset,
+            limit: input.limit,
+          }),
+        ),
+    ),
   );
 }
