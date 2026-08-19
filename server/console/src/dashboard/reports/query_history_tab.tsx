@@ -6,7 +6,7 @@
  */
 import { useState } from "react";
 import { CircleAlertIcon, HistoryIcon, SaveIcon } from "lucide-react";
-import { DASHBOARD_PAGE_SIZE } from "@contract";
+import { DASHBOARD_PAGE_SIZE } from "@contracts/pagination_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";

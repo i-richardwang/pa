@@ -1,6 +1,7 @@
 import type { Hono, MiddlewareHandler } from "hono";
 import type { DashboardDependencies, DashboardEnv } from "./types.js";
-import { RESOLVE_FEEDBACK_BODY, SET_ORG_SCOPE_BODY } from "../contracts/dashboard_contract.js";
+import { RESOLVE_FEEDBACK_BODY } from "../contracts/feedback_contract.js";
+import { SET_ORG_SCOPE_BODY } from "../contracts/session_contract.js";
 
 const days = (request: { query(name: string): string | undefined }) =>
   Number(request.query("days") ?? 30);

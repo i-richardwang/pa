@@ -29,6 +29,7 @@ import {
 import { toNumber } from "./view_format.js";
 import { CHART_CHROME, CHART_SERIES, FONT_FAMILY } from "./design_tokens.js";
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
+import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
 import type { PresentationSpec } from "./presentation_spec.js";
 
 const MOTION = {
@@ -991,7 +992,7 @@ function isTotalBand(value: unknown): value is TotalBand {
 export function isPresentationBlock(value: unknown): value is PresentationBlock {
   if (
     !isRecord(value) ||
-    !["table", "kpi", "line", "bar", "pie"].includes(String(value.type)) ||
+    !PRESENTATION_TYPE_SCHEMA.safeParse(value.type).success ||
     !isTableModel(value.table) ||
     !isRecord(value.table_layout)
   ) {

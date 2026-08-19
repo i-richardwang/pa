@@ -3,7 +3,7 @@
  * 本组件只选择记录；命名、归属和持久化由 SaveReportDialog 负责。
  * 报告记录独立持久化，加入看板仅修改可撤销草稿。
  */
-import type { MyAnalysisRow } from "@contract";
+import type { MyAnalysisRow } from "@contracts/analysis_contract";
 import {
   Command,
   CommandDialog,

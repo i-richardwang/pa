@@ -8,16 +8,14 @@ import { ANALYSIS_RETENTION_DAYS } from "../ports/analysis_repository.js";
 import type { UsageStatistics } from "../ports/usage_statistics.js";
 import type {
   ErrorRow,
-  MyAnalysesPayload,
   UnansweredPayload,
   UsageOverviewPayload,
   UsageTitlesPayload,
   ZeroHitRow,
-} from "../contracts/dashboard_contract.js";
-import {
-  DASHBOARD_PAGE_SIZE,
-  USAGE_ERROR_GROUP_TEXT_LIMIT,
-} from "../contracts/dashboard_contract.js";
+} from "../contracts/usage_contract.js";
+import type { MyAnalysesPayload } from "../contracts/analysis_contract.js";
+import { DASHBOARD_PAGE_SIZE } from "../contracts/pagination_contract.js";
+import { USAGE_ERROR_GROUP_TEXT_LIMIT } from "../contracts/usage_contract.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

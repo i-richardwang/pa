@@ -12,7 +12,7 @@ import {
   MessageSquareIcon,
   WaypointsIcon,
 } from "lucide-react";
-import type { MePayload } from "@contract";
+import type { MePayload } from "@contracts/session_contract";
 import { AppSidebar } from "@/components/app-sidebar";
 import type { NavMainGroup } from "@/components/nav-main";
 import {

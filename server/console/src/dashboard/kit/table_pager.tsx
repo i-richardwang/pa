@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DASHBOARD_PAGE_SIZE } from "@contract";
+import { DASHBOARD_PAGE_SIZE } from "@contracts/pagination_contract";
 
 export function TablePager({
   total,

@@ -5,7 +5,8 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CircleAlertIcon, PackageIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import type { BoardRow, BoardsPayload, MePayload } from "@contract";
+import type { BoardRow, BoardsPayload } from "@contracts/board_contract";
+import type { MePayload } from "@contracts/session_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";

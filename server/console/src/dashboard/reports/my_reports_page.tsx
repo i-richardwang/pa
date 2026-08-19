@@ -5,7 +5,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArchiveIcon, ChartBarIcon, CircleAlertIcon, PlusIcon } from "lucide-react";
-import { REPORT_DETAIL_SCHEMA, type ReportRow } from "@contract";
+import { REPORT_DETAIL_SCHEMA, type ReportRow } from "@contracts/report_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import {

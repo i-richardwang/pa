@@ -18,7 +18,8 @@ import {
 } from "../src/engine/semantic_package.js";
 import { openAppDatabase } from "../src/storage/app_database.js";
 import { createAnalysisRepository } from "../src/storage/analysis_repository.js";
-import { createBoardRepository, type Place } from "../src/storage/board_repository.js";
+import type { Place } from "../src/contracts/board_contract.js";
+import { createBoardRepository } from "../src/storage/board_repository.js";
 import { createBusinessTermRepository } from "../src/storage/business_term_repository.js";
 import { createReportRepository } from "../src/storage/report_repository.js";
 import { createUsageLog } from "../src/storage/usage_log.js";

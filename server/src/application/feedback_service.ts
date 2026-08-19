@@ -2,7 +2,7 @@
 import type { Principal } from "../engine/cube_security.js";
 import type { FeedbackRepository } from "../ports/feedback_repository.js";
 import type { UsageLog } from "../ports/usage_log.js";
-import type { FeedbackStatus } from "../contracts/dashboard_contract.js";
+import type { FeedbackStatus } from "../contracts/feedback_contract.js";
 import { normalizeFeedbackInput, type FeedbackInput } from "../contracts/feedback_input.js";
 
 export type { FeedbackInput } from "../contracts/feedback_input.js";

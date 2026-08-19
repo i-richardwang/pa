@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(import.meta.dirname, "src"),
-        "@contract": path.resolve(import.meta.dirname, "../src/contracts/dashboard_contract.ts"),
+        "@contracts": path.resolve(import.meta.dirname, "../src/contracts"),
         "@payload": path.resolve(import.meta.dirname, "../src/semantic_core/query_payload.ts"),
         "@charts": path.resolve(import.meta.dirname, "../src/presentation_core/chart_config.ts"),
         "@shape": path.resolve(import.meta.dirname, "../src/presentation_core/view_shape.ts"),

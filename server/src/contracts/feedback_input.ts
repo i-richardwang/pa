@@ -1,4 +1,4 @@
-import { FEEDBACK_LIMITS } from "./dashboard_contract.js";
+import { FEEDBACK_LIMITS } from "./feedback_contract.js";
 
 export type FeedbackInput = {
   ask: string;

@@ -8,7 +8,7 @@ import {
   type ReportRevisionsPayload,
   type ReportRow,
   UPDATE_REPORT_BODY,
-} from "../contracts/dashboard_contract.js";
+} from "../contracts/report_contract.js";
 import { RECORD_PROJECTION_REQUEST_BODY } from "../contracts/record_projection_contract.js";
 import { AnalysisNotFoundError } from "../ports/analysis_repository.js";
 import { ReportConflictError, ReportNotFoundError } from "../ports/report_repository.js";

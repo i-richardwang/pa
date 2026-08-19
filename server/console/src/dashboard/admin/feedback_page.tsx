@@ -6,13 +6,13 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, CircleAlertIcon, InboxIcon, XIcon } from "lucide-react";
+import { DASHBOARD_PAGE_SIZE } from "@contracts/pagination_contract";
 import {
-  DASHBOARD_PAGE_SIZE,
   FEEDBACK_LIMITS,
   FEEDBACK_GROUP_PAYLOAD_SCHEMA,
   FEEDBACK_LIST_PAYLOAD_SCHEMA,
   type FeedbackGroup,
-} from "@contract";
+} from "@contracts/feedback_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";

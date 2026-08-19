@@ -7,7 +7,7 @@
 import { expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { CatalogPayload } from "@contract";
+import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
 import type { SemanticQueryView } from "@semantic-analysis";
 import { beginAnalysisEdit, blankAnalysisSpec, type AnalysisEditState } from "./analysis_draft";
 import { defaultPercentOfTotal, percentOfTotalPick, ReportQueryRail } from "./report_query_rail";

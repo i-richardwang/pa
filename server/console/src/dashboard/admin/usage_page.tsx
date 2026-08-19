@@ -5,15 +5,15 @@
 import { type ReactNode, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { CircleAlertIcon } from "lucide-react";
+import { DASHBOARD_PAGE_SIZE } from "@contracts/pagination_contract";
 import {
-  DASHBOARD_PAGE_SIZE,
   UNANSWERED_PAYLOAD_SCHEMA,
   USAGE_OVERVIEW_PAYLOAD_SCHEMA,
   USAGE_TITLES_PAYLOAD_SCHEMA,
   type UnansweredPayload,
   type UsageOverviewPayload,
   type UsageTitlesPayload,
-} from "@contract";
+} from "@contracts/usage_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { BoardPayload, BoardTile, ReportRow } from "@contract";
+import type { BoardPayload, BoardTile } from "@contracts/board_contract";
+import type { ReportRow } from "@contracts/report_contract";
 import {
   addBoardReport,
   applyBoardLayout,

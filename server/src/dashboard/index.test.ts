@@ -3,12 +3,12 @@ import { BusinessTermInputError } from "../application/business_term_service.js"
 import { createFeedbackService } from "../application/feedback_service.js";
 import { cubeSecurityContext } from "../engine/cube_security.js";
 import {
-  CATALOG_PAYLOAD_SCHEMA,
-  CATALOG_VALUES_PAYLOAD_SCHEMA,
-  ME_PAYLOAD_SCHEMA,
-  MY_ANALYSES_PAYLOAD_SCHEMA,
-  USAGE_OVERVIEW_PAYLOAD_SCHEMA,
-} from "../contracts/dashboard_contract.js";
+  PUBLIC_CATALOG_DOCUMENT_SCHEMA as CATALOG_PAYLOAD_SCHEMA,
+  CATALOG_DIMENSION_VALUES_SCHEMA as CATALOG_VALUES_PAYLOAD_SCHEMA,
+} from "../contracts/catalog_contract.js";
+import { ME_PAYLOAD_SCHEMA } from "../contracts/session_contract.js";
+import { MY_ANALYSES_PAYLOAD_SCHEMA } from "../contracts/analysis_contract.js";
+import { USAGE_OVERVIEW_PAYLOAD_SCHEMA } from "../contracts/usage_contract.js";
 import {
   CatalogInputError,
   buildDashboardApp as buildApp,

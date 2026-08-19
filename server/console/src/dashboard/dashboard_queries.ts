@@ -9,20 +9,26 @@ import {
   ADD_BOARD_ITEM_PAYLOAD_SCHEMA,
   BOARD_PAYLOAD_SCHEMA,
   BOARDS_PAYLOAD_SCHEMA,
+} from "@contracts/board_contract";
+import {
   BUSINESS_TERM_SCHEMA,
   BUSINESS_TERMS_PAYLOAD_SCHEMA,
-  CATALOG_PAYLOAD_SCHEMA,
-  CATALOG_VALUES_PAYLOAD_SCHEMA,
-  type CreateReportBody,
-  ME_PAYLOAD_SCHEMA,
-  MY_ANALYSES_PAYLOAD_SCHEMA,
-  OK_PAYLOAD_SCHEMA,
-  REPLAY_PAYLOAD_SCHEMA,
-  REPORT_ROW_PAYLOAD_SCHEMA,
-  REPORTS_PAYLOAD_SCHEMA,
   type CreateBusinessTermBody,
   type UpdateBusinessTermBody,
-} from "@contract";
+} from "@contracts/business_term_contract";
+import {
+  PUBLIC_CATALOG_DOCUMENT_SCHEMA as CATALOG_PAYLOAD_SCHEMA,
+  CATALOG_DIMENSION_VALUES_SCHEMA as CATALOG_VALUES_PAYLOAD_SCHEMA,
+} from "@contracts/catalog_contract";
+import {
+  type CreateReportBody,
+  REPORT_ROW_PAYLOAD_SCHEMA,
+  REPORTS_PAYLOAD_SCHEMA,
+} from "@contracts/report_contract";
+import { ME_PAYLOAD_SCHEMA } from "@contracts/session_contract";
+import { MY_ANALYSES_PAYLOAD_SCHEMA } from "@contracts/analysis_contract";
+import { OK_PAYLOAD_SCHEMA } from "@contracts/response_contract";
+import { REPLAY_PAYLOAD_SCHEMA } from "@contracts/replay_contract";
 import { ApiError, deleteJson, getJson, postJson, putJson } from "./api";
 import { DATA_CAPABILITY_MAP_SCHEMA } from "@data-capability-map";
 

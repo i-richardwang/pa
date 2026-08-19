@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { FeedbackInput } from "../contracts/feedback_input.js";
-import { FEEDBACK_LIMITS } from "../contracts/dashboard_contract.js";
+import { FEEDBACK_LIMITS } from "../contracts/feedback_contract.js";
 import type { McpRegistrationContext } from "./context.js";
 import type { FeedbackService } from "../application/feedback_service.js";
 import type { UsageService } from "../application/usage_service.js";

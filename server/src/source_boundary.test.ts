@@ -175,13 +175,13 @@ test("every source directory that emits class names is registered with both host
 /**
  * 浏览器工作区的模块别名白名单：名字集合全等，任何新别名都必须先记到这里，
  * 编译器内务模块无从借道一个未登记的别名进入浏览器。tsconfig 与 vite 两套必须一致。
- * 自身工作区根别名（@、@widget）之外，别名一律指向三个显式源码边界。
+ * 自身工作区根别名（@、@widget）之外，别名一律指向显式源码边界。
  */
 const BROWSER_ALIASES: Record<string, string[]> = {
   console: [
     "@",
     "@charts",
-    "@contract",
+    "@contracts",
     "@data-capability-map",
     "@format",
     "@member",
@@ -229,7 +229,11 @@ test("browser aliases are exactly the approved source-boundary set", async () =>
 
     for (const alias of approved) {
       if (WORKSPACE_ROOT_ALIASES.has(alias)) continue;
-      const line = tsconfig.split("\n").find((candidate) => candidate.includes(`"${alias}"`));
+      const line = tsconfig
+        .split("\n")
+        .find(
+          (candidate) => candidate.includes(`"${alias}"`) || candidate.includes(`"${alias}/*"`),
+        );
       expect(line, `${workspace}/tsconfig.json ${alias}`).toMatch(
         /\/(?:contracts|semantic_core|presentation_core)\//,
       );

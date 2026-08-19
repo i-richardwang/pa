@@ -1,7 +1,7 @@
 import { useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { CircleAlertIcon, PanelRightIcon, TableIcon } from "lucide-react";
-import type { CatalogPayload } from "@contract";
+import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
 import {
   LoadingMark,
   type CardActions,

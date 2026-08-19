@@ -4,7 +4,7 @@ import {
   RECORD_PROJECTION_PAYLOAD_SCHEMA,
   type RecordProjectionPayload,
   type RecordProjectionRequestBody,
-} from "@contract";
+} from "@contracts/record_projection_contract";
 import type { TimeIntent } from "@time";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertDescription } from "@/components/ui/alert";

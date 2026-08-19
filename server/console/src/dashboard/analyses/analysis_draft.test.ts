@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { CatalogMemberPayload, CatalogPayload, ReportDetail, ReplayPayload } from "@contract";
+import type {
+  PublicCatalogMember as CatalogMemberPayload,
+  PublicCatalogDocument as CatalogPayload,
+} from "@contracts/catalog_contract";
+import type { ReportDetail } from "@contracts/report_contract";
+import type { ReplayPayload } from "@contracts/replay_contract";
 import { SEMANTIC_ANALYSIS_SPEC_INPUT } from "@semantic-analysis";
 import {
   beginAnalysisEdit,

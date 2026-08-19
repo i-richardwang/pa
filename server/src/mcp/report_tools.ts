@@ -3,6 +3,7 @@ import { MCP_REPORT_UPDATE_ACTION, type ReportUpdateAction } from "../contracts/
 import type { McpRegistrationContext } from "./context.js";
 import type { ReportService } from "../application/report_service.js";
 import type { UsageService } from "../application/usage_service.js";
+import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
 import {
   OAUTH_SECURITY_SCHEMES,
   READ_ONLY_ANNOTATIONS,
@@ -107,7 +108,7 @@ export function registerReportTools(
             name: z.string(),
             analysis_id: z.string().uuid(),
             result_view_id: z.string(),
-            presentation_type: z.enum(["table", "kpi", "line", "bar", "pie"]),
+            presentation_type: PRESENTATION_TYPE_SCHEMA,
             revision: z.number().int(),
             updated_at: z.string(),
             url: z.string(),

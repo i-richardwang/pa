@@ -12,7 +12,7 @@ import {
   ADD_BOARD_ITEM_BODY,
   CREATE_BOARD_BODY,
   UPDATE_BOARD_BODY,
-} from "../contracts/dashboard_contract.js";
+} from "../contracts/board_contract.js";
 import { RECORD_PROJECTION_REQUEST_BODY } from "../contracts/record_projection_contract.js";
 import { TIME_INTENT_INPUT, type TimeIntent } from "../semantic_core/time_contract.js";
 import type { DashboardDependencies, DashboardEnv } from "./types.js";

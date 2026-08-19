@@ -6,7 +6,8 @@
  */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { CatalogPayload, ReplayPayload } from "@contract";
+import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
+import type { ReplayPayload } from "@contracts/replay_contract";
 import { AnalysisWorkbench } from "./analysis_workbench";
 import {
   beginAnalysisEdit,

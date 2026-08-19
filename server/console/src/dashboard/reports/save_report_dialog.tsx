@@ -1,6 +1,6 @@
 /** 把本人 analysis handle 保存为独立报告。 */
 import { useEffect, useState } from "react";
-import type { CreateReportBody, ReportRow } from "@contract";
+import type { CreateReportBody, ReportRow } from "@contracts/report_contract";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

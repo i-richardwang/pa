@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { ReplayPayload } from "@contract";
+import type { ReplayPayload } from "@contracts/replay_contract";
 import type { TimeIntent } from "@time";
 import type { ViewRendererProps } from "pa-result-view";
 import { toastManager } from "@/components/ui/toast";

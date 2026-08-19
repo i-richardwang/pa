@@ -98,13 +98,13 @@ test("报告更新动作只有一个领域定义，各呈现面只引用共享�
   expect(duplicateDefinitions).toEqual([]);
 
   const service = await readFile(new URL("server/src/application/report_service.ts", root), "utf8");
-  const dashboard = await readFile(
-    new URL("server/src/contracts/dashboard_contract.ts", root),
+  const webReportContract = await readFile(
+    new URL("server/src/contracts/report_contract.ts", root),
     "utf8",
   );
   const mcpTools = await readFile(new URL("server/src/mcp/report_tools.ts", root), "utf8");
   expect(service).toContain('from "../contracts/report_action.js"');
-  expect(dashboard).toContain("WEB_REPORT_UPDATE_ACTION");
+  expect(webReportContract).toContain("WEB_REPORT_UPDATE_ACTION");
   expect(mcpTools).toContain("MCP_REPORT_UPDATE_ACTION");
 });
 

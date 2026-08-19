@@ -10,7 +10,7 @@ import {
   UsersIcon,
   XIcon,
 } from "lucide-react";
-import type { MePayload } from "@contract";
+import type { MePayload } from "@contracts/session_contract";
 import { LoadingMark } from "pa-result-view";
 import { useCopyToClipboard } from "@/hooks/use_copy_text";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { ChevronRightIcon, MinusIcon, SearchIcon, XIcon } from "lucide-react";
-import { isSearchableCatalogDimension, type CatalogMemberPayload } from "@contract";
+import {
+  isSearchableCatalogDimension,
+  type PublicCatalogMember as CatalogMemberPayload,
+} from "@contracts/catalog_contract";
 import type { SemanticQueryView } from "@semantic-analysis";
 import { Button } from "@/components/ui/button";
 import { InspectorRow } from "@/components/ui/inspector";

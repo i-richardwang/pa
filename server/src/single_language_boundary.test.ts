@@ -62,7 +62,9 @@ describe("单语言边界门禁", () => {
     ).toEqual(["compiler_catalog"]);
     expect(importsForbidden(`import { useState } from "react";`)).toEqual([]);
     // 语义契约导入不算违规
-    expect(importsForbidden(`import type { CatalogPayload } from "@contract";`)).toEqual([]);
+    expect(
+      importsForbidden(`import type { PublicCatalogDocument } from "@contracts/catalog_contract";`),
+    ).toEqual([]);
   });
 
   it("console/src 不导入任何编译器内务模块", () => {

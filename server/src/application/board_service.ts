@@ -4,8 +4,8 @@ import type {
   BoardRow,
   BoardTile,
   UpdateBoardBody,
-} from "../contracts/dashboard_contract.js";
-import { BOARD_ID_PATTERN } from "../contracts/dashboard_contract.js";
+} from "../contracts/board_contract.js";
+import { BOARD_ID_PATTERN } from "../contracts/board_contract.js";
 import { bottomPlace } from "./board_layout.js";
 import type { TimeIntent } from "../semantic_core/time_contract.js";
 import {

@@ -1,5 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
-import type { CatalogMemberPayload, MetricDomainPayload } from "@contract";
+import type {
+  PublicCatalogMember as CatalogMemberPayload,
+  PublicMetricDomain as MetricDomainPayload,
+} from "@contracts/catalog_contract";
 import {
   Autocomplete,
   AutocompleteCollection,

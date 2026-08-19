@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { RenderShape } from "../presentation_core/view_shape.js";
+import { RENDER_SHAPE_SCHEMA, type RenderShape } from "../presentation_core/render_shape.js";
 import type { SqliteDatabase } from "../sqlite.js";
 import { inTransaction } from "./app_database.js";
 import {
@@ -25,10 +25,10 @@ const normalizeName = (name: string): string => {
   return clean;
 };
 
-const renderShape = (value: string | null): RenderShape | null =>
-  ["kpi", "line", "bar", "pie", "crosstab", "table"].includes(value ?? "")
-    ? (value as RenderShape)
-    : null;
+const renderShape = (value: string | null): RenderShape | null => {
+  const parsed = RENDER_SHAPE_SCHEMA.safeParse(value);
+  return parsed.success ? parsed.data : null;
+};
 
 export function createReportRepository(db: SqliteDatabase): ReportRepository {
   type RawReport = Omit<ReportRecord, "render_shape"> & { render_shape: string | null };

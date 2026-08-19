@@ -9,7 +9,7 @@ import type { BusinessTermService } from "../application/business_term_service.j
 import type { FeedbackService } from "../application/feedback_service.js";
 import type { UsageService } from "../application/usage_service.js";
 import type { Principal } from "../engine/cube_security.js";
-import type { MePayload } from "../contracts/dashboard_contract.js";
+import type { MePayload } from "../contracts/session_contract.js";
 import type { DataCapabilityMapData } from "../presentation_core/data_capability_map.js";
 
 export type SessionUser = {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { LayoutDashboardIcon, PlusIcon } from "lucide-react";
-import type { BoardRow } from "@contract";
+import type { BoardRow } from "@contracts/board_contract";
 import {
   Autocomplete,
   AutocompleteEmpty,

@@ -1,9 +1,9 @@
+import type { MyAnalysesPayload } from "../contracts/analysis_contract.js";
 import type {
-  MyAnalysesPayload,
   UnansweredPayload,
   UsageOverviewPayload,
   UsageTitlesPayload,
-} from "../contracts/dashboard_contract.js";
+} from "../contracts/usage_contract.js";
 
 export type UsageStatistics = {
   overview(days: number): Promise<UsageOverviewPayload>;

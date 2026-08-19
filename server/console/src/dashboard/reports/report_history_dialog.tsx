@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CircleAlertIcon, HistoryIcon } from "lucide-react";
-import type { ReportDetail } from "@contract";
+import type { ReportDetail } from "@contracts/report_contract";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { EmptyPanel } from "../kit/empty_panel";
 import {

@@ -1,4 +1,6 @@
-import type { BoardTile, RenderShape, ReportRow } from "@contract";
+import type { BoardTile } from "@contracts/board_contract";
+import type { RenderShape } from "@shape";
+import type { ReportRow } from "@contracts/report_contract";
 
 export const GRID_MARGIN: [number, number] = [16, 16];
 export const MOBILE_GRID_MARGIN: [number, number] = [16, 16];

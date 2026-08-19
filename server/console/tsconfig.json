@@ -8,7 +8,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@contract": ["../src/contracts/dashboard_contract.ts"],
+      "@contracts/*": ["../src/contracts/*"],
       "@payload": ["../src/semantic_core/query_payload.ts"],
       "@charts": ["../src/presentation_core/chart_config.ts"],
       "@shape": ["../src/presentation_core/view_shape.ts"],

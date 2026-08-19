@@ -8,6 +8,7 @@ import { analysisGraphSink, validateDerivedGraphView } from "./analysis_graph.js
 import { GRAND_TOTAL_DESCRIPTION, MAX_PLAN_NODES } from "./analysis_spec.js";
 import { COLUMN_FORMATS, type ColumnFormat } from "./query_payload.js";
 import { TIME_INTENT_INPUT } from "./time_contract.js";
+import type { PresentationType } from "./presentation_type.js";
 
 const SEMANTIC_MEMBER_ID = z.string().min(1).max(120);
 const SEMANTIC_MEASURE_ID = SEMANTIC_MEMBER_ID.describe(
@@ -351,7 +352,7 @@ const PRESENTATION_DISPLAY = z
   .describe("line/bar 的可选系列视觉覆盖；不改变指标、分组或计算结果");
 
 export type SemanticChart = {
-  type: "table" | "kpi" | "line" | "bar" | "pie";
+  type: PresentationType;
   columns?: string[];
   category?: string;
   series?: string[];

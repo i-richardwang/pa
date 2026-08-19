@@ -3,7 +3,7 @@ import type { AnalysisService } from "./analysis_service.js";
 import type { PresentationService } from "./presentation_service.js";
 import type { AnalysisRepository } from "../ports/analysis_repository.js";
 import type { UsageLog } from "../ports/usage_log.js";
-import type { RenderShape } from "../presentation_core/view_shape.js";
+import type { RenderShape } from "../presentation_core/render_shape.js";
 import {
   semanticPresentationType,
   semanticResultViewId,

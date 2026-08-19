@@ -1,14 +1,13 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { REPLAY_PAYLOAD_SCHEMA, type ReplayPayload } from "@contracts/replay_contract";
 import {
-  REPLAY_PAYLOAD_SCHEMA,
   REPORT_DETAIL_SCHEMA,
   REPORT_REVISIONS_PAYLOAD_SCHEMA,
-  type ReplayPayload,
   type ReportDetail,
   type ReportRevisionsPayload,
   type UpdateReportBody,
-} from "@contract";
+} from "@contracts/report_contract";
 import type { SemanticAnalysisSpec } from "@semantic-analysis";
 import { getJson, patchJson, postJson } from "./api";
 import { dashboardKeys, errorText } from "./dashboard_queries";

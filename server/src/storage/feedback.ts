@@ -9,7 +9,7 @@ import type {
   FeedbackGroup,
   FeedbackListPayload,
   FeedbackStatus,
-} from "../contracts/dashboard_contract.js";
+} from "../contracts/feedback_contract.js";
 import type { FeedbackRecord, FeedbackRepository } from "../ports/feedback_repository.js";
 import {
   normalizeFeedbackInput,

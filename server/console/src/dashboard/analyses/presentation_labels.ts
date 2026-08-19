@@ -1,4 +1,4 @@
-import type { ReportDetail } from "@contract";
+import type { ReportDetail } from "@contracts/report_contract";
 
 export const PRESENTATION_TYPE_LABELS: Record<ReportDetail["presentation_type"], string> = {
   table: "表格",

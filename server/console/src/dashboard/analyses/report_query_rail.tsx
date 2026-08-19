@@ -11,7 +11,11 @@ import {
   PercentIcon,
   SigmaIcon,
 } from "lucide-react";
-import type { CatalogMemberPayload, CatalogPayload, ReplayPayload } from "@contract";
+import type {
+  PublicCatalogMember as CatalogMemberPayload,
+  PublicCatalogDocument as CatalogPayload,
+} from "@contracts/catalog_contract";
+import type { ReplayPayload } from "@contracts/replay_contract";
 import {
   isSemanticDerivedView,
   semanticAnalysisSink,

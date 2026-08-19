@@ -1,4 +1,4 @@
-import type { RenderShape } from "../presentation_core/view_shape.js";
+import type { RenderShape } from "../presentation_core/render_shape.js";
 
 export type ReportRecord = {
   id: string;

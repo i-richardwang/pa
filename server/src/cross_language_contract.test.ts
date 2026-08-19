@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { USAGE_ERROR_GROUP_TEXT_LIMIT } from "./contracts/dashboard_contract.js";
+import { USAGE_ERROR_GROUP_TEXT_LIMIT } from "./contracts/usage_contract.js";
 
 const repoRoot = new URL("../../", import.meta.url);
 

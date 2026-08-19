@@ -1,4 +1,4 @@
-import type { Place } from "../contracts/dashboard_contract.js";
+import type { Place } from "../contracts/board_contract.js";
 
 /** 存储态瓦片不复制报告名称与呈现信息。 */
 export type StoredTile =

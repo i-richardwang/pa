@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CircleAlertIcon, InboxIcon, LockIcon, PanelRightIcon, PlusIcon } from "lucide-react";
 import type {
-  CatalogMemberPayload,
-  CatalogPayload,
-  MetricDomainPayload,
-  PublicBusinessTerm,
-} from "@contract";
-import { BUSINESS_TERM_LIMITS, isSearchableCatalogDimension } from "@contract";
+  PublicCatalogMember as CatalogMemberPayload,
+  PublicCatalogDocument as CatalogPayload,
+  PublicMetricDomain as MetricDomainPayload,
+} from "@contracts/catalog_contract";
+import type { PublicBusinessTerm } from "@contracts/business_term_contract";
+import { BUSINESS_TERM_LIMITS } from "@contracts/business_term_contract";
+import { isSearchableCatalogDimension } from "@contracts/catalog_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import {

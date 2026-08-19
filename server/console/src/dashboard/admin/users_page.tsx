@@ -7,7 +7,8 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { CircleAlertIcon, KeyRoundIcon, PlusIcon, ShieldIcon } from "lucide-react";
-import { OK_PAYLOAD_SCHEMA, type MePayload, type SetOrgScopeBody } from "@contract";
+import { OK_PAYLOAD_SCHEMA } from "@contracts/response_contract";
+import type { MePayload, SetOrgScopeBody } from "@contracts/session_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";

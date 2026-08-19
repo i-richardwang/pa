@@ -4,7 +4,8 @@
  * crypto.randomUUID——后者仅安全上下文可用，控制台可经局域网明文 http 访问。
  * 落位与尺寸沿用 tile_sizing 的形态映射：新瓦片按 presentation_type 粗分尺寸、堆到画布底部整列排开。
  */
-import type { BoardPayload, BoardTile, Place, ReportRow } from "@contract";
+import type { BoardPayload, BoardTile, Place } from "@contracts/board_contract";
+import type { ReportRow } from "@contracts/report_contract";
 import { reportTileSize, TILE_SIZES } from "./tile_sizing";
 
 /** 生成合法 tile_id（8-4-4-4-12 hex，匹配服务端 BOARD_ID_PATTERN），不依赖安全上下文。 */

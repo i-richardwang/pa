@@ -12,7 +12,7 @@
  * 配置栏就得等一份自己不消费的数据。故种子只管规格，结果字节另走 `savedReplay` 后到即可。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReplayPayload } from "@contract";
+import type { ReplayPayload } from "@contracts/replay_contract";
 import type { SemanticAnalysisSpec } from "@semantic-analysis";
 import { toastManager } from "@/components/ui/toast";
 import { ApiError } from "../api";

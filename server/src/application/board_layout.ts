@@ -1,4 +1,4 @@
-import { BOARD_GRID_COLUMNS, type Place } from "../contracts/dashboard_contract.js";
+import { BOARD_GRID_COLUMNS, type Place } from "../contracts/board_contract.js";
 
 /** 新瓦片默认落位到当前画布最底部并占满一行。 */
 export function bottomPlace<T extends { place: Place }>(tiles: readonly T[]): Place {

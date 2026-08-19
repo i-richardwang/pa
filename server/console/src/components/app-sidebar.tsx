@@ -1,6 +1,6 @@
 "use client";
 
-import type { MePayload } from "@contract";
+import type { MePayload } from "@contracts/session_contract";
 import { NavMain, type NavMainGroup } from "@/components/nav-main";
 import { NavWorkspace } from "@/components/nav-workspace";
 import {

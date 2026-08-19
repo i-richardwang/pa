@@ -13,6 +13,7 @@ import {
   toNumber,
 } from "./view_format.js";
 import { memberShortName } from "../semantic_core/member_name.js";
+import type { PresentationType } from "../semantic_core/presentation_type.js";
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
 import {
   compileTableShading,
@@ -21,6 +22,9 @@ import {
   type TableShading,
   type TableShadingDecl,
 } from "./table_shading.js";
+import type { RenderShape } from "./render_shape.js";
+
+export type { RenderShape } from "./render_shape.js";
 
 /** 感知极限：折线超出此系列数缠绕不可读，声明的折线编译失败并退回表格 */
 export const MAX_LINE_SERIES = 5;
@@ -143,7 +147,7 @@ export type SeriesDisplay = {
 };
 
 export type ChartDecl = {
-  type: "table" | "kpi" | "line" | "bar" | "pie";
+  type: PresentationType;
   /** 完整内部表格布局；Agent 的简洁 columns 或确定性默认值已在输入边界归一为本结构。 */
   tableLayout?: TableLayoutDecl;
   /** bar/pie 的分类轴（切片）列；line 不用（时间恒为横轴） */
@@ -1451,7 +1455,7 @@ export function canCompileKpi(view: ViewBlock): boolean {
   return !view.columns.some((column) => view.column_roles[column] === "dimension");
 }
 
-export type SensibleForm = "table" | "kpi" | "line" | "bar" | "pie";
+export type SensibleForm = PresentationType;
 
 export function sensibleForms(view: ViewBlock): SensibleForm[] {
   const detected = detectRoles(view);
@@ -1501,8 +1505,6 @@ export function sensibleForms(view: ViewBlock): SensibleForm[] {
     }),
   ];
 }
-
-export type RenderShape = "kpi" | "line" | "bar" | "pie" | "crosstab" | "table";
 
 export function renderShapeOfView(view: ViewBlock, decl: ChartDecl): RenderShape | null {
   if (!view.rows.length) return null;

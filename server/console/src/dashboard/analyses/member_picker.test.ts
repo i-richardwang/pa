@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { CatalogMemberPayload, MetricDomainPayload } from "@contract";
+import type {
+  PublicCatalogMember as CatalogMemberPayload,
+  PublicMetricDomain as MetricDomainPayload,
+} from "@contracts/catalog_contract";
 import { TIME_INTENT_INPUT, compileTimeIntent, resolveTimeOutputGrain } from "@time";
 import { parseAnalysisSpec } from "../../../../src/semantic_core/analysis_spec";
 import { groupMembers, metricDomainTitles, pickableMembers } from "./member_picker";

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FileTextIcon, PlusIcon, WaypointsIcon } from "lucide-react";
-import type { ReportRow } from "@contract";
+import type { ReportRow } from "@contracts/report_contract";
 import {
   Autocomplete,
   AutocompleteEmpty,

@@ -8,18 +8,17 @@
 import { z } from "zod";
 import { memberShortName } from "../semantic_core/member_name.js";
 import { TABLE_SHADING_INPUT } from "../semantic_core/semantic_analysis.js";
+import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
 import { resolveTimeOutputGrain, type TimeInput } from "../semantic_core/time_contract.js";
 import type { ChartDecl, TableAxis, TableLayoutDecl } from "./view_shape.js";
 
 export const CHART_INPUT = z
   .object({
-    type: z
-      .enum(["table", "kpi", "line", "bar", "pie"])
-      .describe(
-        "必填呈现形态：table=表格；kpi=单行指标卡；line=时间趋势折线（时间恒为横轴）；" +
-          "bar=分类柱形或条形，数量与比例混合时自动使用柱线双轴；" +
-          "pie=构成饼图（仅可加计数度量）。服务端只编译声明的形态，不自动改选其他图表",
-      ),
+    type: PRESENTATION_TYPE_SCHEMA.describe(
+      "必填呈现形态：table=表格；kpi=单行指标卡；line=时间趋势折线（时间恒为横轴）；" +
+        "bar=分类柱形或条形，数量与比例混合时自动使用柱线双轴；" +
+        "pie=构成饼图（仅可加计数度量）。服务端只编译声明的形态，不自动改选其他图表",
+    ),
     columns: z
       .array(z.string().min(1))
       .min(1)

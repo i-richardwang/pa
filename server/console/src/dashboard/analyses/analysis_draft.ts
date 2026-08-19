@@ -1,4 +1,5 @@
-import type { CatalogPayload, ReplayPayload } from "@contract";
+import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
+import type { ReplayPayload } from "@contracts/replay_contract";
 import {
   isSemanticDerivedView,
   semanticAnalysisSink,

@@ -7,10 +7,10 @@ import {
   BOARD_GRID_COLUMNS,
   BOARD_PAYLOAD_SCHEMA,
   type BoardTile as BoardTileData,
-  type MePayload,
-  type MyAnalysisRow,
-  type ReportRow,
-} from "@contract";
+} from "@contracts/board_contract";
+import type { MePayload } from "@contracts/session_contract";
+import type { MyAnalysisRow } from "@contracts/analysis_contract";
+import type { ReportRow } from "@contracts/report_contract";
 import { LoadingMark, useElementSize } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import {

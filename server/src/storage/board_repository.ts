@@ -5,11 +5,7 @@
  * created_by 是唯一维护人；查看与重放的共享权限由 application service 按看板成员关系裁决。
  */
 import { randomUUID } from "node:crypto";
-import {
-  BOARD_GRID_COLUMNS,
-  BOARD_ID_PATTERN,
-  type Place,
-} from "../contracts/dashboard_contract.js";
+import { BOARD_GRID_COLUMNS, BOARD_ID_PATTERN, type Place } from "../contracts/board_contract.js";
 import type { SqliteDatabase } from "../sqlite.js";
 import { inTransaction } from "./app_database.js";
 import type { ReportRepository } from "../ports/report_repository.js";
@@ -20,21 +16,11 @@ import {
   type StoredTile,
 } from "../ports/board_repository.js";
 
-export { BOARD_ID_PATTERN } from "../contracts/dashboard_contract.js";
-export { bottomPlace } from "../application/board_layout.js";
-export {
-  BoardConflictError,
-  type BoardRecord,
-  type BoardRepository,
-  type StoredTile,
-} from "../ports/board_repository.js";
 /** 一张看板的瓦片上限（report + text 合计）。 */
 export const MAX_BOARD_TILES = 24;
 
 const MAX_NAME_LENGTH = 50;
 const MAX_TEXT_MD_LENGTH = 4000;
-
-export type { Place } from "../contracts/dashboard_contract.js";
 
 function normalizePlace(value: unknown): Place {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {

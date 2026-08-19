@@ -18,7 +18,7 @@ import {
   PencilIcon,
   Trash2Icon,
 } from "lucide-react";
-import { REPLAY_PAYLOAD_SCHEMA } from "@contract";
+import { REPLAY_PAYLOAD_SCHEMA } from "@contracts/replay_contract";
 import type { TimeIntent } from "@time";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { LoadingMark, type CardActions, ViewRenderer } from "pa-result-view";

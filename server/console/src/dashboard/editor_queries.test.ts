@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import type { ReplayPayload, ReportDetail } from "@contract";
+import type { ReplayPayload } from "@contracts/replay_contract";
+import type { ReportDetail } from "@contracts/report_contract";
 import { reportKeys, revisionsConsistent } from "./editor_queries";
 
 test("重放键位不含 revision：含了它就得等详情落地才发得出去，白串一跳", () => {

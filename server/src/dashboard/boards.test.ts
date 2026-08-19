@@ -19,8 +19,8 @@ import { createAnalysisRepository } from "../storage/analysis_repository.js";
 import {
   ADD_BOARD_ITEM_PAYLOAD_SCHEMA,
   BOARD_PAYLOAD_SCHEMA,
-  REPLAY_PAYLOAD_SCHEMA,
-} from "../contracts/dashboard_contract.js";
+} from "../contracts/board_contract.js";
+import { REPLAY_PAYLOAD_SCHEMA } from "../contracts/replay_contract.js";
 
 describe("dashboard board routes", () => {
   test("创建者编辑看板，任意登录用户可按成员关系重放报告", async () => {

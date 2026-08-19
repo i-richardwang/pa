@@ -1,5 +1,5 @@
 import { PanelRightIcon } from "lucide-react";
-import type { CatalogPayload } from "@contract";
+import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
 import { HeaderIconButton } from "../layout/view_chrome";
 import { Titlebar } from "@/components/ui/titlebar";
 import { ReportQueryRail } from "./report_query_rail";

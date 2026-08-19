@@ -1,21 +1,15 @@
-/**
- * 看板存储单测：瓦片归一（报告存在性、tile_id 去重、place 合法、text md、上限、未知 kind），
- * 稳定 uuid 门牌号与 tiles CRUD 语义，新瓦片底部落位。
- */
 import { describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  BOARD_ID_PATTERN,
-  BoardConflictError,
   MAX_BOARD_TILES,
-  bottomPlace,
   createBoardRepository,
   normalizeBoardName,
   normalizeTiles,
 } from "./board_repository.js";
-import { BOARD_GRID_COLUMNS } from "../contracts/dashboard_contract.js";
+import { BOARD_GRID_COLUMNS, BOARD_ID_PATTERN } from "../contracts/board_contract.js";
+import { BoardConflictError } from "../ports/board_repository.js";
 import { createReportRepository as createReports } from "./report_repository.js";
 import { createAnalysisRepository } from "./analysis_repository.js";
 import { semanticSpecOf } from "../test_support/report.js";
@@ -189,21 +183,6 @@ describe("瓦片归一", () => {
     expect(normalizeBoardName(" 人委会看板 ")).toBe("人委会看板");
     expect(() => normalizeBoardName("  ")).toThrow("名称");
     expect(() => normalizeBoardName("长".repeat(51))).toThrow("最长");
-  });
-
-  test("bottomPlace 落到画布最底空位、整行", () => {
-    expect(bottomPlace([])).toEqual({ x: 0, y: 0, w: BOARD_GRID_COLUMNS, h: 6 });
-    expect(
-      bottomPlace([
-        {
-          kind: "text",
-          tile_id: randomUUID(),
-          md: "x",
-          place: place(0, 0, BOARD_GRID_COLUMNS, 2),
-        },
-        { kind: "report", tile_id: randomUUID(), report_id: "c", place: place(0, 2, 12, 5) },
-      ]),
-    ).toEqual({ x: 0, y: 7, w: BOARD_GRID_COLUMNS, h: 6 });
   });
 });
 

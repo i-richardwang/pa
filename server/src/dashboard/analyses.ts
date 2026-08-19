@@ -6,7 +6,7 @@
 import type { Hono } from "hono";
 import { AuthzError } from "../engine/cube_security.js";
 import type { DashboardDependencies, DashboardEnv } from "./types.js";
-import { PREVIEW_REPORT_BODY } from "../contracts/dashboard_contract.js";
+import { PREVIEW_ANALYSIS_BODY } from "../contracts/analysis_contract.js";
 import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
 import { SemanticQueryIncompatibleError } from "../engine/semantic_analysis_compiler.js";
 import { AnalysisNotFoundError } from "../ports/analysis_repository.js";
@@ -37,7 +37,7 @@ export function registerAnalysisRoutes(
 
   dashboard.post("/api/analyses", async (c) => {
     if (!analyses) return c.json({ error: "未启用分析执行" }, 501);
-    const body = PREVIEW_REPORT_BODY.safeParse(await c.req.json().catch(() => null));
+    const body = PREVIEW_ANALYSIS_BODY.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: "分析请求无效" }, 400);
     try {
       if (!semanticPlanning) return c.json({ error: "未启用语义查询规划" }, 501);

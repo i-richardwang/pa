@@ -11,7 +11,7 @@ import { registerCatalogRoutes } from "./catalog.js";
 import { registerReportRoutes } from "./reports.js";
 import type { DashboardDependencies, DashboardEnv, SessionUser } from "./types.js";
 import { registerUsageRoutes } from "./usage.js";
-import type { MePayload } from "../contracts/dashboard_contract.js";
+import type { MePayload } from "../contracts/session_contract.js";
 
 function toMe(user: SessionUser, principal: Principal): MePayload {
   return {

@@ -14,12 +14,12 @@ import {
 } from "../test_support/dashboard.js";
 import { planExecution } from "../semantic_core/execution_plan.js";
 import { semanticSpecOf } from "../test_support/report.js";
+import { REPLAY_PAYLOAD_SCHEMA } from "../contracts/replay_contract.js";
 import {
-  REPLAY_PAYLOAD_SCHEMA,
   REPORT_DETAIL_SCHEMA,
   REPORT_ROW_PAYLOAD_SCHEMA,
   REPORTS_PAYLOAD_SCHEMA,
-} from "../contracts/dashboard_contract.js";
+} from "../contracts/report_contract.js";
 import { SemanticQueryIncompatibleError } from "../engine/semantic_analysis_compiler.js";
 import type { SemanticAnalysisSpec } from "../semantic_core/semantic_analysis.js";
 import { createAnalysisRepository } from "../storage/analysis_repository.js";
