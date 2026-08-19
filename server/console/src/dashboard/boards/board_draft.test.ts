@@ -57,6 +57,7 @@ describe("board edit state", () => {
     const report: ReportRow = {
       id: "report",
       analysis_id: "analysis",
+      view_id: "view",
       name: "可复用报告",
       result_view_id: "result",
       presentation_type: "bar",

@@ -29,20 +29,42 @@ describe("归一与缺省补齐", () => {
     });
   });
 
-  test("display：按度量字段归一颜色与标签声明", () => {
+  test("display：按度量字段归一颜色声明", () => {
     expect(
       validateChartDecl(
         {
           type: "line",
           display: {
             series: {
-              "test_people_metrics.new_hire_count": { color: "#123abc", label: true },
+              "test_people_metrics.new_hire_count": { color: "#123abc" },
             },
           },
         },
         TREND,
       ).display,
-    ).toEqual({ new_hire_count: { color: "#123abc", label: true } });
+    ).toEqual({ new_hire_count: { color: "#123abc" } });
+  });
+
+  test("value_labels：line/bar 透传，table 拒绝，main 与 group_by 互斥", () => {
+    expect(validateChartDecl({ type: "line", value_labels: "all" }, TREND).valueLabels).toBe("all");
+    expect(() => validateChartDecl({ type: "table", value_labels: "all" }, TREND)).toThrow(
+      /value_labels 仅支持 type=line 或 bar/,
+    );
+    expect(() =>
+      validateChartDecl(
+        {
+          type: "line",
+          y: ["new_hire_count"],
+          group_by: "organization_name",
+          value_labels: "main",
+        },
+        {
+          measures: ["test_people_metrics.new_hire_count"],
+          dimensions: ["test_people_metrics.organization_name"],
+          time: { range: { from: "2026-01", to: "2026-07" }, grain: "month" },
+        },
+      ),
+    ).toThrow(/value_labels=main 与 group_by 互斥/);
   });
 
   test("绑定接受成员全名或列短名，归一为短名", () => {
@@ -345,7 +367,7 @@ describe("可行动报错", () => {
   test("table 带 display 拒绝", () => {
     expect(() =>
       validateChartDecl(
-        { type: "table", display: { series: { active_employee_count: { label: true } } } },
+        { type: "table", display: { series: { active_employee_count: { color: "#123abc" } } } },
         CATEGORY,
       ),
     ).toThrow(/display 仅支持 type=line 或 bar/);
@@ -358,7 +380,7 @@ describe("可行动报错", () => {
           type: "line",
           y: ["new_hire_count"],
           group_by: "organization_name",
-          display: { series: { new_hire_count: { label: true } } },
+          display: { series: { new_hire_count: { color: "#123abc" } } },
         },
         { ...TREND, dimensions: ["test_people_metrics.organization_name"] },
       ),

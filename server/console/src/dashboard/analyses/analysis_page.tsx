@@ -12,15 +12,17 @@ export function AnalysisPage({ id }: { id: string }) {
   const catalog = useCatalogQuery().data ?? null;
   const data = replayQuery.data ?? null;
   const error = errorText(replayQuery.error);
-  const title = data?.payload.title ?? data?.spec.analysis.title ?? "分析回放";
+  const title = data?.payload.title ?? data?.analysis.title ?? "分析回放";
   const edit = useAnalysisEditSession({
     sessionKey: `analysis:${id}`,
     seed: data
       ? {
           name: title,
-          spec: data.spec,
+          analysis: data.analysis,
+          view: data.view,
+          view_preferences: data.view_preferences,
           hasSavedResult: true,
-          ownedAnalysisId: data.analysis_id,
+          ownedViewId: data.view_id,
         }
       : null,
     // 回放是一次取数：规格与结果同来同走，没有可拆的两条腿。

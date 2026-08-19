@@ -18,7 +18,13 @@ import {
   type PaChartExtension,
   type ViewChart,
 } from "../../src/presentation_core/chart_config.js";
-import { plotRect, prepareOption } from "./chart_render.js";
+import {
+  applyValueLabelDensity,
+  gridRect,
+  plotRect,
+  plotWidth,
+  prepareOption,
+} from "./chart_render.js";
 
 function chart(): ViewChart {
   return {
@@ -67,6 +73,25 @@ test("形态自己那一栏叠在场景留白之上，grid 与 DOM 那层框读�
     expect(gridOf(prepareOption(bars, false, { plot }))).toMatchObject(rect);
     expect(plotRect(chart(), plot).left).toBe(PLOT_PADDING[plot].left);
   }
+});
+
+test("值标签的框内余量只缩数据区：grid 加余量、场地框不动", () => {
+  const labeled = { ...chart(), plot_inset: { top: 22, right: 48 } };
+  for (const plot of ["compact", "tile", "page"] as const) {
+    const frame = plotRect(labeled, plot);
+    expect(frame.top, `${plot} 档的框不随标签开关移动`).toBe(PLOT_PADDING[plot].top);
+    expect(frame.right).toBe(PLOT_PADDING[plot].right);
+    const grid = gridRect(labeled, plot);
+    expect(grid.top).toBe(frame.top + 22);
+    expect(grid.right).toBe(frame.right + 48);
+    expect(gridOf(prepareOption(labeled, false, { plot }))).toMatchObject(grid);
+  }
+});
+
+test("值标签密度读取数据区宽度，不把轴栏与场景留白算成可用空间", () => {
+  const labeled = { ...chart(), plot_gutter: { left: 80 }, plot_inset: { right: 40 } };
+  const rect = gridRect(labeled, "page");
+  expect(plotWidth(labeled, "page", 500)).toBe(500 - rect.left - rect.right);
 });
 
 test("绘图区边框由 DOM 绘制，grid 不重复画框", () => {
@@ -228,4 +253,80 @@ test("刻度、读数卡与值标签都按列声明的小数位报数：整数�
     false,
   );
   expect((plain.yAxis as { axisLabel: { formatter: (value: number) => string } }).axisLabel.formatter(0.225)).toBe("22.5%");
+});
+
+test("值标签密度守卫：局促时按步距挑桶印数且恒印末点，充裕时逐点印", () => {
+  const pa: PaChartExtension = {
+    series: { 在职人数: "number" },
+    axes: { y: ["number"] },
+    legend: [{ name: "在职人数", color: "#000000" }],
+  };
+  const chart: ViewChart = {
+    form: "line",
+    height: 300,
+    option: {
+      xAxis: { type: "category", data: ["1月", "2月", "3月"] },
+      yAxis: { type: "value" },
+      series: [{ type: "line", name: "在职人数", data: [10, 20, 30], label: { show: true } }],
+      pa,
+    },
+  };
+  type Formatter = (params: { value?: unknown; dataIndex?: number }) => string;
+  const run = (width: number) => {
+    let patch: { series?: { label?: { formatter?: Formatter } }[] } = {};
+    applyValueLabelDensity({ setOption: (option) => (patch = option as typeof patch) }, chart, width);
+    return patch.series?.[0]?.label?.formatter;
+  };
+  // 3 点：120px 充裕（每点 40 > 37.33，逐点）；90px 局促（每点 30，步距 ceil(50/30)=2 → 0、末点）
+  const wide = run(120);
+  expect(wide?.({ value: 20, dataIndex: 1 })).toBe("20");
+  const sparse = run(90);
+  expect(sparse?.({ value: 10, dataIndex: 0 })).toBe("10");
+  expect(sparse?.({ value: 20, dataIndex: 1 })).toBe("");
+  expect(sparse?.({ value: 30, dataIndex: 2 })).toBe("30");
+  // 柱按底片宽定步距：底片 26+4=30 > 每列 20 → 步距 2；横排（y 轴类目）不受触碰
+  const barChart: ViewChart = {
+    ...chart,
+    option: {
+      ...chart.option,
+      series: [{ type: "bar", name: "在职人数", data: [10, 20, 30], label: { show: true } }],
+    },
+  };
+  let barPatch: { series?: { label?: { formatter?: Formatter } }[] } = {};
+  applyValueLabelDensity(
+    { setOption: (option) => (barPatch = option as typeof barPatch) },
+    barChart,
+    60,
+  );
+  const barSparse = barPatch.series?.[0]?.label?.formatter;
+  expect(barSparse?.({ value: 20, dataIndex: 1 })).toBe("");
+  expect(barSparse?.({ value: 30, dataIndex: 2 })).toBe("30");
+  let horizontalTouched = false;
+  applyValueLabelDensity(
+    { setOption: () => (horizontalTouched = true) },
+    {
+      ...barChart,
+      option: {
+        ...barChart.option,
+        xAxis: { type: "value" },
+        yAxis: { type: "category", data: ["A", "B", "C"] },
+      },
+    },
+    60,
+  );
+  expect(horizontalTouched).toBe(false);
+  // 没开标签的系列不受触碰
+  let touched = false;
+  applyValueLabelDensity(
+    { setOption: () => (touched = true) },
+    {
+      ...chart,
+      option: {
+        ...chart.option,
+        series: [{ type: "line", name: "在职人数", data: [10, 20, 30] }],
+      },
+    },
+    90,
+  );
+  expect(touched).toBe(false);
 });

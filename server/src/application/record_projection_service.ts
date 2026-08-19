@@ -33,7 +33,8 @@ import {
 import {
   isSemanticDerivedView,
   semanticResultViewId,
-  type SemanticAnalysisSpec,
+  type AnalysisDefinition,
+  type SemanticViewIntent,
 } from "../semantic_core/semantic_analysis.js";
 import type { TimeIntent } from "../semantic_core/time_contract.js";
 import type { BoardRepository } from "../ports/board_repository.js";
@@ -42,7 +43,8 @@ import type { AnalysisRepository } from "../ports/analysis_repository.js";
 import { ReportConflictError, ReportNotFoundError } from "../ports/report_repository.js";
 import type { SemanticPlanningService } from "./semantic_planning_service.js";
 import { applyBoardTimeOverride } from "./board_time_override.js";
-import type { CompiledSemanticAnalysis } from "../engine/semantic_analysis_compiler.js";
+import type { CompiledAnalysisView } from "../engine/semantic_analysis_compiler.js";
+import type { ViewPreferences } from "../presentation_core/view_preferences.js";
 
 /** 可安全原样返回浏览器的业务请求错误；引擎与模型异常由路由统一收口。 */
 export class RecordProjectionRequestError extends Error {
@@ -211,7 +213,12 @@ export function createRecordProjectionService(deps: {
   cube: CubeGateway;
   audit: RecordProjectionAudit;
 }) {
-  type ProjectionContext = { revision: number; spec: SemanticAnalysisSpec };
+  type ProjectionContext = {
+    revision: number;
+    definition: AnalysisDefinition;
+    intent: SemanticViewIntent;
+    preferences: ViewPreferences;
+  };
   type ProjectionRequest = Omit<RecordProjectionRequestBody, "time_coordinate" | "data_as_of"> & {
     time_coordinate?: RecordProjectionRequestBody["time_coordinate"];
     data_as_of?: string;
@@ -219,11 +226,18 @@ export function createRecordProjectionService(deps: {
 
   async function analysisContext(report: {
     revision: number;
-    analysis_id: string;
+    view_id: string;
   }): Promise<ProjectionContext> {
-    const analysis = await deps.analyses.get(report.analysis_id);
-    if (!analysis) throw new Error(`报告引用的分析不存在：${report.analysis_id}`);
-    return { revision: report.revision, spec: analysis.spec };
+    const view = await deps.analyses.getView(report.view_id);
+    if (!view) throw new Error(`报告引用的视图不存在：${report.view_id}`);
+    const analysis = await deps.analyses.getAnalysis(view.analysis_id);
+    if (!analysis) throw new Error(`报告引用的分析不存在：${view.analysis_id}`);
+    return {
+      revision: report.revision,
+      definition: analysis.definition,
+      intent: view.intent,
+      preferences: view.preferences,
+    };
   }
 
   async function ownedContext(principal: Principal, reportId: string): Promise<ProjectionContext> {
@@ -243,17 +257,20 @@ export function createRecordProjectionService(deps: {
     if (!report) throw new ReportNotFoundError("看板或报告不存在");
     const context = await analysisContext(report);
     return timeOverride
-      ? { ...context, spec: applyBoardTimeOverride(context.spec, timeOverride).spec }
+      ? {
+          ...context,
+          definition: applyBoardTimeOverride(context.definition, timeOverride).definition,
+        }
       : context;
   }
 
   function directRequest(
-    spec: SemanticAnalysisSpec,
-    compiled: CompiledSemanticAnalysis,
+    definition: AnalysisDefinition,
+    compiled: CompiledAnalysisView,
     options: { metricId?: string; offset?: number; limit?: number; dataAsOf?: string },
   ): ProjectionRequest {
-    const viewId = semanticResultViewId(spec);
-    const semanticView = spec.analysis.views.find((candidate) => candidate.id === viewId);
+    const resultViewId = semanticResultViewId(definition);
+    const semanticView = definition.views.find((candidate) => candidate.id === resultViewId);
     if (!semanticView || isSemanticDerivedView(semanticView)) {
       throw new RecordProjectionRequestError("当前分析没有可直接展开的指标结果");
     }
@@ -263,7 +280,7 @@ export function createRecordProjectionService(deps: {
       );
     }
     const binding = compiled.record_projection_bindings.views.find(
-      (item) => item.view_id === viewId,
+      (item) => item.result_view_id === resultViewId,
     );
     const available = Object.values(binding?.metrics ?? {});
     const selected = options.metricId
@@ -280,7 +297,7 @@ export function createRecordProjectionService(deps: {
     }
     return {
       revision: 1,
-      view_id: viewId,
+      result_view_id: resultViewId,
       metric_id: selected.metric_id,
       coordinates: [],
       offset: options.offset ?? 0,
@@ -325,7 +342,7 @@ export function createRecordProjectionService(deps: {
     input: ProjectionRequest,
     resolve: () => Promise<{
       access: ProjectionContext;
-      compiled?: CompiledSemanticAnalysis;
+      compiled?: CompiledAnalysisView;
     }>,
   ): Promise<RecordProjectionPayload> {
     const auditBase = {
@@ -341,17 +358,23 @@ export function createRecordProjectionService(deps: {
       if (access.revision !== input.revision) {
         throw new ReportConflictError("报告已更新，请刷新后重新查看明细");
       }
-      if (input.view_id !== semanticResultViewId(access.spec)) {
+      if (input.result_view_id !== semanticResultViewId(access.definition)) {
         throw new RecordProjectionRequestError("当前结果列没有可追溯的基础指标");
       }
-      const semanticView = access.spec.analysis.views.find((view) => view.id === input.view_id);
+      const semanticView = access.definition.views.find((view) => view.id === input.result_view_id);
       if (!semanticView || isSemanticDerivedView(semanticView)) {
         throw new RecordProjectionRequestError("当前结果列没有可追溯的基础指标");
       }
       const compiled =
-        prepared.compiled ?? (await deps.semanticPlanning.compile(principal, access.spec));
+        prepared.compiled ??
+        (await deps.semanticPlanning.compile(
+          principal,
+          access.definition,
+          access.intent,
+          access.preferences,
+        ));
       const binding = compiled.record_projection_bindings.views.find(
-        (view) => view.view_id === input.view_id,
+        (view) => view.result_view_id === input.result_view_id,
       );
       const allowedMetrics = new Set(
         Object.values(binding?.metrics ?? {}).map((metric) => metric.metric_id),
@@ -509,7 +532,7 @@ export function createRecordProjectionService(deps: {
 
   async function runAnalysis(
     principal: Principal,
-    analysisId: string,
+    viewId: string,
     options: {
       metricId?: string;
       offset?: number;
@@ -517,13 +540,23 @@ export function createRecordProjectionService(deps: {
       dataAsOf?: string;
     } = {},
   ): Promise<RecordProjectionPayload> {
-    const analysis = await deps.analyses.resolveOwned(analysisId, principal.email);
-    const access = { revision: 1, spec: analysis.spec };
-    const compiled = await deps.semanticPlanning.compile(principal, analysis.spec);
-    const request = directRequest(analysis.spec, compiled, options);
+    const current = await deps.analyses.resolveOwnedView(viewId, principal.email);
+    const access = {
+      revision: 1,
+      definition: current.analysis.definition,
+      intent: current.view.intent,
+      preferences: current.view.preferences,
+    };
+    const compiled = await deps.semanticPlanning.compile(
+      principal,
+      access.definition,
+      access.intent,
+      access.preferences,
+    );
+    const request = directRequest(access.definition, compiled, options);
     return runWithContext(
       principal,
-      { kind: "analysis", id: analysisId, revision: 1 },
+      { kind: "analysis", id: viewId, revision: 1 },
       request,
       async () => ({ access, compiled }),
     );

@@ -30,14 +30,14 @@ export function registerExportTools(
       title: "导出分析结果",
       description: TOOL_DESCRIPTIONS.export_result,
       inputSchema: {
-        analysis_id: z.string().uuid(),
+        view_id: z.string().uuid(),
       },
       outputSchema: EXPORT_OUTPUT,
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    async (input: { analysis_id: string }) => {
-      const payload = await exports.exportResult(principal, input.analysis_id);
+    async (input: { view_id: string }) => {
+      const payload = await exports.exportResult(principal, input.view_id);
       return {
         content: [{ type: "text" as const, text: JSON.stringify(payload) }],
         structuredContent: payload,

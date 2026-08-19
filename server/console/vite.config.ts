@@ -25,6 +25,10 @@ export default defineConfig(({ mode }) => {
           import.meta.dirname,
           "../src/semantic_core/semantic_analysis.ts",
         ),
+        "@view-preferences": path.resolve(
+          import.meta.dirname,
+          "../src/presentation_core/view_preferences.ts",
+        ),
         "@data-capability-map": path.resolve(
           import.meta.dirname,
           "../src/presentation_core/data_capability_map.ts",

@@ -14,7 +14,7 @@ import {
   freshPath,
   semanticPlanningStub,
 } from "../test_support/dashboard.js";
-import { semanticSpecOf } from "../test_support/report.js";
+import { semanticAnalysisOf } from "../test_support/report.js";
 import { createAnalysisRepository } from "../storage/analysis_repository.js";
 import {
   ADD_BOARD_ITEM_PAYLOAD_SCHEMA,
@@ -28,14 +28,12 @@ describe("dashboard board routes", () => {
     const db = createTestAppDatabase(path);
     const reportRepository = createReports(db);
     const analysisRepository = createAnalysisRepository(db);
-    const analysis = await analysisRepository.create(
-      "alice@x",
-      semanticSpecOf(STRUCTURE_ARGS, { type: "table", y: [] }),
-    );
+    const fixture = semanticAnalysisOf(STRUCTURE_ARGS, { type: "table", y: [] });
+    const analysis = await analysisRepository.create("alice@x", fixture.analysis, fixture.view);
     const report = await reportRepository.create({
       owner: "alice@x",
       name: "组织人数",
-      analysisId: analysis.id,
+      viewId: analysis.view.id,
     });
     const boards = createBoardRepository(db, reportRepository);
     const usage = { log: async () => {} };
@@ -172,15 +170,20 @@ describe("dashboard board routes", () => {
     const sharedReplay = REPLAY_PAYLOAD_SCHEMA.parse(await replay.json());
     expect(sharedReplay).toMatchObject({
       caller: "alice@x",
-      analysis_id: expect.any(String),
+      analysis_id: analysis.analysis.id,
+      view_id: analysis.view.id,
       revision: 1,
       record_projection_bindings: { views: [] },
-      spec: analysis.spec,
-      payload: { analysis_id: expect.any(String) },
+      analysis: analysis.analysis.definition,
+      view: analysis.view.intent,
+      payload: {
+        analysis_id: analysis.analysis.id,
+        view_id: analysis.view.id,
+      },
     });
     const recordProjectionBody = {
       revision: 1,
-      view_id: "structure",
+      result_view_id: "structure",
       metric_id: "measure:active_employee_count",
       coordinates: [],
       time_coordinate: { from: "2026-06", to: "2026-06" },
@@ -212,23 +215,27 @@ describe("dashboard board routes", () => {
 
     const foreignPointer = await bob.request("/api/reports", {
       method: "POST",
-      ...json({ analysis_id: analysis.id, name: "错误副本" }),
+      ...json({ view_id: analysis.view.id, name: "错误副本" }),
     });
     expect(foreignPointer.status).toBe(400);
 
     const forked = await bob.request("/api/analyses", {
       method: "POST",
-      ...json({ spec: sharedReplay.spec }),
+      ...json({
+        analysis: sharedReplay.analysis,
+        view: sharedReplay.view,
+        view_preferences: sharedReplay.view_preferences,
+      }),
     });
     expect(forked.status).toBe(200);
     const forkedReplay = REPLAY_PAYLOAD_SCHEMA.parse(await forked.json());
-    expect(forkedReplay.analysis_id).not.toBe(analysis.id);
+    expect(forkedReplay.analysis_id).not.toBe(analysis.analysis.id);
     const copied = await bob.request("/api/reports", {
       method: "POST",
-      ...json({ analysis_id: forkedReplay.analysis_id, name: "我的组织人数" }),
+      ...json({ view_id: forkedReplay.view_id, name: "我的组织人数" }),
     });
     expect(copied.status).toBe(201);
-    expect((await analysisRepository.get(forkedReplay.analysis_id))?.owner).toBe("bob@x");
+    expect((await analysisRepository.getAnalysis(forkedReplay.analysis_id))?.owner).toBe("bob@x");
 
     expect(
       (await alice.request(`/api/boards/${created.id}/items/${report.id}/replay`)).status,

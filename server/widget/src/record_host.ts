@@ -4,14 +4,14 @@ import { useSyncExternalStore } from "react";
 import { PRODUCT_VERSION, RESULT_WIDGET_NAME } from "@product";
 import type { RecordProjectionPayload } from "@records";
 import {
-  analysisIdFrom,
+  viewIdFrom,
   deliverRecordProjection,
   firstText,
   type ToolResult,
 } from "./result_delivery.js";
 
 export type RecordHostState = {
-  analysisId: string | null;
+  viewId: string | null;
   payload: RecordProjectionPayload | null;
   status: string;
   loading: boolean;
@@ -22,7 +22,7 @@ export type RecordHostState = {
 export const RECORDS_WAITING_STATUS = "正在加载人员名单…";
 
 let state: RecordHostState = {
-  analysisId: null,
+  viewId: null,
   payload: null,
   status: RECORDS_WAITING_STATUS,
   loading: true,
@@ -57,8 +57,8 @@ function applyResult(result: ToolResult): boolean {
     setState({ status: delivered.error, loading: false });
     return false;
   }
-  const analysisId = analysisIdFrom(result.structuredContent) ?? state.analysisId;
-  setState({ analysisId, payload: delivered.payload, status: "", loading: false });
+  const viewId = viewIdFrom(result.structuredContent) ?? state.viewId;
+  setState({ viewId, payload: delivered.payload, status: "", loading: false });
   return true;
 }
 
@@ -74,14 +74,14 @@ function applyHostContext(ctx: McpUiHostContext | undefined): void {
 }
 
 export async function loadRecordPage(offset: number): Promise<void> {
-  const { analysisId, payload } = state;
-  if (!analysisId || !payload || state.loading) return;
+  const { viewId, payload } = state;
+  if (!viewId || !payload || state.loading) return;
   setState({ loading: true, status: "正在加载名单分页…" });
   try {
     const result = (await app.callServerTool({
       name: "load_records_page",
       arguments: {
-        analysis_id: analysisId,
+        view_id: viewId,
         metric_id: payload.metric_id,
         data_as_of: payload.data_as_of,
         offset,
@@ -110,7 +110,7 @@ export async function connectRecordHost(): Promise<void> {
   };
   app.addEventListener("toolinput", (params) => {
     setState({
-      analysisId: analysisIdFrom(params.arguments) ?? state.analysisId,
+      viewId: viewIdFrom(params.arguments) ?? state.viewId,
       status: RECORDS_WAITING_STATUS,
       loading: true,
     });

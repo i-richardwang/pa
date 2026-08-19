@@ -12,8 +12,9 @@ import { BOARD_GRID_COLUMNS, BOARD_ID_PATTERN } from "../contracts/board_contrac
 import { BoardConflictError } from "../ports/board_repository.js";
 import { createReportRepository as createReports } from "./report_repository.js";
 import { createAnalysisRepository } from "./analysis_repository.js";
-import { semanticSpecOf } from "../test_support/report.js";
+import { semanticAnalysisOf } from "../test_support/report.js";
 import { createTestAppDatabase } from "../test_support/app_database.js";
+import type { AnalysisRepository } from "../ports/analysis_repository.js";
 
 let seq = 0;
 const runId = randomUUID();
@@ -29,14 +30,14 @@ async function setup(reportCount = 3) {
   const analyses = createAnalysisRepository(db);
   const reportIds: string[] = [];
   for (let i = 0; i < reportCount; i += 1) {
+    const fixture = semanticAnalysisOf(analysis(), presentation());
+    const created = await analyses.create("alice@x", fixture.analysis, fixture.view);
     reportIds.push(
       (
         await reports.create({
           owner: "alice@x",
           name: `报告 ${i + 1}`,
-          analysisId: (
-            await analyses.create("alice@x", semanticSpecOf(analysis(), presentation()))
-          ).id,
+          viewId: created.view.id,
         })
       ).id,
     );
@@ -58,6 +59,11 @@ const presentation = () => ({
   type: "table" as const,
   y: [],
 });
+
+async function ownedViewId(analyses: AnalysisRepository, owner: string): Promise<string> {
+  const fixture = semanticAnalysisOf(analysis(), presentation());
+  return (await analyses.create(owner, fixture.analysis, fixture.view)).view.id;
+}
 
 const place = (x: number, y: number, w = 12, h = 5) => ({ x, y, w, h });
 const reportTile = (reportId: string, p = place(0, 0)) => ({
@@ -98,7 +104,7 @@ describe("瓦片归一", () => {
       await reports.create({
         owner: "bob@x",
         name: "他人的图",
-        analysisId: (await analyses.create("bob@x", semanticSpecOf(analysis(), presentation()))).id,
+        viewId: await ownedViewId(analyses, "bob@x"),
       })
     ).id;
     const ctx = board("alice@x");

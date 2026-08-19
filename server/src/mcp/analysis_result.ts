@@ -6,7 +6,7 @@ import { EXPORT_RESOURCE_META_KEY, FULL_ROWS_META_KEY } from "../semantic_core/q
 export function analysisResult(
   presentationService: Pick<PresentationService, "compile" | "runtimeFallbacks">,
   executed: ExecutedAnalysis,
-  options: { includeSpec?: boolean } = {},
+  options: { includeDefinition?: boolean } = {},
 ) {
   const presentation = presentationService.compile(executed);
   // 降级说明据本次编译解析出的物理呈现（executed.presentation）判定，与所渲图表同源。
@@ -19,7 +19,9 @@ export function analysisResult(
   const payload = {
     ...executed.payload,
     ...(fallbacks.length ? { presentation_notes: fallbacks } : {}),
-    ...(options.includeSpec ? { spec: executed.spec } : {}),
+    ...(options.includeDefinition
+      ? { analysis: executed.definition, view_intent: executed.intent }
+      : {}),
   };
   return {
     content: [{ type: "text" as const, text: JSON.stringify(payload) }],

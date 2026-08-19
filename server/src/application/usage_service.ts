@@ -15,15 +15,15 @@ export function createUsageService(deps: { log: UsageLog; statistics: UsageStati
   ): (args: Args, ...rest: Rest) => Promise<Result> {
     return async (args, ...rest) => {
       const started = performance.now();
-      const specTitle = (args.spec as { analysis?: { title?: unknown } } | undefined)?.analysis
-        ?.title;
+      const analysisTitle = (args.analysis as { title?: unknown } | undefined)?.title;
       const base = {
         caller: span.caller,
         tool: span.tool,
         analysis_id: typeof args.analysis_id === "string" ? args.analysis_id : undefined,
+        view_id: typeof args.view_id === "string" ? args.view_id : undefined,
         title:
-          typeof specTitle === "string"
-            ? specTitle
+          typeof analysisTitle === "string"
+            ? analysisTitle
             : typeof args.title === "string"
               ? args.title
               : typeof args.ask === "string"

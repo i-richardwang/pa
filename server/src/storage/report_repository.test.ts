@@ -7,11 +7,13 @@ import { createReportService } from "../application/report_service.js";
 
 const usage = { log: async () => {} };
 import type { Principal } from "../engine/cube_security.js";
-import { semanticSpecOf } from "../test_support/report.js";
+import { semanticAnalysisOf } from "../test_support/report.js";
 import type { AnalysisSpec } from "../semantic_core/analysis_spec.js";
 import { planExecution } from "../semantic_core/execution_plan.js";
 import { createAnalysisRepository } from "./analysis_repository.js";
 import { ReportConflictError, createReportRepository } from "./report_repository.js";
+import type { AnalysisRepository } from "../ports/analysis_repository.js";
+import type { AnalysisDefinition, SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
 
 const path = () => join(tmpdir(), `pa_repository_${randomUUID()}.db`);
 const spec = (id = "result") => ({
@@ -38,19 +40,29 @@ const execution = {
 };
 const presentation = { renderShape: () => null };
 const semanticPlanning = {
-  compile: async (_principal: unknown, semantic: ReturnType<typeof semanticSpecOf>) => ({
+  compile: async (
+    _principal: unknown,
+    semantic: AnalysisDefinition,
+    _intent: SemanticViewIntent,
+  ) => ({
     plan: planExecution({
-      ...(semantic.analysis.title ? { title: semantic.analysis.title } : {}),
-      views: semantic.analysis.views.filter((view) => !("from" in view)),
+      ...(semantic.title ? { title: semantic.title } : {}),
+      views: semantic.views.filter((view) => !("from" in view)),
     } as AnalysisSpec),
     presentation: { type: "table" as const, y: [] },
+    render_decl: { type: "table" as const, y: [] },
     routes: [],
     record_projection_bindings: { views: [] },
   }),
 };
 
+async function createOwned(analyses: AnalysisRepository, owner: string, value: AnalysisSpec) {
+  const fixture = semanticAnalysisOf(value);
+  return analyses.create(owner, fixture.analysis, fixture.view);
+}
+
 describe("report aggregate", () => {
-  test("报告与版本只存 analysis_id，逻辑规格只物化在 analysis", async () => {
+  test("报告与版本只存 view_id，定义与视图各自只物化一次", async () => {
     const db = createTestAppDatabase();
     const analyses = createAnalysisRepository(db);
     const reports = createReportRepository(db);
@@ -67,22 +79,22 @@ describe("report aggregate", () => {
         },
       ],
     };
-    const logical = semanticSpecOf(derived);
-    const analysisRecord = await analyses.create("alice@x", logical);
+    const logical = semanticAnalysisOf(derived);
+    const analysisRecord = await analyses.create("alice@x", logical.analysis, logical.view);
     const created = await reports.create({
       owner: "alice@x",
       name: "派生报告",
-      analysisId: analysisRecord.id,
+      viewId: analysisRecord.view.id,
     });
-    expect(created.analysis_id).toBe(analysisRecord.id);
+    expect(created.view_id).toBe(analysisRecord.view.id);
     expect(created).not.toHaveProperty("spec");
     expect(db.prepare("SELECT COUNT(*) AS n FROM analysis").get()).toEqual({ n: 1 });
-    expect(db.prepare("SELECT analysis_id FROM report WHERE id = ?").get(created.id)).toEqual({
-      analysis_id: analysisRecord.id,
+    expect(db.prepare("SELECT view_id FROM report WHERE id = ?").get(created.id)).toEqual({
+      view_id: analysisRecord.view.id,
     });
   });
 
-  test("只从本人 handle 保存，revision 乐观锁与归档生效", async () => {
+  test("只从本人 View 身份保存，revision 乐观锁与归档生效", async () => {
     const db = createTestAppDatabase();
     const analyses = createAnalysisRepository(db);
     const reports = createReportRepository(db);
@@ -94,18 +106,18 @@ describe("report aggregate", () => {
       semanticPlanning,
       usage,
     });
-    const handle = await analyses.create("alice@x", semanticSpecOf(spec()));
+    const identity = await createOwned(analyses, "alice@x", spec());
     await expect(
       service.save({
         principal: principal("bob@x"),
-        analysisId: handle.id,
+        viewId: identity.view.id,
         name: "越权",
       }),
     ).rejects.toThrow(/无权访问/);
 
     const saved = await service.save({
       principal: principal("alice@x"),
-      analysisId: handle.id,
+      viewId: identity.view.id,
       name: "组织报告",
     });
     expect(saved.revision).toBe(1);
@@ -130,14 +142,11 @@ describe("report aggregate", () => {
     const firstDb = createTestAppDatabase(dbPath);
     const first = createReportRepository(firstDb);
     const second = createReportRepository(createTestAppDatabase(dbPath));
-    const analysis = await createAnalysisRepository(firstDb).create(
-      "alice@x",
-      semanticSpecOf(spec()),
-    );
+    const analysis = await createOwned(createAnalysisRepository(firstDb), "alice@x", spec());
     const report = await first.create({
       owner: "alice@x",
       name: "初始",
-      analysisId: analysis.id,
+      viewId: analysis.view.id,
     });
     const settled = await Promise.allSettled([
       first.update(report.id, "alice@x", { name: "甲" }, 1),
@@ -152,7 +161,7 @@ describe("report aggregate", () => {
     expect(await first.listRevisions(report.id, "alice@x")).toHaveLength(1);
   });
 
-  test("每次更新快照上一版、只留最近 20 版，恢复追加新 revision", async () => {
+  test("每次更新保存更新前快照、只留最近 20 版，恢复追加新 revision", async () => {
     const db = createTestAppDatabase();
     const reports = createReportRepository(db);
     const analyses = createAnalysisRepository(db);
@@ -164,11 +173,11 @@ describe("report aggregate", () => {
       semanticPlanning,
       usage,
     });
-    const analysis = await analyses.create("alice@x", semanticSpecOf(spec()));
+    const analysis = await createOwned(analyses, "alice@x", spec());
     let current = await reports.create({
       owner: "alice@x",
       name: "版本 1",
-      analysisId: analysis.id,
+      viewId: analysis.view.id,
     });
     for (let revision = 2; revision <= 26; revision += 1) {
       current = await reports.update(
@@ -199,22 +208,22 @@ describe("report aggregate", () => {
     const db = createTestAppDatabase();
     const analyses = createAnalysisRepository(db);
     const reports = createReportRepository(db);
-    const analysis = await analyses.create("alice@x", semanticSpecOf(spec()));
+    const analysis = await createOwned(analyses, "alice@x", spec());
     await reports.create({
       owner: "alice@x",
       name: "人数_100%",
-      analysisId: analysis.id,
+      viewId: analysis.view.id,
     });
     await reports.create({
       owner: "alice@x",
       name: "人数汇总",
-      analysisId: analysis.id,
+      viewId: analysis.view.id,
     });
     expect(await reports.listOwned("alice@x", "_100%")).toHaveLength(1);
     expect((await reports.listOwned("alice@x", "_100%"))[0]?.name).toBe("人数_100%");
   });
 
-  test("render shape 缓存不递增 revision，旧 analysis_id 不能覆盖新缓存", async () => {
+  test("render shape 缓存不递增 revision，非当前 view_id 不能覆盖当前缓存", async () => {
     const db = createTestAppDatabase();
     const analyses = createAnalysisRepository(db);
     const reports = createReportRepository(db);
@@ -226,10 +235,10 @@ describe("report aggregate", () => {
       semanticPlanning,
       usage,
     });
-    const handle = await analyses.create("alice@x", semanticSpecOf(spec()));
+    const identity = await createOwned(analyses, "alice@x", spec());
     const saved = await service.save({
       principal: principal("alice@x"),
-      analysisId: handle.id,
+      viewId: identity.view.id,
       name: "报告",
     });
     await service.cacheRenderShape(saved, "table");
@@ -237,10 +246,10 @@ describe("report aggregate", () => {
       render_shape: "table",
       revision: 1,
     });
-    const next = await analyses.create("alice@x", semanticSpecOf(spec("next")));
+    const next = await createOwned(analyses, "alice@x", spec("next"));
     const updated = await service.update(principal("alice@x"), saved.id, {
-      type: "replace_analysis",
-      analysis_id: next.id,
+      type: "replace_view",
+      view_id: next.view.id,
     });
     expect(updated).toMatchObject({ render_shape: null, revision: 2 });
     await service.cacheRenderShape(saved, "kpi");

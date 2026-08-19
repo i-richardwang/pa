@@ -4,8 +4,8 @@ import { openSqlite, type SqliteDatabase } from "../sqlite.js";
 /**
  * 结构印记：本文件 DDL 的规范化摘要，开库时写进 `user_version`。
  *
- * 应用库不做原地迁移：非空库的印记与当前 DDL 不同时，开库立即 fail-closed，
- * 由部署方以空库重建。印记从 DDL 自动得出，不是手工维护的版本号。
+ * 非空库的印记与当前 DDL 不同时，开库立即 fail-closed，由部署方以空库重建。
+ * 印记从 DDL 自动得出。
  *
  * 摘要取自 DDL 源文本并折叠空白：重排版、改缩进不算结构变化，动表、动列、动索引才算。
  */
@@ -15,7 +15,7 @@ export function schemaStampOf(ddl: string): number {
   return digest.readUInt32BE(0) & 0x7fff_ffff || 1;
 }
 
-function schemaVersion(db: SqliteDatabase): number {
+function storedSchemaStamp(db: SqliteDatabase): number {
   return (
     db.prepare("PRAGMA user_version").get() as {
       user_version: number;
@@ -32,7 +32,7 @@ function hasUserTables(db: SqliteDatabase): boolean {
   return row !== null && row !== undefined;
 }
 
-/** 自有应用库结构的唯一基线：结构变化直接改这里，仓库不提供迁移框架。 */
+/** 自有应用库结构的唯一基线：结构变化直接更新完整 DDL，空库据此建立全部结构。 */
 const SCHEMA_DDL = `
     CREATE TABLE usage_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,11 +48,13 @@ const SCHEMA_DDL = `
       duration_ms INTEGER NOT NULL CHECK (duration_ms >= 0),
       query_fingerprint TEXT,
       unmatched_terms TEXT CHECK (unmatched_terms IS NULL OR json_valid(unmatched_terms)),
-      analysis_id TEXT
+      analysis_id TEXT,
+      view_id TEXT
     );
     CREATE INDEX usage_log_at ON usage_log (at);
     CREATE INDEX usage_log_fingerprint ON usage_log (query_fingerprint);
     CREATE INDEX usage_log_analysis_id ON usage_log (analysis_id);
+    CREATE INDEX usage_log_view_id ON usage_log (view_id);
 
     CREATE TABLE feedback (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,39 +85,50 @@ const SCHEMA_DDL = `
     CREATE TABLE analysis (
       id TEXT PRIMARY KEY,
       owner TEXT NOT NULL,
-      spec TEXT NOT NULL CHECK (json_valid(spec)),
+      definition TEXT NOT NULL CHECK (json_valid(definition)),
       created_at TEXT NOT NULL
     );
     CREATE INDEX analysis_owner ON analysis (owner, created_at DESC);
+
+    CREATE TABLE analysis_view (
+      id TEXT PRIMARY KEY,
+      analysis_id TEXT NOT NULL,
+      intent TEXT NOT NULL CHECK (json_valid(intent)),
+      preferences TEXT NOT NULL DEFAULT '{}'
+        CHECK (json_valid(preferences) AND json_type(preferences) = 'object'),
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (analysis_id) REFERENCES analysis(id) ON DELETE CASCADE
+    );
+    CREATE INDEX analysis_view_analysis ON analysis_view (analysis_id, created_at DESC);
 
     CREATE TABLE report (
       id TEXT PRIMARY KEY,
       owner TEXT NOT NULL,
       name TEXT NOT NULL,
-      analysis_id TEXT NOT NULL,
+      view_id TEXT NOT NULL,
       render_shape TEXT,
       archived_at TEXT,
       revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      FOREIGN KEY (analysis_id) REFERENCES analysis(id) ON DELETE RESTRICT
+      FOREIGN KEY (view_id) REFERENCES analysis_view(id) ON DELETE RESTRICT
     );
     CREATE INDEX report_owner ON report (owner, archived_at, updated_at DESC);
-    CREATE INDEX report_analysis ON report (analysis_id);
+    CREATE INDEX report_view ON report (view_id);
 
     CREATE TABLE report_revision (
       report_id TEXT NOT NULL,
       revision INTEGER NOT NULL,
       name TEXT NOT NULL,
-      analysis_id TEXT NOT NULL,
+      view_id TEXT NOT NULL,
       saved_by TEXT NOT NULL,
       saved_at TEXT NOT NULL,
       PRIMARY KEY (report_id, revision),
       FOREIGN KEY (report_id) REFERENCES report(id) ON DELETE CASCADE,
-      FOREIGN KEY (analysis_id) REFERENCES analysis(id) ON DELETE RESTRICT
+      FOREIGN KEY (view_id) REFERENCES analysis_view(id) ON DELETE RESTRICT
     );
     CREATE INDEX report_revision_saved_at ON report_revision (report_id, revision DESC);
-    CREATE INDEX report_revision_analysis ON report_revision (analysis_id);
+    CREATE INDEX report_revision_view ON report_revision (view_id);
 
     CREATE TABLE board (
       id TEXT PRIMARY KEY,
@@ -191,12 +204,12 @@ export function initializeAppDatabase(db: SqliteDatabase): void {
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA synchronous = NORMAL");
 
-  const version = schemaVersion(db);
-  if (version === APP_SCHEMA_STAMP) return;
-  if (version !== 0 || hasUserTables(db)) {
+  const stamp = storedSchemaStamp(db);
+  if (stamp === APP_SCHEMA_STAMP) return;
+  if (stamp !== 0 || hasUserTables(db)) {
     throw new Error(
-      `应用库结构与当前代码不符：库印记 ${version}，代码印记 ${APP_SCHEMA_STAMP}；` +
-        "本版不做数据迁移，请以空库重建后再启动",
+      `应用库结构与当前代码不符：库印记 ${stamp}，代码印记 ${APP_SCHEMA_STAMP}；` +
+        "请以空库重建后再启动",
     );
   }
 

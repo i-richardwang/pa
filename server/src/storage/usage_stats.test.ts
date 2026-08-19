@@ -11,7 +11,7 @@ import type { SqliteDatabase } from "../sqlite.js";
 
 const createUsage = (db: SqliteDatabase) =>
   createUsageService({ log: createUsageLog(db), statistics: createUsageStats(db) });
-import { semanticSpecOf } from "../test_support/report.js";
+import { semanticAnalysisOf } from "../test_support/report.js";
 import { createAnalysisRepository } from "./analysis_repository.js";
 import { createTestAppDatabase } from "../test_support/app_database.js";
 
@@ -22,18 +22,16 @@ function freshPath() {
   return join(tmpdir(), `pa_usage_stats_test_${runId}_${seq}.db`);
 }
 
-/** 结构查询的真实入参：与生产写入方同形（{ spec } 承载语义规格），写入时应计出分析指纹。 */
-const STRUCTURE_ARGS = {
-  spec: semanticSpecOf({
-    views: [
-      {
-        id: "result",
-        measures: ["test_people_metrics.active_employee_count"],
-        time: { cutoff: "2026-07" },
-      },
-    ],
-  }),
-};
+/** 结构查询的真实入参：AnalysisDefinition 与 ViewIntent 分列。 */
+const STRUCTURE_ARGS = semanticAnalysisOf({
+  views: [
+    {
+      id: "result",
+      measures: ["test_people_metrics.active_employee_count"],
+      time: { cutoff: "2026-07" },
+    },
+  ],
+});
 
 /** 经写入方落一批代表性日志：分析成功（带 title）、换呈现重跑、目录零命中/命中、分析报错 */
 async function seed(path: string) {
@@ -130,34 +128,33 @@ describe("usage_stats", () => {
     expect((await stats.mine("bob", 30)).rows).toEqual([]);
   });
 
-  test("mine：使用记录独立保留，缺少有效 handle 时不提供重放入口", async () => {
+  test("mine：使用记录独立保留，缺少有效 View 身份时不提供重放入口", async () => {
     const path = freshPath();
     const db = createTestAppDatabase(path);
     const repository = createAnalysisRepository(db);
-    const handle = await repository.create(
-      "alice",
-      semanticSpecOf({
-        views: [
-          {
-            id: "result",
-            measures: ["test_people_metrics.active_employee_count"],
-            time: { cutoff: "2026-07" },
-          },
-        ],
-      }),
-    );
+    const fixture = semanticAnalysisOf({
+      views: [
+        {
+          id: "result",
+          measures: ["test_people_metrics.active_employee_count"],
+          time: { cutoff: "2026-07" },
+        },
+      ],
+    });
+    const identity = await repository.create("alice", fixture.analysis, fixture.view);
     await createUsage(db).log({
       caller: "alice",
       tool: "run_analysis",
       title: "组织人数",
-      args: { spec: handle.spec },
+      args: { analysis: identity.analysis.definition, view: identity.view.intent },
       outcome: "ok",
       duration_ms: 1,
-      analysis_id: handle.id,
+      analysis_id: identity.analysis.id,
+      view_id: identity.view.id,
     });
     const stats = createUsageStats(db);
-    expect((await stats.mine("alice", 30)).rows[0]?.analysis_id).toBe(handle.id);
-    new Database(path).prepare("DELETE FROM analysis WHERE id = ?").run(handle.id);
+    expect((await stats.mine("alice", 30)).rows[0]?.view_id).toBe(identity.view.id);
+    new Database(path).prepare("DELETE FROM analysis WHERE id = ?").run(identity.analysis.id);
     expect((await stats.mine("alice", 30)).rows[0]?.analysis_id).toBeNull();
   });
 

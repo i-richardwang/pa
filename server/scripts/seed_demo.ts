@@ -11,7 +11,10 @@ import {
   loadCanonicalSemanticModel,
   withCanonicalSemanticModel,
 } from "../src/engine/canonical_semantic_model.js";
-import type { SemanticAnalysisSpec } from "../src/semantic_core/semantic_analysis.js";
+import type {
+  AnalysisDefinition,
+  SemanticViewIntent,
+} from "../src/semantic_core/semantic_analysis.js";
 import {
   configuredSemanticPackageDir,
   loadSemanticPackage,
@@ -82,62 +85,57 @@ const planned = measure("编制目标");
 const fulfillment = measure("当月编制完成率");
 const organization = dimension("组织");
 
-type DemoReport = { name: string; spec: SemanticAnalysisSpec };
+type DemoReport = {
+  name: string;
+  analysis: AnalysisDefinition;
+  view: SemanticViewIntent;
+};
 const demos: DemoReport[] = [
   {
     name: "组织人员规模",
-    spec: {
-      version: 2,
-      analysis: {
-        title: "按组织查看月末在职人数与平均年龄",
-        views: [
-          {
-            id: "workforce",
-            measures: [active, averageAge],
-            dimensions: [organization],
-            time: { window: { kind: "current_month", month: asOf } },
-            group_sort: { dimension: organization, by: active, direction: "desc" },
-          },
-        ],
-      },
-      presentation: { type: "table" },
+    analysis: {
+      title: "按组织查看月末在职人数与平均年龄",
+      views: [
+        {
+          id: "workforce",
+          measures: [active, averageAge],
+          dimensions: [organization],
+          time: { window: { kind: "current_month", month: asOf } },
+          group_sort: { dimension: organization, by: active, direction: "desc" },
+        },
+      ],
     },
+    view: { type: "table" },
   },
   {
     name: "入离职率趋势",
-    spec: {
-      version: 2,
-      analysis: {
-        title: "本年逐月入职率与离职率趋势",
-        views: [
-          {
-            id: "movement",
-            measures: [hireRate, turnoverRate],
-            time: { window: { kind: "year_to_date" }, display: "month" },
-          },
-        ],
-      },
-      presentation: { type: "line", series: [hireRate, turnoverRate] },
+    analysis: {
+      title: "本年逐月入职率与离职率趋势",
+      views: [
+        {
+          id: "movement",
+          measures: [hireRate, turnoverRate],
+          time: { window: { kind: "year_to_date" }, display: "month" },
+        },
+      ],
     },
+    view: { type: "line", series: [hireRate, turnoverRate] },
   },
   {
     name: "组织编制完成率",
-    spec: {
-      version: 2,
-      analysis: {
-        title: "按组织查看月末人数、编制目标与完成率",
-        views: [
-          {
-            id: "staffing",
-            measures: [active, planned, fulfillment],
-            dimensions: [organization],
-            time: { window: { kind: "current_month", month: asOf } },
-            group_sort: { dimension: organization, by: fulfillment, direction: "desc" },
-          },
-        ],
-      },
-      presentation: { type: "bar", category: organization, series: [fulfillment] },
+    analysis: {
+      title: "按组织查看月末人数、编制目标与完成率",
+      views: [
+        {
+          id: "staffing",
+          measures: [active, planned, fulfillment],
+          dimensions: [organization],
+          time: { window: { kind: "current_month", month: asOf } },
+          group_sort: { dimension: organization, by: fulfillment, direction: "desc" },
+        },
+      ],
     },
+    view: { type: "bar", category: organization, series: [fulfillment] },
   },
 ];
 
@@ -157,19 +155,19 @@ try {
   );
   const reportIds = new Map<string, string>();
   for (const demo of demos) {
-    const compiled = await planning.compile(principal, demo.spec);
+    const compiled = await planning.compile(principal, demo.analysis, demo.view);
     const result = await execution.execute(principal, compiled.plan, compiled.presentation);
     if (!result.fullRowViewBlock.rows.length) throw new Error(`Demo「${demo.name}」实跑零行`);
-    const analysis = await analyses.create(owner, demo.spec);
+    const analysis = await analyses.create(owner, demo.analysis, demo.view);
     const previous = existing.get(demo.name);
     const report = previous
       ? await reports.update(
           previous.id,
           owner,
-          { name: demo.name, analysisId: analysis.id, archivedAt: null },
+          { name: demo.name, viewId: analysis.view.id, archivedAt: null },
           previous.revision,
         )
-      : await reports.create({ owner, name: demo.name, analysisId: analysis.id });
+      : await reports.create({ owner, name: demo.name, viewId: analysis.view.id });
     reportIds.set(demo.name, report.id);
   }
 

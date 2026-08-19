@@ -8,7 +8,7 @@ export const RECORD_PROJECTION_MAX_ROWS = 50_000;
 export const RECORD_PROJECTION_META_KEY = "ai.pa/record-projection";
 
 export type RecordProjectionViewBinding = {
-  view_id: string;
+  result_view_id: string;
   metrics: Record<string, { metric_id: string; title: string }>;
   dimensions: Record<string, { dimension_id: string; title: string }>;
 };
@@ -20,7 +20,7 @@ export const RECORD_PROJECTION_BINDINGS_SCHEMA: z.ZodType<RecordProjectionBindin
     views: z.array(
       z
         .object({
-          view_id: z.string(),
+          result_view_id: z.string(),
           metrics: z.record(
             z.string(),
             z.object({ metric_id: z.string(), title: z.string() }).strict(),
@@ -45,7 +45,7 @@ const RECORD_PROJECTION_TIME_COORDINATE = z
 export const RECORD_PROJECTION_REQUEST_BODY = z
   .object({
     revision: z.number().int().positive(),
-    view_id: z.string().min(1),
+    result_view_id: z.string().min(1),
     metric_id: z.string().min(1),
     coordinates: z
       .array(z.object({ dimension_id: z.string().min(1), value: CELL_SCHEMA }).strict())

@@ -49,7 +49,7 @@ export function useRecordProjection({
     }
     const revision = replay.revision;
     const bindingByView = new Map(
-      replay.record_projection_bindings.views.map((binding) => [binding.view_id, binding]),
+      replay.record_projection_bindings.views.map((binding) => [binding.result_view_id, binding]),
     );
     return {
       // 可点性是指标列属性；零值仍可打开并得到诚实的空名单。
@@ -89,7 +89,7 @@ export function useRecordProjection({
                   ...(timeOverride ? { time_override: timeOverride } : {}),
                 },
           revision,
-          view_id: cell.viewId,
+          result_view_id: cell.viewId,
           metric_id: metric.metric_id,
           coordinates,
           time_coordinate: timeCoordinate,

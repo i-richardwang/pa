@@ -40,7 +40,13 @@ export function registerReportRoutes(
   };
 
   const reportDetail = (row: ReportDocument): ReportDetail => {
-    return { ...reportRow(row), owner: row.owner, spec: row.spec };
+    return {
+      ...reportRow(row),
+      owner: row.owner,
+      analysis: row.definition,
+      view: row.intent,
+      view_preferences: row.view_preferences,
+    };
   };
 
   dashboard.get("/api/reports", async (c) => {
@@ -103,12 +109,12 @@ export function registerReportRoutes(
   dashboard.post("/api/reports", async (c) => {
     if (!reportService) return c.json({ error: "未启用我的报告" }, 501);
     const parsed = CREATE_REPORT_BODY.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "缺少 analysis_id 或 name" }, 400);
+    if (!parsed.success) return c.json({ error: "缺少 view_id 或 name" }, 400);
     const body = parsed.data;
     try {
       const row = await reportService.save({
         principal: c.get("principal"),
-        analysisId: body.analysis_id,
+        viewId: body.view_id,
         name: body.name,
       });
       return c.json(reportRow(row), 201);
@@ -160,10 +166,14 @@ export function registerReportRoutes(
         at: row.updated_at,
         caller: row.owner,
         analysis_id: executed.analysis_id,
+        view_id: executed.view_id,
         revision: row.revision,
-        spec: row.spec,
+        analysis: row.definition,
+        view: row.intent,
+        view_preferences: row.view_preferences,
         record_projection_bindings: recordProjectionBindings,
         payload: executed.payload,
+        render_bundle: { view: executed.fullRowViewBlock, decl: executed.decl },
         ...(renderedPresentation ? { presentation: renderedPresentation } : {}),
         ...(presentationNotes.length ? { presentation_notes: presentationNotes } : {}),
       });

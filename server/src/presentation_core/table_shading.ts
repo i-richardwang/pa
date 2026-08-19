@@ -9,11 +9,11 @@
  * 字色按底色与承载面合成后的对比度选墨色或反白，与外部参照的可读性判据一致（WCAG 相对亮度）。
  * 本模块只算颜色，不改数值，也不产生任何要印出来的数。
  */
-import type { ShadingPaletteName, TableShadingDecl } from "../semantic_core/semantic_analysis.js";
 import { CHART_SERIES } from "./design_tokens.js";
+import type { ShadingPaletteName, TableShadingPreferences } from "./view_preferences.js";
 import { toNumber } from "./view_format.js";
 
-export type { TableShadingDecl } from "../semantic_core/semantic_analysis.js";
+export type { TableShadingPreferences } from "./view_preferences.js";
 
 export type ShadingScale = { min: number; mid: number; max: number };
 
@@ -101,9 +101,14 @@ function dataExtents(
   return extents;
 }
 
-function scaleOf(extent: Extent, thresholds: TableShadingDecl["thresholds"]): ShadingScale {
-  const min = thresholds?.min ?? extent.min;
-  const max = thresholds?.max ?? extent.max;
+function scaleOf(extent: Extent, thresholds: TableShadingPreferences["thresholds"]): ShadingScale {
+  // 自动端点包住数据与已显式声明的其他停点，保证“只填一个阈值”也始终得到有序色阶。
+  const min =
+    thresholds?.min ??
+    Math.min(extent.min, thresholds?.mid ?? extent.min, thresholds?.max ?? extent.min);
+  const max =
+    thresholds?.max ??
+    Math.max(extent.max, thresholds?.mid ?? extent.max, thresholds?.min ?? extent.max);
   return { min, mid: thresholds?.mid ?? (min + max) / 2, max };
 }
 
@@ -113,7 +118,7 @@ function scaleOf(extent: Extent, thresholds: TableShadingDecl["thresholds"]): Sh
  * 一个键没有任何数值时不立刻度（渲染端遂不着色）。
  */
 export function compileTableShading(
-  decl: TableShadingDecl,
+  decl: TableShadingPreferences,
   columns: ShadedColumns,
   rows: ShadedRows,
   shadedKeys: ReadonlySet<string>,

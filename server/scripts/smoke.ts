@@ -64,21 +64,18 @@ try {
         await client.callTool({
           name: "run_analysis",
           arguments: {
-            spec: {
-              version: 2,
-              analysis: {
-                title: "公开 Demo 月末人员规模",
-                views: [
-                  {
-                    id: "workforce",
-                    measures: [active],
-                    dimensions: [organization],
-                    time: { window: { kind: "current_month" } },
-                  },
-                ],
-              },
-              presentation: { type: "table" },
+            analysis: {
+              title: "公开 Demo 月末人员规模",
+              views: [
+                {
+                  id: "workforce",
+                  measures: [active],
+                  dimensions: [organization],
+                  time: { window: { kind: "current_month" } },
+                },
+              ],
             },
+            view: { type: "table" },
           },
         }),
       ),

@@ -19,6 +19,7 @@ import {
   FONT_FAMILY,
   PLOT_PADDING,
   SERIES_COLORS,
+  valueLabelPillWidth,
   type PaChartExtension,
   type ViewChart,
 } from "../../src/presentation_core/chart_config.js";
@@ -265,6 +266,67 @@ function injectValueLabelFormatters(option: MutableOption, pa: PaChartExtension)
   });
 }
 
+/**
+ * 值标签密度守卫：空间不足时按步距挑桶印数、恒印末点。
+ * 折线：每点摊到 37.33px 以上才逐点印，否则步距 = ceil(50 / 每点宽)；
+ * 柱：步距 = ceil((最宽底片 + 4) / 每列宽)（放得下即逐列印，无独立阈值）。
+ * 宽度到渲染时才知道，故与符号密度一样在实例上按尺寸补丁，而非编译期定死。
+ * 横排条一行一格不会横向挤，不在此列。
+ */
+const VALUE_LABEL_SPACING = 37.33;
+const LINE_LABEL_BUDGET = 50;
+const BAR_LABEL_GAP = 4;
+
+export function applyValueLabelDensity(
+  instance: { setOption: (option: unknown) => void },
+  chart: ViewChart,
+  width: number,
+): void {
+  const series = chart.option.series;
+  if (!Array.isArray(series) || width <= 0) return;
+  const xAxis = Array.isArray(chart.option.xAxis) ? chart.option.xAxis[0] : chart.option.xAxis;
+  if ((xAxis as { type?: string } | undefined)?.type !== "category") return;
+  const pa = chart.option.pa as PaChartExtension | undefined;
+  let touched = false;
+  const patch = series.map((s) => {
+    const record = s as Record<string, unknown>;
+    const label = record.label as { show?: boolean } | undefined;
+    const kind = record.type;
+    if ((kind !== "line" && kind !== "bar") || !label?.show || !Array.isArray(record.data))
+      return {};
+    touched = true;
+    const count = (record.data as unknown[]).length;
+    const per = count > 0 ? width / count : width;
+    const name = String(record.name ?? "");
+    const format: ColumnFormat = pa?.series[name] ?? "number";
+    const decimals = pa?.decimals?.[name];
+    const widest = (record.data as unknown[]).reduce<number>(
+      (max, value) =>
+        typeof value === "number"
+          ? Math.max(max, valueLabelPillWidth(formatSeriesValue(value, format, decimals)))
+          : max,
+      0,
+    );
+    const step =
+      kind === "line"
+        ? per <= VALUE_LABEL_SPACING
+          ? Math.max(1, Math.ceil(LINE_LABEL_BUDGET / per))
+          : 1
+        : Math.max(1, Math.ceil((widest + BAR_LABEL_GAP) / per));
+    return {
+      label: {
+        formatter: (params: { value?: unknown; dataIndex?: number }) => {
+          const index = params.dataIndex ?? 0;
+          if (step > 1 && index !== count - 1 && index % step !== 0) return "";
+          const value = Array.isArray(params.value) ? params.value.at(-1) : params.value;
+          return typeof value === "number" ? formatSeriesValue(value, format, decimals) : "";
+        },
+      },
+    };
+  });
+  if (touched) instance.setOption({ series: patch });
+}
+
 /** 环心总计：值为主、总计标签为次，居中常驻。 */
 function injectPieCenterTotal(option: MutableOption, pa: PaChartExtension, dark: boolean): void {
   const total = pieTotal(option);
@@ -359,8 +421,9 @@ function applyDarkColors(value: unknown): unknown {
 }
 
 /**
- * 绘图区相对画布四缘的退让（px）：场景留白 + 该形态自己那一栏轴标签。
+ * 场地框相对画布四缘的退让（px）：场景留白 + 该形态自己那一栏框外轴标签。
  * echarts 的 grid 与 DOM 那层 plot 框读同一道算式——两处各算一次，框迟早圈错地方。
+ * 值标签的框内余量（`plot_inset`）不在此列：它只缩数据区（见 `gridRect`），框不动。
  */
 export function plotRect(
   chart: ViewChart,
@@ -368,6 +431,26 @@ export function plotRect(
 ): { left: number; right: number; top: number; bottom: number } {
   const pad = PLOT_PADDING[plot];
   return { ...pad, left: pad.left + (chart.plot_gutter?.left ?? 0) };
+}
+
+/** 数据区 = 场地框 + 框内标签余量：框不因标签开关移动，余量只缩数据区。 */
+export function gridRect(
+  chart: ViewChart,
+  plot: keyof typeof PLOT_PADDING,
+): { left: number; right: number; top: number; bottom: number } {
+  const rect = plotRect(chart, plot);
+  const inset = chart.plot_inset ?? {};
+  return { ...rect, top: rect.top + (inset.top ?? 0), right: rect.right + (inset.right ?? 0) };
+}
+
+/** 数据区实际宽度；依赖横轴空间的密度策略统一从这里取值。 */
+export function plotWidth(
+  chart: ViewChart,
+  plot: keyof typeof PLOT_PADDING,
+  canvasWidth: number,
+): number {
+  const rect = gridRect(chart, plot);
+  return Math.max(0, canvasWidth - rect.left - rect.right);
 }
 
 /** 渲染前补全：克隆 option、注入格式化函数与环心总计、按主题翻色；返回可直接 setOption 的对象 */
@@ -389,7 +472,7 @@ export function prepareOption(
   // 不在这里另写数字——否则 grid() 与本处各持一份留白，改哪边都只改对一半。
 
   if (layout?.plot && base.grid) {
-    const rect = plotRect(chart, layout.plot);
+    const rect = gridRect(chart, layout.plot);
     for (const g of asArray(base.grid)) Object.assign(g, rect);
   }
   const pa = base.pa as PaChartExtension | undefined;

@@ -20,7 +20,7 @@ import {
   type ShadingScale,
   shadingDataScale,
   type TableShading,
-  type TableShadingDecl,
+  type TableShadingPreferences,
 } from "./table_shading.js";
 import type { RenderShape } from "./render_shape.js";
 
@@ -143,7 +143,6 @@ export type SeriesDisplay = {
   color?: string;
   type?: "line" | "bar";
   yAxis?: "left" | "right";
-  label?: boolean;
 };
 
 export type ChartDecl = {
@@ -162,8 +161,10 @@ export type ChartDecl = {
   stack?: boolean;
 
   display?: Record<string, SeriesDisplay>;
+  /** 图级数值标签：main=仅第一主系列，all=全部系列（含拆分系列）；缺省不印 */
+  valueLabels?: "main" | "all";
   /** table 的热力着色声明；刻度在编译期按本表数据定 */
-  shading?: TableShadingDecl;
+  shading?: TableShadingPreferences;
 };
 
 export type TableAxis =

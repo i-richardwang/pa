@@ -778,7 +778,7 @@ describe("无图形态与回答级块", () => {
   });
 });
 
-describe("呈现声明（Agent 选型）", () => {
+describe("服务端物理呈现声明", () => {
   const trendView = view(
     ["year", "month", "new_hire_count", "leave_count"],
     [
@@ -798,14 +798,15 @@ describe("呈现声明（Agent 选型）", () => {
     expect(realSeries(chart)).toHaveLength(1);
   });
 
-  test("display 覆盖颜色、标签、型别，并为右轴补 option 与 pa 格式", () => {
+  test("display 覆盖颜色、型别，value_labels 印数，并为右轴补 option 与 pa 格式", () => {
     const chart = buildViewChart(trendView, {
       type: "line",
       y: ["new_hire_count", "leave_count"],
       display: {
-        new_hire_count: { color: "#123abc", label: true, type: "bar" },
+        new_hire_count: { color: "#123abc", type: "bar" },
         leave_count: { yAxis: "right" },
       },
+      valueLabels: "main",
     });
     if (!chart) throw new Error("应产出带视觉覆盖的折线配置");
     const series = chart.option.series as {
@@ -816,22 +817,20 @@ describe("呈现声明（Agent 选型）", () => {
         show: boolean;
         color?: string;
         fontSize?: number;
-        fontWeight?: number;
-        textBorderColor?: string;
-        textBorderWidth?: number;
+        backgroundColor?: string;
+        borderColor?: string;
       };
     }[];
-    // 值标签：13/500 次级灰 + 承载面色描边（压在网格线上仍可读）
+    // 值标签：浅灰底片上的 14px 系列色数字——颜色覆盖后标签跟着换色（同源 pa.legend）
     expect(series[0]).toMatchObject({
       type: "bar",
       itemStyle: { color: "#123abc" },
       label: {
         show: true,
-        color: "#767676",
-        fontSize: 13,
-        fontWeight: 500,
-        textBorderColor: "#ffffff",
-        textBorderWidth: 3,
+        color: "#123abc",
+        fontSize: 14,
+        backgroundColor: "#f7f7f8",
+        borderColor: "#ffffff",
       },
     });
     // 视觉覆盖必须同步到 HTML 图例的标记色
@@ -865,6 +864,67 @@ describe("呈现声明（Agent 选型）", () => {
     expect(JSON.stringify(buildViewChart(trendView, { ...decl, display: {} }))).toBe(
       JSON.stringify(buildViewChart(trendView, decl)),
     );
+  });
+
+  test("value_labels：main 只给第一主系列印数，all 全部系列印数", () => {
+    const decl = { type: "line" as const, y: ["new_hire_count", "leave_count"] };
+    const labelShown = (valueLabels?: "main" | "all") => {
+      const chart = buildViewChart(trendView, valueLabels ? { ...decl, valueLabels } : decl);
+      if (!chart) throw new Error("应产出折线配置");
+      return realSeries(chart).map(
+        (series) => (series as { label?: { show?: boolean } }).label?.show ?? false,
+      );
+    };
+    expect(labelShown()).toEqual([false, false]);
+    expect(labelShown("main")).toEqual([true, false]);
+    expect(labelShown("all")).toEqual([true, true]);
+    // 贴上限的标签朝上画：余量留在框内（grid 缩进），场地框不因标签开关移动
+    const labeled = buildViewChart(trendView, { ...decl, valueLabels: "all" });
+    if (!labeled) throw new Error("应产出带标签的折线配置");
+    expect(labeled.plot_inset?.top).toBe(30);
+    expect((labeled.option.grid as { top: number }).top).toBe(30);
+    // 标签形制：浅灰底片 + 承载面色描边 + 14px 系列色数字
+    const pill = (realSeries(labeled)[0] as { label?: Record<string, unknown> }).label;
+    expect(pill?.backgroundColor).toBe("#f7f7f8");
+    expect(pill?.borderColor).toBe("#ffffff");
+    expect(pill?.borderRadius).toBe(4);
+    expect(pill?.fontSize).toBe(14);
+    expect(pill?.color).toBe(SERIES_COLORS[0]);
+    expect(labeled.plot_gutter).toBeUndefined();
+    expect(buildViewChart(trendView, decl)?.plot_inset).toBeUndefined();
+  });
+
+  test("value_labels：横排条按最宽格式化标签在框内留右栏，堆叠段标签进段内不占余量", () => {
+    const rows: [string, string, number][] = [
+      ["A", "本科", 10],
+      ["A", "硕士", 5],
+      ["B", "本科", 1234],
+      ["B", "硕士", 8],
+    ];
+    const decl = {
+      type: "bar" as const,
+      x: "organization_name",
+      y: ["active_employee_count"],
+      groupBy: "degree",
+      valueLabels: "all" as const,
+    };
+    const barView = view(["organization_name", "degree", "active_employee_count"], rows);
+    const flat = buildViewChart(barView, { ...decl, stack: false });
+    if (!flat) throw new Error("应产出条形配置");
+    const flatSeries = flat.option.series as { label?: { position?: string } }[];
+    expect(flatSeries.every((s) => s.label?.position === "right")).toBe(true);
+    // 最宽标签是「1,234」：右栏 = 实测底片宽 + 号距，框外栏（左类目栏）保持不动
+    const right = flat.plot_inset?.right ?? 0;
+    expect(right).toBeGreaterThan(30);
+    expect((flat.option.grid as { right: number }).right).toBe(16 + right);
+    expect(flat.plot_gutter?.left).toBeGreaterThan(0);
+    expect(flat.plot_inset?.top).toBeUndefined();
+
+    const stacked = buildViewChart(barView, { ...decl, stack: true });
+    if (!stacked) throw new Error("应产出堆叠条形配置");
+    const stackedSeries = stacked.option.series as { label?: { position?: string } }[];
+    expect(stackedSeries.every((s) => s.label?.position === "inside")).toBe(true);
+    expect(stacked.plot_inset).toBeUndefined();
   });
 
   test("声明 table：显式只出表格（压掉自动出图）", () => {

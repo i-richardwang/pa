@@ -535,7 +535,7 @@ export function BoardPage({
         finalFocus={fromAnalysisFocus.finalFocus}
         onPick={(row: MyAnalysisRow) => {
           setFromAnalysisOpen(false);
-          if (row.analysis_id) setSaveTarget({ id: row.analysis_id, title: row.title });
+          if (row.view_id) setSaveTarget({ id: row.view_id, title: row.title });
         }}
       />
 

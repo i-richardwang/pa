@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { CompilerCatalog, CompilerCatalogMember } from "../semantic_core/compiler_catalog.js";
-import { compileSemanticAnalysis } from "./semantic_analysis_compiler.js";
-import { parseSemanticAnalysisSpec } from "../semantic_core/semantic_analysis.js";
+import { compileAnalysisView } from "./semantic_analysis_compiler.js";
+import { parseAnalysisDefinition } from "../semantic_core/semantic_analysis.js";
 import { isDerivedViewSpec, type QueryViewSpec } from "../semantic_core/analysis_spec.js";
+
+const parseDefinitionFrom = (input: { analysis: unknown }) =>
+  parseAnalysisDefinition(input.analysis);
 
 function member(
   id: string,
@@ -158,19 +161,17 @@ const catalog: CompilerCatalog = {
 describe("semantic analysis compiler", () => {
   test("语义分析只接受唯一 TimeIntent", () => {
     const invalid = {
-      version: 2,
       analysis: {
         views: [{ id: "result", measures: [ACTIVE_EMPLOYEE], time: { cutoff: "2026-07" } }],
       },
-      presentation: { type: "table" },
+      view: { type: "table" },
     };
-    expect(() => parseSemanticAnalysisSpec(invalid)).toThrow(/语义分析规格无效/);
+    expect(() => parseDefinitionFrom(invalid)).toThrow(/分析定义无效/);
   });
 
   test("报告构成占比编译为两个 Cube 聚合查询与一个 many_to_one 标量变换", () => {
     const calculationId = "calculation:active_employee_age_band_share";
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         title: "组织内年龄段结构",
         views: [
@@ -191,7 +192,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table" },
+      view: { type: "table" },
     });
     expect(compiled.plan.nodes).toHaveLength(3);
     const queries = compiled.plan.nodes.filter(
@@ -206,15 +207,14 @@ describe("semantic analysis compiler", () => {
     expect(derived?.structure_shares).toEqual([
       { measure: "年龄段结构", numerator: "active_employee_count" },
     ]);
-    expect(compiled.plan.output.columns["年龄段结构"]).toBe(calculationId);
+    expect(compiled.plan.output.columns.年龄段结构).toBe(calculationId);
     expect(compiled.routes).toEqual([
-      expect.objectContaining({ status: "composed", view_id: "result" }),
+      expect.objectContaining({ status: "composed", result_view_id: "result" }),
     ]);
   });
 
   test("维度最大项数编译为层级补全后的私有选择规格，不生成物理行 limit", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -236,7 +236,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table" },
+      view: { type: "table" },
     });
     expect(compiled.plan.nodes[0]).toMatchObject({
       dimensions: ["test_people_metrics.organization_name", "test_people_metrics.department_name"],
@@ -258,8 +258,7 @@ describe("semantic analysis compiler", () => {
   });
 
   test("按名称限制维度项数时，以目标维度自身作为私有排名字段", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -276,7 +275,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table" },
+      view: { type: "table" },
     });
     expect(compiled.plan.nodes[0]).toMatchObject({
       selection: {
@@ -293,8 +292,7 @@ describe("semantic analysis compiler", () => {
 
   test("聚合语义查询拒绝物理行 limit，排行只能使用 Top-N 分组选择", () => {
     expect(() =>
-      parseSemanticAnalysisSpec({
-        version: 2,
+      parseDefinitionFrom({
         analysis: {
           views: [
             {
@@ -307,15 +305,13 @@ describe("semantic analysis compiler", () => {
             },
           ],
         },
-        presentation: { type: "table" },
       }),
-    ).toThrow(/语义分析规格无效/);
+    ).toThrow(/分析定义无效/);
   });
 
   test("总体只允许指标与业务分组并存的结果", () => {
     expect(() =>
-      parseSemanticAnalysisSpec({
-        version: 2,
+      parseDefinitionFrom({
         analysis: {
           views: [
             {
@@ -332,8 +328,7 @@ describe("semantic analysis compiler", () => {
 
   test("分组排序只能作用于唯一直接结果，不允许中间查询各自选组", () => {
     expect(() =>
-      parseSemanticAnalysisSpec({
-        version: 2,
+      parseDefinitionFrom({
         analysis: {
           views: [
             {
@@ -357,15 +352,13 @@ describe("semantic analysis compiler", () => {
             },
           ],
         },
-        presentation: { type: "table" },
       }),
     ).toThrow(/只能声明在唯一直接结果视图/);
   });
 
   test("公共语义规格对派生来源强制业务标题，独立直查不被额外约束", () => {
     expect(() =>
-      parseSemanticAnalysisSpec({
-        version: 2,
+      parseDefinitionFrom({
         analysis: {
           views: [
             { id: "source", measures: [ACTIVE_EMPLOYEE], time: JULY_2026 },
@@ -377,25 +370,21 @@ describe("semantic analysis compiler", () => {
             },
           ],
         },
-        presentation: { type: "table" },
       }),
     ).toThrow(/来源查询.*业务标题/);
     expect(() =>
-      parseSemanticAnalysisSpec({
-        version: 2,
+      parseDefinitionFrom({
         analysis: {
           views: [{ id: "standalone", measures: [ACTIVE_EMPLOYEE], time: JULY_2026 }],
         },
-        presentation: { type: "table" },
       }),
     ).not.toThrow();
   });
 
-  test("presentation 必填：服务端不存在自动判型入口", () => {
+  test("ViewIntent 必填：服务端不存在自动判型入口", () => {
     expect(() =>
-      parseSemanticAnalysisSpec({
-        version: 2,
-        analysis: {
+      compileAnalysisView(catalog, {
+        analysis: parseAnalysisDefinition({
           views: [
             {
               id: "result",
@@ -404,15 +393,15 @@ describe("semantic analysis compiler", () => {
               time: JULY_2026,
             },
           ],
-        },
+        }),
+        view: undefined as never,
       }),
-    ).toThrow(/语义分析规格无效/);
+    ).toThrow();
   });
 
   test("规格外字段一律拒绝", () => {
     expect(() =>
-      parseSemanticAnalysisSpec({
-        version: 2,
+      parseDefinitionFrom({
         analysis: {
           views: [
             {
@@ -424,14 +413,12 @@ describe("semantic analysis compiler", () => {
             },
           ],
         },
-        presentation: { type: "table" },
       }),
-    ).toThrow(/语义分析规格无效/);
+    ).toThrow(/分析定义无效/);
   });
 
   test("KPI 作为显式呈现直接编译，不注入图表通道", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -441,7 +428,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "kpi" },
+      view: { type: "kpi" },
     });
     expect(compiled.presentation).toEqual({
       type: "kpi",
@@ -451,8 +438,7 @@ describe("semantic analysis compiler", () => {
   });
 
   test("table 的语义列轴绑定编译为内部行列布局", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -463,7 +449,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table", columns: [DEPARTMENT] },
+      view: { type: "table", columns: [DEPARTMENT] },
     });
     expect(compiled.presentation).toMatchObject({
       type: "table",
@@ -475,32 +461,65 @@ describe("semantic analysis compiler", () => {
     });
   });
 
-  test("table 的热力着色原样穿过编译，其他形态拒绝", () => {
+  test("人类表格热力样式在编译边界合入物理呈现，其他形态拒绝", () => {
     const shading = { palette: "traffic_lights", flipped: true, thresholds: { mid: 0.5 } };
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const spec = {
       analysis: {
         views: [{ id: "result", measures: [ACTIVE_EMPLOYEE], dimensions: [ORG], time: JULY_2026 }],
       },
-      presentation: { type: "table", shading },
-    });
+      view: { type: "table" as const },
+    };
+    const compiled = compileAnalysisView(catalog, spec, { table_shading: shading });
     expect(compiled.presentation).toMatchObject({ type: "table", shading });
     expect(() =>
-      compileSemanticAnalysis(catalog, {
-        version: 2,
+      compileAnalysisView(
+        catalog,
+        { ...spec, view: { type: "bar" } },
+        {
+          table_shading: shading,
+        },
+      ),
+    ).toThrow(/只支持 table/);
+  });
+
+  test("人类系列样式按语义 id 绑定为物理图表设置", () => {
+    const compiled = compileAnalysisView(
+      catalog,
+      {
         analysis: {
           views: [
-            { id: "result", measures: [ACTIVE_EMPLOYEE], dimensions: [ORG], time: JULY_2026 },
+            {
+              id: "result",
+              measures: [ACTIVE_EMPLOYEE],
+              dimensions: [ORG],
+              time: JULY_2026,
+            },
           ],
         },
-        presentation: { type: "bar", shading } as never,
-      }),
-    ).toThrow(/Unrecognized key\(s\) in object: 'shading'/);
+        view: { type: "bar", category: ORG, series: [ACTIVE_EMPLOYEE] },
+      },
+      {
+        series: {
+          [ACTIVE_EMPLOYEE]: { color: "#509ee3", mark: "line", axis: "right" },
+        },
+        value_labels: "main",
+      },
+    );
+    expect(compiled.presentation).toMatchObject({
+      type: "bar",
+      display: {
+        active_employee_count: {
+          color: "#509ee3",
+          type: "line",
+          yAxis: "right",
+        },
+      },
+      valueLabels: "main",
+    });
   });
 
   test("table 列轴支持时间，业务维度轴拒绝总体行和未查询维度", () => {
-    const temporal = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const temporal = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -511,7 +530,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table", columns: ["time", "metrics"] },
+      view: { type: "table", columns: ["time", "metrics"] },
     });
     expect(temporal.presentation).toMatchObject({
       tableLayout: {
@@ -520,8 +539,7 @@ describe("semantic analysis compiler", () => {
       },
     });
     expect(() =>
-      compileSemanticAnalysis(catalog, {
-        version: 2,
+      compileAnalysisView(catalog, {
         analysis: {
           views: [
             {
@@ -533,12 +551,11 @@ describe("semantic analysis compiler", () => {
             },
           ],
         },
-        presentation: { type: "table", columns: [DEPARTMENT] },
+        view: { type: "table", columns: [DEPARTMENT] },
       }),
     ).toThrow(/业务维度列轴与 summary 互斥/);
     expect(() =>
-      compileSemanticAnalysis(catalog, {
-        version: 2,
+      compileAnalysisView(catalog, {
         analysis: {
           views: [
             {
@@ -549,14 +566,13 @@ describe("semantic analysis compiler", () => {
             },
           ],
         },
-        presentation: { type: "table", columns: [AGE_BAND] },
+        view: { type: "table", columns: [AGE_BAND] },
       }),
     ).toThrow(/不在查询中/);
   });
 
   test("同月在职人数与 YTD 事件率落到人员总览", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -567,7 +583,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table" },
+      view: { type: "table" },
     });
     expect(compiled.routes[0]).toMatchObject({ status: "direct" });
     // 选路已内部化：物理落点由 plan.nodes 的物理成员名验证（test_people_metrics.*）
@@ -583,7 +599,7 @@ describe("semantic analysis compiler", () => {
     });
     expect(compiled.record_projection_bindings.views).toEqual([
       {
-        view_id: "result",
+        result_view_id: "result",
         metrics: {
           [ACTIVE_EMPLOYEE]: { metric_id: ACTIVE_EMPLOYEE, title: "在职人数" },
           [YTD_EVENT_RATE]: { metric_id: YTD_EVENT_RATE, title: "YTD事件率" },
@@ -597,8 +613,7 @@ describe("semantic analysis compiler", () => {
   });
 
   test("部门在职人数与编制完成率落到人员与编制", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -609,7 +624,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table" },
+      view: { type: "table" },
     });
     expect(compiled.routes[0]).toMatchObject({ status: "direct" });
     // 选路已内部化：物理落点由 plan.nodes 的物理成员名验证。
@@ -626,8 +641,7 @@ describe("semantic analysis compiler", () => {
   });
 
   test("单值上级过滤同时约束查询输出与明细坐标", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -639,7 +653,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table" },
+      view: { type: "table" },
     });
     expect(compiled.plan.nodes[0]).toMatchObject({
       dimensions: ["test_people_metrics.department_name"],
@@ -657,8 +671,7 @@ describe("semantic analysis compiler", () => {
   });
 
   test("公开排除关系只在编译边界映射为物理 notEquals", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -669,7 +682,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table" },
+      view: { type: "table" },
     });
     expect(compiled.plan.nodes[0]).toMatchObject({
       filters: [
@@ -683,8 +696,7 @@ describe("semantic analysis compiler", () => {
   });
 
   test("多值下级过滤补出的上级同时进入查询输出与明细坐标", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -695,7 +707,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table" },
+      view: { type: "table" },
     });
     expect(compiled.plan.nodes[0]).toMatchObject({
       dimensions: ["test_people_metrics.organization_name"],
@@ -706,8 +718,7 @@ describe("semantic analysis compiler", () => {
   });
 
   test("组织维度上的人员、离职与编制指标跨指标域原生直查", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -723,7 +734,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table" },
+      view: { type: "table" },
     });
     const binding = compiled.record_projection_bindings.views[0];
     expect(Object.values(binding.metrics).map((metric) => metric.metric_id)).toEqual([
@@ -736,7 +747,7 @@ describe("semantic analysis compiler", () => {
     ]);
     expect(compiled.routes[0]).toEqual({
       status: "direct",
-      view_id: "result",
+      result_view_id: "result",
     });
     expect(compiled.plan.nodes).toHaveLength(1);
     expect(compiled.plan.nodes[0]).toMatchObject({
@@ -763,8 +774,7 @@ describe("semantic analysis compiler", () => {
   });
 
   test("人员与编制直查与明细共用单值上级过滤后的有效分组", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -776,9 +786,9 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table" },
+      view: { type: "table" },
     });
-    expect(compiled.routes[0]).toEqual({ status: "direct", view_id: "result" });
+    expect(compiled.routes[0]).toEqual({ status: "direct", result_view_id: "result" });
     expect(compiled.plan.nodes).toEqual([
       expect.objectContaining({
         dimensions: ["test_people_metrics.department_name"],
@@ -796,8 +806,7 @@ describe("semantic analysis compiler", () => {
   });
 
   test("人员单值维度与流动指标编译为直接查询", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -808,10 +817,10 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table" },
+      view: { type: "table" },
     });
     expect(compiled.routes).toEqual([
-      expect.objectContaining({ status: "direct", view_id: "result" }),
+      expect.objectContaining({ status: "direct", result_view_id: "result" }),
     ]);
     expect(compiled.plan.nodes[0]).toMatchObject({
       measures: ["test_people_metrics.ytd_event_rate"],
@@ -827,10 +836,9 @@ describe("semantic analysis compiler", () => {
       time: JULY_2026,
     });
     try {
-      compileSemanticAnalysis(catalog, {
-        version: 2,
+      compileAnalysisView(catalog, {
         analysis: { views: [view("first"), view("second")] },
-        presentation: { type: "table" },
+        view: { type: "table" },
       });
       throw new Error("预期单结果护栏失败");
     } catch (error) {
@@ -840,8 +848,7 @@ describe("semantic analysis compiler", () => {
   });
 
   test("分子与结构占比显式分流为柱系列和辅助标注", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -852,7 +859,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: {
+      view: {
         type: "bar",
         category: AGE_BAND,
         series: [ACTIVE_EMPLOYEE],
@@ -874,8 +881,7 @@ describe("semantic analysis compiler", () => {
   });
 
   test("只选结构占比时它仍是一等柱系列", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -886,7 +892,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: {
+      view: {
         type: "bar",
         category: AGE_BAND,
         series: [ACTIVE_EMPLOYEE_SHARE],
@@ -896,8 +902,7 @@ describe("semantic analysis compiler", () => {
   });
 
   test("趋势图中的分子与结构占比都是显式主系列", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -907,7 +912,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "line", series: [ACTIVE_EMPLOYEE, ACTIVE_EMPLOYEE_SHARE] },
+      view: { type: "line", series: [ACTIVE_EMPLOYEE, ACTIVE_EMPLOYEE_SHARE] },
     });
     expect(compiled.presentation).toMatchObject({
       type: "line",
@@ -918,8 +923,7 @@ describe("semantic analysis compiler", () => {
 
   test("分子与结构占比不能同时塞进主系列", () => {
     expect(() =>
-      compileSemanticAnalysis(catalog, {
-        version: 2,
+      compileAnalysisView(catalog, {
         analysis: {
           views: [
             {
@@ -930,7 +934,7 @@ describe("semantic analysis compiler", () => {
             },
           ],
         },
-        presentation: {
+        view: {
           type: "bar",
           category: AGE_BAND,
           series: [ACTIVE_EMPLOYEE, ACTIVE_EMPLOYEE_SHARE],
@@ -958,8 +962,7 @@ describe("semantic analysis compiler", () => {
           : dimension,
       ),
     };
-    const compiled = compileSemanticAnalysis(renamedCatalog, {
-      version: 2,
+    const compiled = compileAnalysisView(renamedCatalog, {
       analysis: {
         views: [
           {
@@ -998,7 +1001,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table" },
+      view: { type: "table" },
     });
     expect(compiled.plan.nodes[2]).toMatchObject({
       join: {
@@ -1014,8 +1017,7 @@ describe("semantic analysis compiler", () => {
   });
 
   test("派生视图按输出别名编译 table 列轴声明", () => {
-    const compiled = compileSemanticAnalysis(catalog, {
-      version: 2,
+    const compiled = compileAnalysisView(catalog, {
       analysis: {
         views: [
           {
@@ -1037,7 +1039,7 @@ describe("semantic analysis compiler", () => {
           },
         ],
       },
-      presentation: { type: "table", columns: ["二级组织"] },
+      view: { type: "table", columns: ["二级组织"] },
     });
     expect(compiled.presentation).toEqual({
       type: "table",
@@ -1051,8 +1053,7 @@ describe("semantic analysis compiler", () => {
 
   test("派生视图的 columns 同样只允许 table", () => {
     expect(() =>
-      compileSemanticAnalysis(catalog, {
-        version: 2,
+      compileAnalysisView(catalog, {
         analysis: {
           views: [
             {
@@ -1074,7 +1075,7 @@ describe("semantic analysis compiler", () => {
             },
           ],
         },
-        presentation: {
+        view: {
           type: "bar",
           columns: ["二级组织"],
           category: "一级组织",

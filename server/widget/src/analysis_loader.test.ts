@@ -11,9 +11,9 @@ function harness(overrides: Partial<AnalysisLoaderPort> = {}) {
   const failures: string[] = [];
   let waiting = 0;
   const port: AnalysisLoaderPort = {
-    call: async (analysisId) => {
-      calls.push(analysisId);
-      return { structuredContent: { analysis_id: analysisId } };
+    call: async (viewId) => {
+      calls.push(viewId);
+      return { structuredContent: { view_id: viewId } };
     },
     apply: (result) => {
       applied.push(result);
@@ -37,7 +37,7 @@ function harness(overrides: Partial<AnalysisLoaderPort> = {}) {
 describe("analysis loader", () => {
   test("缓存握手前的 tool input，连接后只加载一次", async () => {
     const state = harness();
-    state.loader.receive({ analysis_id: FIRST_ID });
+    state.loader.receive({ view_id: FIRST_ID });
     expect(state.calls).toEqual([]);
 
     await state.loader.connect();
@@ -45,17 +45,17 @@ describe("analysis loader", () => {
     expect(state.applied).toHaveLength(1);
     expect(state.waiting()).toBe(1);
 
-    state.loader.receive({ analysis_id: FIRST_ID });
+    state.loader.receive({ view_id: FIRST_ID });
     await Promise.resolve();
     expect(state.calls).toEqual([FIRST_ID]);
   });
 
-  test("新句柄到达后加载新结果，旧句柄不会阻塞", async () => {
+  test("view_id 变化后加载当前结果，非当前请求不会阻塞", async () => {
     const state = harness();
     await state.loader.connect();
-    state.loader.receive({ analysis_id: FIRST_ID });
+    state.loader.receive({ view_id: FIRST_ID });
     await Promise.resolve();
-    state.loader.receive({ analysis_id: SECOND_ID });
+    state.loader.receive({ view_id: SECOND_ID });
     await Promise.resolve();
 
     expect(state.calls).toEqual([FIRST_ID, SECOND_ID]);
@@ -64,8 +64,8 @@ describe("analysis loader", () => {
 
   test("输入和宿主代理错误使用稳定状态文案", async () => {
     const invalid = harness();
-    invalid.loader.receive({ analysis_id: "not-a-uuid" });
-    expect(invalid.failures).toEqual(["结果卡缺少有效的 analysis_id。"]);
+    invalid.loader.receive({ view_id: "not-a-uuid" });
+    expect(invalid.failures).toEqual(["结果卡缺少有效的 view_id。"]);
 
     const failed = harness({
       call: async () => {
@@ -73,7 +73,7 @@ describe("analysis loader", () => {
       },
     });
     await failed.loader.connect();
-    failed.loader.receive({ analysis_id: FIRST_ID });
+    failed.loader.receive({ view_id: FIRST_ID });
     await Promise.resolve();
     await Promise.resolve();
     expect(failed.failures).toEqual(["无法加载分析结果：host proxy unavailable"]);
@@ -88,10 +88,10 @@ describe("analysis loader", () => {
         }),
     });
     await state.loader.connect();
-    state.loader.receive({ analysis_id: FIRST_ID });
+    state.loader.receive({ view_id: FIRST_ID });
     await Promise.resolve();
     state.loader.close();
-    resolveResult?.({ structuredContent: { analysis_id: FIRST_ID } });
+    resolveResult?.({ structuredContent: { view_id: FIRST_ID } });
     await Promise.resolve();
 
     expect(state.applied).toEqual([]);

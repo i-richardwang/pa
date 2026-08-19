@@ -5,15 +5,22 @@ import {
   type PresentationType,
 } from "../semantic_core/presentation_type.js";
 import {
-  SEMANTIC_ANALYSIS_SPEC_INPUT,
-  type SemanticAnalysisSpec,
+  ANALYSIS_DEFINITION_INPUT,
+  SEMANTIC_VIEW_INTENT_INPUT,
+  type AnalysisDefinition,
+  type SemanticViewIntent,
 } from "../semantic_core/semantic_analysis.js";
 import { WEB_REPORT_UPDATE_ACTION } from "./report_action.js";
+import {
+  VIEW_PREFERENCES_INPUT,
+  type ViewPreferences,
+} from "../presentation_core/view_preferences.js";
 
 export type ReportRow = {
   id: string;
   name: string;
   analysis_id: string;
+  view_id: string;
   result_view_id: string;
   presentation_type: PresentationType;
   render_shape: RenderShape | null;
@@ -25,7 +32,7 @@ type ReportsPayload = { rows: ReportRow[]; total: number };
 
 export const CREATE_REPORT_BODY = z
   .object({
-    analysis_id: z.string().min(1),
+    view_id: z.string().min(1),
     name: z.string().trim().min(1),
   })
   .strict();
@@ -33,7 +40,9 @@ export type CreateReportBody = z.infer<typeof CREATE_REPORT_BODY>;
 
 export type ReportDetail = ReportRow & {
   owner: string;
-  spec: SemanticAnalysisSpec;
+  analysis: AnalysisDefinition;
+  view: SemanticViewIntent;
+  view_preferences: ViewPreferences;
 };
 
 export const UPDATE_REPORT_BODY = z
@@ -56,6 +65,7 @@ const REPORT_ROW_FIELDS = {
   id: z.string(),
   name: z.string(),
   analysis_id: z.string(),
+  view_id: z.string(),
   result_view_id: z.string(),
   presentation_type: PRESENTATION_TYPE_SCHEMA,
   render_shape: RENDER_SHAPE_SCHEMA.nullable(),
@@ -74,7 +84,9 @@ export const REPORT_DETAIL_SCHEMA: z.ZodType<ReportDetail, z.ZodTypeDef, unknown
   .object({
     ...REPORT_ROW_FIELDS,
     owner: z.string(),
-    spec: SEMANTIC_ANALYSIS_SPEC_INPUT,
+    analysis: ANALYSIS_DEFINITION_INPUT,
+    view: SEMANTIC_VIEW_INTENT_INPUT,
+    view_preferences: VIEW_PREFERENCES_INPUT,
   })
   .strict();
 

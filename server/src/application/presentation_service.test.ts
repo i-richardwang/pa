@@ -71,14 +71,14 @@ describe("presentation service runtime fallback", () => {
     expect(service.compile(executed)).toMatchObject({ type: "table" });
     expect(service.runtimeFallbacks(executed, presentation)).toEqual([
       {
-        view_id: "result",
+        result_view_id: "result",
         kind: "empty_result",
         note: expect.stringContaining("结果为空"),
       },
     ]);
   });
 
-  test("非空但形态画不出声明图表时给出归一说明", () => {
+  test("非空但形态画不出声明图表时给出降级说明", () => {
     const service = createPresentationService();
     const executed = result([
       ["研发", 10],
@@ -87,7 +87,7 @@ describe("presentation service runtime fallback", () => {
     expect(service.compile(executed)).toMatchObject({ type: "table" });
     expect(service.runtimeFallbacks(executed, presentation)).toEqual([
       {
-        view_id: "result",
+        result_view_id: "result",
         kind: "unsupported_shape",
         note: expect.stringContaining("已按表格呈现"),
       },
@@ -145,7 +145,7 @@ describe("presentation service runtime fallback", () => {
     });
     expect(service.runtimeFallbacks(degraded, presentation)).toEqual([
       {
-        view_id: "result",
+        result_view_id: "result",
         kind: "unsupported_shape",
         note: expect.stringContaining("表格布局未生效"),
       },

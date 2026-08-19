@@ -168,16 +168,19 @@ export function useMyAnalyses(days: number, limit: number, offset: number, enabl
   });
 }
 
-/** 按 analysis 句柄以当前浏览者权限重放（结果为当前数据，非当时快照）。 */
+/** 按 View 身份以当前浏览者权限重放（结果为当前数据，非当时快照）。 */
 export function useAnalysisReplay(id: string) {
   return useQuery({
     queryKey: dashboardKeys.analysisReplay(id),
     queryFn: () =>
-      getJson(`/dashboard/api/analyses/${encodeURIComponent(id)}/replay`, REPLAY_PAYLOAD_SCHEMA),
+      getJson(
+        `/dashboard/api/analysis_views/${encodeURIComponent(id)}/replay`,
+        REPLAY_PAYLOAD_SCHEMA,
+      ),
   });
 }
 
-/** 保存 analysis 句柄为独立报告；成功后失效报告列表，让「我的报告」与选择器取到新行。 */
+/** 保存 View 身份为独立报告；成功后失效报告列表，让「我的报告」与选择器取到新行。 */
 export function useCreateReport() {
   const queryClient = useQueryClient();
   return useMutation({

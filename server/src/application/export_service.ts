@@ -34,7 +34,7 @@ type ExportDelivery = {
 };
 
 export function createExportService(deps: {
-  analyses: Pick<AnalysisRepository, "resolveOwned">;
+  analyses: Pick<AnalysisRepository, "resolveOwnedView">;
   semanticPlanning: Pick<SemanticPlanningService, "compile">;
   usage: Pick<UsageLog, "log">;
   cube: CubeGateway;
@@ -122,14 +122,22 @@ export function createExportService(deps: {
     return materialize(claims);
   }
 
-  async function exportResult(principal: Principal, requestedAnalysisId: string) {
+  async function exportResult(principal: Principal, requestedViewId: string) {
     const started = performance.now();
     let analysisId: string | undefined;
+    let viewId: string | undefined;
     try {
-      const analysis = await deps.analyses.resolveOwned(requestedAnalysisId, principal.email);
-      analysisId = analysis.id;
-      const semanticSpec = analysis.spec;
-      const executionPlan = (await deps.semanticPlanning.compile(principal, semanticSpec)).plan;
+      const current = await deps.analyses.resolveOwnedView(requestedViewId, principal.email);
+      analysisId = current.analysis.id;
+      viewId = current.view.id;
+      const executionPlan = (
+        await deps.semanticPlanning.compile(
+          principal,
+          current.analysis.definition,
+          current.view.intent,
+          current.view.preferences,
+        )
+      ).plan;
       const view = exportableOutput(executionPlan);
       if (!view) {
         throw new Error("该分析结果不支持导出底层明细（组合或派生结果无底层明细可导）");
@@ -168,6 +176,7 @@ export function createExportService(deps: {
       ];
       const payload = {
         analysis_id: analysisId,
+        view_id: viewId,
         ...link,
         max_rows: EXPORT_MAX_ROWS,
         data_as_of: context.dataAsOf,
@@ -176,21 +185,23 @@ export function createExportService(deps: {
       await deps.usage.log({
         caller: principal.email,
         tool: "export_result",
-        args: { analysis_id: requestedAnalysisId },
+        args: { view_id: requestedViewId },
         outcome: "ok",
         duration_ms: performance.now() - started,
         ...(analysisId ? { analysis_id: analysisId } : {}),
+        ...(viewId ? { view_id: viewId } : {}),
       });
       return payload;
     } catch (error) {
       await deps.usage.log({
         caller: principal.email,
         tool: "export_result",
-        args: { analysis_id: requestedAnalysisId },
+        args: { view_id: requestedViewId },
         outcome: "error",
         error: error instanceof Error ? error.message : String(error),
         duration_ms: performance.now() - started,
         ...(analysisId ? { analysis_id: analysisId } : {}),
+        ...(viewId ? { view_id: viewId } : {}),
       });
       throw error;
     }

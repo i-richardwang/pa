@@ -439,7 +439,8 @@ export const VIEW_BLOCK_SCHEMA = z
 
 /** Raw shape is reused directly by MCP registration; do not recreate these fields in server.ts. */
 export const QUERY_PAYLOAD_OUTPUT = {
-  analysis_id: z.string().optional().describe("已成功执行的不可变分析规格句柄"),
+  analysis_id: z.string().optional().describe("本次结果使用的不可变分析定义身份"),
+  view_id: z.string().optional().describe("本次结果使用的不可变呈现视图身份"),
   title: z.string().optional().describe("回显调用方声明的卡片标题"),
   view: VIEW_BLOCK_SCHEMA.describe("唯一用户可见结果；计算中间结果不进入公共载荷"),
   default_population_scope: z.string(),

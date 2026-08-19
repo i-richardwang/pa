@@ -20,7 +20,7 @@ description: 查询 PA 组织与人才数据；用于人员规模、入离职、
    - 用户表达确实需要落到分类维度过滤值时，调用
      `values_of(dimension=<相关维度语义 id>, contains=<可选子串>)` 核实真实值；不要从术语定义
      反推出未经目录和数据确认的值。
-3. 按 `run_analysis` 的 input schema 组装语义分析规格。成员一律用 catalog 响应返回的语义
+3. 按 `run_analysis` 的 input schema 分别组装 `analysis`（数据问题）与 `view`（图型和数据通道）。成员一律用 catalog 响应返回的语义
    `id`，不使用中文标题、物理字段名或猜测值；基础查询不选择物理 View 或指标域。指标域只帮助
    发现能力；服务端按每个指标的唯一执行来源规划查询，并校验所选维度、筛选和排序是否属于全部
    相关事实的共同维度空间。
@@ -29,30 +29,29 @@ description: 查询 PA 组织与人才数据；用于人员规模、入离职、
 4. 根据结果的 `time`（已解析主/对比期间、业务粒度与业务桶）、`time_context`、`data_as_of`、
    `default_population_scope`、`display_notes` 和结果字段作答。不要向用户复述 `query_notes`，
    它只用于正确执行查询。
-5. 保留成功响应的 `analysis_id`。工具面提供 `show_analysis` 时，用它打开交互结果卡；
+5. 保留成功响应的 `analysis_id` 与 `view_id`。工具面提供 `show_analysis` 时，用 `view_id` 打开交互结果卡；
    用户询问“谁、名单、人员明细”时，按下文“人员明细与导出”把问题收敛成一个聚合结果格，
    再调用 `show_records` 打开受控名单；
-   需要显式改变画法时调用 `rerun_analysis(analysis_id, presentation)`，保留其返回的
-   **新** `analysis_id`，再用新句柄调用 `show_analysis` 或 `save_report`；需要修改指标、
-   维度、筛选、时间或呈现时，先用 `load_analysis_result` 读取 canonical `spec`，改写后交给
+   需要显式改变画法时调用 `rerun_analysis(analysis_id, view)`，保留其返回的**新** `view_id`，
+   再用它调用 `show_analysis` 或 `save_report`；需要修改指标、维度、筛选或时间时，先用
+   `load_analysis_result(view_id)` 读取 canonical `analysis` 与 `view_intent`，改写后交给
    `run_analysis`。保存不会重新执行查询。
 
 ## 分析、呈现与报告
 
-- `rerun_analysis` 按当前数据重执行同一分析意图，并把新呈现落成新的不可变 handle；
-  调用时同样必须提供完整 `presentation`。原 handle 不修改，后续展示、保存和导出一律使用
-  本次返回的新 `analysis_id`。它是只换呈现的便捷工具，不承担查询规格编辑。
-- `load_analysis_result` 返回已有 handle 的当前结果与 canonical `spec`。修改已有分析时以该
-  规格为起点，只改用户要求的部分，再调用 `run_analysis` 产生新 handle；不得改写原 handle。
+- `rerun_analysis` 按当前数据重执行同一 `analysis_id`，并把呈现意图落成新的不可变 View；
+  调用时提供完整 `view`。原 View 不修改，后续展示、保存和导出使用本次返回的新 `view_id`。
+- `load_analysis_result` 按 `view_id` 返回当前结果、canonical `analysis` 与 `view_intent`。修改数据问题时
+  以 `analysis` 为起点，只改用户要求的部分，再调用 `run_analysis` 产生新的 Analysis 与 View。
 - `show_analysis` 只挂载已有分析的结果卡，不承担查数；不在工具面时直接用结构化查询结果作答。
-- `find_report` 查找本人未归档报告，并返回报告当前的 `analysis_id`；需要卡片时直接调用
-  `show_analysis`。报告控制台会按当前数据与当前权限重放同一 Analysis，不另造句柄。
-- `update_report` 只用于改名、把报告切到新的 `analysis_id` 或归档；改变呈现同样先用
-  `rerun_analysis` 产生新 Analysis，再切换报告指针。
+- `find_report` 查找本人未归档报告，并返回报告当前的 `analysis_id` 与 `view_id`；需要卡片时直接调用
+  `show_analysis`。报告控制台会按当前数据与当前权限重放同一 Analysis，不复制分析定义。
+- `update_report` 只用于改名、把报告切到新的 `view_id` 或归档；改变呈现时先用
+  `rerun_analysis` 产生新 View，再切换报告指针。
 - 更新已有报告时优先传最近一次看到的 `if_revision`；冲突后重新读取报告再决定，不覆盖并发修改。
-- 报告需要修改数据问题时，用 `find_report` 取得当前 handle，随后
-  `load_analysis_result` → 改写 canonical `spec` → `run_analysis` →
-  `update_report(action: {type: "replace_analysis", analysis_id: ...})`；报告与版本历史都不复制规格。
+- 报告需要修改数据问题时，用 `find_report` 取得当前 `view_id`，随后
+  `load_analysis_result` → 改写 canonical `analysis` → `run_analysis` →
+  `update_report(action: {type: "replace_view", view_id: ...})`；报告与版本历史都不复制定义或视图。
 
 ## 反馈未满足的需求
 
@@ -120,7 +119,7 @@ description: 查询 PA 组织与人才数据；用于人员规模、入离职、
    指标不能查看名单。
 2. 用该指标执行一次无 `dimensions` 的分析；组织、部门等条件写入 `filters`，时间使用
    单月或单范围窗口并确保解析后只有一个业务时间桶。不要把姓名、工号当维度，也不要用派生视图。
-3. `run_analysis` 成功且结果只有一行后，调用 `show_records(analysis_id=...)`；分析包含多个可查看名单的
+3. `run_analysis` 成功且结果只有一行后，调用 `show_records(view_id=...)`；分析包含多个可查看名单的
    指标时同时传 `metric_id`。服务端按指标绑定的记录集、当前权限与当前数据生成名单。
 4. 成功打开名单后，最终回复只确认名单已打开，并按需说明口径或限制；不得复述姓名、工号或逐人字段。
 
@@ -128,7 +127,7 @@ description: 查询 PA 组织与人才数据；用于人员规模、入离职、
 - 只有用户明确要求保存、分享或复用时才调用 `save_report`；名单查询本身不依赖报告。
 - `export_result` 只导出聚合分析结果；不得把它描述成人员名单导出。
 - 用户明确要求聚合结果文件时调用
-  `export_result(analysis_id=<analysis_id>)`。报告可先用 `find_report` 取得当前 analysis_id。
+  `export_result(view_id=<view_id>)`。报告可先用 `find_report` 取得当前 view_id。
 - 派生结果不能直接导出；若用户需要来源查询的文件，把它作为独立问题另做一次分析再导出。
 - 客户端不能展示附件时原样转述 `url`，并说明链接 24 小时有效；不要假定客户端提供某个按钮。
 

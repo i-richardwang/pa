@@ -9,7 +9,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
 import type { SemanticQueryView } from "@semantic-analysis";
-import { beginAnalysisEdit, blankAnalysisSpec, type AnalysisEditState } from "./analysis_draft";
+import {
+  beginAnalysisEdit,
+  blankAnalysisDefinition,
+  type AnalysisEditState,
+} from "./analysis_draft";
 import { defaultPercentOfTotal, percentOfTotalPick, ReportQueryRail } from "./report_query_rail";
 
 const catalog: CatalogPayload = {
@@ -37,25 +41,29 @@ const catalog: CatalogPayload = {
 };
 
 const blankDraft = (): AnalysisEditState =>
-  beginAnalysisEdit({ name: "未命名分析", spec: blankAnalysisSpec("未命名分析") }, false);
+  beginAnalysisEdit(
+    {
+      name: "未命名分析",
+      analysis: blankAnalysisDefinition("未命名分析"),
+      view: { type: "table" },
+    },
+    false,
+  );
 
 function withMembers(draft: AnalysisEditState): AnalysisEditState {
-  const view = draft.spec.analysis.views[0];
+  const view = draft.analysis.views[0];
   if (!view || "from" in view) throw new Error("空白种子必须是语义查询视图");
   return {
     ...draft,
-    spec: {
-      ...draft.spec,
-      analysis: {
-        ...draft.spec.analysis,
-        views: [
-          {
-            ...view,
-            measures: ["measure:active_employee_count"],
-            dimensions: ["dimension:organization_name"],
-          },
-        ],
-      },
+    analysis: {
+      ...draft.analysis,
+      views: [
+        {
+          ...view,
+          measures: ["measure:active_employee_count"],
+          dimensions: ["dimension:organization_name"],
+        },
+      ],
     },
   };
 }
@@ -64,47 +72,39 @@ function withSort(
   draft: AnalysisEditState,
   group_sort: Omit<NonNullable<SemanticQueryView["group_sort"]>, "dimension">,
 ): AnalysisEditState {
-  const view = draft.spec.analysis.views[0];
+  const view = draft.analysis.views[0];
   if (!view || "from" in view) throw new Error("空白种子必须是语义查询视图");
   return {
     ...draft,
-    spec: {
-      ...draft.spec,
-      analysis: {
-        ...draft.spec.analysis,
-        views: [
-          { ...view, group_sort: { ...group_sort, dimension: "dimension:organization_name" } },
-        ],
-      },
+    analysis: {
+      ...draft.analysis,
+      views: [{ ...view, group_sort: { ...group_sort, dimension: "dimension:organization_name" } }],
     },
   };
 }
 
 function withCalculation(draft: AnalysisEditState): AnalysisEditState {
   const withMembersDraft = withMembers(draft);
-  const view = withMembersDraft.spec.analysis.views[0];
+  const view = withMembersDraft.analysis.views[0];
   if (!view || "from" in view) throw new Error("测试草稿必须是语义查询视图");
   return {
     ...withMembersDraft,
-    spec: {
-      ...withMembersDraft.spec,
-      analysis: {
-        ...withMembersDraft.spec.analysis,
-        views: [
-          {
-            ...view,
-            calculations: [
-              {
-                id: "calculation:active_employee_organization_share",
-                title: "组织结构",
-                kind: "percent_of_total",
-                measure: "measure:active_employee_count",
-                category_dimension: "dimension:organization_name",
-              },
-            ],
-          },
-        ],
-      },
+    analysis: {
+      ...withMembersDraft.analysis,
+      views: [
+        {
+          ...view,
+          calculations: [
+            {
+              id: "calculation:active_employee_organization_share",
+              title: "组织结构",
+              kind: "percent_of_total",
+              measure: "measure:active_employee_count",
+              category_dimension: "dimension:organization_name",
+            },
+          ],
+        },
+      ],
     },
   };
 }
@@ -114,21 +114,18 @@ function withFilter(
   relation: "one_of" | "none_of",
   values = ["示例组织甲"],
 ): AnalysisEditState {
-  const view = draft.spec.analysis.views[0];
+  const view = draft.analysis.views[0];
   if (!view || "from" in view) throw new Error("空白种子必须是语义查询视图");
   return {
     ...draft,
-    spec: {
-      ...draft.spec,
-      analysis: {
-        ...draft.spec.analysis,
-        views: [
-          {
-            ...view,
-            filters: [{ member: "dimension:organization_name", relation, values }],
-          },
-        ],
-      },
+    analysis: {
+      ...draft.analysis,
+      views: [
+        {
+          ...view,
+          filters: [{ member: "dimension:organization_name", relation, values }],
+        },
+      ],
     },
   };
 }
@@ -273,7 +270,7 @@ test("范围触发件印的是结论不是控件名：限项说端与量，只�
 
 test("分组默认展示全部，不在新增维度时暗写 Top 10", () => {
   const draft = withMembers(blankDraft());
-  const view = draft.spec.analysis.views[0];
+  const view = draft.analysis.views[0];
   if (!view || "from" in view) throw new Error("测试草稿必须是语义查询视图");
   expect(view.group_sort).toBeUndefined();
   const out = render(draft);

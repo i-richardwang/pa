@@ -243,6 +243,29 @@ test("application services 与 transports 不依赖存储实现", () => {
   expect(violations).toEqual([]);
 });
 
+test("Agent MCP 投影只引用可公开领域合同，不引用作者偏好或执行工件", () => {
+  const subjects = [
+    "analysis_tools.ts",
+    "analysis_result.ts",
+    "contracts.ts",
+    "export_tools.ts",
+    "report_tools.ts",
+  ].map((name) => join(SERVER, "src", "mcp", name));
+  const privateArtifacts = new Set([
+    join(SERVER, "src", "presentation_core", "view_preferences.ts"),
+    join(SERVER, "src", "presentation_core", "design_tokens.ts"),
+    join(SERVER, "src", "semantic_core", "execution_plan.ts"),
+    join(SERVER, "src", "contracts", "replay_contract.ts"),
+    join(SERVER, "src", "contracts", "record_projection_contract.ts"),
+  ]);
+  const violations = subjects.flatMap((file) =>
+    (graph.get(file) ?? [])
+      .filter((dependency) => privateArtifacts.has(dependency))
+      .map((dependency) => `${display(file)} -> ${display(dependency)}`),
+  );
+  expect(violations).toEqual([]);
+});
+
 test("engine 不创建或反向依赖存储实现", () => {
   const engineRoot = join(SERVER, "src", "engine");
   const storageRoot = join(SERVER, "src", "storage");

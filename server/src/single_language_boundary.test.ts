@@ -16,8 +16,8 @@ import {
   type CatalogDocument,
 } from "./engine/catalog_document.js";
 import { catalogMember } from "./semantic_core/query_intent.js";
-import { compileSemanticAnalysis } from "./engine/semantic_analysis_compiler.js";
-import { parseSemanticAnalysisSpec } from "./semantic_core/semantic_analysis.js";
+import { compileAnalysisView } from "./engine/semantic_analysis_compiler.js";
+import { parseAnalysisDefinition } from "./semantic_core/semantic_analysis.js";
 import { publicTimeContext } from "./application/time_context.js";
 import type { CubeView, TimeContext } from "./ports/cube_gateway.js";
 import { TEST_SEMANTIC_TAXONOMY } from "./test_support/semantic_taxonomy.js";
@@ -191,28 +191,24 @@ describe("单语言物理绑定不上线", () => {
   });
 
   it("编译产出的语义路由只讲业务血缘，键集合全等", () => {
-    const compiled = compileSemanticAnalysis(
-      toCompilerCatalog(DOCUMENT),
-      parseSemanticAnalysisSpec({
-        version: 2,
-        analysis: {
-          views: [
-            {
-              id: "v1",
-              measures: [HEADCOUNT_ID],
-              time: {
-                window: { kind: "current_month", month: "2026-07" },
-              },
+    const compiled = compileAnalysisView(toCompilerCatalog(DOCUMENT), {
+      analysis: parseAnalysisDefinition({
+        views: [
+          {
+            id: "v1",
+            measures: [HEADCOUNT_ID],
+            time: {
+              window: { kind: "current_month", month: "2026-07" },
             },
-          ],
-        },
-        presentation: { type: "table" },
+          },
+        ],
       }),
-    );
-    const route = compiled.routes.find((r) => r.view_id === "v1");
+      view: { type: "table" },
+    });
+    const route = compiled.routes.find((r) => r.result_view_id === "v1");
     expect(route?.status).toBe("direct");
     // 全等而非排除：直查血缘只有状态与语义视图 id，选路字段无从随实现变化混入。
-    expect(Object.keys(route!).sort()).toEqual(["status", "view_id"]);
+    expect(Object.keys(route!).sort()).toEqual(["result_view_id", "status"]);
     // 对外血缘里不出现物理执行 view 名
     expect(JSON.stringify(compiled.routes)).not.toContain("employee_and_key_talent");
   });

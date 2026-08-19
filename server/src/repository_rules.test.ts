@@ -78,7 +78,7 @@ test("应用库只有 composition root 与 app_database 可以打开连接", asy
 test("报告更新动作只有一个领域定义，各呈现面只引用共享子集", async () => {
   const canonical = await readFile(new URL("server/src/contracts/report_action.ts", root), "utf8");
   expect(
-    canonical.includes('z.literal("replace_analysis")'),
+    canonical.includes('z.literal("replace_view")'),
     "检测串已无法命中唯一合法定义，护栏失去检出能力",
   ).toBe(true);
 
@@ -93,7 +93,7 @@ test("报告更新动作只有一个领域定义，各呈现面只引用共享�
     const relativePath = relative(rootPath, path);
     if (relativePath === "server/src/contracts/report_action.ts") continue;
     const source = await readFile(path, "utf8");
-    if (source.includes('z.literal("replace_analysis")')) duplicateDefinitions.push(relativePath);
+    if (source.includes('z.literal("replace_view")')) duplicateDefinitions.push(relativePath);
   }
   expect(duplicateDefinitions).toEqual([]);
 

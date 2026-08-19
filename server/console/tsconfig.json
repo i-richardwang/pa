@@ -16,6 +16,7 @@
       "@member": ["../src/semantic_core/member_name.ts"],
       "@time": ["../src/semantic_core/time_contract.ts"],
       "@semantic-analysis": ["../src/semantic_core/semantic_analysis.ts"],
+      "@view-preferences": ["../src/presentation_core/view_preferences.ts"],
       "@data-capability-map": ["../src/presentation_core/data_capability_map.ts"]
     },
     "resolveJsonModule": true,

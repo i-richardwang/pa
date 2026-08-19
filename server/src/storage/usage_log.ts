@@ -34,7 +34,7 @@ export function createUsageLog(db: SqliteDatabase, options: { now?: () => number
   /** 从落库 args（JSON 串或对象）计算分析指纹；解析或归一失败返回 undefined。 */
   function fingerprintOf(args: unknown): string | undefined {
     try {
-      return queryFingerprint((args as { spec: unknown }).spec);
+      return queryFingerprint((args as { analysis: unknown }).analysis);
     } catch {
       return undefined;
     }
@@ -50,8 +50,8 @@ export function createUsageLog(db: SqliteDatabase, options: { now?: () => number
         `INSERT INTO usage_log
              (at, caller, tool, title, args, outcome, error,
               row_count, has_more, duration_ms, query_fingerprint, unmatched_terms,
-              analysis_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              analysis_id, view_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         new Date(now()).toISOString(),
         r.caller,
@@ -66,6 +66,7 @@ export function createUsageLog(db: SqliteDatabase, options: { now?: () => number
         fingerprint ?? null,
         r.unmatched_terms === undefined ? null : JSON.stringify(r.unmatched_terms),
         r.analysis_id ?? null,
+        r.view_id ?? null,
       );
     } catch (e) {
       console.error("[pa] usage log 写入失败（不影响应答）:", e);

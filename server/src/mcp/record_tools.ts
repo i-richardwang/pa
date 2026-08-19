@@ -13,8 +13,8 @@ import {
   TOOL_DESCRIPTIONS,
 } from "./contracts.js";
 
-const recordSummary = (analysisId: string, payload: RecordProjectionPayload) => ({
-  analysis_id: analysisId,
+const recordSummary = (viewId: string, payload: RecordProjectionPayload) => ({
+  view_id: viewId,
   metric_id: payload.metric_id,
   metric_title: payload.metric_title,
   record_set_title: payload.record_set_title,
@@ -27,8 +27,8 @@ const recordSummary = (analysisId: string, payload: RecordProjectionPayload) => 
   data_changed: payload.data_changed,
 });
 
-const result = (analysisId: string, payload: RecordProjectionPayload) => {
-  const summary = recordSummary(analysisId, payload);
+const result = (viewId: string, payload: RecordProjectionPayload) => {
+  const summary = recordSummary(viewId, payload);
   return {
     content: [{ type: "text" as const, text: "人员名单已打开。" }],
     structuredContent: summary,
@@ -52,7 +52,7 @@ export function registerRecordTools(
       title: "展示人员名单",
       description: TOOL_DESCRIPTIONS.show_records,
       inputSchema: {
-        analysis_id: z.string().uuid().describe("run_analysis 返回的 analysis_id"),
+        view_id: z.string().uuid().describe("run_analysis 返回的 view_id"),
         metric_id: z
           .string()
           .optional()
@@ -70,10 +70,10 @@ export function registerRecordTools(
     },
     usage.wrap(
       { tool: "show_records", caller },
-      async (input: { analysis_id: string; metric_id?: string }) =>
+      async (input: { view_id: string; metric_id?: string }) =>
         result(
-          input.analysis_id,
-          await records.runAnalysis(principal, input.analysis_id, {
+          input.view_id,
+          await records.runAnalysis(principal, input.view_id, {
             ...(input.metric_id ? { metricId: input.metric_id } : {}),
             limit: 20,
           }),
@@ -88,7 +88,7 @@ export function registerRecordTools(
       title: "加载名单分页",
       description: TOOL_DESCRIPTIONS.load_records_page,
       inputSchema: {
-        analysis_id: z.string().uuid().describe("当前名单卡的 analysis_id"),
+        view_id: z.string().uuid().describe("当前名单卡的 view_id"),
         metric_id: z.string().describe("当前名单卡的语义指标 id"),
         data_as_of: z.string().describe("当前名单卡的数据截至月份，用于识别翻页期间的数据刷新"),
         offset: z.number().int().nonnegative().max(49_999),
@@ -102,15 +102,15 @@ export function registerRecordTools(
       },
     },
     async (input: {
-      analysis_id: string;
+      view_id: string;
       metric_id: string;
       data_as_of: string;
       offset: number;
       limit: number;
     }) =>
       result(
-        input.analysis_id,
-        await records.runAnalysis(principal, input.analysis_id, {
+        input.view_id,
+        await records.runAnalysis(principal, input.view_id, {
           metricId: input.metric_id,
           dataAsOf: input.data_as_of,
           offset: input.offset,

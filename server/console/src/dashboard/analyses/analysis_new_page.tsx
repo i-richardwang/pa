@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { AnalysisWorkbench } from "./analysis_workbench";
 import { useCatalogQuery } from "../dashboard_queries";
-import { blankAnalysisSpec } from "./analysis_draft";
+import { blankAnalysisDefinition } from "./analysis_draft";
 import { reportsHistoryHash } from "../router";
 import { useAnalysisEditSession } from "./use_analysis_edit_session";
 
@@ -11,7 +11,12 @@ export function AnalysisNewPage() {
   const catalog = useCatalogQuery().data ?? null;
   // 种子恒定：换引用会让编辑会话把用户已录入的草稿当成新种子重播。
   const seed = useMemo(
-    () => ({ name: BLANK_NAME, spec: blankAnalysisSpec(BLANK_NAME), hasSavedResult: false }),
+    () => ({
+      name: BLANK_NAME,
+      analysis: blankAnalysisDefinition(BLANK_NAME),
+      view: { type: "table" as const },
+      hasSavedResult: false,
+    }),
     [],
   );
   const edit = useAnalysisEditSession({

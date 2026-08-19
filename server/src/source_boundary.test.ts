@@ -189,6 +189,7 @@ const BROWSER_ALIASES: Record<string, string[]> = {
     "@semantic-analysis",
     "@shape",
     "@time",
+    "@view-preferences",
   ],
   widget: [
     "@charts",

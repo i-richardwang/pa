@@ -67,7 +67,7 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
     return { days: d, cells, callers };
   }
 
-  /** 分析清单只计铸造句柄的执行（run_analysis / rerun_analysis）；重放是消费既有分析，不算新的业务提问。 */
+  /** 分析清单只计创建 Analysis/View 身份的执行；重放消费既有身份，不算新的业务提问。 */
   async function titles(
     days: number,
     limit = DASHBOARD_PAGE_SIZE,
@@ -112,16 +112,18 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
       .prepare(
         `SELECT u.id,
                 CASE WHEN a.id IS NOT NULL THEN u.analysis_id ELSE NULL END AS analysis_id,
+                CASE WHEN a.id IS NOT NULL THEN u.view_id ELSE NULL END AS view_id,
                 u.at, u.title, u.row_count
          FROM usage_log AS u
+         LEFT JOIN analysis_view AS v ON v.id = u.view_id
          LEFT JOIN analysis AS a
-           ON a.id = u.analysis_id
+           ON a.id = v.analysis_id
           AND a.owner = u.caller
           AND (
             a.created_at >= ?
-            OR EXISTS (SELECT 1 FROM report WHERE report.analysis_id = a.id)
+            OR EXISTS (SELECT 1 FROM report WHERE report.view_id = v.id)
             OR EXISTS (
-              SELECT 1 FROM report_revision WHERE report_revision.analysis_id = a.id
+              SELECT 1 FROM report_revision WHERE report_revision.view_id = v.id
             )
           )
          WHERE ${where}
@@ -136,6 +138,7 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
       ) as Array<{
       id: number;
       analysis_id: string | null;
+      view_id: string | null;
       at: string;
       title: string;
       row_count: number | null;

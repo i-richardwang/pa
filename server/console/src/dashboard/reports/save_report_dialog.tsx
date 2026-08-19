@@ -1,4 +1,4 @@
-/** 把本人 analysis handle 保存为独立报告。 */
+/** 把本人不可变 View 保存为独立报告。 */
 import { useEffect, useState } from "react";
 import type { CreateReportBody, ReportRow } from "@contracts/report_contract";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,7 @@ export function SaveReportDialog({
     setError(null);
     try {
       const body: CreateReportBody = {
-        analysis_id: target.id,
+        view_id: target.id,
         name,
       };
       const row = await createReport.mutateAsync(body);

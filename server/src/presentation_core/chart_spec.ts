@@ -1,16 +1,16 @@
 /**
- * Agent 在 PresentationSpec 中用受限词汇表声明图型与字段绑定，选型权在持有用户原话的 Agent，
+ * 服务端把 ViewIntent 与 ViewPreferences 合成这份物理呈现输入；它不进入 MCP 或持久化合同。
  * schema 校验成员绑定和图型前提，实际数据不满足声明时只退回忠实表格，不静默改写数据。
  * 时间轴由时间执行器合成；line 可确认时间成员，bar、pie 和 group_by 不接受时间绑定。
  * 个体名单恒为表格。
- * 声明是纯呈现字段，不参与分析指纹内容哈希。
+ * 物理呈现是纯编译产物，不参与分析指纹内容哈希。
  */
 import { z } from "zod";
 import { memberShortName } from "../semantic_core/member_name.js";
-import { TABLE_SHADING_INPUT } from "../semantic_core/semantic_analysis.js";
 import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
 import { resolveTimeOutputGrain, type TimeInput } from "../semantic_core/time_contract.js";
 import type { ChartDecl, TableAxis, TableLayoutDecl } from "./view_shape.js";
+import { TABLE_SHADING_PREFERENCES_INPUT } from "./view_preferences.js";
 
 export const CHART_INPUT = z
   .object({
@@ -69,7 +69,6 @@ export const CHART_INPUT = z
                   .describe("十六进制系列颜色，例如 #5b8fd9"),
                 type: z.enum(["line", "bar"]).optional().describe("系列呈现为折线或柱形"),
                 yAxis: z.enum(["left", "right"]).optional().describe("系列归属左轴或右轴"),
-                label: z.boolean().optional().describe("是否显示系列数据标签"),
               })
               .strict(),
           )
@@ -79,7 +78,11 @@ export const CHART_INPUT = z
       .strict()
       .optional()
       .describe("line/bar 图的可选系列视觉覆盖"),
-    shading: TABLE_SHADING_INPUT.optional().describe("table 专用热力着色"),
+    value_labels: z
+      .enum(["main", "all"])
+      .optional()
+      .describe("line/bar 图级数值标签：main=仅第一主系列，all=全部系列（含拆分系列）；缺省不印"),
+    shading: TABLE_SHADING_PREFERENCES_INPUT.optional().describe("table 专用热力着色"),
   })
   .strict();
 
@@ -201,6 +204,14 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
       "presentation.display 仅支持 type=line 或 bar；table/kpi/pie 请删除 display 字段",
     );
   }
+  if (
+    input.value_labels !== undefined &&
+    (input.type === "table" || input.type === "kpi" || input.type === "pie")
+  ) {
+    throw new Error(
+      "presentation.value_labels 仅支持 type=line 或 bar；table/kpi/pie 请删除 value_labels 字段",
+    );
+  }
 
   if (input.type === "table" || input.type === "kpi") {
     if (
@@ -292,6 +303,11 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
   if (input.display !== undefined && groupBy !== undefined) {
     throw new Error("presentation.display 与 group_by 互斥；请移除其中一个字段");
   }
+  if (input.value_labels === "main" && groupBy !== undefined) {
+    throw new Error(
+      "presentation.value_labels=main 与 group_by 互斥；拆分系列没有主系列，请改用 all 或删除",
+    );
+  }
   const display =
     input.display === undefined
       ? undefined
@@ -331,6 +347,7 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
       tableLayout,
       ...(groupBy !== undefined ? { groupBy } : {}),
       ...(display !== undefined ? { display } : {}),
+      ...(input.value_labels !== undefined ? { valueLabels: input.value_labels } : {}),
       ...(annotations !== undefined ? { annotations } : {}),
     };
   }
@@ -374,6 +391,7 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
     ...(groupBy !== undefined ? { groupBy } : {}),
     ...(input.stack !== undefined ? { stack: input.stack } : {}),
     ...(display !== undefined ? { display } : {}),
+    ...(input.value_labels !== undefined ? { valueLabels: input.value_labels } : {}),
     ...(annotations !== undefined ? { annotations } : {}),
   };
 }

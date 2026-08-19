@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CubeGateway } from "./ports/cube_gateway.js";
 import { MAX_PLAN_NODES, parseAnalysisSpec } from "./semantic_core/analysis_spec.js";
-import { parseSemanticAnalysisSpec } from "./semantic_core/semantic_analysis.js";
-import { semanticSpecOf } from "./test_support/report.js";
+import type { SemanticViewIntent } from "./semantic_core/semantic_analysis.js";
+import { semanticAnalysisOf } from "./test_support/report.js";
 import { createTestAppDatabase } from "./test_support/app_database.js";
 import { TEST_SEMANTIC_TAXONOMY } from "./test_support/semantic_taxonomy.js";
 import { canonicalModelFixture } from "./test_support/canonical_semantic_model.js";
@@ -200,11 +200,13 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     name: "pa-tool-metadata-test",
     version: "0.1.0",
   });
-  const analysisId = "22222222-2222-4222-8222-222222222222";
-  const rerunAnalysisId = "33333333-3333-4333-8333-333333333333";
-  const appliedPivotId = "44444444-4444-4444-8444-444444444444";
-  const unavailablePivotId = "55555555-5555-4555-8555-555555555555";
-  const renderedSpec = semanticSpecOf({ views: [query("result")] });
+  const baseAnalysisId = "22222222-2222-4222-8222-222222222222";
+  const rerunViewId = "33333333-3333-4333-8333-333333333333";
+  const appliedPivotAnalysisId = "44444444-4444-4444-8444-444444444444";
+  const appliedPivotViewId = "44444444-4444-4444-9444-444444444444";
+  const unavailablePivotAnalysisId = "55555555-5555-4555-8555-555555555555";
+  const unavailablePivotViewId = "55555555-5555-4555-9555-555555555555";
+  const rendered = semanticAnalysisOf({ views: [query("result")] });
   // 执行器解析出的物理呈现（声明一张 bar 图）：驱动 rerun_analysis 的降级说明。
   const renderedPresentation = {
     type: "bar" as const,
@@ -251,7 +253,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     baseUrl: "http://127.0.0.1:8788",
   });
   const feedbackStore = createFeedbackStore(db);
-  const executedAnalysis = (id: string) => {
+  const executedAnalysis = (viewId: string, analysisId = baseAnalysisId) => {
     const view = {
       id: "result",
       columns: ["organization_name", "active_employee_count"],
@@ -281,11 +283,15 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
       ],
     };
     return {
-      analysis_id: id,
-      spec: renderedSpec,
+      analysis_id: analysisId,
+      view_id: viewId,
+      definition: rendered.analysis,
+      intent: rendered.view,
+      preferences: {},
       presentation: renderedPresentation,
       payload: {
-        analysis_id: id,
+        analysis_id: analysisId,
+        view_id: viewId,
         default_population_scope: "统计范围",
         data_as_of: "2026-07",
         time_context: [],
@@ -296,27 +302,23 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
       record_projection_bindings: { views: [] },
     };
   };
-  const pivotSpec = (columnAxis: string) =>
-    parseSemanticAnalysisSpec({
-      version: 2,
-      analysis: {
-        views: [
-          {
-            id: "result",
-            measures: ["measure:active_employee_count"],
-            dimensions: ["dimension:organization_name", "dimension:department_name"],
-            time: {
-              window: { kind: "current_month", month: "2026-07" },
-            },
-          },
-        ],
+  const pivotDefinition = {
+    views: [
+      {
+        id: "result",
+        measures: ["measure:active_employee_count"],
+        dimensions: ["dimension:organization_name", "dimension:department_name"],
+        time: { window: { kind: "current_month" as const, month: "2026-07" } },
       },
-      presentation: { type: "table", columns: [columnAxis] },
-    });
-  const executedPivot = (id: string, spec: ReturnType<typeof pivotSpec>) => {
+    ],
+  };
+  const pivotIntent = (columnAxis: string) => ({
+    type: "table" as const,
+    columns: [columnAxis],
+  });
+  const executedPivot = (analysisId: string, viewId: string, intent: SemanticViewIntent) => {
     const columnAxis =
-      spec.presentation.type === "table" &&
-      spec.presentation.columns?.[0] === "dimension:organization_name"
+      intent.columns?.[0] === "dimension:organization_name"
         ? "organization_name"
         : "department_name";
     const rowAxis = columnAxis === "organization_name" ? "department_name" : "organization_name";
@@ -356,11 +358,15 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
       columns: [{ kind: "field" as const, column: columnAxis }, { kind: "metrics" as const }],
     };
     return {
-      analysis_id: id,
-      spec,
+      analysis_id: analysisId,
+      view_id: viewId,
+      definition: pivotDefinition,
+      intent,
+      preferences: {},
       presentation: { type: "table" as const, y: [], tableLayout },
       payload: {
-        analysis_id: id,
+        analysis_id: analysisId,
+        view_id: viewId,
         default_population_scope: "统计范围",
         data_as_of: "2026-07",
         time_context: [],
@@ -399,15 +405,20 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
   const server = buildServer({
     dependencies: {
       analysis: {
-        run: async (_principal, spec) => {
-          const declared =
-            spec.presentation.type === "table" ? spec.presentation.columns?.[0] : undefined;
+        run: async (_principal, _definition, intent) => {
+          if (intent.type !== "table") throw new Error("本测试桩只执行表格呈现");
+          const declared = intent.columns?.[0];
           return executedPivot(
-            declared === "dimension:organization_name" ? unavailablePivotId : appliedPivotId,
-            spec,
+            declared === "dimension:organization_name"
+              ? unavailablePivotAnalysisId
+              : appliedPivotAnalysisId,
+            declared === "dimension:organization_name"
+              ? unavailablePivotViewId
+              : appliedPivotViewId,
+            intent,
           );
         },
-        rerun: async () => executedAnalysis(rerunAnalysisId),
+        rerun: async () => executedAnalysis(rerunViewId),
         replay: async (_principal, id) => {
           replayed.push(id);
           return executedAnalysis(id);
@@ -517,15 +528,30 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     });
     expect(runAnalysisInput).toContain('"group_sort"');
     expect(runAnalysisInput).not.toContain('"selection"');
-    const versionSchema = findJsonObject(
-      tools.run_analysis?.inputSchema,
-      (candidate) => candidate.const === 2,
-    );
-    expect(versionSchema).toMatchObject({ type: "number", const: 2 });
+    const rerunAnalysisInput = JSON.stringify(tools.rerun_analysis?.inputSchema);
+    for (const humanOnlyField of [
+      "color",
+      "mark",
+      "axis",
+      "value_labels",
+      "table_shading",
+      "shading",
+      "palette",
+    ]) {
+      expect(runAnalysisInput).not.toContain(`"${humanOnlyField}"`);
+      expect(rerunAnalysisInput).not.toContain(`"${humanOnlyField}"`);
+    }
     for (const name of ["run_analysis", "rerun_analysis"]) {
       expect(tools[name]?._meta?.ui).toBeUndefined();
       expect(tools[name]?._meta?.["openai/outputTemplate"]).toBeUndefined();
+      expect(tools[name]?.annotations).toMatchObject({
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      });
     }
+    expect(tools.show_analysis?.annotations?.readOnlyHint).toBe(true);
     expect(tools.show_analysis?._meta?.ui).toEqual({
       resourceUri: UI_RESOURCE_URI,
       visibility: ["model"],
@@ -542,10 +568,14 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     expect(tools.load_records_page?._meta?.ui).toEqual({ visibility: ["app"] });
     const appliedPivot = await client.callTool({
       name: "run_analysis",
-      arguments: { spec: pivotSpec("dimension:department_name") },
+      arguments: {
+        analysis: pivotDefinition,
+        view: pivotIntent("dimension:department_name"),
+      },
     });
     expect(appliedPivot.structuredContent).toMatchObject({
-      analysis_id: appliedPivotId,
+      analysis_id: appliedPivotAnalysisId,
+      view_id: appliedPivotViewId,
     });
     expect(appliedPivot.structuredContent).not.toHaveProperty("presentation_notes");
     expect(appliedPivot._meta?.["ai.pa/presentation"]).toMatchObject({
@@ -555,13 +585,17 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
 
     const unavailablePivot = await client.callTool({
       name: "run_analysis",
-      arguments: { spec: pivotSpec("dimension:organization_name") },
+      arguments: {
+        analysis: pivotDefinition,
+        view: pivotIntent("dimension:organization_name"),
+      },
     });
     expect(unavailablePivot.structuredContent).toMatchObject({
-      analysis_id: unavailablePivotId,
+      analysis_id: unavailablePivotAnalysisId,
+      view_id: unavailablePivotViewId,
       presentation_notes: [
         {
-          view_id: "result",
+          result_view_id: "result",
           kind: "unsupported_shape",
           note: expect.stringContaining("表格布局未生效"),
         },
@@ -575,18 +609,19 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     const rendered = await client.callTool({
       name: "rerun_analysis",
       arguments: {
-        analysis_id: analysisId,
-        presentation: {
+        analysis_id: baseAnalysisId,
+        view: {
           type: "bar",
           category: "test_people_metrics.organization_name",
         },
       },
     });
     expect(rendered.structuredContent).toMatchObject({
-      analysis_id: rerunAnalysisId,
+      analysis_id: baseAnalysisId,
+      view_id: rerunViewId,
       presentation_notes: [
         {
-          view_id: "result",
+          result_view_id: "result",
           kind: "empty_result",
           note: expect.stringContaining("结果为空"),
         },
@@ -594,26 +629,28 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     });
     const shown = await client.callTool({
       name: "show_analysis",
-      arguments: { analysis_id: rerunAnalysisId },
+      arguments: { view_id: rerunViewId },
     });
-    expect(shown.structuredContent).toEqual({ analysis_id: rerunAnalysisId });
-    expect(ownershipChecks).toEqual([rerunAnalysisId]);
+    expect(shown.structuredContent).toEqual({ view_id: rerunViewId });
+    expect(ownershipChecks).toEqual([rerunViewId]);
     const loaded = await client.callTool({
       name: "load_analysis_result",
-      arguments: { analysis_id: rerunAnalysisId },
+      arguments: { view_id: rerunViewId },
     });
     expect(loaded.structuredContent).toMatchObject({
-      analysis_id: rerunAnalysisId,
-      spec: executedAnalysis(rerunAnalysisId).spec,
+      analysis_id: baseAnalysisId,
+      view_id: rerunViewId,
+      analysis: executedAnalysis(rerunViewId).definition,
+      view_intent: executedAnalysis(rerunViewId).intent,
     });
-    expect(replayed).toEqual([rerunAnalysisId]);
+    expect(replayed).toEqual([rerunViewId]);
     const records = await client.callTool({
       name: "show_records",
-      arguments: { analysis_id: rerunAnalysisId, metric_id: "measure:active_employee_count" },
+      arguments: { view_id: rerunViewId, metric_id: "measure:active_employee_count" },
     });
     expect(records.content).toEqual([{ type: "text", text: "人员名单已打开。" }]);
     expect(records.structuredContent).toEqual({
-      analysis_id: rerunAnalysisId,
+      view_id: rerunViewId,
       metric_id: "measure:active_employee_count",
       metric_title: "在职人数",
       record_set_title: "在职员工",
@@ -629,7 +666,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
       rows: [["e_001", "张三"]],
     });
     expect(projected).toEqual([
-      { analysisId: rerunAnalysisId, metricId: "measure:active_employee_count" },
+      { analysisId: rerunViewId, metricId: "measure:active_employee_count" },
     ]);
     const resources = await client.listResources();
     expect(resources.resources.map((resource) => resource.uri).sort()).toEqual(

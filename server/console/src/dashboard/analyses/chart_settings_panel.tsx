@@ -21,11 +21,8 @@ import {
 import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
 import type { ReplayPayload } from "@contracts/replay_contract";
 import { SERIES_COLORS } from "@charts";
-import {
-  isSemanticDerivedView,
-  type SemanticChart,
-  type TableShadingDecl,
-} from "@semantic-analysis";
+import { isSemanticDerivedView, type SemanticViewIntent } from "@semantic-analysis";
+import type { SeriesPreferences, TableShadingPreferences } from "@view-preferences";
 import { makeTitleOf, sensibleForms, type SensibleForm, tableShadingDefaults } from "@shape";
 import { compileTimeIntent, resolveTimeOutputGrain } from "@time";
 import { Button } from "@/components/ui/button";
@@ -58,12 +55,13 @@ import { cn } from "@/lib/utils";
 import { SwitchField } from "@/components/ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  defaultSemanticChart,
-  semanticChart,
+  defaultSemanticViewIntent,
+  semanticViewIntent,
   semanticSummaryEnabled,
   semanticViewContext,
-  setSemanticChart,
+  setSemanticViewIntent,
   setSemanticSummary,
+  setViewPreferences,
   type AnalysisEditState,
 } from "./analysis_draft";
 import { TableShadingSettings } from "./table_shading_settings";
@@ -94,12 +92,12 @@ const SUMMARY_TOOLTIP = "总体保留当前筛选与时间粒度，并由数据�
 
 const SETTING_CONTENT_CLASS = cn(INSPECTOR_MEMBER_INSET_CLASS, "px-0 md:px-0");
 
-function selectedChart(
+function selectedViewIntent(
   draft: AnalysisEditState,
   _replay: ReplayPayload,
   _catalog: CatalogPayload,
-): SemanticChart {
-  return semanticChart(draft);
+): SemanticViewIntent {
+  return semanticViewIntent(draft);
 }
 
 export function ChartSettingsPanel({
@@ -129,12 +127,12 @@ export function ChartSettingsPanel({
 
   const resultView = replay.payload.view;
   const resultTitleOf = makeTitleOf(resultView);
-  const semanticView = draft.spec.analysis.views.find((view) => view.id === resultView.id) ?? null;
+  const semanticView = draft.analysis.views.find((view) => view.id === resultView.id) ?? null;
   const context = semanticView ? semanticViewContext(semanticView, catalog) : null;
   const titleOf = (member: string) =>
     [...catalog.measures, ...catalog.dimensions].find((item) => item.id === member)?.title ??
     resultTitleOf(member);
-  const chart = selectedChart(draft, replay, catalog);
+  const chart = selectedViewIntent(draft, replay, catalog);
   const forms = new Set(sensibleForms(resultView));
   const measures = context?.measures ?? [];
   const dimensions = context?.dimensions ?? [];
@@ -193,36 +191,46 @@ export function ChartSettingsPanel({
   const y = chart.type === "table" || chart.type === "kpi" ? [] : (chart.series ?? measures);
   const annotations =
     chart.type === "table" || chart.type === "kpi" ? [] : (chart.annotations ?? []);
-  const series = chart.display?.series ?? {};
+  const series = draft.view_preferences.series ?? {};
   // 「显示」的三项各有各的前提；三项全不成立时**整节不出现**，不留一个空节题。
   // 节题是对内容的承诺，底下什么都没有时它就成了一道假分隔线。
   const canSplitSeries = (chart.type === "line" || chart.type === "bar") && dimensions.length > 1;
 
   // 饼图同理（扇区归属取值）。此时指标行只留「上不上轴」。
   const canStyleSeries = (chart.type === "line" || chart.type === "bar") && !chart.group_by;
+  const valueLabelItems: Record<string, string> = {
+    none: "不显示",
+    main: "仅主指标",
+    all: "全部",
+  };
   const splitSeriesItems: Record<string, string> = {
     none: "不拆分",
     ...Object.fromEntries(dimensions.map((member) => [member, titleOf(member)])),
   };
   const canStack = chart.type === "bar" && Boolean(chart.group_by);
-  const showDisplaySection = canSplitSeries || canStack || canSummarize;
+  const canValueLabels = chart.type === "line" || chart.type === "bar";
+  const showDisplaySection = canSplitSeries || canStack || canSummarize || canValueLabels;
 
-  const update = (next: SemanticChart) => onChange(setSemanticChart(draft, next, catalog));
+  const update = (next: SemanticViewIntent) =>
+    onChange(setSemanticViewIntent(draft, next, catalog));
+  const updateStyle = (next: AnalysisEditState["view_preferences"]) =>
+    onChange(setViewPreferences(draft, next));
 
-  const tableShading = chart.type === "table" ? chart.shading : undefined;
+  const tableShading = chart.type === "table" ? draft.view_preferences.table_shading : undefined;
   const shadingStyle = !tableShading ? "none" : tableShading.values === false ? "colors" : "values";
-  const setTable = (patch: { columns?: string[]; shading?: TableShadingDecl | null }) => {
-    const columns = patch.columns ?? (chart.type === "table" ? chart.columns : undefined);
-    const shading = patch.shading === undefined ? tableShading : (patch.shading ?? undefined);
+  const setTableColumns = (columns: string[]) => {
     update({
       type: "table",
       ...(columns?.length ? { columns } : {}),
-      ...(shading ? { shading } : {}),
     });
   };
-  const setTableColumns = (columns: string[]) => setTable({ columns });
-  const setShading = (patch: Partial<TableShadingDecl>) =>
-    setTable({ shading: { palette: SERIES_COLORS[0], ...tableShading, ...patch } });
+  const setTableShading = (table_shading: TableShadingPreferences | null) =>
+    updateStyle({
+      ...draft.view_preferences,
+      table_shading: table_shading ?? undefined,
+    });
+  const setShading = (patch: Partial<TableShadingPreferences>) =>
+    setTableShading({ palette: SERIES_COLORS[0], ...tableShading, ...patch });
 
   function moveTableColumn(axis: string, delta: -1 | 1) {
     const index = tableColumns.indexOf(axis);
@@ -262,11 +270,11 @@ export function ChartSettingsPanel({
     });
   }
 
-  function setDisplay(member: string, patch: Record<string, unknown>) {
+  function setSeriesPreferences(member: string, patch: Partial<SeriesPreferences>) {
     if (chart.type !== "line" && chart.type !== "bar") return;
-    update({
-      ...chart,
-      display: { series: { ...series, [member]: { ...(series[member] ?? {}), ...patch } } },
+    updateStyle({
+      ...draft.view_preferences,
+      series: { ...series, [member]: { ...(series[member] ?? {}), ...patch } },
     });
   }
 
@@ -291,7 +299,7 @@ export function ChartSettingsPanel({
                         disabled={!allowed}
                         icon={FORM_META[form].icon}
                         label={label}
-                        onClick={() => update(defaultSemanticChart(draft, form, catalog))}
+                        onClick={() => update(defaultSemanticViewIntent(draft, form, catalog))}
                         selected={chart.type === form}
                       />
                     </TooltipTrigger>
@@ -430,7 +438,7 @@ export function ChartSettingsPanel({
                 <Select
                   items={SHADING_STYLE_ITEMS}
                   onValueChange={(value) => {
-                    if (value === "none") setTable({ shading: null });
+                    if (value === "none") setTableShading(null);
                     else if (value === "values" || value === "colors") {
                       setShading({ values: value === "values" ? undefined : false });
                     }
@@ -520,7 +528,7 @@ export function ChartSettingsPanel({
                                     aria-label={`${titleOf(member)} 颜色 ${option}`}
                                     color={option}
                                     key={option}
-                                    onClick={() => setDisplay(member, { color: option })}
+                                    onClick={() => setSeriesPreferences(member, { color: option })}
                                     selected={option === color}
                                     size="sm"
                                   />
@@ -531,10 +539,10 @@ export function ChartSettingsPanel({
                               items={AXIS_ITEMS}
                               onValueChange={(value) => {
                                 if (typeof value === "string" && value) {
-                                  setDisplay(member, { yAxis: value });
+                                  setSeriesPreferences(member, { axis: value });
                                 }
                               }}
-                              value={intent.yAxis ?? "left"}
+                              value={intent.axis ?? "left"}
                             >
                               <InspectorOptionRow label={<SelectLabel>坐标轴</SelectLabel>}>
                                 <SelectTrigger
@@ -554,10 +562,10 @@ export function ChartSettingsPanel({
                               items={SERIES_FORM_ITEMS}
                               onValueChange={(value) => {
                                 if (typeof value === "string" && value) {
-                                  setDisplay(member, { type: value });
+                                  setSeriesPreferences(member, { mark: value });
                                 }
                               }}
-                              value={intent.type ?? chart.type}
+                              value={intent.mark ?? (chart.type === "line" ? "line" : "bar")}
                             >
                               <InspectorOptionRow label={<SelectLabel>形态</SelectLabel>}>
                                 <SelectTrigger
@@ -573,11 +581,6 @@ export function ChartSettingsPanel({
                                 </SelectPopup>
                               </InspectorOptionRow>
                             </Select>
-                            <SwitchField
-                              checked={intent.label === true}
-                              label="显示数值标签"
-                              onCheckedChange={(checked) => setDisplay(member, { label: checked })}
-                            />
                           </div>
                         )}
                       </div>
@@ -622,7 +625,6 @@ export function ChartSettingsPanel({
                           ...chart,
                           series: groupBy ? y.slice(0, 1) : y,
                           group_by: groupBy,
-                          ...(groupBy ? { display: undefined } : {}),
                         });
                       }}
                       value={chart.group_by ?? "none"}
@@ -651,6 +653,36 @@ export function ChartSettingsPanel({
                       label="堆叠显示"
                       onCheckedChange={(checked) => update({ ...chart, stack: checked })}
                     />
+                  ) : null}
+
+                  {canValueLabels ? (
+                    <Select
+                      items={valueLabelItems}
+                      onValueChange={(value) => {
+                        if (chart.type !== "line" && chart.type !== "bar") return;
+                        updateStyle({
+                          ...draft.view_preferences,
+                          value_labels: value === "main" || value === "all" ? value : undefined,
+                        });
+                      }}
+                      value={
+                        (chart.type === "line" || chart.type === "bar"
+                          ? draft.view_preferences.value_labels
+                          : undefined) ?? "none"
+                      }
+                    >
+                      <InspectorOptionRow label={<SelectLabel>显示数值</SelectLabel>}>
+                        <SelectTrigger className={GHOST_SELECT_TRIGGER} size="sm" variant="ghost">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectPopup>
+                          <SelectItem value="none">不显示</SelectItem>
+                          {/* 拆分系列没有「主指标」，这一档不出现（契约同判） */}
+                          {chart.group_by ? null : <SelectItem value="main">仅主指标</SelectItem>}
+                          <SelectItem value="all">全部</SelectItem>
+                        </SelectPopup>
+                      </InspectorOptionRow>
+                    </Select>
                   ) : null}
 
                   {canSummarize ? (

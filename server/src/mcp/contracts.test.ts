@@ -45,6 +45,7 @@ test("公共 MCP 响应 schema 递归 strict，物理字段不能被静默剥离
 
   const run = {
     analysis_id: "018f5da8-7a4c-7d4d-9f3a-8a3c7f4b4c01",
+    view_id: "118f5da8-7a4c-7d4d-9f3a-8a3c7f4b4c01",
     default_population_scope: "测试人群口径。",
     data_as_of: "2026-07",
     time_context: [],
@@ -78,7 +79,7 @@ test("公共 MCP 响应 schema 递归 strict，物理字段不能被静默剥离
   ).toBe(false);
 
   const records = {
-    analysis_id: "018f5da8-7a4c-7d4d-9f3a-8a3c7f4b4c01",
+    view_id: "118f5da8-7a4c-7d4d-9f3a-8a3c7f4b4c01",
     metric_id: "measure:active_employee_count",
     metric_title: "在职人数",
     record_set_title: "在职员工",

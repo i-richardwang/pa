@@ -9,13 +9,15 @@ import type { AnalysisSpec, ExprNode } from "../semantic_core/analysis_spec.js";
 import { planExecution } from "../semantic_core/execution_plan.js";
 import { memberShortName } from "../semantic_core/member_name.js";
 import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
+import type { ViewPreferences } from "../presentation_core/view_preferences.js";
 import { bindSemanticFilter } from "../semantic_core/query_intent.js";
 import {
   isSemanticDerivedView,
   type SemanticColumnOperand,
   type SemanticExprNode,
   type SemanticLiteralOperand,
-  type SemanticAnalysisSpec,
+  type AnalysisDefinition,
+  type SemanticViewIntent,
 } from "../semantic_core/semantic_analysis.js";
 import { createBoardRepository } from "../storage/board_repository.js";
 import { createReportRepository as createReports } from "../storage/report_repository.js";
@@ -150,10 +152,15 @@ const testExpression = (node: SemanticExprNode): ExprNode => ({
 });
 
 export const semanticPlanningStub = {
-  compile: async (_principal: unknown, semantic: SemanticAnalysisSpec) => {
+  compile: async (
+    _principal: unknown,
+    semantic: AnalysisDefinition,
+    declared: SemanticViewIntent,
+    preferences: ViewPreferences = {},
+  ) => {
     const analysis: AnalysisSpec = {
-      ...(semantic.analysis.title ? { title: semantic.analysis.title } : {}),
-      views: semantic.analysis.views.map((view) => {
+      ...(semantic.title ? { title: semantic.title } : {}),
+      views: semantic.views.map((view) => {
         if (!isSemanticDerivedView(view)) {
           const { filters, group_sort: groupSort, time, ...query } = view;
           return {
@@ -211,10 +218,15 @@ export const semanticPlanningStub = {
         };
       }),
     };
-    const declared = semantic.presentation;
     const presentation: PresentationSpec =
       declared.type === "table" || declared.type === "kpi"
-        ? { type: declared.type, y: [] }
+        ? {
+            type: declared.type,
+            y: [],
+            ...(declared.type === "table" && preferences.table_shading
+              ? { shading: preferences.table_shading }
+              : {}),
+          }
         : {
             type: declared.type,
             ...(declared.category ? { x: declared.category } : {}),
@@ -222,10 +234,30 @@ export const semanticPlanningStub = {
             ...(declared.annotations ? { annotations: declared.annotations } : {}),
             ...(declared.group_by ? { groupBy: declared.group_by } : {}),
             ...(declared.stack !== undefined ? { stack: declared.stack } : {}),
-            ...(declared.display?.series ? { display: declared.display.series } : {}),
+            ...(preferences.series
+              ? {
+                  display: Object.fromEntries(
+                    Object.entries(preferences.series).map(([member, style]) => [
+                      member,
+                      {
+                        ...(style.color ? { color: style.color } : {}),
+                        ...(style.mark ? { type: style.mark } : {}),
+                        ...(style.axis ? { yAxis: style.axis } : {}),
+                      },
+                    ]),
+                  ),
+                }
+              : {}),
+            ...(preferences.value_labels ? { valueLabels: preferences.value_labels } : {}),
           };
     const plan = planExecution(analysis);
-    return { plan, presentation, routes: [], record_projection_bindings: { views: [] } };
+    return {
+      plan,
+      presentation,
+      render_decl: presentation,
+      routes: [],
+      record_projection_bindings: { views: [] },
+    };
   },
 };
 

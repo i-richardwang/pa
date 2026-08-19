@@ -41,14 +41,14 @@ export function createReportRepository(db: SqliteDatabase): ReportRepository {
   async function create(input: {
     owner: string;
     name: string;
-    analysisId: string;
+    viewId: string;
   }): Promise<ReportRecord> {
     const now = new Date().toISOString();
     const raw: RawReport = {
       id: randomUUID(),
       owner: input.owner.trim(),
       name: normalizeName(input.name),
-      analysis_id: input.analysisId,
+      view_id: input.viewId,
       render_shape: null,
       archived_at: null,
       revision: 1,
@@ -57,14 +57,14 @@ export function createReportRepository(db: SqliteDatabase): ReportRepository {
     };
     db.prepare(
       `INSERT INTO report
-         (id, owner, name, analysis_id, render_shape, archived_at,
+         (id, owner, name, view_id, render_shape, archived_at,
           revision, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       raw.id,
       raw.owner,
       raw.name,
-      raw.analysis_id,
+      raw.view_id,
       raw.render_shape,
       raw.archived_at,
       raw.revision,
@@ -109,7 +109,7 @@ export function createReportRepository(db: SqliteDatabase): ReportRepository {
     owner: string,
     patch: {
       name?: string;
-      analysisId?: string;
+      viewId?: string;
       archivedAt?: string | null;
     },
     ifRevision?: number,
@@ -122,11 +122,9 @@ export function createReportRepository(db: SqliteDatabase): ReportRepository {
     }
     const now = new Date().toISOString();
     const expectedRevision = current.revision;
-    const nextAnalysisId = patch.analysisId ?? current.analysis_id;
+    const nextViewId = patch.viewId ?? current.view_id;
     const nextRenderShape =
-      patch.analysisId !== undefined && patch.analysisId !== current.analysis_id
-        ? null
-        : current.render_shape;
+      patch.viewId !== undefined && patch.viewId !== current.view_id ? null : current.render_shape;
     let changes = 0;
     try {
       inTransaction(db, () => {
@@ -139,26 +137,26 @@ export function createReportRepository(db: SqliteDatabase): ReportRepository {
         }
         db.prepare(
           `INSERT INTO report_revision
-             (report_id, revision, name, analysis_id, saved_by, saved_at)
+             (report_id, revision, name, view_id, saved_by, saved_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
         ).run(
           current.id,
           current.revision,
           current.name,
-          current.analysis_id,
+          current.view_id,
           owner,
           current.updated_at,
         );
         const result = db
           .prepare(
             `UPDATE report
-             SET name = ?, analysis_id = ?, render_shape = ?, archived_at = ?,
+             SET name = ?, view_id = ?, render_shape = ?, archived_at = ?,
                  revision = ?, updated_at = ?
              WHERE id = ? AND revision = ?`,
           )
           .run(
             patch.name === undefined ? current.name : normalizeName(patch.name),
-            nextAnalysisId,
+            nextViewId,
             nextRenderShape,
             patch.archivedAt === undefined ? current.archived_at : patch.archivedAt,
             current.revision + 1,
@@ -210,18 +208,18 @@ export function createReportRepository(db: SqliteDatabase): ReportRepository {
       .prepare("SELECT * FROM report_revision WHERE report_id = ? AND revision = ?")
       .get(id, revision) as ReportRevision | undefined;
     if (!snapshot) throw new ReportNotFoundError("报告历史版本不存在");
-    return update(id, owner, { name: snapshot.name, analysisId: snapshot.analysis_id }, ifRevision);
+    return update(id, owner, { name: snapshot.name, viewId: snapshot.view_id }, ifRevision);
   }
 
   async function cacheRenderShape(
     id: string,
-    analysisId: string,
+    viewId: string,
     shape: RenderShape | null,
   ): Promise<void> {
     db.prepare(
       `UPDATE report SET render_shape = ?
-       WHERE id = ? AND analysis_id = ?`,
-    ).run(shape, id, analysisId);
+       WHERE id = ? AND view_id = ?`,
+    ).run(shape, id, viewId);
   }
 
   return {

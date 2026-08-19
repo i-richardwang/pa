@@ -1,6 +1,11 @@
 import { useEffect } from "react";
+import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { REPLAY_PAYLOAD_SCHEMA, type ReplayPayload } from "@contracts/replay_contract";
+import {
+  CHART_DECL_SCHEMA,
+  REPLAY_PAYLOAD_SCHEMA,
+  type ReplayPayload,
+} from "@contracts/replay_contract";
 import {
   REPORT_DETAIL_SCHEMA,
   REPORT_REVISIONS_PAYLOAD_SCHEMA,
@@ -8,7 +13,13 @@ import {
   type ReportRevisionsPayload,
   type UpdateReportBody,
 } from "@contracts/report_contract";
-import type { SemanticAnalysisSpec } from "@semantic-analysis";
+import {
+  SEMANTIC_VIEW_INTENT_INPUT,
+  type AnalysisDefinition,
+  type SemanticViewIntent,
+} from "@semantic-analysis";
+import { VIEW_PREFERENCES_INPUT, type ViewPreferences } from "@view-preferences";
+import { RECORD_PROJECTION_BINDINGS_SCHEMA } from "@contracts/record_projection_contract";
 import { getJson, patchJson, postJson } from "./api";
 import { dashboardKeys, errorText } from "./dashboard_queries";
 
@@ -97,10 +108,35 @@ export function useUpdateReport(id: string) {
   });
 }
 
-/** 草稿预览：现编译现执行，结果是未落库的临时执行，不写入任何缓存键。 */
+/** AnalysisDefinition 变更才创建 Run；响应带不可变 Analysis/View 身份。 */
 export function usePreviewAnalysis() {
   return useMutation({
-    mutationFn: (spec: SemanticAnalysisSpec) =>
-      postJson("/dashboard/api/analyses", { spec }, REPLAY_PAYLOAD_SCHEMA),
+    mutationFn: (input: {
+      analysis: AnalysisDefinition;
+      view: SemanticViewIntent;
+      view_preferences: ViewPreferences;
+    }) => postJson("/dashboard/api/analyses", input, REPLAY_PAYLOAD_SCHEMA),
+  });
+}
+
+const MATERIALIZED_VIEW_SCHEMA = z
+  .object({
+    analysis_id: z.string().uuid(),
+    view_id: z.string().uuid(),
+    view: SEMANTIC_VIEW_INTENT_INPUT,
+    view_preferences: VIEW_PREFERENCES_INPUT,
+    render_decl: CHART_DECL_SCHEMA,
+    record_projection_bindings: RECORD_PROJECTION_BINDINGS_SCHEMA,
+  })
+  .strict();
+
+/** ViewIntent/ViewPreferences 变更只创建 View，不执行查询。 */
+export function useMaterializeAnalysisView() {
+  return useMutation({
+    mutationFn: (input: {
+      analysis_id: string;
+      view: SemanticViewIntent;
+      view_preferences: ViewPreferences;
+    }) => postJson("/dashboard/api/analysis_views", input, MATERIALIZED_VIEW_SCHEMA),
   });
 }

@@ -9,7 +9,7 @@ import { ArrowDownUpIcon } from "lucide-react";
 import { DIVERGING_PALETTES, SERIES_COLORS, shadingStops } from "@charts";
 import { formatCell, isRateFormat } from "@format";
 import type { TableShadingDefaults } from "@shape";
-import { SHADING_PALETTE_NAMES, type TableShadingDecl } from "@semantic-analysis";
+import { SHADING_PALETTE_NAMES, type TableShadingPreferences } from "@view-preferences";
 import { Button } from "@/components/ui/button";
 import { ColorPill } from "@/components/ui/color-pill";
 import { ColorScale, ColorScaleStop, ColorScaleTick } from "@/components/ui/color-scale";
@@ -37,10 +37,10 @@ export function TableShadingSettings({
   defaults,
   onChange,
 }: {
-  shading: TableShadingDecl;
+  shading: TableShadingPreferences;
   /** 当前结果的数据缺省刻度；无结果时为 null，读数退回两端的名字。 */
   defaults: TableShadingDefaults | null;
-  onChange: (patch: Partial<TableShadingDecl>) => void;
+  onChange: (patch: Partial<TableShadingPreferences>) => void;
 }) {
   const diverging = divergingNameOf(shading.palette);
   const flipped = !!shading.flipped;

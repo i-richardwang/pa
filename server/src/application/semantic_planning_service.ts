@@ -1,17 +1,29 @@
-/** 当前主体可见语义目录上的唯一报告规划入口。 */
+/** 当前主体可见语义目录上的唯一分析与视图规划入口。 */
 import type { Principal } from "../engine/cube_security.js";
-import { compileSemanticAnalysis } from "../engine/semantic_analysis_compiler.js";
-import type { SemanticAnalysisSpec } from "../semantic_core/semantic_analysis.js";
+import { compileAnalysisView } from "../engine/semantic_analysis_compiler.js";
+import type { AnalysisDefinition, SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
 import type { CatalogService } from "./catalog_service.js";
+import {
+  EMPTY_VIEW_PREFERENCES,
+  type ViewPreferences,
+} from "../presentation_core/view_preferences.js";
 
 /**
- * 服务端语义规划是查询兼容性的唯一权威：编译发生在预览/run 路径上，不可行的字段组合在此
- * 抛 SemanticQueryIncompatibleError，其 routes/reason 只讲业务血缘（direct/composed/incompatible），
- * 物理执行绑定留在编译器内。Web 走 validate-on-commit：编辑落草稿、提交时经预览编译校验。
+ * 服务端规划是查询兼容性与呈现绑定的唯一权威，只编译纯工件。
+ * AnalysisService 负责执行与身份创建；Web 可用同一规划入口创建新 View。
  */
 export function createSemanticPlanningService(deps: { catalog: Pick<CatalogService, "compiler"> }) {
-  async function compile(principal: Principal, spec: SemanticAnalysisSpec) {
-    return compileSemanticAnalysis(await deps.catalog.compiler(principal), spec);
+  async function compile(
+    principal: Principal,
+    definition: AnalysisDefinition,
+    intent: SemanticViewIntent,
+    preferences: ViewPreferences = EMPTY_VIEW_PREFERENCES,
+  ) {
+    return compileAnalysisView(
+      await deps.catalog.compiler(principal),
+      { analysis: definition, view: intent },
+      preferences,
+    );
   }
 
   return { compile };

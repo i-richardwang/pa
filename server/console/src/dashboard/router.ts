@@ -86,7 +86,7 @@ export function analysisNewHash(): string {
   return "#/analysis/new";
 }
 
-/** 分析详情页（按 analysis handle 重放）的 hash */
+/** 分析详情页（按 view_id 重放）的 hash */
 export function analysisHash(id: string): string {
   return `#/analysis/${id}`;
 }

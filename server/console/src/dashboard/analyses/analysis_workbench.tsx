@@ -151,7 +151,7 @@ export function AnalysisWorkbench({
 
   // 常驻时间栏（页面底栏左段）：有结果时进真底栏，首载 / 加载 / 空态 / 错误态用同一底栏壳承接
 
-  const queryView = draft && catalog ? semanticSinkQueryView(draft.spec) : null;
+  const queryView = draft && catalog ? semanticSinkQueryView(draft.analysis) : null;
   const timeBar =
     draft && catalog && queryView ? (
       <TimeBar

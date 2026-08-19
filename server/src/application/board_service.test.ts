@@ -8,25 +8,24 @@ const report = {
   owner: "alice@x",
   name: "组织人数",
   analysis_id: "analysis_1",
+  view_id: "view_1",
   render_shape: "table",
   archived_at: null,
   revision: 1,
   created_at: "2026-08-13T00:00:00.000Z",
   updated_at: "2026-08-13T00:00:00.000Z",
-  spec: {
-    version: 2,
-    analysis: {
-      views: [
-        {
-          id: "result",
-          measures: ["measure:active_employee_count"],
-          dimensions: [],
-          time: { window: { kind: "current_month" } },
-        },
-      ],
-    },
-    presentation: { type: "table" },
+  view_preferences: {},
+  definition: {
+    views: [
+      {
+        id: "result",
+        measures: ["measure:active_employee_count"],
+        dimensions: [],
+        time: { window: { kind: "current_month" } },
+      },
+    ],
   },
+  intent: { type: "table" },
 } satisfies ReportDocument;
 
 function harness(initialTiles: BoardRecord["tiles"] = []) {

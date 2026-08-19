@@ -1,7 +1,7 @@
 /**
  * OAuth 全流程冒烟：动态客户端注册 → 密码登录 → 授权码（PKCE S256）→ 换 token →
- * 持 token 走 MCP 查数 → 派生新呈现句柄 → App 展示/加载工具 → analysis handle 保存为报告 → 查找、运行、更新、归档报告
- * → 导出分析结果 → 控制台按 handle 重放并与 MCP 通道对数 → 未授权端点返回 401。
+ * 持 token 走 MCP 查数 → 派生新 View → App 展示/加载工具 → View 保存为报告 → 查找、运行、更新、归档报告
+ * → 导出分析结果 → 控制台按 View 重放并与 MCP 通道对数 → 未授权端点返回 401。
  * 模拟 MCP 客户端连接器的完整握手路径与报告生命周期，
  * OAuth 侧改动后必跑。
  * 前置：服务已启用 OAuth（PA_AUTH_SECRET）且测试用户已开通。
@@ -168,9 +168,8 @@ if (
   throw new Error("show_records UI 契约异常");
 }
 
-// run_analysis 收语义规格：把 analysis 主体（title + 显式 id 的语义 views）包装成
-// { version, analysis, presentation }。成员一律用 catalog 语义 id（见 sid 解析器）。
-function analysisInput(raw: Record<string, unknown>): { spec: Record<string, unknown> } {
+// run_analysis 收独立的 AnalysisDefinition 与 ViewIntent；成员一律用 catalog 语义 id。
+function analysisInput(raw: Record<string, unknown>) {
   const { title, views: declaredViews, ...flat } = raw;
   const sourceViews = Array.isArray(declaredViews) ? declaredViews : [flat];
   const views = sourceViews.map((candidate, index) => {
@@ -184,11 +183,8 @@ function analysisInput(raw: Record<string, unknown>): { spec: Record<string, unk
     return { ...view, id };
   });
   return {
-    spec: {
-      version: 2,
-      analysis: { ...(typeof title === "string" ? { title } : {}), views },
-      presentation: { type: "table" },
-    },
+    analysis: { ...(typeof title === "string" ? { title } : {}), views },
+    view: { type: "table" },
   };
 }
 
@@ -270,9 +266,11 @@ const smokeTitle = `oauth-smoke 在职人数 ${Date.now()}`;
 const q = await callTool({
   name: "run_analysis",
   arguments: {
-    measures: [ACTIVE_EMPLOYEE],
-    time: currentMonthTime(),
-    title: smokeTitle,
+    analysis: {
+      title: smokeTitle,
+      views: [{ id: "result", measures: [ACTIVE_EMPLOYEE], time: currentMonthTime() }],
+    },
+    view: { type: "table" },
   },
 });
 const queryPayload = RUN_OUTPUT_SCHEMA.parse(
@@ -298,59 +296,59 @@ if (typeof queryPayload.analysis_id !== "string") {
   throw new Error("run_analysis 未返回 analysis_id");
 }
 
-// 呈现重跑派生新不可变句柄；show 只挂载，模型 loader 按新句柄重放同一结果。
+// 呈现重跑创建新的不可变 View；show 只挂载，模型 loader 按新 view_id 重放同一结果。
 const rerunResult = await callTool({
   name: "rerun_analysis",
   arguments: {
     analysis_id: queryPayload.analysis_id,
-    presentation: { type: "table" },
+    view: { type: "table" },
   },
 });
 const rerunPayload = RUN_OUTPUT_SCHEMA.parse(
   (rerunResult as { structuredContent?: unknown }).structuredContent,
 );
 if (
-  typeof rerunPayload.analysis_id !== "string" ||
-  rerunPayload.analysis_id === queryPayload.analysis_id
+  rerunPayload.analysis_id !== queryPayload.analysis_id ||
+  rerunPayload.view_id === queryPayload.view_id
 ) {
-  throw new Error("rerun_analysis 未派生新的不可变 analysis_id");
+  throw new Error("rerun_analysis 未保留 Analysis 并派生新 View");
 }
 const shownResult = await callTool({
   name: "show_analysis",
-  arguments: { analysis_id: rerunPayload.analysis_id },
+  arguments: { view_id: rerunPayload.view_id },
 });
 if (
-  (shownResult as { structuredContent?: { analysis_id?: unknown } }).structuredContent
-    ?.analysis_id !== rerunPayload.analysis_id
+  (shownResult as { structuredContent?: { view_id?: unknown } }).structuredContent?.view_id !==
+  rerunPayload.view_id
 ) {
-  throw new Error("show_analysis 未回显指定的新句柄");
+  throw new Error("show_analysis 未回显指定的新 view_id");
 }
 const loadedResult = await callTool({
   name: "load_analysis_result",
-  arguments: { analysis_id: rerunPayload.analysis_id },
+  arguments: { view_id: rerunPayload.view_id },
 });
 const loadedPayload = LOAD_ANALYSIS_OUTPUT_SCHEMA.parse(
   (loadedResult as { structuredContent?: unknown }).structuredContent,
 );
 if (
-  loadedPayload.analysis_id !== rerunPayload.analysis_id ||
+  loadedPayload.view_id !== rerunPayload.view_id ||
   JSON.stringify(loadedPayload.view.rows) !== JSON.stringify(rerunPayload.view.rows) ||
-  loadedPayload.spec.presentation.type !== "table"
+  loadedPayload.view_intent.type !== "table"
 ) {
-  throw new Error("load_analysis_result 未按新句柄返回 canonical spec 与重放结果");
+  throw new Error("load_analysis_result 未按新 View 返回定义、呈现意图与重放结果");
 }
 console.log("不可变 rerun / show / model load 链路已验证");
 
 // 人员名单由聚合 Analysis 直接投影：模型只见摘要，逐人记录只在 App 私有 _meta。
 const recordsResult = await callTool({
   name: "show_records",
-  arguments: { analysis_id: rerunPayload.analysis_id },
+  arguments: { view_id: rerunPayload.view_id },
 });
 const recordsSummary = RECORDS_OUTPUT_SCHEMA.parse(
   (recordsResult as { structuredContent?: unknown }).structuredContent,
 );
 if (
-  recordsSummary.analysis_id !== rerunPayload.analysis_id ||
+  recordsSummary.view_id !== rerunPayload.view_id ||
   JSON.stringify(recordsSummary).includes("employee_name") ||
   JSON.stringify(recordsSummary).includes("rows")
 ) {
@@ -366,11 +364,19 @@ const asOfYear = Number(String(queryPayload.data_as_of).slice(0, 4));
 const periodQuery = await callTool({
   name: "run_analysis",
   arguments: {
-    measures: [HIRE_COUNT],
-    time: {
-      window: { kind: "range", from: `${asOfYear - 2}-01`, to: `${asOfYear - 1}-06` },
-      display: "month",
+    analysis: {
+      views: [
+        {
+          id: "result",
+          measures: [HIRE_COUNT],
+          time: {
+            window: { kind: "range", from: `${asOfYear - 2}-01`, to: `${asOfYear - 1}-06` },
+            display: "month",
+          },
+        },
+      ],
     },
+    view: { type: "table" },
   },
 });
 const periodView = RUN_OUTPUT_SCHEMA.parse(
@@ -396,10 +402,18 @@ const smokeTitle2 = `oauth-smoke 分组织在职 ${Date.now()}`;
 await callTool({
   name: "run_analysis",
   arguments: {
-    measures: [ACTIVE_EMPLOYEE],
-    dimensions: [ORG_NAME],
-    time: currentMonthTime(),
-    title: smokeTitle2,
+    analysis: {
+      title: smokeTitle2,
+      views: [
+        {
+          id: "result",
+          measures: [ACTIVE_EMPLOYEE],
+          dimensions: [ORG_NAME],
+          time: currentMonthTime(),
+        },
+      ],
+    },
+    view: { type: "table" },
   },
 });
 
@@ -409,42 +423,45 @@ const scopedTitle = `oauth-smoke ${expectedScopedOrg ? "受限" : ""}派生 ${Da
 const scopedQuery = await callTool({
   name: "run_analysis",
   arguments: {
-    title: scopedTitle,
-    views: [
-      {
-        id: "current",
-        view_title: `${asOfYear}年`,
-        measures: [ACTIVE_EMPLOYEE],
-        dimensions: [ORG_NAME],
-        time: currentMonthTime(queryPayload.data_as_of),
-      },
-      {
-        id: "previous",
-        view_title: `${asOfYear - 1}年`,
-        measures: [ACTIVE_EMPLOYEE],
-        dimensions: [ORG_NAME],
-        time: currentMonthTime(`${asOfYear - 1}-${String(queryPayload.data_as_of).slice(5)}`),
-      },
-      {
-        id: "delta",
-        view_title: "同比变化",
-        from: ["current", "previous"],
-        join: { on: [ORG_NAME], how: "left" },
-        columns: [
-          { member: ORG_NAME, source: "current", as: "组织" },
-          { member: ACTIVE_EMPLOYEE, source: "current", as: `${asOfYear}年在职人数` },
-          { member: ACTIVE_EMPLOYEE, source: "previous", as: `${asOfYear - 1}年在职人数` },
-          {
-            expr: {
-              op: "-",
-              left: { member: ACTIVE_EMPLOYEE, source: "current" },
-              right: { member: ACTIVE_EMPLOYEE, source: "previous" },
+    analysis: {
+      title: scopedTitle,
+      views: [
+        {
+          id: "current",
+          view_title: `${asOfYear}年`,
+          measures: [ACTIVE_EMPLOYEE],
+          dimensions: [ORG_NAME],
+          time: currentMonthTime(queryPayload.data_as_of),
+        },
+        {
+          id: "previous",
+          view_title: `${asOfYear - 1}年`,
+          measures: [ACTIVE_EMPLOYEE],
+          dimensions: [ORG_NAME],
+          time: currentMonthTime(`${asOfYear - 1}-${String(queryPayload.data_as_of).slice(5)}`),
+        },
+        {
+          id: "delta",
+          view_title: "同比变化",
+          from: ["current", "previous"],
+          join: { on: [ORG_NAME], how: "left" },
+          columns: [
+            { member: ORG_NAME, source: "current", as: "组织" },
+            { member: ACTIVE_EMPLOYEE, source: "current", as: `${asOfYear}年在职人数` },
+            { member: ACTIVE_EMPLOYEE, source: "previous", as: `${asOfYear - 1}年在职人数` },
+            {
+              expr: {
+                op: "-",
+                left: { member: ACTIVE_EMPLOYEE, source: "current" },
+                right: { member: ACTIVE_EMPLOYEE, source: "previous" },
+              },
+              as: "在职人数同比变化",
             },
-            as: "在职人数同比变化",
-          },
-        ],
-      },
-    ],
+          ],
+        },
+      ],
+    },
+    view: { type: "table" },
   },
 });
 const scopedPayload = RUN_OUTPUT_SCHEMA.parse(
@@ -484,7 +501,7 @@ const saved = JSON.parse(
   toolText(
     await callTool({
       name: "save_report",
-      arguments: { analysis_id: queryPayload.analysis_id, name: `oauth-smoke 报告 ${Date.now()}` },
+      arguments: { view_id: queryPayload.view_id, name: `oauth-smoke 报告 ${Date.now()}` },
     }),
   ),
 ) as { id: string; revision: number };
@@ -492,11 +509,11 @@ const found = JSON.parse(
   toolText(await callTool({ name: "find_report", arguments: { query: "oauth-smoke" } })),
 );
 const foundReport = found.reports?.find((report: { id: string }) => report.id === saved.id) as
-  | { id: string; analysis_id: string; url: string }
+  | { id: string; analysis_id: string; view_id: string; url: string }
   | undefined;
 if (
   !foundReport ||
-  foundReport.analysis_id !== queryPayload.analysis_id ||
+  foundReport.view_id !== queryPayload.view_id ||
   !foundReport.url.includes("#/report/")
 ) {
   throw new Error(`find_report 未返回报告深链: ${JSON.stringify(found)}`);
@@ -519,12 +536,16 @@ const exported = JSON.parse(
     await callTool({
       name: "export_result",
       arguments: {
-        analysis_id: queryPayload.analysis_id,
+        view_id: queryPayload.view_id,
       },
     }),
   ),
 );
-if (exported.analysis_id !== queryPayload.analysis_id || !exported.url) {
+if (
+  exported.analysis_id !== queryPayload.analysis_id ||
+  exported.view_id !== queryPayload.view_id ||
+  !exported.url
+) {
   throw new Error(`export_result 返回异常: ${JSON.stringify(exported)}`);
 }
 await callTool({
@@ -537,17 +558,17 @@ await callTool({
 });
 await client.close();
 
-// 控制台只从不可变 Analysis 重放，usage_log 仅承担观察日志职责。
+// 控制台按不可变 View 重放，usage_log 仅承担观察日志职责。
 const mine = (await (
   await fetch(`${base}/dashboard/api/usage/mine?days=1`, { headers: { cookie } })
-).json()) as { rows: { title: string; analysis_id: string | null }[] };
+).json()) as { rows: { title: string; analysis_id: string | null; view_id: string | null }[] };
 const mineRow = mine.rows.find(
-  (entry) => entry.title === smokeTitle && entry.analysis_id === queryPayload.analysis_id,
+  (entry) => entry.title === smokeTitle && entry.view_id === queryPayload.view_id,
 );
 if (!mineRow) {
-  throw new Error(`查询记录未关联 analysis handle: ${JSON.stringify(mineRow)}`);
+  throw new Error(`查询记录未关联 View: ${JSON.stringify(mineRow)}`);
 }
-const replayRes = await fetch(`${base}/dashboard/api/analyses/${mineRow.analysis_id}/replay`, {
+const replayRes = await fetch(`${base}/dashboard/api/analysis_views/${mineRow.view_id}/replay`, {
   headers: { cookie },
 });
 if (!replayRes.ok)
@@ -558,7 +579,7 @@ const replay = (await replayRes.json()) as {
 if (JSON.stringify(replay.payload.view.rows[0]) !== JSON.stringify(row)) {
   throw new Error("web analysis 重放与 MCP 通道不同数");
 }
-const anonReplay = await fetch(`${base}/dashboard/api/analyses/${mineRow.analysis_id}/replay`);
+const anonReplay = await fetch(`${base}/dashboard/api/analysis_views/${mineRow.view_id}/replay`);
 if (anonReplay.status !== 401) throw new Error(`重放端点未登录应 401: ${anonReplay.status}`);
 console.log("analysis/report/export 与 web 重放链路正常");
 

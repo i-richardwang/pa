@@ -1,5 +1,5 @@
 /**
- * 宿主接线：show_analysis 的 tool input 只交付 analysis_id；App 完成握手后调用
+ * 宿主接线：show_analysis 的 tool input 只交付 view_id；App 完成握手后调用
  * load_analysis_card，消费其 structuredContent 与不进模型上下文的 `_meta` 全量行块。
  * React 组件经 useHostState 消费合并后的 QueryPayload。
  * 卡片上限截断走 export 限时票据；仅当宿主支持标准下载时
@@ -83,10 +83,10 @@ function applyResult(result: ToolResult): boolean {
 }
 
 const analysisLoader = createAnalysisLoader({
-  call: async (analysisId) =>
+  call: async (viewId) =>
     (await app.callServerTool({
       name: "load_analysis_card",
-      arguments: { analysis_id: analysisId },
+      arguments: { view_id: viewId },
     })) as ToolResult,
   apply: applyResult,
   waiting: () =>

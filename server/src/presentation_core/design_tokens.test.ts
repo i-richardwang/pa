@@ -73,3 +73,36 @@ test("the variable cut of inter leads the shared font stack", () => {
   // 写出来的那几档字重就永远看不见。
   expect(FONT_FAMILY.startsWith("'Inter Variable', Inter,")).toBe(true);
 });
+
+test("series colors stay readable on the label chip in both themes", () => {
+  // 值标签把系列色印在浅灰底片上，可读的最低对比档取 1.45。色板是封闭集合，
+  // 整套过检就不需要运行时调暗环节——这条护栏看住这个前提。
+  const luminance = (hex: string): number => {
+    const channel = (raw: string) => {
+      const v = Number.parseInt(raw, 16) / 255;
+      return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    };
+    return (
+      0.2126 * channel(hex.slice(1, 3)) +
+      0.7152 * channel(hex.slice(3, 5)) +
+      0.0722 * channel(hex.slice(5, 7))
+    );
+  };
+  const contrast = (a: string, b: string) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  // 自检：已知坏输入必中（浅底上印白字），好输入必过
+  expect(contrast("#ffffff", CHART_CHROME.labelChip.light)).toBeLessThan(1.45);
+  expect(contrast("#000000", CHART_CHROME.labelChip.light)).toBeGreaterThan(1.45);
+  for (const pair of CHART_SERIES) {
+    expect(
+      contrast(pair.light, CHART_CHROME.labelChip.light),
+      `${pair.light} 在浅色底片上不够醒目`,
+    ).toBeGreaterThanOrEqual(1.45);
+    expect(
+      contrast(pair.dark, CHART_CHROME.labelChip.dark),
+      `${pair.dark} 在暗色底片上不够醒目`,
+    ).toBeGreaterThanOrEqual(1.45);
+  }
+});

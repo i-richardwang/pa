@@ -4,10 +4,11 @@ import {
   isSemanticDerivedView,
   semanticAnalysisSink,
   type SemanticAnalysisView,
-  type SemanticChart,
+  type SemanticViewIntent,
   type SemanticQueryView,
-  type SemanticAnalysisSpec,
+  type AnalysisDefinition,
 } from "@semantic-analysis";
+import type { ViewPreferences } from "@view-preferences";
 import {
   compileTimeIntent,
   resolveTimeOutputGrain,
@@ -17,14 +18,20 @@ import {
 
 export type AnalysisEditState = {
   name: string;
-  spec: SemanticAnalysisSpec;
+  analysis: AnalysisDefinition;
+  view: SemanticViewIntent;
+  view_preferences: ViewPreferences;
   baseline_name: string;
   /**
    * 进入编辑时的落定基线：脏判定与离开拦截以此为准。
    * 声明的自动落定（见 settledAgainst）不是用户改动，不该触发「放弃修改」拦截。
    */
-  baseline: SemanticAnalysisSpec;
-  previewed_spec: SemanticAnalysisSpec | null;
+  baseline_analysis: AnalysisDefinition;
+  baseline_view: SemanticViewIntent;
+  baseline_view_preferences: ViewPreferences;
+  previewed_analysis: AnalysisDefinition | null;
+  previewed_view: SemanticViewIntent | null;
+  previewed_view_preferences: ViewPreferences | null;
 };
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -34,21 +41,17 @@ const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
  * 同样经预览铸不可变快照。空查询本身不可执行（无成员），
  * 由 isAnalysisRunnable 把住预览与保存两个出口，编译合法性仍归服务端裁定。
  */
-export function blankAnalysisSpec(title: string): SemanticAnalysisSpec {
+export function blankAnalysisDefinition(title: string): AnalysisDefinition {
   return {
-    version: 2,
-    analysis: {
-      title,
-      views: [{ id: "result", time: { window: { kind: "current_month" } } }],
-    },
-    presentation: { type: "table" },
+    title,
+    views: [{ id: "result", time: { window: { kind: "current_month" } } }],
   };
 }
 
 /** 结果视图是否已具备可执行的成员；空查询无法编译，预览与保存都不给出口。 */
-export function isAnalysisRunnable(draft: Pick<AnalysisEditState, "spec">): boolean {
-  const viewId = semanticAnalysisSink(draft.spec.analysis.views);
-  const view = draft.spec.analysis.views.find((candidate) => candidate.id === viewId);
+export function isAnalysisRunnable(draft: Pick<AnalysisEditState, "analysis">): boolean {
+  const viewId = semanticAnalysisSink(draft.analysis.views);
+  const view = draft.analysis.views.find((candidate) => candidate.id === viewId);
   if (!view) return false;
   if (isSemanticDerivedView(view)) return true;
   const hasMembers = (view.measures?.length ?? 0) + (view.dimensions?.length ?? 0) > 0;
@@ -63,30 +66,53 @@ export function isAnalysisRunnable(draft: Pick<AnalysisEditState, "spec">): bool
  * 用户真的修改规格后，必须经预览创建新 Analysis 才能保存。
  */
 export function beginAnalysisEdit(
-  seed: { name: string; spec: SemanticAnalysisSpec },
+  seed: {
+    name: string;
+    analysis: AnalysisDefinition;
+    view: SemanticViewIntent;
+    view_preferences?: ViewPreferences;
+  },
   /**
    * 这份规格有没有落定结果。传的是**判定**不是结果字节：报告页规格先到、结果后到，
    * 播种那一刻就已经知道稍后会有一份对位的结果，此时把草稿记成「改过但没预览」是错的。
    */
   hasSavedResult: boolean,
 ): AnalysisEditState {
-  const spec = clone(seed.spec);
+  const analysis = clone(seed.analysis);
+  const view = clone(seed.view);
+  const preferences = clone(seed.view_preferences ?? {});
   return {
     name: seed.name,
-    spec,
+    analysis,
+    view,
+    view_preferences: preferences,
     baseline_name: seed.name,
-    baseline: clone(spec),
-    previewed_spec: hasSavedResult ? clone(spec) : null,
+    baseline_analysis: clone(analysis),
+    baseline_view: clone(view),
+    baseline_view_preferences: clone(preferences),
+    previewed_analysis: hasSavedResult ? clone(analysis) : null,
+    previewed_view: hasSavedResult ? clone(view) : null,
+    previewed_view_preferences: hasSavedResult ? clone(preferences) : null,
   };
 }
 
-/** 草稿规格（含呈现）是否已偏离播种快照；单语言下呈现改动也需服务端重跑取图。 */
-export function hasSpecChanges(draft: AnalysisEditState): boolean {
-  return JSON.stringify(draft.spec) !== JSON.stringify(draft.baseline);
+export function hasAnalysisChanges(draft: AnalysisEditState): boolean {
+  return JSON.stringify(draft.analysis) !== JSON.stringify(draft.baseline_analysis);
+}
+
+export function hasViewChanges(draft: AnalysisEditState): boolean {
+  return (
+    JSON.stringify(draft.view) !== JSON.stringify(draft.baseline_view) ||
+    JSON.stringify(draft.view_preferences) !== JSON.stringify(draft.baseline_view_preferences)
+  );
 }
 
 export function isPreviewCurrent(draft: AnalysisEditState): boolean {
-  return JSON.stringify(draft.previewed_spec) === JSON.stringify(draft.spec);
+  return (
+    JSON.stringify(draft.previewed_analysis) === JSON.stringify(draft.analysis) &&
+    JSON.stringify(draft.previewed_view) === JSON.stringify(draft.view) &&
+    JSON.stringify(draft.previewed_view_preferences) === JSON.stringify(draft.view_preferences)
+  );
 }
 
 /**
@@ -94,19 +120,37 @@ export function isPreviewCurrent(draft: AnalysisEditState): boolean {
  * 不靠「回读服务端再重播种」落定——那要等一次刷新往返，其间页面会先退回保存前的规格再跳回来。
  */
 export function settleSaved(draft: AnalysisEditState): AnalysisEditState {
-  return { ...draft, baseline_name: draft.name, baseline: clone(draft.spec) };
+  return {
+    ...draft,
+    baseline_name: draft.name,
+    baseline_analysis: clone(draft.analysis),
+    baseline_view: clone(draft.view),
+    baseline_view_preferences: clone(draft.view_preferences),
+  };
 }
 
-/** 预览返回的新 Analysis 规格就是可保存真相，包含服务端必要的呈现归一。 */
+/** 预览返回的 canonical Analysis、View 与作者偏好成为可保存真相。 */
 export function settlePreview(draft: AnalysisEditState, replay: ReplayPayload): AnalysisEditState {
-  const spec = clone(replay.spec);
-  return { ...draft, spec, previewed_spec: clone(spec) };
+  const analysis = clone(replay.analysis);
+  const view = clone(replay.view);
+  const preferences = clone(replay.view_preferences);
+  return {
+    ...draft,
+    analysis,
+    view,
+    view_preferences: preferences,
+    previewed_analysis: clone(analysis),
+    previewed_view: clone(view),
+    previewed_view_preferences: clone(preferences),
+  };
 }
 
 export function isAnalysisEditDirty(draft: AnalysisEditState): boolean {
   return (
     draft.name !== draft.baseline_name ||
-    JSON.stringify(draft.spec) !== JSON.stringify(draft.baseline)
+    JSON.stringify(draft.analysis) !== JSON.stringify(draft.baseline_analysis) ||
+    JSON.stringify(draft.view) !== JSON.stringify(draft.baseline_view) ||
+    JSON.stringify(draft.view_preferences) !== JSON.stringify(draft.baseline_view_preferences)
   );
 }
 
@@ -114,15 +158,13 @@ export function renameAnalysisDraft(draft: AnalysisEditState, name: string): Ana
   return draft.name === name ? draft : { ...draft, name };
 }
 
-export function semanticChart(draft: Pick<AnalysisEditState, "spec">): SemanticChart {
-  return draft.spec.presentation;
+export function semanticViewIntent(draft: Pick<AnalysisEditState, "view">): SemanticViewIntent {
+  return draft.view;
 }
 
-export function semanticSummaryEnabled(draft: Pick<AnalysisEditState, "spec">): boolean {
-  const viewId = semanticAnalysisSink(draft.spec.analysis.views);
-  return (
-    draft.spec.analysis.views.find((view) => view.id === viewId)?.summary?.mode === "grand_total"
-  );
+export function semanticSummaryEnabled(draft: Pick<AnalysisEditState, "analysis">): boolean {
+  const viewId = semanticAnalysisSink(draft.analysis.views);
+  return draft.analysis.views.find((view) => view.id === viewId)?.summary?.mode === "grand_total";
 }
 
 export function setSemanticSummary(
@@ -130,25 +172,24 @@ export function setSemanticSummary(
   enabled: boolean,
   catalog: CatalogPayload,
 ): AnalysisEditState {
-  const viewId = semanticAnalysisSink(draft.spec.analysis.views);
-  const views = draft.spec.analysis.views.map((view) => {
+  const viewId = semanticAnalysisSink(draft.analysis.views);
+  const views = draft.analysis.views.map((view) => {
     if (view.id !== viewId) return view;
     if (enabled) return { ...view, summary: { mode: "grand_total" as const } };
     const { summary: _summary, ...rest } = view;
     return rest;
   });
   const resultView = views.find((view) => view.id === viewId);
-  const presentation = resultView
-    ? repairedSemanticChart(draft.spec.presentation, resultView, catalog)
-    : draft.spec.presentation;
+  const viewIntent = resultView ? repairedViewIntent(draft.view, resultView, catalog) : draft.view;
+  const preferences = repairedViewPreferences(draft.view_preferences, viewIntent);
   return {
     ...draft,
-    spec: {
-      ...draft.spec,
-      analysis: { ...draft.spec.analysis, views },
-      presentation,
-    },
-    previewed_spec: null,
+    analysis: { ...draft.analysis, views },
+    view: viewIntent,
+    view_preferences: preferences,
+    previewed_analysis: null,
+    previewed_view: null,
+    previewed_view_preferences: null,
   };
 }
 
@@ -179,11 +220,11 @@ export function semanticViewContext(
   return { measures, dimensions };
 }
 
-function repairedSemanticChart(
-  chart: SemanticChart,
+function repairedViewIntent(
+  chart: SemanticViewIntent,
   view: SemanticAnalysisView,
   catalog: CatalogPayload,
-): SemanticChart {
+): SemanticViewIntent {
   const { measures, dimensions, time } = semanticViewContext(view, catalog);
   if (chart.type === "table") {
     const temporal =
@@ -200,7 +241,6 @@ function repairedSemanticChart(
     return {
       type: "table",
       ...(columns?.length ? { columns } : {}),
-      ...(chart.shading ? { shading: chart.shading } : {}),
     };
   }
   if (chart.type === "kpi") {
@@ -244,39 +284,69 @@ function repairedSemanticChart(
   ) {
     return { type: "table" };
   }
-  const displaySeries = chart.display?.series;
-  const display = displaySeries
-    ? {
-        series: Object.fromEntries(
-          Object.entries(displaySeries).filter(([member]) => series.includes(member)),
-        ),
-      }
-    : undefined;
   return {
     ...chart,
     category,
     series: chart.type === "pie" || groupBy ? series.slice(0, 1) : series,
     ...(annotations.length ? { annotations } : { annotations: undefined }),
     group_by: groupBy,
-    ...(display ? { display } : { display: undefined }),
   };
 }
 
-export function setSemanticChart(
+function repairedViewPreferences(
+  style: ViewPreferences,
+  intent: SemanticViewIntent,
+): ViewPreferences {
+  if (intent.type === "table") {
+    return style.table_shading ? { table_shading: clone(style.table_shading) } : {};
+  }
+  if (intent.type === "kpi" || intent.type === "pie") return {};
+  if (intent.group_by) {
+    return style.value_labels === "all" ? { value_labels: "all" } : {};
+  }
+  // 省略 series 表示“使用该结果的默认指标通道”，不是空集合；此时保留已有偏好，
+  // 由服务端编译器用实际结果成员做最终 fail-closed 绑定。
+  const selected = intent.series ? new Set(intent.series) : null;
+  const series = style.series
+    ? Object.fromEntries(
+        Object.entries(style.series).filter(([member]) => !selected || selected.has(member)),
+      )
+    : undefined;
+  return {
+    ...(series && Object.keys(series).length ? { series } : {}),
+    ...(style.value_labels ? { value_labels: style.value_labels } : {}),
+  };
+}
+
+export function setViewPreferences(
   draft: AnalysisEditState,
-  chart: SemanticChart,
-  catalog: CatalogPayload,
+  style: ViewPreferences,
 ): AnalysisEditState {
-  const viewId = semanticAnalysisSink(draft.spec.analysis.views);
-  const view = draft.spec.analysis.views.find((candidate) => candidate.id === viewId);
-  if (!view) return draft;
-  const normalized = repairedSemanticChart(chart, view, catalog);
   return {
     ...draft,
-    spec: {
-      ...draft.spec,
-      presentation: clone(normalized),
-    },
+    view_preferences: repairedViewPreferences(clone(style), draft.view),
+    previewed_analysis: null,
+    previewed_view: null,
+    previewed_view_preferences: null,
+  };
+}
+
+export function setSemanticViewIntent(
+  draft: AnalysisEditState,
+  chart: SemanticViewIntent,
+  catalog: CatalogPayload,
+): AnalysisEditState {
+  const viewId = semanticAnalysisSink(draft.analysis.views);
+  const view = draft.analysis.views.find((candidate) => candidate.id === viewId);
+  if (!view) return draft;
+  const normalized = repairedViewIntent(chart, view, catalog);
+  return {
+    ...draft,
+    view_preferences: repairedViewPreferences(draft.view_preferences, normalized),
+    view: clone(normalized),
+    previewed_analysis: null,
+    previewed_view: null,
+    previewed_view_preferences: null,
   };
 }
 
@@ -286,24 +356,20 @@ export function setSemanticQueryView(
   nextView: SemanticQueryView,
   catalog: CatalogPayload,
 ): AnalysisEditState {
-  const current = draft.spec.analysis.views.find((view) => view.id === viewId);
+  const current = draft.analysis.views.find((view) => view.id === viewId);
   if (!current || isSemanticDerivedView(current)) return draft;
-  const views = draft.spec.analysis.views.map((view) =>
-    view.id === viewId ? clone(nextView) : view,
-  );
+  const views = draft.analysis.views.map((view) => (view.id === viewId ? clone(nextView) : view));
   const resultId = semanticAnalysisSink(views);
-  const presentation =
-    resultId === viewId
-      ? repairedSemanticChart(draft.spec.presentation, nextView, catalog)
-      : draft.spec.presentation;
+  const viewIntent =
+    resultId === viewId ? repairedViewIntent(draft.view, nextView, catalog) : draft.view;
   return {
     ...draft,
-    spec: {
-      ...draft.spec,
-      analysis: { ...draft.spec.analysis, views },
-      presentation,
-    },
-    previewed_spec: null,
+    analysis: { ...draft.analysis, views },
+    view: viewIntent,
+    view_preferences: repairedViewPreferences(draft.view_preferences, viewIntent),
+    previewed_analysis: null,
+    previewed_view: null,
+    previewed_view_preferences: null,
   };
 }
 
@@ -311,10 +377,10 @@ export function setSemanticQueryView(
  * 语义收敛点的查询视图：存在任何派生视图即整体只读（null）——与查询分区同一严格规则，
  * 时间栏与 Inspector 对「可编辑」的判定不允许分叉。
  */
-export function semanticSinkQueryView(spec: SemanticAnalysisSpec): SemanticQueryView | null {
-  if (spec.analysis.views.some(isSemanticDerivedView)) return null;
-  const sinkId = semanticAnalysisSink(spec.analysis.views);
-  const view = spec.analysis.views.find((candidate) => candidate.id === sinkId);
+export function semanticSinkQueryView(analysis: AnalysisDefinition): SemanticQueryView | null {
+  if (analysis.views.some(isSemanticDerivedView)) return null;
+  const sinkId = semanticAnalysisSink(analysis.views);
+  const view = analysis.views.find((candidate) => candidate.id === sinkId);
   return view && !isSemanticDerivedView(view) ? view : null;
 }
 
@@ -344,7 +410,7 @@ export function setDraftTime(
   time: TimeIntent,
   catalog: CatalogPayload,
 ): AnalysisEditState {
-  const view = semanticSinkQueryView(draft.spec);
+  const view = semanticSinkQueryView(draft.analysis);
   if (!view) return draft;
   return setSemanticQueryView(draft, view.id, { ...view, time }, catalog);
 }
@@ -398,25 +464,25 @@ export function replaceSemanticQueryDimension(
   };
 }
 
-export function defaultSemanticChart(
+export function defaultSemanticViewIntent(
   draft: AnalysisEditState,
-  type: SemanticChart["type"],
+  type: SemanticViewIntent["type"],
   catalog: CatalogPayload,
-): SemanticChart {
-  const viewId = semanticAnalysisSink(draft.spec.analysis.views);
-  const view = draft.spec.analysis.views.find((candidate) => candidate.id === viewId);
+): SemanticViewIntent {
+  const viewId = semanticAnalysisSink(draft.analysis.views);
+  const view = draft.analysis.views.find((candidate) => candidate.id === viewId);
   if (!view || type === "table") return { type: "table" };
-  if (type === "kpi") return repairedSemanticChart({ type }, view, catalog);
+  if (type === "kpi") return repairedViewIntent({ type }, view, catalog);
   const { measures, dimensions } = semanticViewContext(view, catalog);
   if (type === "line") {
-    return repairedSemanticChart({ type, series: measures }, view, catalog);
+    return repairedViewIntent({ type, series: measures }, view, catalog);
   }
   if (type === "pie") {
-    return repairedSemanticChart(
+    return repairedViewIntent(
       { type, category: dimensions[0], series: measures.slice(0, 1) },
       view,
       catalog,
     );
   }
-  return repairedSemanticChart({ type, category: dimensions[0], series: measures }, view, catalog);
+  return repairedViewIntent({ type, category: dimensions[0], series: measures }, view, catalog);
 }

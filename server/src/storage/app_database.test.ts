@@ -21,7 +21,7 @@ function names(db: SqliteDatabase, table: string): string[] {
 }
 
 describe("app database", () => {
-  test("空库一次性建立最终结构、版本与连接 pragma", async () => {
+  test("空库建立最终结构、结构印记与连接 pragma", async () => {
     const db = await openAppDatabase(path("empty"));
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -31,6 +31,7 @@ describe("app database", () => {
       "feedback",
       "business_term",
       "analysis",
+      "analysis_view",
       "report",
       "report_revision",
       "board",
@@ -44,7 +45,23 @@ describe("app database", () => {
     expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
     expect(db.prepare("PRAGMA busy_timeout").get()).toEqual({ timeout: 5000 });
     expect(db.prepare("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
-    expect(names(db, "analysis")).toEqual(["id", "owner", "spec", "created_at"]);
+    expect(names(db, "analysis")).toEqual(["id", "owner", "definition", "created_at"]);
+    expect(names(db, "analysis_view")).toEqual([
+      "id",
+      "analysis_id",
+      "intent",
+      "preferences",
+      "created_at",
+    ]);
+    const persistedColumns = [
+      "analysis",
+      "analysis_view",
+      "report",
+      "report_revision",
+      "usage_log",
+    ].flatMap((table) => names(db, table));
+    expect(persistedColumns).not.toContain("render_bundle");
+    expect(persistedColumns).not.toContain("payload");
     expect(names(db, "business_term")).toEqual([
       "id",
       "canonical_term",
@@ -57,7 +74,7 @@ describe("app database", () => {
       "id",
       "owner",
       "name",
-      "analysis_id",
+      "view_id",
       "render_shape",
       "archived_at",
       "revision",
@@ -90,7 +107,7 @@ describe("app database", () => {
     db.close();
   });
 
-  test("当前版本重复打开不改已有数据", async () => {
+  test("结构印记匹配时重复打开保留已有数据", async () => {
     const file = path("reopen");
     const first = await openAppDatabase(file);
     first
@@ -109,8 +126,8 @@ describe("app database", () => {
     reopened.close();
   });
 
-  test("非空但结构版本不匹配的库 fail-closed，不做原地改结构", () => {
-    const db = new Database(path("stale")) as unknown as SqliteDatabase;
+  test("非空库的结构印记不匹配时 fail-closed 并保持原结构", () => {
+    const db = new Database(path("mismatch")) as unknown as SqliteDatabase;
     db.exec("CREATE TABLE usage_log (id INTEGER PRIMARY KEY)");
     expect(() => initializeAppDatabase(db)).toThrow("请以空库重建后再启动");
     expect(
@@ -128,12 +145,11 @@ describe("app database", () => {
     expect(APP_SCHEMA_STAMP).toBeGreaterThan(0);
   });
 
-  test("旧代码建的库（自带匹配的旧印记）同样 fail-closed", () => {
-    // 非当前 DDL 的完整库也必须在开库时拒绝。
-    const db = new Database(path("previous-shape")) as unknown as SqliteDatabase;
-    const stale = "CREATE TABLE value_alias (id TEXT PRIMARY KEY, term TEXT NOT NULL);";
-    db.exec(stale);
-    db.exec(`PRAGMA user_version = ${schemaStampOf(stale)}`);
+  test("其他 DDL 即使带有自己的结构印记也 fail-closed", () => {
+    const db = new Database(path("other-shape")) as unknown as SqliteDatabase;
+    const otherDdl = "CREATE TABLE value_alias (id TEXT PRIMARY KEY, term TEXT NOT NULL);";
+    db.exec(otherDdl);
+    db.exec(`PRAGMA user_version = ${schemaStampOf(otherDdl)}`);
     expect(() => initializeAppDatabase(db)).toThrow("应用库结构与当前代码不符");
     db.close();
   });
@@ -153,20 +169,25 @@ describe("app database", () => {
 
     const reportId = randomUUID();
     const analysisId = randomUUID();
+    const viewId = randomUUID();
     db.prepare(
-      `INSERT INTO analysis (id, owner, spec, created_at)
+      `INSERT INTO analysis (id, owner, definition, created_at)
        VALUES (?, ?, ?, ?)`,
     ).run(analysisId, "alice@x", "{}", "2026-07-01");
     db.prepare(
+      `INSERT INTO analysis_view (id, analysis_id, intent, preferences, created_at)
+       VALUES (?, ?, ?, '{}', ?)`,
+    ).run(viewId, analysisId, '{"type":"table"}', "2026-07-01");
+    db.prepare(
       `INSERT INTO report
-       (id, owner, name, analysis_id, created_at, updated_at)
+       (id, owner, name, view_id, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(reportId, "alice@x", "经营报告", analysisId, "2026-07-01", "2026-07-01");
+    ).run(reportId, "alice@x", "经营报告", viewId, "2026-07-01", "2026-07-01");
     db.prepare(
       `INSERT INTO report_revision
-       (report_id, revision, name, analysis_id, saved_by, saved_at)
+       (report_id, revision, name, view_id, saved_by, saved_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(reportId, 1, "经营报告", analysisId, "alice@x", "2026-07-01");
+    ).run(reportId, 1, "经营报告", viewId, "alice@x", "2026-07-01");
     db.prepare("DELETE FROM report WHERE id = ?").run(reportId);
     expect(
       db.prepare("SELECT COUNT(*) AS n FROM report_revision WHERE report_id = ?").get(reportId),

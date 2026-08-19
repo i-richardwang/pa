@@ -9,7 +9,13 @@ import {
   TooltipComponent,
 } from "echarts/components";
 import { SVGRenderer } from "echarts/renderers";
-import { plotRect, prepareOption } from "../chart_render.js";
+import {
+  applyValueLabelDensity,
+  gridRect,
+  plotRect,
+  plotWidth,
+  prepareOption,
+} from "../chart_render.js";
 import { useDarkTheme } from "../use_dark_theme.js";
 import { PlotSlab } from "./plot_slab.js";
 import { RankRows } from "./rank_rows.js";
@@ -77,7 +83,7 @@ export function applyValueTickDensity(
 ): void {
   if (chart.form === "pie" || chart.layout === "rank") return;
   if (size.width <= 0 || size.height <= 0) return;
-  const rect = plotRect(chart, plot);
+  const rect = gridRect(chart, plot);
   const patch = {
     xAxis: tickPatch(chart.option.xAxis, size.width - rect.left - rect.right),
     yAxis: tickPatch(chart.option.yAxis, size.height - rect.top - rect.bottom),
@@ -244,6 +250,7 @@ export function ViewChartCanvas({
       { notMerge: true },
     );
     applySymbolDensity(current, chart, size.current.width);
+    applyValueLabelDensity(current, chart, plotWidth(chart, plot, size.current.width));
     applyValueTickDensity(current, chart, plot, size.current);
   }, [chart, dark, plot]);
 
@@ -273,6 +280,7 @@ export function ViewChartCanvas({
       current?.resize();
       if (!current) return;
       applySymbolDensity(current, chart, next.width);
+      applyValueLabelDensity(current, chart, plotWidth(chart, plot, next.width));
       applyValueTickDensity(current, chart, plot, next);
     });
   }, [suspendResize, chart, plot]);

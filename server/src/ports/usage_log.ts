@@ -16,6 +16,7 @@ export type UsageRecord = UsageSummary & {
   error?: string;
   duration_ms: number;
   analysis_id?: string;
+  view_id?: string;
 };
 
 export type UsageLog = {

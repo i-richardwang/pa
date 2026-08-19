@@ -42,10 +42,10 @@ export function firstText(content: ToolResult["content"]): string | undefined {
   return content?.find((item) => item.type === "text")?.text;
 }
 
-export function analysisIdFrom(value: unknown): string | undefined {
-  if (typeof value !== "object" || value === null || !("analysis_id" in value)) return undefined;
-  const analysisId = (value as { analysis_id?: unknown }).analysis_id;
-  return typeof analysisId === "string" && UUID_PATTERN.test(analysisId) ? analysisId : undefined;
+export function viewIdFrom(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null || !("view_id" in value)) return undefined;
+  const viewId = (value as { view_id?: unknown }).view_id;
+  return typeof viewId === "string" && UUID_PATTERN.test(viewId) ? viewId : undefined;
 }
 
 /**
@@ -59,12 +59,11 @@ export function deliverAnalysisResult(result: ToolResult): DeliveredAnalysis {
   if (result.structuredContent === undefined) {
     return { ok: false, error: "查询结果缺少结构化载荷。" };
   }
-  const { spec: _spec, ...payloadCandidate } = result.structuredContent;
-  if (!isQueryPayload(payloadCandidate)) {
+  if (!isQueryPayload(result.structuredContent)) {
     return { ok: false, error: "查询结果不符合预览载荷契约。" };
   }
 
-  const payload = payloadCandidate;
+  const payload = result.structuredContent;
   const fullCandidate = result._meta?.[FULL_ROWS_META_KEY];
   if (fullCandidate !== undefined && !isFullRowsBlock(fullCandidate, payload)) {
     return { ok: false, error: "查询结果的全量行数据格式无效。" };

@@ -47,7 +47,7 @@ describe("usage_log.wrap", () => {
         caller: "tester",
         tool: "run_analysis",
         title,
-        args: { spec: { version: 2, analysis: { title, views }, presentation: { type: "table" } } },
+        args: { analysis: { title, views }, view: { type: "table" } },
         outcome: "ok",
         duration_ms: 1,
       });
@@ -124,15 +124,20 @@ describe("usage_log.wrap", () => {
     expect(rows(path)[0].title).toBe("能否查看工时？");
   });
 
-  test("带 analysis_id 的工具包装器把句柄写入观察日志", async () => {
+  test("工具包装器把 Analysis 与 View 身份分别写入观察日志", async () => {
     const { usage, path } = fresh();
     const analysisId = randomUUID();
+    const viewId = randomUUID();
     const handler = usage.wrap(
       { tool: "save_report", caller: "tester" },
-      async (_args: { analysis_id: string; name: string }) => "ok" as const,
+      async (_args: { analysis_id: string; view_id: string; name: string }) => "ok" as const,
     );
-    await handler({ analysis_id: analysisId, name: "组织报告" });
-    expect(rows(path)[0]).toMatchObject({ tool: "save_report", analysis_id: analysisId });
+    await handler({ analysis_id: analysisId, view_id: viewId, name: "组织报告" });
+    expect(rows(path)[0]).toMatchObject({
+      tool: "save_report",
+      analysis_id: analysisId,
+      view_id: viewId,
+    });
   });
 
   test("feedback 报错调用仍以 ask 落 title，并原样上抛", async () => {

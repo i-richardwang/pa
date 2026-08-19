@@ -21,6 +21,7 @@ import type {
   ViewBlock,
 } from "../semantic_core/query_payload.js";
 import type { ChartDecl } from "../presentation_core/view_shape.js";
+import { projectPresentation } from "../presentation_core/presentation_projection.js";
 import type { MetricQueryPlan } from "../engine/metric_planner.js";
 import {
   transformDerivedView,
@@ -170,36 +171,6 @@ function projectOutputBlock(
   };
 }
 
-function projectChartDecl(decl: ChartDecl, delivery: OutputDelivery, outputId: string): ChartDecl {
-  const project = (column: string) => requiredPublicColumnId(delivery, column, outputId);
-  return {
-    ...decl,
-    ...(decl.tableLayout
-      ? {
-          tableLayout: {
-            rows: decl.tableLayout.rows.map((axis) =>
-              axis.kind === "field" ? { ...axis, column: project(axis.column) } : axis,
-            ),
-            columns: decl.tableLayout.columns.map((axis) =>
-              axis.kind === "field" ? { ...axis, column: project(axis.column) } : axis,
-            ),
-          },
-        }
-      : {}),
-    ...(decl.x ? { x: project(decl.x) } : {}),
-    y: decl.y.map(project),
-    ...(decl.annotations ? { annotations: decl.annotations.map(project) } : {}),
-    ...(decl.groupBy ? { groupBy: project(decl.groupBy) } : {}),
-    ...(decl.display
-      ? {
-          display: Object.fromEntries(
-            Object.entries(decl.display).map(([column, display]) => [project(column), display]),
-          ),
-        }
-      : {}),
-  };
-}
-
 export async function runQueryPipeline(
   deps: {
     executeView: ExecuteView;
@@ -289,7 +260,7 @@ export async function runQueryPipeline(
   const outputId = plan.output.id;
   const deliveredResult = resultById.get(outputId)!;
   const deliveredFull = projectOutputBlock(deliveredResult.block, plan.output, outputId);
-  const decl = projectChartDecl(presentation, plan.output, outputId);
+  const decl = projectPresentation(presentation, plan.output, outputId);
   const deliveredSampled: ViewBlock =
     deliveredResult.sampleForModel && deliveredFull.rows.length > AGGREGATE_MODEL_ROWS
       ? {

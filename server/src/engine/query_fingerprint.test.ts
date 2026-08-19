@@ -16,9 +16,8 @@ const queryView = (id = "source", cutoff = "2026-07") => ({
 });
 
 const spec = (views: unknown[]) => ({
-  version: 2 as const,
-  analysis: { title: "在职人数", views },
-  presentation: { type: "table" },
+  title: "在职人数",
+  views,
 });
 
 describe("queryFingerprint", () => {
@@ -38,7 +37,7 @@ describe("queryFingerprint", () => {
       member: filter.member,
     }));
     const renamed = spec([view]);
-    renamed.analysis.title = "另一标题";
+    renamed.title = "另一标题";
     expect(queryFingerprint(renamed)).toBe(fingerprint);
   });
 
@@ -49,19 +48,6 @@ describe("queryFingerprint", () => {
     const reordered = queryView();
     reordered.filters[0].values = [" Harbor Works ", "Aurora Labs", "Aurora Labs"];
     expect(queryFingerprint(spec([reordered]))).toBe(fingerprint);
-  });
-
-  test("table 列轴声明属于呈现，不进入查询指纹", () => {
-    const view = {
-      ...queryView(),
-      dimensions: ["organization_name", "category_level"],
-    };
-    const automatic = spec([view]);
-    const declared = {
-      ...automatic,
-      presentation: { type: "table" as const, columns: ["category_level"] },
-    };
-    expect(queryFingerprint(declared)).toBe(queryFingerprint(automatic));
   });
 
   test("数据选择、列序与派生算式参与指纹", () => {

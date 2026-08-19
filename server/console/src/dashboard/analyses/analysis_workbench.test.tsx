@@ -11,7 +11,7 @@ import type { ReplayPayload } from "@contracts/replay_contract";
 import { AnalysisWorkbench } from "./analysis_workbench";
 import {
   beginAnalysisEdit,
-  blankAnalysisSpec,
+  blankAnalysisDefinition,
   setDraftTime,
   type AnalysisEditState,
 } from "./analysis_draft";
@@ -37,7 +37,14 @@ const catalog: CatalogPayload = {
 };
 
 const draftFixture = (): AnalysisEditState =>
-  beginAnalysisEdit({ name: "未命名分析", spec: blankAnalysisSpec("未命名分析") }, false);
+  beginAnalysisEdit(
+    {
+      name: "未命名分析",
+      analysis: blankAnalysisDefinition("未命名分析"),
+      view: { type: "table" },
+    },
+    false,
+  );
 
 const resultTable = {
   columns: [
@@ -51,29 +58,35 @@ const resultTable = {
   rows: [[120]],
 };
 
+const rawView = {
+  id: "result",
+  columns: ["measure:active_employee_count"],
+  column_roles: { "measure:active_employee_count": "measure" as const },
+  rows: [[120]],
+  row_count: 1,
+  query_notes: [],
+};
+
 const tableReplay: ReplayPayload = {
   at: "2026-07-21T00:00:00Z",
   caller: "demo@pa.local",
   analysis_id: "a1",
-  spec: blankAnalysisSpec("未命名分析"),
+  view_id: "v1",
+  analysis: blankAnalysisDefinition("未命名分析"),
+  view: { type: "table" },
+  view_preferences: {},
   presentation: {
     type: "table",
     table_layout: { state: "applied", leafColumns: 1 },
     table: resultTable,
   },
   payload: {
-    view: {
-      id: "result",
-      columns: ["measure:active_employee_count"],
-      column_roles: { "measure:active_employee_count": "measure" },
-      rows: [[120]],
-      row_count: 1,
-      query_notes: [],
-    },
+    view: rawView,
     default_population_scope: "统计口径",
     data_as_of: "2026-07",
     time_context: [],
   },
+  render_bundle: { view: rawView, decl: { type: "table", y: [] } },
 };
 
 /** 折线呈现才会渲染「系列」节；拿表格呈现去验节题重名等于没验。呈现类型取自草稿规格。 */
@@ -81,7 +94,7 @@ const lineDraft = (): AnalysisEditState => {
   const draft = draftFixture();
   return {
     ...draft,
-    spec: { ...draft.spec, presentation: { type: "line" } },
+    view: { type: "line" },
   };
 };
 

@@ -8,8 +8,8 @@ import {
 import type { Principal } from "../engine/cube_security.js";
 import type { CubeGateway, CubeQuery, CubeView, LoadResponse } from "../ports/cube_gateway.js";
 import { memberShortName } from "../semantic_core/member_name.js";
-import { compileSemanticAnalysis } from "../engine/semantic_analysis_compiler.js";
-import type { SemanticAnalysisSpec } from "../semantic_core/semantic_analysis.js";
+import { compileAnalysisView } from "../engine/semantic_analysis_compiler.js";
+import type { AnalysisDefinition, SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
 import { createRecordProjectionService } from "./record_projection_service.js";
 import { TEST_SEMANTIC_TAXONOMY } from "../test_support/semantic_taxonomy.js";
 
@@ -191,8 +191,38 @@ const currentMonth = (anchor: string) => ({
   window: { kind: "current_month" as const, month: anchor },
 });
 
-const spec: SemanticAnalysisSpec = {
-  version: 2,
+type AnalysisViewFixture = {
+  analysis: AnalysisDefinition;
+  view: SemanticViewIntent;
+};
+
+const STORED_VIEW_ID = "stored_view";
+function analysisRepositoryOf(
+  fixture: AnalysisViewFixture,
+  analysisId = "analysis_1",
+  viewId = STORED_VIEW_ID,
+) {
+  const analysis = {
+    id: analysisId,
+    owner: principal.email,
+    definition: fixture.analysis,
+    created_at: "2026-07-01T00:00:00.000Z",
+  };
+  const view = {
+    id: viewId,
+    analysis_id: analysisId,
+    intent: fixture.view,
+    preferences: {},
+    created_at: "2026-07-01T00:00:00.000Z",
+  };
+  return {
+    getAnalysis: async () => analysis,
+    getView: async () => view,
+    resolveOwnedView: async () => ({ analysis, view }),
+  } as never;
+}
+
+const spec: AnalysisViewFixture = {
   analysis: {
     views: [
       {
@@ -203,10 +233,10 @@ const spec: SemanticAnalysisSpec = {
       },
     ],
   },
-  presentation: { type: "table" },
+  view: { type: "table" },
 };
 
-const rateSpec: SemanticAnalysisSpec = {
+const rateSpec: AnalysisViewFixture = {
   ...spec,
   analysis: {
     views: [
@@ -220,7 +250,7 @@ const rateSpec: SemanticAnalysisSpec = {
 
 test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内过滤贡献记录", async () => {
   const document = buildCatalogDocument(fixtureViews);
-  const compiled = compileSemanticAnalysis(toCompilerCatalog(document), spec);
+  const compiled = compileAnalysisView(toCompilerCatalog(document), spec);
   const seen: CubeQuery[] = [];
   const load = async (query: CubeQuery): Promise<LoadResponse> => {
     seen.push(query);
@@ -280,20 +310,20 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
     loadMulti: async () => Promise.reject(new Error("不应执行多窗")),
   } as unknown as CubeGateway;
   const audit: unknown[] = [];
-  const compiledSpecs: SemanticAnalysisSpec[] = [];
+  const compiledDefinitions: AnalysisDefinition[] = [];
   const service = createRecordProjectionService({
     reports: {
-      resolveOwned: async () => ({ revision: 3, analysis_id: "analysis_1" }),
-      get: async () => ({ revision: 3, analysis_id: "analysis_1" }),
+      resolveOwned: async () => ({ revision: 3, view_id: STORED_VIEW_ID }),
+      get: async () => ({ revision: 3, view_id: STORED_VIEW_ID }),
     } as never,
     boards: {
       get: async (id: string) =>
         id === "board_1" ? { tiles: [{ kind: "report", report_id: "report_1" }] } : null,
     } as never,
-    analyses: { get: async () => ({ id: "analysis_1", spec }) } as never,
+    analyses: analysisRepositoryOf(spec),
     semanticPlanning: {
-      compile: async (_principal: Principal, effectiveSpec: SemanticAnalysisSpec) => {
-        compiledSpecs.push(effectiveSpec);
+      compile: async (_principal: Principal, effectiveDefinition: AnalysisDefinition) => {
+        compiledDefinitions.push(effectiveDefinition);
         return compiled;
       },
     } as never,
@@ -304,7 +334,7 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
 
   const result = await service.runReport(principal, "report_1", {
     revision: 3,
-    view_id: "result",
+    result_view_id: "result",
     metric_id: "measure:active_employee_count",
     coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
     time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -356,7 +386,7 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
     "report_1",
     {
       revision: 3,
-      view_id: "result",
+      result_view_id: "result",
       metric_id: "measure:active_employee_count",
       coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
       time_coordinate: { from: "2026-06", to: "2026-06" },
@@ -367,7 +397,7 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
     currentMonth("2026-06"),
   );
   expect(boardResult.rows).toHaveLength(1);
-  const effectiveView = compiledSpecs.at(-1)?.analysis.views[0];
+  const effectiveView = compiledDefinitions.at(-1)?.views[0];
   expect(effectiveView && "time" in effectiveView ? effectiveView.time : null).toEqual(
     currentMonth("2026-06"),
   );
@@ -385,7 +415,7 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
   await expect(
     service.runBoard(principal, "missing_board", "report_1", {
       revision: 3,
-      view_id: "result",
+      result_view_id: "result",
       metric_id: "measure:active_employee_count",
       coordinates: [],
       time_coordinate: { from: "2026-06", to: "2026-06" },
@@ -402,10 +432,10 @@ test("报告修订漂移时 fail-closed，记录失败审计且不执行查询",
   const audit: unknown[] = [];
   const service = createRecordProjectionService({
     reports: {
-      resolveOwned: async () => ({ revision: 4, analysis_id: "analysis_1" }),
+      resolveOwned: async () => ({ revision: 4, view_id: STORED_VIEW_ID }),
     } as never,
     boards: noBoards,
-    analyses: { get: async () => ({ id: "analysis_1", spec }) } as never,
+    analyses: analysisRepositoryOf(spec),
     semanticPlanning: {
       compile: async () => Promise.reject(new Error("不应编译")),
     } as never,
@@ -418,11 +448,10 @@ test("报告修订漂移时 fail-closed，记录失败审计且不执行查询",
     } as never,
     audit: { log: async (event: unknown) => void audit.push(event) },
   });
-
   await expect(
     service.runReport(principal, "report_1", {
       revision: 3,
-      view_id: "result",
+      result_view_id: "result",
       metric_id: "measure:active_employee_count",
       coordinates: [],
       time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -437,7 +466,7 @@ test("报告修订漂移时 fail-closed，记录失败审计且不执行查询",
 
 test("率指标只投影分子名单，YTD 时间仍由指标口径解释", async () => {
   const document = buildCatalogDocument(fixtureViews);
-  const compiled = compileSemanticAnalysis(toCompilerCatalog(document), rateSpec);
+  const compiled = compileAnalysisView(toCompilerCatalog(document), rateSpec);
   const seen: CubeQuery[] = [];
   const cube = {
     meta: async () => fixtureViews,
@@ -474,10 +503,10 @@ test("率指标只投影分子名单，YTD 时间仍由指标口径解释", asyn
   } as unknown as CubeGateway;
   const service = createRecordProjectionService({
     reports: {
-      resolveOwned: async () => ({ revision: 1, analysis_id: "analysis_rate" }),
+      resolveOwned: async () => ({ revision: 1, view_id: STORED_VIEW_ID }),
     } as never,
     boards: noBoards,
-    analyses: { get: async () => ({ id: "analysis_rate", spec: rateSpec }) } as never,
+    analyses: analysisRepositoryOf(rateSpec, "analysis_rate"),
     semanticPlanning: { compile: async () => compiled } as never,
     catalog: catalogFixture(document),
     cube,
@@ -486,7 +515,7 @@ test("率指标只投影分子名单，YTD 时间仍由指标口径解释", asyn
 
   const result = await service.runReport(principal, "report_rate", {
     revision: 1,
-    view_id: "result",
+    result_view_id: "result",
     metric_id: "measure:ytd_event_rate",
     coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
     time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -510,8 +539,7 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
   const publicCatalog = toCompilerCatalog(document);
   const metric = publicCatalog.measures.find((member) => member.title === "YTD去重事件数");
   expect(metric).toBeDefined();
-  const entitySpec: SemanticAnalysisSpec = {
-    version: 2,
+  const entitySpec: AnalysisViewFixture = {
     analysis: {
       views: [
         {
@@ -529,9 +557,9 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
         },
       ],
     },
-    presentation: { type: "table" },
+    view: { type: "table" },
   };
-  const compiled = compileSemanticAnalysis(publicCatalog, entitySpec);
+  const compiled = compileAnalysisView(publicCatalog, entitySpec);
   const seen: CubeQuery[] = [];
   let duplicateMembership = false;
   let excessiveDetail = false;
@@ -625,10 +653,10 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
   } as unknown as CubeGateway;
   const service = createRecordProjectionService({
     reports: {
-      resolveOwned: async () => ({ revision: 1, analysis_id: "analysis_entities" }),
+      resolveOwned: async () => ({ revision: 1, view_id: STORED_VIEW_ID }),
     } as never,
     boards: noBoards,
-    analyses: { get: async () => ({ id: "analysis_entities", spec: entitySpec }) } as never,
+    analyses: analysisRepositoryOf(entitySpec, "analysis_entities"),
     semanticPlanning: { compile: async () => compiled } as never,
     catalog: catalogFixture(document),
     cube,
@@ -637,7 +665,7 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
 
   const result = await service.runReport(principal, "report_entities", {
     revision: 1,
-    view_id: "result",
+    result_view_id: "result",
     metric_id: metric!.id,
     coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
     time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -694,7 +722,7 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
   await expect(
     service.runReport(principal, "report_entities", {
       revision: 1,
-      view_id: "result",
+      result_view_id: "result",
       metric_id: metric!.id,
       coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
       time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -709,7 +737,7 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
   await expect(
     service.runReport(principal, "report_entities", {
       revision: 1,
-      view_id: "result",
+      result_view_id: "result",
       metric_id: metric!.id,
       coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
       time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -722,14 +750,14 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
 
 test("分组坐标缺失时不能把单个格子扩大成整份名单", async () => {
   const document = buildCatalogDocument(fixtureViews);
-  const compiled = compileSemanticAnalysis(toCompilerCatalog(document), spec);
+  const compiled = compileAnalysisView(toCompilerCatalog(document), spec);
   let loads = 0;
   const service = createRecordProjectionService({
     reports: {
-      resolveOwned: async () => ({ revision: 3, analysis_id: "analysis_1" }),
+      resolveOwned: async () => ({ revision: 3, view_id: STORED_VIEW_ID }),
     } as never,
     boards: noBoards,
-    analyses: { get: async () => ({ id: "analysis_1", spec }) } as never,
+    analyses: analysisRepositoryOf(spec),
     semanticPlanning: { compile: async () => compiled } as never,
     catalog: catalogFixture(document),
     cube: {
@@ -744,7 +772,7 @@ test("分组坐标缺失时不能把单个格子扩大成整份名单", async ()
   await expect(
     service.runReport(principal, "report_1", {
       revision: 3,
-      view_id: "result",
+      result_view_id: "result",
       metric_id: "measure:active_employee_count",
       coordinates: [],
       time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -756,10 +784,9 @@ test("分组坐标缺失时不能把单个格子扩大成整份名单", async ()
   expect(loads).toBe(0);
 });
 
-test("隐藏 source 不是交付结果，不能通过手写 view_id 投影记录", async () => {
+test("隐藏 source 不是交付结果，不能通过手写 result_view_id 投影记录", async () => {
   const document = buildCatalogDocument(fixtureViews);
-  const derivedSpec: SemanticAnalysisSpec = {
-    version: 2,
+  const derivedSpec: AnalysisViewFixture = {
     analysis: {
       views: [
         {
@@ -788,9 +815,9 @@ test("隐藏 source 不是交付结果，不能通过手写 view_id 投影记录
         },
       ],
     },
-    presentation: { type: "table" },
+    view: { type: "table" },
   };
-  const compiled = compileSemanticAnalysis(toCompilerCatalog(document), derivedSpec);
+  const compiled = compileAnalysisView(toCompilerCatalog(document), derivedSpec);
   expect(compiled.record_projection_bindings.views).toEqual([]);
 
   let compiles = 0;
@@ -798,10 +825,10 @@ test("隐藏 source 不是交付结果，不能通过手写 view_id 投影记录
   const audit: unknown[] = [];
   const service = createRecordProjectionService({
     reports: {
-      resolveOwned: async () => ({ revision: 1, analysis_id: "analysis_derived" }),
+      resolveOwned: async () => ({ revision: 1, view_id: STORED_VIEW_ID }),
     } as never,
     boards: noBoards,
-    analyses: { get: async () => ({ id: "analysis_derived", spec: derivedSpec }) } as never,
+    analyses: analysisRepositoryOf(derivedSpec, "analysis_derived"),
     semanticPlanning: {
       compile: async () => {
         compiles += 1;
@@ -821,7 +848,7 @@ test("隐藏 source 不是交付结果，不能通过手写 view_id 投影记录
   await expect(
     service.runReport(principal, "report_derived", {
       revision: 1,
-      view_id: "source",
+      result_view_id: "source",
       metric_id: "measure:active_employee_count",
       coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
       time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -838,8 +865,7 @@ test("隐藏 source 不是交付结果，不能通过手写 view_id 投影记录
 test("Agent 名单从单一聚合结果格投影记录，分类条件保留在分析筛选中", async () => {
   const document = buildCatalogDocument(fixtureViews);
   const catalog = toCompilerCatalog(document);
-  const listSpec: SemanticAnalysisSpec = {
-    version: 2,
+  const listSpec: AnalysisViewFixture = {
     analysis: {
       views: [
         {
@@ -856,7 +882,7 @@ test("Agent 名单从单一聚合结果格投影记录，分类条件保留在�
         },
       ],
     },
-    presentation: { type: "table" },
+    view: { type: "table" },
   };
   let storedSpec = listSpec;
   let compiles = 0;
@@ -865,17 +891,25 @@ test("Agent 名单从单一聚合结果格投影记录，分类条件保留在�
     reports: {} as never,
     boards: noBoards,
     analyses: {
-      resolveOwned: async () => ({
-        id: "22222222-2222-4222-8222-222222222222",
-        owner: principal.email,
-        spec: storedSpec,
-        created_at: "2026-08-05",
-      }),
+      resolveOwnedView: async () => {
+        const repository = analysisRepositoryOf(
+          storedSpec,
+          "analysis_list",
+          "22222222-2222-4222-8222-222222222222",
+        ) as unknown as {
+          resolveOwnedView: () => Promise<unknown>;
+        };
+        return repository.resolveOwnedView();
+      },
     } as never,
     semanticPlanning: {
-      compile: async () => {
+      compile: async (
+        _principal: Principal,
+        analysis: AnalysisDefinition,
+        view: SemanticViewIntent,
+      ) => {
         compiles += 1;
-        return compileSemanticAnalysis(catalog, storedSpec);
+        return compileAnalysisView(catalog, { analysis, view });
       },
     } as never,
     catalog: catalogFixture(document),

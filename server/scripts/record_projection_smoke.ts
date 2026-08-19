@@ -12,7 +12,7 @@ import {
   loadCanonicalSemanticModel,
   withCanonicalSemanticModel,
 } from "../src/engine/canonical_semantic_model.js";
-import type { SemanticAnalysisSpec } from "../src/semantic_core/semantic_analysis.js";
+import type { AnalysisDefinition } from "../src/semantic_core/semantic_analysis.js";
 import {
   configuredSemanticPackageDir,
   loadSemanticPackage,
@@ -58,22 +58,19 @@ const active = compiler.measures.find((metric) => metric.title === "在职人数
 const organization = compiler.dimensions.find((dimension) => dimension.title === "组织");
 assert(active?.records_available === true && organization, "在职人数或组织明细合同缺失");
 
-const spec: SemanticAnalysisSpec = {
-  version: 2,
-  analysis: {
-    title: "公开 Demo 人员明细",
-    views: [
-      {
-        id: "organization_summary",
-        measures: [active.id],
-        dimensions: [organization.id],
-        time: { window: { kind: "current_month", month: context.dataAsOf } },
-      },
-    ],
-  },
-  presentation: { type: "table" },
+const definition: AnalysisDefinition = {
+  title: "公开 Demo 人员明细",
+  views: [
+    {
+      id: "organization_summary",
+      measures: [active.id],
+      dimensions: [organization.id],
+      time: { window: { kind: "current_month", month: context.dataAsOf } },
+    },
+  ],
 };
-const compiled = await planning.compile(principal, spec);
+const view = { type: "table" as const };
+const compiled = await planning.compile(principal, definition, view);
 assert(compiled.routes[0]?.status === "direct", "聚合查询未形成正式指标计划");
 const binding = compiled.record_projection_bindings.views[0];
 assert(binding, "分析没有生成记录投影绑定");
@@ -83,11 +80,11 @@ try {
   const reports = createReportRepository(appDb);
   const analyses = createAnalysisRepository(appDb);
   const boards = createBoardRepository(appDb, reports);
-  const analysis = await analyses.create(principal.email, spec);
+  const analysis = await analyses.create(principal.email, definition, view);
   const report = await reports.create({
     owner: principal.email,
     name: "公开 Demo 人员明细",
-    analysisId: analysis.id,
+    viewId: analysis.view.id,
   });
   const records = createRecordProjectionService({
     reports,
@@ -100,7 +97,7 @@ try {
   });
   const payload = await records.runReport(principal, report.id, {
     revision: report.revision,
-    view_id: "organization_summary",
+    result_view_id: "organization_summary",
     metric_id: active.id,
     coordinates: [{ dimension_id: organization.id, value: "Aurora Labs" }],
     time_coordinate: { from: context.dataAsOf, to: context.dataAsOf },

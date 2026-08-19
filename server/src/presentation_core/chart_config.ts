@@ -26,7 +26,7 @@ import {
   type TotalBand,
   type TrendSpec,
 } from "./view_shape.js";
-import { toNumber } from "./view_format.js";
+import { formatSeriesValue, toNumber } from "./view_format.js";
 import { CHART_CHROME, CHART_SERIES, FONT_FAMILY } from "./design_tokens.js";
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
 import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
@@ -102,7 +102,10 @@ export type ViewChart = {
   /** 建议渲染高度（px）：条形随分类数伸缩，布局由服务端一次算定 */
   height: number;
 
-  plot_gutter?: { left: number };
+  /** 框外栏（px）：留给框外轴标签的那一栏（横排条的左侧类目栏），场地框缩进让位 */
+  plot_gutter?: { left?: number };
+  /** 框内余量（px）：值标签占的那道，grid 缩进而场地框不动 */
+  plot_inset?: { top?: number; right?: number };
 
   layout?: "rank";
   option: Record<string, unknown>;
@@ -122,7 +125,7 @@ export type PresentationBlock = {
 export type PresentationFallbackKind = "empty_result" | "unsupported_shape";
 
 export type PresentationFallback = {
-  view_id: string;
+  result_view_id: string;
   kind: PresentationFallbackKind;
   note: string;
 };
@@ -137,7 +140,7 @@ export function presentationFallbacks(
     presentation.type === "table" && compiled.table_layout.state === "unavailable"
       ? [
           {
-            view_id: viewId,
+            result_view_id: viewId,
             kind: "unsupported_shape",
             note: `声明的表格布局未生效：${compiled.table_layout.message}`,
           },
@@ -148,7 +151,7 @@ export function presentationFallbacks(
     return [
       ...tableNotes,
       {
-        view_id: viewId,
+        result_view_id: viewId,
         kind: "empty_result",
         note: "查询成功但结果为空，本次以空表呈现；呈现声明保留，数据满足后重跑即可生效。",
       },
@@ -157,7 +160,7 @@ export function presentationFallbacks(
   return [
     ...tableNotes,
     {
-      view_id: viewId,
+      result_view_id: viewId,
       kind: "unsupported_shape",
       note: "查询已成功，但当前结果形态不支持声明的呈现，本次已按表格呈现。",
     },
@@ -170,6 +173,7 @@ const GRID_LINE = CHART_CHROME.gridLine.light;
 const GRID_EDGE = CHART_CHROME.gridEdge.light;
 const AXIS_TEXT = CHART_CHROME.axisText.light;
 const VALUE_TEXT = CHART_CHROME.valueText.light;
+const LABEL_CHIP = CHART_CHROME.labelChip.light;
 const CHART_SURFACE = CHART_CHROME.surface.light;
 const POINTER_BAND = CHART_CHROME.pointerBand.light;
 const POINTER_LINE = CHART_CHROME.pointerLine.light;
@@ -302,7 +306,7 @@ function withLatestMarker(values: (number | null)[], color: string) {
   );
 }
 
-function lineSeriesStyle(color: string, multi: boolean) {
+function lineSeriesPreferences(color: string, multi: boolean) {
   return {
     color,
     showSymbol: true,
@@ -329,7 +333,7 @@ function lineSeriesStyle(color: string, multi: boolean) {
  * 柱系列：同类目多柱紧贴（barGap 0）、类目带留 40% 白，方角无边框。
  * 柱占带宽 60%——柱之间要留得出「这是相邻两个桶」的间隙，贴太近就读成一条被切开的带子。
  */
-function barSeriesStyle(color: string, multi: boolean) {
+function barSeriesPreferences(color: string, multi: boolean) {
   return {
     color,
     itemStyle: { color },
@@ -419,9 +423,9 @@ export const LEGEND_MARKER_CLASS =
  * 在渲染前就算得出来，DOM 那层框才对得上。开着 containLabel 就等于把四缘交给 echarts
  * 量标签，量出来的数只有画完才知道。要为标签留栏的形态自己给 `plot_gutter`。
  */
-function grid(gutter: { left: number } = { left: 0 }) {
+function grid(gutter: { left?: number } = {}) {
   const pad = PLOT_PADDING.compact;
-  return { containLabel: false, ...pad, left: pad.left + gutter.left };
+  return { containLabel: false, ...pad, left: pad.left + (gutter.left ?? 0) };
 }
 
 /* ---------- option 构建 ---------- */
@@ -457,7 +461,6 @@ function applyDisplay(
   option: Record<string, unknown>,
   display: Record<string, SeriesDisplay>,
   series: SeriesDef[],
-  orientation: "vertical" | "horizontal" = "vertical",
 ): void {
   const optionSeries = option.series as Record<string, unknown>[] | undefined;
   if (!Array.isArray(optionSeries)) return;
@@ -472,14 +475,14 @@ function applyDisplay(
       intent.color ?? (typeof target.color === "string" ? target.color : seriesColorAt(index));
 
     if (intent.type === "bar") {
-      Object.assign(target, { type: "bar" }, barSeriesStyle(color, multi));
+      Object.assign(target, { type: "bar" }, barSeriesPreferences(color, multi));
       delete target.showSymbol;
       delete target.symbol;
       delete target.symbolSize;
       delete target.lineStyle;
       delete target.areaStyle;
     } else if (intent.type === "line") {
-      Object.assign(target, { type: "line" }, lineSeriesStyle(color, multi));
+      Object.assign(target, { type: "line" }, lineSeriesPreferences(color, multi));
     } else if (intent.color !== undefined) {
       target.color = color;
       if (target.type === "line") {
@@ -499,19 +502,6 @@ function applyDisplay(
       }
     }
     if (pa?.legend?.[index]) pa.legend[index].color = color;
-    if (intent.label !== undefined) {
-      target.label = intent.label
-        ? {
-            show: true,
-            position: orientation === "horizontal" ? "right" : "top",
-            color: VALUE_TEXT,
-            fontSize: 13,
-            fontWeight: 500,
-            textBorderColor: CHART_SURFACE,
-            textBorderWidth: 3,
-          }
-        : { show: false };
-    }
     if (intent.yAxis !== undefined) {
       target.yAxisIndex = intent.yAxis === "right" ? 1 : 0;
       if (intent.yAxis === "right") {
@@ -544,6 +534,101 @@ function applyDisplay(
   if (currentTooltip?.trigger === "axis") {
     currentTooltip.axisPointer = axisPointer(pointerFormOf(optionSeries));
   }
+}
+
+/**
+ * 图级数值标签：main=仅第一主系列，all=全部系列。真系列数以 pa.legend 为准，
+ * 垫层与标记系列不印数；密度守卫在渲染层按实宽收敛（见 chart_render）。
+ * 形制是浅灰底片（高 18、圆角 4、承载面色描边）+ 14px 系列色数字——系列色对底片的
+ * 对比度整套色板两个主题都过 1.45，由 design_tokens 测试看住，故不带运行时调暗环节。
+ * 标签的场地余量留在框内：grid 缩进、框不动，纵向留 30、横向按最宽底片实测留右栏。
+ * 排行版式的值恒以独立一列印出，条上不贴标签。
+ */
+function applyValueLabels(
+  chart: ViewChart,
+  mode: "main" | "all",
+  orientation: "vertical" | "horizontal" = "vertical",
+): void {
+  if (chart.layout === "rank") return;
+  const option = chart.option;
+  const optionSeries = option.series as Record<string, unknown>[] | undefined;
+  if (!Array.isArray(optionSeries)) return;
+  const pa = option.pa as PaChartExtension | undefined;
+  const count = pa?.legend?.length ?? optionSeries.length;
+  const labeled = optionSeries.slice(0, mode === "main" ? 1 : count);
+  labeled.forEach((target, index) => {
+    target.label = {
+      show: true,
+      // 堆叠段的外侧是相邻段不是空场地：标签进段内；平铺条才朝值轴末端画
+      position:
+        target.stack !== undefined ? "inside" : orientation === "horizontal" ? "right" : "top",
+      distance: VALUE_LABEL_GAP,
+      color: pa?.legend?.[index]?.color ?? VALUE_TEXT,
+      fontSize: 14,
+      lineHeight: 14,
+      padding: [2, 5],
+      backgroundColor: LABEL_CHIP,
+      borderColor: CHART_SURFACE,
+      borderWidth: 1,
+      borderRadius: 4,
+    };
+  });
+  // 段内标签不占余量；贴上限的平铺标签朝框缘画，框内不留这道就被画布裁掉
+  const flat = labeled.filter((target) => target.stack === undefined);
+  if (flat.length === 0) return;
+  const inset =
+    orientation === "horizontal"
+      ? { right: valueLabelSpan(flat, pa) }
+      : { top: VALUE_LABEL_HEADROOM };
+  chart.plot_inset = { ...(chart.plot_inset ?? {}), ...inset };
+  for (const g of Array.isArray(option.grid) ? option.grid : [option.grid]) {
+    if (g && typeof g === "object") {
+      const record = g as Record<string, unknown>;
+      if (inset.top) record.top = Number(record.top ?? 0) + inset.top;
+      if (inset.right) record.right = Number(record.right ?? 0) + inset.right;
+    }
+  }
+}
+
+/** 值标签的顶部余量（px）：间距 6 + 底片 18，余下是描边与最高点自身的缓冲。 */
+const VALUE_LABEL_HEADROOM = 30;
+
+/** 标签底片与数据点/条端的间距（px）。 */
+const VALUE_LABEL_GAP = 6;
+
+/**
+ * 值标签底片宽（px）：逐字符查表（数字 8/逗号 4/点 4/% 10/负号 6）+ 两侧衬垫 5、最小 20。
+ * 值、格式、位数编译期全知道，渲染层密度守卫与横排右栏都按它算。
+ */
+export function valueLabelPillWidth(text: string): number {
+  const width = [...text].reduce((sum, ch) => {
+    if (/\d/.test(ch)) return sum + 8;
+    if (ch === ",") return sum + 4;
+    if (ch === ".") return sum + 4;
+    if (ch === "%") return sum + 10;
+    if (ch === "-") return sum + 6;
+    if (/[⺀-￯]/.test(ch)) return sum + 14;
+    return sum + 8;
+  }, 0);
+  return Math.max(width + 10, 20);
+}
+
+/** 横排条右侧标签要占的框内余量：最宽底片 + 号距 + 描边缓冲。 */
+function valueLabelSpan(
+  series: Record<string, unknown>[],
+  pa: PaChartExtension | undefined,
+): number {
+  let widest = 0;
+  for (const target of series) {
+    const name = String(target.name ?? "");
+    const format = pa?.series[name] ?? "number";
+    const decimals = pa?.decimals?.[name];
+    for (const value of Array.isArray(target.data) ? target.data : []) {
+      if (typeof value !== "number") continue;
+      widest = Math.max(widest, valueLabelPillWidth(formatSeriesValue(value, format, decimals)));
+    }
+  }
+  return widest === 0 ? 0 : widest + VALUE_LABEL_GAP + 2;
 }
 
 /** 纯时间趋势 / 柱线组合：时间恒占 x 轴；混量纲时量画柱（主轴）、率画线（副轴） */
@@ -612,10 +697,10 @@ function trendOption(spec: TrendSpec): ViewChart {
           type: s.mark === "bar" ? "bar" : "line",
           data: s.mark === "bar" ? values : withLatestMarker(values, seriesColorAt(i)),
           ...(s.mark === "bar"
-            ? { yAxisIndex: 0, ...barSeriesStyle(seriesColorAt(i), multi) }
+            ? { yAxisIndex: 0, ...barSeriesPreferences(seriesColorAt(i), multi) }
             : {
                 yAxisIndex: spec.mixedAxes ? 1 : 0,
-                ...lineSeriesStyle(seriesColorAt(i), multi),
+                ...lineSeriesPreferences(seriesColorAt(i), multi),
               }),
         };
       }),
@@ -686,8 +771,8 @@ function categoryComboOption(spec: CategoryComboSpec): ViewChart {
         yAxisIndex: series.isRate ? 1 : 0,
         data: spec.rows.map((row) => cellNumber(row[series.key])),
         ...(series.isRate
-          ? lineSeriesStyle(seriesColorAt(index), multi)
-          : barSeriesStyle(seriesColorAt(index), multi)),
+          ? lineSeriesPreferences(seriesColorAt(index), multi)
+          : barSeriesPreferences(seriesColorAt(index), multi)),
       })),
       pa,
     },
@@ -737,7 +822,7 @@ function barOption(spec: BarSpec): ViewChart {
           name: s.name,
           type: "bar",
           data: spec.rows.map((r) => cellNumber(r[s.key])),
-          ...barSeriesStyle(seriesColorAt(i), multi),
+          ...barSeriesPreferences(seriesColorAt(i), multi),
         })),
         pa,
       },
@@ -781,7 +866,7 @@ function barOption(spec: BarSpec): ViewChart {
         name: s.name,
         type: "bar",
         data: spec.rows.map((r) => cellNumber(r[s.key])),
-        ...barSeriesStyle(seriesColorAt(i), multi),
+        ...barSeriesPreferences(seriesColorAt(i), multi),
         ...(spec.stacked ? { stack: "total" } : {}),
       })),
       pa,
@@ -859,16 +944,19 @@ export function buildViewChart(view: ViewBlock, decl: ChartDecl): ViewChart | nu
   if (shape.kind === "line") {
     const chart = trendOption(shape);
     if (decl.display) applyDisplay(chart.option, decl.display, shape.series);
+    if (decl.valueLabels) applyValueLabels(chart, decl.valueLabels);
     return withHalo(chart);
   }
   if (shape.kind === "bar") {
     const chart = barOption(shape);
-    if (decl.display) applyDisplay(chart.option, decl.display, shape.series, "horizontal");
+    if (decl.display) applyDisplay(chart.option, decl.display, shape.series);
+    if (decl.valueLabels) applyValueLabels(chart, decl.valueLabels, "horizontal");
     return withHalo(chart);
   }
   if (shape.kind === "category_combo") {
     const chart = categoryComboOption(shape);
     if (decl.display) applyDisplay(chart.option, decl.display, shape.series);
+    if (decl.valueLabels) applyValueLabels(chart, decl.valueLabels);
     return withHalo(chart);
   }
   return pieOption(shape);

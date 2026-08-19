@@ -4,7 +4,10 @@ import {
   COLUMN_FORMATS,
   PUBLIC_TIME_CONTEXT_SCHEMA,
 } from "../semantic_core/query_payload.js";
-import { SEMANTIC_ANALYSIS_SPEC_INPUT } from "../semantic_core/semantic_analysis.js";
+import {
+  ANALYSIS_DEFINITION_INPUT,
+  SEMANTIC_VIEW_INTENT_INPUT,
+} from "../semantic_core/semantic_analysis.js";
 import { TIME_CAPABILITIES_INPUT } from "../semantic_core/time_contract.js";
 import { BUSINESS_TERM_RESOLUTION_SCHEMA } from "../contracts/business_term_contract.js";
 
@@ -18,20 +21,19 @@ export const TOOL_DESCRIPTIONS = {
     "发现当前调用者可用的 PA 指标、维度与业务术语解释。不传 terms 返回全部成员，传 terms 按业务概念筛选；成员 id 可直接用于分析。",
   values_of: "搜索一个分类维度在当前调用者权限范围内的真实值，可按子串收窄。",
   run_analysis:
-    "用 catalog 返回的语义成员 id 执行一次分析；不接受标题、物理字段、SQL 或个体字段。服务端自动规划兼容指标域，返回 analysis_id 与结构化结果。",
+    "用 catalog 返回的语义成员 id 与呈现意图执行一次分析；不接受视觉设置、物理字段、SQL 或个体字段。服务端自动规划兼容指标域，返回 analysis_id、view_id 与结构化结果。",
   rerun_analysis:
-    "从已有 analysis_id 派生新呈现并按当前数据重跑，返回新的不可变 analysis_id；原句柄保持不变。",
-  show_analysis: "为本人已有 analysis_id 打开交互结果卡；只负责展示，不重新定义或执行分析。",
-  load_analysis_result:
-    "按 analysis_id 实时加载本人分析的 canonical spec 与当前结果，供 Agent 继续编辑。",
-  load_analysis_card: "按 analysis_id 实时加载当前聚合结果，仅供 PA 结果卡渲染。",
+    "从已有 analysis_id 派生新的不可变 View 并按当前数据重跑；AnalysisDefinition 保持不变。",
+  show_analysis: "为本人已有 view_id 打开交互结果卡；只负责展示，不重新定义或执行分析。",
+  load_analysis_result: "按 view_id 实时加载本人分析定义、呈现意图与当前结果，供 Agent 继续编辑。",
+  load_analysis_card: "按 view_id 实时加载当前聚合结果，仅供 PA 结果卡渲染。",
   show_records:
     "为单结果格、单时间桶的本人分析打开受控构成记录；分类条件应在分析 filters 中表达，不能用 dimensions 展开名单。",
-  load_records_page: "按 analysis_id 加载受控构成记录分页，仅供 PA 名单卡渲染。",
-  export_result: "从本人不可变分析生成 24 小时有效的 CSV 交付。",
-  save_report: "把本人分析句柄保存为报告；不重新执行查询。",
-  update_report: "修改本人报告的名称、当前 analysis_id 指针或归档状态。",
-  find_report: "按名称查找本人未归档报告，返回当前 analysis_id 与控制台深链。",
+  load_records_page: "按 view_id 加载受控构成记录分页，仅供 PA 名单卡渲染。",
+  export_result: "从本人不可变 View 对应的分析生成 24 小时有效的 CSV 交付。",
+  save_report: "把本人不可变 View 保存为报告；不重新执行查询。",
+  update_report: "修改本人报告的名称、当前 view_id 指针或归档状态。",
+  find_report: "按名称查找本人未归档报告，返回当前 analysis_id、view_id 与控制台深链。",
   feedback:
     "在当前目录无法满足用户需求时提报数据能力缺口；不改变本次应答，也不会直接改变指标或口径。",
 } as const;
@@ -152,12 +154,13 @@ export const VALUES_OUTPUT = {
 
 export const RUN_OUTPUT = {
   ...QUERY_PAYLOAD_OUTPUT,
-  analysis_id: z.string().describe("本次成功分析的不可变规格句柄"),
+  analysis_id: z.string().describe("本次结果使用的不可变分析定义身份"),
+  view_id: z.string().describe("本次结果使用的不可变呈现视图身份"),
   presentation_notes: z
     .array(
       z
         .object({
-          view_id: z.string(),
+          result_view_id: z.string(),
           kind: z.enum(["empty_result", "unsupported_shape"]),
           note: z.string(),
         })
@@ -170,18 +173,19 @@ export const RUN_OUTPUT_SCHEMA = z.object(RUN_OUTPUT).strict();
 
 export const LOAD_ANALYSIS_OUTPUT = {
   ...RUN_OUTPUT,
-  spec: SEMANTIC_ANALYSIS_SPEC_INPUT.describe(
-    "该 analysis_id 固定的 canonical 语义规格；修改后用 run_analysis 产生新的不可变分析",
+  analysis: ANALYSIS_DEFINITION_INPUT.describe(
+    "该 analysis_id 固定的 canonical 分析定义；修改后用 run_analysis 产生新的分析身份",
   ),
+  view_intent: SEMANTIC_VIEW_INTENT_INPUT.describe("该 view_id 固定且 Agent 可编辑的呈现意图"),
 };
 export const LOAD_ANALYSIS_OUTPUT_SCHEMA = z.object(LOAD_ANALYSIS_OUTPUT).strict();
 
 export const SHOW_ANALYSIS_OUTPUT = {
-  analysis_id: z.string().uuid().describe("结果卡所展示的本人分析句柄"),
+  view_id: z.string().uuid().describe("结果卡所展示的本人分析视图"),
 };
 
 export const RECORDS_OUTPUT = {
-  analysis_id: z.string().uuid().describe("名单卡对应的本人分析句柄"),
+  view_id: z.string().uuid().describe("名单卡对应的本人分析视图"),
   metric_id: z.string().describe("本次展开的语义指标 id"),
   metric_title: z.string(),
   record_set_title: z.string(),
@@ -197,6 +201,7 @@ export const RECORDS_OUTPUT_SCHEMA = z.object(RECORDS_OUTPUT).strict();
 
 export const EXPORT_OUTPUT = {
   analysis_id: z.string().uuid(),
+  view_id: z.string().uuid(),
   url: z.string(),
   expires_at: z.string(),
   max_rows: z.number().int(),

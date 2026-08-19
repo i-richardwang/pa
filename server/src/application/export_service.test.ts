@@ -117,7 +117,7 @@ function exportServiceFixture(input: {
   let executions = 0;
   const service = createExportService({
     analyses: {
-      resolveOwned: async () => {
+      resolveOwnedView: async () => {
         throw new Error("测试不创建分析导出");
       },
     },

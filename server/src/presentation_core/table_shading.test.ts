@@ -40,6 +40,24 @@ describe("热力着色刻度", () => {
     expect(shading.scales.headcount).toEqual({ min: 20, mid: 110, max: 200 });
   });
 
+  test("单个阈值落在数据域外时，自动端点仍包住声明停点", () => {
+    const lower = compileTableShading(
+      { palette: "red_blue", thresholds: { min: 200 } },
+      columns,
+      rows,
+      measureKeys,
+    );
+    expect(lower.scales.headcount).toEqual({ min: 200, mid: 200, max: 200 });
+
+    const middle = compileTableShading(
+      { palette: "red_blue", thresholds: { mid: 200 } },
+      columns,
+      rows,
+      measureKeys,
+    );
+    expect(middle.scales.headcount).toEqual({ min: 20, mid: 200, max: 200 });
+  });
+
   test("没有任何数值的键不立刻度", () => {
     const shading = compileTableShading(
       { palette: BLUE },

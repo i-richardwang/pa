@@ -1,6 +1,6 @@
 /**
- * 分析的持久化事实源：只表达业务字段意图与呈现通道，
- * 不携带 Cube view 限定成员。物理 AnalysisSpec / PresentationSpec
+ * 分析定义的持久化事实源：只表达查询、计算与结果图关系，
+ * 不携带呈现方式、视觉偏好或 Cube view 限定成员。物理 AnalysisSpec
  * 由应用层在当前身份的 catalog 上编译，不是分析身份。
  */
 import { z } from "zod";
@@ -285,45 +285,6 @@ export function semanticAnalysisSink(views: SemanticAnalysisView[]): string {
   return analysisGraphSink(views);
 }
 
-const SEMANTIC_SERIES_DISPLAY = z
-  .object({
-    color: z
-      .string()
-      .regex(/^#[0-9a-fA-F]{6}$/)
-      .optional(),
-    type: z.enum(["line", "bar"]).optional(),
-    yAxis: z.enum(["left", "right"]).optional(),
-    label: z.boolean().optional(),
-  })
-  .strict();
-
-/** 双向色阶名（下限→中点→上限的三停色带）；三停取值归呈现层 `table_shading.ts`。 */
-export const SHADING_PALETTE_NAMES = ["traffic_lights", "red_blue", "viridis", "magma"] as const;
-export type ShadingPaletteName = (typeof SHADING_PALETTE_NAMES)[number];
-
-/** 表格热力着色声明：一个色阶 + 可选翻转、阈值与是否印数；不含任何成员引用。 */
-export const TABLE_SHADING_INPUT = z
-  .object({
-    palette: z
-      .union([z.string().regex(/^#[0-9a-fA-F]{6}$/), z.enum(SHADING_PALETTE_NAMES)])
-      .describe(
-        "色阶：十六进制单色（值越大越深，例如 #3b6fdb），或双向色阶名 traffic_lights / red_blue / viridis / magma",
-      ),
-    flipped: z.boolean().optional().describe("翻转色阶方向（值越大越浅或反向色带）"),
-    thresholds: z
-      .object({
-        min: z.number().optional(),
-        mid: z.number().optional().describe("仅双向色阶使用；单色忽略"),
-        max: z.number().optional(),
-      })
-      .strict()
-      .optional()
-      .describe("刻度阈值覆盖；缺省按本表该指标全部数值的极值，中点取两端中点"),
-    values: z.boolean().optional().describe("false=只铺色不印数；缺省印数"),
-  })
-  .strict();
-export type TableShadingDecl = z.infer<typeof TABLE_SHADING_INPUT>;
-
 const PRESENTATION_FIELD = z
   .string()
   .min(1)
@@ -340,18 +301,7 @@ const PRESENTATION_CATEGORY = PRESENTATION_FIELD.optional().describe(
 const PRESENTATION_GROUP_BY = PRESENTATION_FIELD.optional().describe(
   "拆分系列的第二个分类维度；与多个主指标互斥",
 );
-const PRESENTATION_DISPLAY = z
-  .object({
-    series: z
-      .record(PRESENTATION_FIELD, SEMANTIC_SERIES_DISPLAY)
-      .optional()
-      .describe("按主指标语义 id 或派生输出列名设置视觉样式"),
-  })
-  .strict()
-  .optional()
-  .describe("line/bar 的可选系列视觉覆盖；不改变指标、分组或计算结果");
-
-export type SemanticChart = {
+export type SemanticViewIntent = {
   type: PresentationType;
   columns?: string[];
   category?: string;
@@ -359,11 +309,9 @@ export type SemanticChart = {
   annotations?: string[];
   group_by?: string;
   stack?: boolean;
-  display?: { series?: Record<string, z.infer<typeof SEMANTIC_SERIES_DISPLAY>> };
-  shading?: TableShadingDecl;
 };
 
-export const SEMANTIC_CHART_INPUT: z.ZodType<SemanticChart> = z
+export const SEMANTIC_VIEW_INTENT_INPUT: z.ZodType<SemanticViewIntent> = z
   .discriminatedUnion("type", [
     z
       .object({
@@ -377,9 +325,6 @@ export const SEMANTIC_CHART_INPUT: z.ZodType<SemanticChart> = z
               "未进入列轴的分组维度留在行轴；指标与时间同在列轴时默认使用 [metrics, time]，" +
               "即指标在外层、年份或月份在内层；只有明确需要相反层级时才交换顺序",
           ),
-        shading: TABLE_SHADING_INPUT.optional().describe(
-          "table 专用热力着色：按值给指标格铺深浅或冷暖底色，每个指标各按自身极值定刻度",
-        ),
       })
       .strict(),
     z
@@ -392,7 +337,6 @@ export const SEMANTIC_CHART_INPUT: z.ZodType<SemanticChart> = z
         type: z.literal("line").describe("按月或按年的连续时间趋势；横轴恒为时间"),
         series: PRESENTATION_SERIES,
         group_by: PRESENTATION_GROUP_BY,
-        display: PRESENTATION_DISPLAY,
       })
       .strict(),
     z
@@ -406,7 +350,6 @@ export const SEMANTIC_CHART_INPUT: z.ZodType<SemanticChart> = z
           .describe("结构占比等辅助标注指标；不能与主系列重复，仅 bar 支持"),
         group_by: PRESENTATION_GROUP_BY,
         stack: z.boolean().optional().describe("需同时声明 group_by；true=堆叠，false=并列分组"),
-        display: PRESENTATION_DISPLAY,
       })
       .strict(),
     z
@@ -438,42 +381,19 @@ export const SEMANTIC_CHART_INPUT: z.ZodType<SemanticChart> = z
         message: "presentation.stack 仅用于 bar 且需同时声明 group_by",
       });
     }
-    if ((chart.type === "line" || chart.type === "bar") && chart.group_by && chart.display) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["display"],
-        message: "presentation.display 与 group_by 互斥，请移除其中一个",
-      });
-    }
   });
 
-export const SEMANTIC_ANALYSIS_SPEC_INPUT = z
+export const ANALYSIS_DEFINITION_INPUT = z
   .object({
-    version: z.literal(2),
-    analysis: z
-      .object({
-        title: z.string().min(1).max(100).optional(),
-        views: z
-          .array(z.union([SEMANTIC_QUERY_VIEW_INPUT, SEMANTIC_DERIVED_VIEW_INPUT]))
-          .min(1)
-          .max(MAX_PLAN_NODES),
-      })
-      .strict(),
-    presentation: SEMANTIC_CHART_INPUT.describe(
-      "唯一结果的呈现声明。必须显式选择 table、kpi、line、bar 或 pie；服务端不自动选图",
-    ),
+    title: z.string().min(1).max(100).optional(),
+    views: z
+      .array(z.union([SEMANTIC_QUERY_VIEW_INPUT, SEMANTIC_DERIVED_VIEW_INPUT]))
+      .min(1)
+      .max(MAX_PLAN_NODES),
   })
   .strict();
 
-export type SemanticAnalysisSpec = z.infer<typeof SEMANTIC_ANALYSIS_SPEC_INPUT>;
-
-/**
- * 呈现声明归一为表格。声明的图表在实际结果形态下画不出时（非空结果仍编译不出图），
- * 执行侧与编辑器都用它当场收敛，规格里不留「声明是图、呈现是表」的冲突态。
- */
-export function withTablePresentation(spec: SemanticAnalysisSpec): SemanticAnalysisSpec {
-  return { ...spec, presentation: { type: "table" } };
-}
+export type AnalysisDefinition = z.infer<typeof ANALYSIS_DEFINITION_INPUT>;
 
 function semanticOperands(column: SemanticDerivedColumn): SemanticColumnOperand[] {
   if ("member" in column) return [column];
@@ -499,35 +419,30 @@ function validateSemanticDerivedView(
   });
 }
 
-export function parseSemanticAnalysisSpec(value: unknown): SemanticAnalysisSpec {
-  const parsed = SEMANTIC_ANALYSIS_SPEC_INPUT.safeParse(value);
+export function parseAnalysisDefinition(value: unknown): AnalysisDefinition {
+  const parsed = ANALYSIS_DEFINITION_INPUT.safeParse(value);
   if (!parsed.success) {
     throw new Error(
-      `语义分析规格无效：${parsed.error.issues.map((issue) => issue.message).join("；")}`,
+      `分析定义无效：${parsed.error.issues.map((issue) => issue.message).join("；")}`,
     );
   }
-  const ids = new Set(parsed.data.analysis.views.map((view) => view.id));
-  if (ids.size !== parsed.data.analysis.views.length) throw new Error("语义分析的视图 id 不得重复");
-  const queryCount = parsed.data.analysis.views.filter(
-    (view) => !isSemanticDerivedView(view),
-  ).length;
+  const ids = new Set(parsed.data.views.map((view) => view.id));
+  if (ids.size !== parsed.data.views.length) throw new Error("分析定义的视图 id 不得重复");
+  const queryCount = parsed.data.views.filter((view) => !isSemanticDerivedView(view)).length;
   if (!queryCount) throw new Error("语义分析至少需要一个查询视图作为数据来源");
-  for (const view of parsed.data.analysis.views) {
+  for (const view of parsed.data.views) {
     if (isSemanticDerivedView(view)) {
-      validateSemanticDerivedView(view, parsed.data.analysis.views);
+      validateSemanticDerivedView(view, parsed.data.views);
     }
   }
-  const outputId = semanticAnalysisSink(parsed.data.analysis.views);
-  const calculationView = parsed.data.analysis.views.find(
+  const outputId = semanticAnalysisSink(parsed.data.views);
+  const calculationView = parsed.data.views.find(
     (view) => !isSemanticDerivedView(view) && view.calculations?.length,
   );
-  if (
-    calculationView &&
-    (calculationView.id !== outputId || parsed.data.analysis.views.length > 1)
-  ) {
+  if (calculationView && (calculationView.id !== outputId || parsed.data.views.length > 1)) {
     throw new Error("报告级构成占比只能声明在唯一直接结果视图中");
   }
-  const internalGroupSort = parsed.data.analysis.views.find(
+  const internalGroupSort = parsed.data.views.find(
     (view) => !isSemanticDerivedView(view) && view.group_sort && view.id !== outputId,
   );
   if (internalGroupSort) {
@@ -538,10 +453,6 @@ export function parseSemanticAnalysisSpec(value: unknown): SemanticAnalysisSpec 
   return parsed.data;
 }
 
-export function semanticResultViewId(spec: SemanticAnalysisSpec): string {
-  return semanticAnalysisSink(spec.analysis.views);
-}
-
-export function semanticPresentationType(spec: SemanticAnalysisSpec): SemanticChart["type"] {
-  return spec.presentation.type;
+export function semanticResultViewId(definition: AnalysisDefinition): string {
+  return semanticAnalysisSink(definition.views);
 }

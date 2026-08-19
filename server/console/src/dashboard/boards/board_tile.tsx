@@ -139,7 +139,7 @@ export function BoardTile({
   });
 
   const isReportOwner = data?.caller === viewerEmail;
-  const hasReportAction = !!data && (isReportOwner || !!data.payload.analysis_id);
+  const hasReportAction = !!data && (isReportOwner || !!data.payload.view_id);
   /**
    * 文案与整板「编辑看板」刻意分立：查看态不说「编辑」，避免像在改板；
    * 整板编辑态才用「编辑报告」。非报告主只给「调整并另存」。

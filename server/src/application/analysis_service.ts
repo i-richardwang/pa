@@ -2,77 +2,106 @@ import type { Principal } from "../engine/cube_security.js";
 import type { QueryRunResult } from "./query_pipeline.js";
 import type { ExecutionPlan } from "../semantic_core/execution_plan.js";
 import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
-import { compilePresentationBlock } from "../presentation_core/chart_config.js";
 import {
-  parseSemanticAnalysisSpec,
-  withTablePresentation,
-  type SemanticChart,
-  type SemanticAnalysisSpec,
+  parseAnalysisDefinition,
+  SEMANTIC_VIEW_INTENT_INPUT,
+  type AnalysisDefinition,
+  type SemanticViewIntent,
 } from "../semantic_core/semantic_analysis.js";
-import type { CompiledSemanticAnalysis } from "../engine/semantic_analysis_compiler.js";
-import type { AnalysisRecord, AnalysisRepository } from "../ports/analysis_repository.js";
+import type { CompiledAnalysisView } from "../engine/semantic_analysis_compiler.js";
+import type {
+  AnalysisRecord,
+  AnalysisRepository,
+  OwnedAnalysisView,
+} from "../ports/analysis_repository.js";
 import type { UsageLog } from "../ports/usage_log.js";
 import type { RecordProjectionBindings } from "../contracts/record_projection_contract.js";
+import {
+  EMPTY_VIEW_PREFERENCES,
+  validateViewPreferences,
+  type ViewPreferences,
+} from "../presentation_core/view_preferences.js";
+import type { ChartDecl } from "../presentation_core/view_shape.js";
 
-/** 执行器只收不透明 plan——由 compiler 产出后直接递入。 */
+/** Run 只消费编译工件，不认识持久化身份。 */
 type ExecuteAnalysis = (
   principal: Principal,
   plan: ExecutionPlan,
   presentation: PresentationSpec,
 ) => Promise<QueryRunResult>;
 
-/** 语义编译入口：语义规格 → 私有执行计划 + 已解析物理呈现。 */
-type CompileSemantic = (
+type CompileAnalysisView = (
   principal: Principal,
-  spec: SemanticAnalysisSpec,
-) => Promise<CompiledSemanticAnalysis>;
+  definition: AnalysisDefinition,
+  intent: SemanticViewIntent,
+  preferences?: ViewPreferences,
+) => Promise<CompiledAnalysisView>;
 
+export type MaterializedAnalysisView = OwnedAnalysisView & {
+  render_decl: ChartDecl;
+  presentation: PresentationSpec;
+  record_projection_bindings: RecordProjectionBindings;
+};
+
+/** 一次瞬态 Run 的结果；数据库只保存其 analysis/view 引用，不保存此对象。 */
 export type ExecutedAnalysis = QueryRunResult & {
   analysis_id: string;
-  /** 本次执行的语义规格（句柄回显用）。 */
-  spec: SemanticAnalysisSpec;
-  /** 编译解析出的物理呈现——供图表装配与运行期降级说明。 */
+  view_id: string;
+  definition: AnalysisDefinition;
+  intent: SemanticViewIntent;
+  preferences: ViewPreferences;
   presentation: PresentationSpec;
-  /** 最终结果格可以投影到的受控记录集绑定。 */
   record_projection_bindings: RecordProjectionBindings;
 };
 
 export function createAnalysisService(deps: {
   repository: AnalysisRepository;
   execute: ExecuteAnalysis;
-  compile: CompileSemantic;
+  compile: CompileAnalysisView;
   usage: Pick<UsageLog, "log">;
 }) {
   async function executeAndLog(input: {
     principal: Principal;
-    /** 本次执行的语义规格：落库为句柄、回显给编辑器。 */
-    spec: SemanticAnalysisSpec;
-    /** 该语义规格的编译产物（执行器只消费 compiled.plan，图表消费 compiled.presentation）。 */
-    compiled: CompiledSemanticAnalysis;
+    definition: AnalysisDefinition;
+    intent: SemanticViewIntent;
+    preferences: ViewPreferences;
+    compiled: CompiledAnalysisView;
     tool: "run_analysis" | "rerun_analysis" | "report_replay" | "replay";
-    analysisId?: string;
-    existing?: AnalysisRecord;
-    createHandle: boolean;
+    analysis?: AnalysisRecord;
+    identity?: OwnedAnalysisView;
+    createIdentity: "analysis" | "view" | "none";
     args: unknown;
   }): Promise<ExecutedAnalysis> {
     const started = performance.now();
-    const { spec, compiled } = input;
-    const title = spec.analysis.title;
+    const title = input.definition.title;
     try {
-      const result = await deps.execute(input.principal, compiled.plan, compiled.presentation);
-      // 非空结果画不出声明图表时，当场归一为表格；表格布局失败保留原声明并由呈现状态明确说明，
-      // 不能因一次结果形态改变用户的行列意图。
-      const presentationBlock = compilePresentationBlock(result.fullRowViewBlock, result.decl);
-      const degraded =
-        result.fullRowViewBlock.rows.length > 0 &&
-        compiled.presentation.type !== "table" &&
-        presentationBlock.type === "table";
-      const settledSpec = input.createHandle && degraded ? withTablePresentation(spec) : spec;
-      const handle = input.createHandle
-        ? await deps.repository.create(input.principal.email, settledSpec)
-        : (input.existing ??
-          (await deps.repository.resolveOwned(input.analysisId ?? "", input.principal.email)));
-      const payload = { ...result.payload, analysis_id: handle.id };
+      const result = await deps.execute(
+        input.principal,
+        input.compiled.plan,
+        input.compiled.presentation,
+      );
+      const identity =
+        input.createIdentity === "analysis"
+          ? await deps.repository.create(
+              input.principal.email,
+              input.definition,
+              input.intent,
+              input.preferences,
+            )
+          : input.createIdentity === "view"
+            ? await deps.repository.createView(
+                input.principal.email,
+                input.analysis?.id ?? input.identity?.analysis.id ?? "",
+                input.intent,
+                input.preferences,
+              )
+            : input.identity;
+      if (!identity) throw new Error("执行结果缺少分析视图身份");
+      const payload = {
+        ...result.payload,
+        analysis_id: identity.analysis.id,
+        view_id: identity.view.id,
+      };
       await deps.usage.log({
         caller: input.principal.email,
         tool: input.tool,
@@ -82,15 +111,19 @@ export function createAnalysisService(deps: {
         row_count: payload.view.row_count,
         has_more: payload.view.has_more,
         duration_ms: performance.now() - started,
-        analysis_id: handle.id,
+        analysis_id: identity.analysis.id,
+        view_id: identity.view.id,
       });
       return {
         ...result,
         payload,
-        analysis_id: handle.id,
-        spec: handle.spec,
-        presentation: compiled.presentation,
-        record_projection_bindings: compiled.record_projection_bindings,
+        analysis_id: identity.analysis.id,
+        view_id: identity.view.id,
+        definition: identity.analysis.definition,
+        intent: identity.view.intent,
+        preferences: identity.view.preferences,
+        presentation: input.compiled.presentation,
+        record_projection_bindings: input.compiled.record_projection_bindings,
       };
     } catch (error) {
       await deps.usage.log({
@@ -101,7 +134,12 @@ export function createAnalysisService(deps: {
         outcome: "error",
         error: error instanceof Error ? error.message : String(error),
         duration_ms: performance.now() - started,
-        ...(input.analysisId ? { analysis_id: input.analysisId } : {}),
+        ...(input.identity || input.analysis
+          ? {
+              analysis_id: input.analysis?.id ?? input.identity!.analysis.id,
+              ...(input.identity ? { view_id: input.identity.view.id } : {}),
+            }
+          : {}),
       });
       throw error;
     }
@@ -109,94 +147,147 @@ export function createAnalysisService(deps: {
 
   async function run(
     principal: Principal,
-    rawSpec: SemanticAnalysisSpec,
+    rawDefinition: AnalysisDefinition,
+    rawIntent: SemanticViewIntent,
   ): Promise<ExecutedAnalysis> {
-    const spec = parseSemanticAnalysisSpec(rawSpec);
-    const compiled = await deps.compile(principal, spec);
+    const definition = parseAnalysisDefinition(rawDefinition);
+    const intent = SEMANTIC_VIEW_INTENT_INPUT.parse(rawIntent);
+    const preferences = EMPTY_VIEW_PREFERENCES;
+    const compiled = await deps.compile(principal, definition, intent, preferences);
     return executeAndLog({
       principal,
-      spec,
+      definition,
+      intent,
+      preferences,
       compiled,
       tool: "run_analysis",
-      createHandle: true,
-      args: { spec },
+      createIdentity: "analysis",
+      args: { analysis: definition, view: intent },
     });
   }
 
   async function rerun(
     principal: Principal,
     analysisId: string,
-    presentation: SemanticChart,
+    rawIntent: SemanticViewIntent,
   ): Promise<ExecutedAnalysis> {
-    const handle = await deps.repository.resolveOwned(analysisId, principal.email);
-    const spec = parseSemanticAnalysisSpec({ ...handle.spec, presentation });
-    const compiled = await deps.compile(principal, spec);
+    const analysis = await deps.repository.resolveOwnedAnalysis(analysisId, principal.email);
+    const intent = SEMANTIC_VIEW_INTENT_INPUT.parse(rawIntent);
+    const preferences = EMPTY_VIEW_PREFERENCES;
+    const compiled = await deps.compile(principal, analysis.definition, intent, preferences);
     return executeAndLog({
       principal,
-      spec,
+      definition: analysis.definition,
+      intent,
+      preferences,
       compiled,
       tool: "rerun_analysis",
-      analysisId,
-      createHandle: true,
-      args: { analysis_id: analysisId, presentation },
+      analysis,
+      createIdentity: "view",
+      args: { analysis_id: analysisId, view: intent },
     });
   }
 
-  async function replay(principal: Principal, analysisId: string): Promise<ExecutedAnalysis> {
-    const handle = await deps.repository.resolveOwned(analysisId, principal.email);
-    const compiled = await deps.compile(principal, handle.spec);
-    return executeAndLog({
-      principal,
-      spec: handle.spec,
-      compiled,
-      tool: "replay",
-      analysisId,
-      existing: handle,
-      createHandle: false,
-      args: { analysis_id: analysisId },
-    });
-  }
-
-  // 只校验句柄归属与有效期，不执行查询；供结果卡挂载入口在创建 UI 前 fail-closed。
-  async function ensureOwned(principal: Principal, analysisId: string): Promise<void> {
-    await deps.repository.resolveOwned(analysisId, principal.email);
-  }
-
-  // 报告/看板运行：复用 Report 指向的不可变 Analysis，不复制规格、不铸造新句柄。
-  async function executeReferenced(
+  async function materializeView(
     principal: Principal,
-    analysis: AnalysisRecord,
-    compiled: CompiledSemanticAnalysis,
-    reportId: string,
-  ): Promise<ExecutedAnalysis> {
-    return executeAndLog({
-      principal,
-      spec: analysis.spec,
-      compiled,
-      tool: "report_replay",
-      analysisId: analysis.id,
-      existing: analysis,
-      createHandle: false,
-      args: { report_id: reportId },
-    });
+    analysisId: string,
+    rawIntent: SemanticViewIntent,
+    rawPreferences: ViewPreferences,
+  ): Promise<MaterializedAnalysisView> {
+    const analysis = await deps.repository.resolveOwnedAnalysis(analysisId, principal.email);
+    const intent = SEMANTIC_VIEW_INTENT_INPUT.parse(rawIntent);
+    const preferences = validateViewPreferences(intent, rawPreferences);
+    const compiled = await deps.compile(principal, analysis.definition, intent, preferences);
+    const identity = await deps.repository.createView(
+      principal.email,
+      analysis.id,
+      intent,
+      preferences,
+    );
+    return {
+      ...identity,
+      render_decl: compiled.render_decl,
+      presentation: compiled.presentation,
+      record_projection_bindings: compiled.record_projection_bindings,
+    };
   }
 
   async function preview(
     principal: Principal,
-    spec: SemanticAnalysisSpec,
-    compiled: CompiledSemanticAnalysis,
+    rawDefinition: AnalysisDefinition,
+    rawIntent: SemanticViewIntent,
+    rawPreferences: ViewPreferences,
+    compiled?: CompiledAnalysisView,
   ): Promise<ExecutedAnalysis> {
+    const definition = parseAnalysisDefinition(rawDefinition);
+    const intent = SEMANTIC_VIEW_INTENT_INPUT.parse(rawIntent);
+    const preferences = validateViewPreferences(intent, rawPreferences);
+    const planned = compiled ?? (await deps.compile(principal, definition, intent, preferences));
     return executeAndLog({
       principal,
-      spec,
-      compiled,
+      definition,
+      intent,
+      preferences,
+      compiled: planned,
       tool: "run_analysis",
-      createHandle: true,
-      args: { spec, source: "editor" },
+      createIdentity: "analysis",
+      args: { analysis: definition, source: "editor" },
     });
   }
 
-  return { run, rerun, replay, ensureOwned, executeReferenced, preview };
+  async function replay(principal: Principal, viewId: string): Promise<ExecutedAnalysis> {
+    const identity = await deps.repository.resolveOwnedView(viewId, principal.email);
+    const compiled = await deps.compile(
+      principal,
+      identity.analysis.definition,
+      identity.view.intent,
+      identity.view.preferences,
+    );
+    return executeAndLog({
+      principal,
+      definition: identity.analysis.definition,
+      intent: identity.view.intent,
+      preferences: identity.view.preferences,
+      compiled,
+      tool: "replay",
+      identity,
+      createIdentity: "none",
+      args: { view_id: viewId },
+    });
+  }
+
+  async function ensureOwned(principal: Principal, viewId: string): Promise<void> {
+    await deps.repository.resolveOwnedView(viewId, principal.email);
+  }
+
+  async function executeReferenced(
+    principal: Principal,
+    identity: OwnedAnalysisView,
+    compiled: CompiledAnalysisView,
+    reportId: string,
+  ): Promise<ExecutedAnalysis> {
+    return executeAndLog({
+      principal,
+      definition: identity.analysis.definition,
+      intent: identity.view.intent,
+      preferences: identity.view.preferences,
+      compiled,
+      tool: "report_replay",
+      identity,
+      createIdentity: "none",
+      args: { report_id: reportId },
+    });
+  }
+
+  return {
+    run,
+    rerun,
+    materializeView,
+    preview,
+    replay,
+    ensureOwned,
+    executeReferenced,
+  };
 }
 
 export type AnalysisService = ReturnType<typeof createAnalysisService>;

@@ -1,6 +1,6 @@
 /**
  * 看板瓦片的分叉调整：以他人（或自己）看板上的报告为种子，在同一工作台里改，
- * 保存时以当前身份铸自有 Analysis 并新建报告——不把别人的 `analysis_id` 挂到自己名下。
+ * 保存时以当前身份铸自有 Analysis/View 并新建报告——不把别人的身份挂到自己名下。
  * 面包屑父级是那块看板，故「不改了」走面包屑回去，不另设取消钮。
  */
 import { AnalysisWorkbench } from "../analyses/analysis_workbench";
@@ -20,12 +20,21 @@ export function BoardReportEditPage({ boardId, reportId }: { boardId: string; re
   const name =
     (tile?.kind === "report" ? tile.name : undefined) ??
     replay?.payload.title ??
-    replay?.spec.analysis.title ??
+    replay?.analysis.title ??
     "分析副本";
   const error = errorText(boardQuery.error) ?? errorText(replayQuery.error);
   const edit = useAnalysisEditSession({
     sessionKey: `board:${boardId}:report:${reportId}`,
-    seed: board && replay ? { name, spec: replay.spec, hasSavedResult: true } : null,
+    seed:
+      board && replay
+        ? {
+            name,
+            analysis: replay.analysis,
+            view: replay.view,
+            view_preferences: replay.view_preferences,
+            hasSavedResult: true,
+          }
+        : null,
     // 分叉的规格取自那份重放本身：规格与结果同来同走，没有可拆的两条腿。
     savedReplay: replay,
     target: { kind: "create" },

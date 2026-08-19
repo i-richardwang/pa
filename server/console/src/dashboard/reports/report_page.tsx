@@ -38,9 +38,11 @@ export function ReportPage({ id }: { id: string }) {
   const seed = report
     ? {
         name: report.name,
-        spec: report.spec,
+        analysis: report.analysis,
+        view: report.view,
+        view_preferences: report.view_preferences,
         hasSavedResult: true,
-        ownedAnalysisId: report.analysis_id,
+        ownedViewId: report.view_id,
       }
     : null;
   const edit = useAnalysisEditSession({
@@ -53,7 +55,7 @@ export function ReportPage({ id }: { id: string }) {
     scope: "report",
     reportId: id,
     replay: savedReplay,
-    // 明细只对已保存的那份结果开放：草稿预览是未落库的临时执行，没有可投影的记录集。
+    // 明细只对报告当前保存的 View 开放，避免草稿坐标与报告 revision 交叉。
     disabled: !edit.showingSavedReplay,
     onRequest: setRecordProjectionRequest,
   });

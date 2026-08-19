@@ -27,7 +27,7 @@ export function registerReportTools(
       title: "保存报告",
       description: TOOL_DESCRIPTIONS.save_report,
       inputSchema: {
-        analysis_id: z.string().uuid(),
+        view_id: z.string().uuid(),
         name: z.string().min(1).max(100),
       },
       outputSchema: {
@@ -39,10 +39,10 @@ export function registerReportTools(
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    usage.wrap({ tool: "save_report", caller }, async (input) => {
+    async (input) => {
       const report = await reports.save({
         principal,
-        analysisId: input.analysis_id,
+        viewId: input.view_id,
         name: input.name,
       });
       const payload = {
@@ -55,7 +55,7 @@ export function registerReportTools(
         content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
         structuredContent: payload,
       };
-    }),
+    },
   );
 
   server.registerTool(
@@ -77,22 +77,19 @@ export function registerReportTools(
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    usage.wrap(
-      { tool: "update_report", caller },
-      async (input: { id: string; action: ReportUpdateAction; if_revision?: number }) => {
-        const report = await reports.update(principal, input.id, input.action, input.if_revision);
-        const payload = {
-          id: report.id,
-          name: report.name,
-          revision: report.revision,
-          updated_at: report.updated_at,
-        };
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(payload) }],
-          structuredContent: payload,
-        };
-      },
-    ),
+    async (input: { id: string; action: ReportUpdateAction; if_revision?: number }) => {
+      const report = await reports.update(principal, input.id, input.action, input.if_revision);
+      const payload = {
+        id: report.id,
+        name: report.name,
+        revision: report.revision,
+        updated_at: report.updated_at,
+      };
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(payload) }],
+        structuredContent: payload,
+      };
+    },
   );
 
   server.registerTool(
@@ -107,6 +104,7 @@ export function registerReportTools(
             id: z.string(),
             name: z.string(),
             analysis_id: z.string().uuid(),
+            view_id: z.string().uuid(),
             result_view_id: z.string(),
             presentation_type: PRESENTATION_TYPE_SCHEMA,
             revision: z.number().int(),

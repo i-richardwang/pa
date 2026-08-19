@@ -217,7 +217,7 @@ export function CommandPalette({
       analysesQuery.isError
         ? []
         : (analysesQuery.data?.rows.flatMap((r) =>
-            r.analysis_id ? [{ kind: "analysis", id: r.analysis_id, title: r.title }] : [],
+            r.view_id ? [{ kind: "analysis", id: r.view_id, title: r.title }] : [],
           ) ?? null),
     [analysesQuery.data, analysesQuery.isError],
   );

@@ -13,13 +13,16 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReplayPayload } from "@contracts/replay_contract";
-import type { SemanticAnalysisSpec } from "@semantic-analysis";
+import type { AnalysisDefinition, SemanticViewIntent } from "@semantic-analysis";
+import type { ViewPreferences } from "@view-preferences";
+import { compilePresentationBlock } from "@charts";
 import { toastManager } from "@/components/ui/toast";
 import { ApiError } from "../api";
 import { useCreateReport } from "../dashboard_queries";
 import {
   beginAnalysisEdit,
-  hasSpecChanges,
+  hasAnalysisChanges,
+  hasViewChanges,
   isAnalysisEditDirty,
   isAnalysisRunnable,
   isPreviewCurrent,
@@ -27,16 +30,18 @@ import {
   settleSaved,
   type AnalysisEditState,
 } from "./analysis_draft";
-import { usePreviewAnalysis, useUpdateReport } from "../editor_queries";
+import { useMaterializeAnalysisView, usePreviewAnalysis, useUpdateReport } from "../editor_queries";
 import { reportHash, useLeaveBlocker } from "../router";
 
 export type AnalysisEditorSeed = {
   name: string;
-  spec: SemanticAnalysisSpec;
+  analysis: AnalysisDefinition;
+  view: SemanticViewIntent;
+  view_preferences?: ViewPreferences;
 
   hasSavedResult: boolean;
-  /** 只有当前用户自有 Analysis 才能直接被报告引用；看板分叉不提供该字段。 */
-  ownedAnalysisId?: string;
+  /** 只有当前用户自有 View 才能直接被报告引用；看板分叉不提供该字段。 */
+  ownedViewId?: string;
 };
 
 export type AnalysisEditorTarget =
@@ -71,6 +76,7 @@ export function useAnalysisEditSession({
   const updateReport = useUpdateReport(target.kind === "update" ? target.reportId : "");
   const createReport = useCreateReport();
   const previewAnalysis = usePreviewAnalysis();
+  const materializeView = useMaterializeAnalysisView();
   const savedReplay = savedReplayInput;
   const activeReplay = previewReplay ?? savedReplay;
 
@@ -115,25 +121,84 @@ export function useAnalysisEditSession({
 
   const presentationNotes = useMemo(() => {
     if (!activeReplay) return [];
-    if (draft && hasSpecChanges(draft) && !isPreviewCurrent(draft)) return [];
-    return (activeReplay.presentation_notes ?? []).filter(
-      (note) => note.kind !== "unsupported_shape",
-    );
+    if (draft && (hasAnalysisChanges(draft) || hasViewChanges(draft)) && !isPreviewCurrent(draft)) {
+      return [];
+    }
+    return activeReplay.presentation_notes ?? [];
   }, [draft, activeReplay]);
 
   async function previewDraft(current: AnalysisEditState): Promise<{
-    analysisId: string;
+    viewId: string;
     replay: ReplayPayload;
     draft: AnalysisEditState;
   } | null> {
     const epoch = editEpoch.current;
     try {
-      const next = await previewAnalysis.mutateAsync(current.spec);
+      const next = await previewAnalysis.mutateAsync({
+        analysis: current.analysis,
+        view: current.view,
+        view_preferences: current.view_preferences,
+      });
       if (epoch !== editEpoch.current) return null;
       const settled = settlePreview(current, next);
       setPreviewReplay(next);
       setDraft(settled);
-      return { analysisId: next.analysis_id, replay: next, draft: settled };
+      return { viewId: next.view_id, replay: next, draft: settled };
+    } catch (reason) {
+      if (epoch !== editEpoch.current) return null;
+      if (reason instanceof ApiError && reason.status === 401) return null;
+      toastManager.add({
+        type: "error",
+        title: "预览失败",
+        description: reason instanceof Error ? reason.message : String(reason),
+      });
+      return null;
+    }
+  }
+
+  async function materializeViewDraft(current: AnalysisEditState): Promise<{
+    viewId: string;
+    replay: ReplayPayload;
+    draft: AnalysisEditState;
+  } | null> {
+    const source = activeReplay;
+    if (!source) return previewDraft(current);
+    const epoch = editEpoch.current;
+    try {
+      const materialized = await materializeView.mutateAsync({
+        analysis_id: source.analysis_id,
+        view: current.view,
+        view_preferences: current.view_preferences,
+      });
+      const presentation = compilePresentationBlock(
+        source.render_bundle.view,
+        materialized.render_decl,
+      );
+      if (epoch !== editEpoch.current) return null;
+      const next: ReplayPayload = {
+        ...source,
+        at: new Date().toISOString(),
+        analysis_id: materialized.analysis_id,
+        view_id: materialized.view_id,
+        view: materialized.view,
+        view_preferences: materialized.view_preferences,
+        record_projection_bindings: materialized.record_projection_bindings,
+        payload: {
+          ...source.payload,
+          analysis_id: materialized.analysis_id,
+          view_id: materialized.view_id,
+        },
+        render_bundle: {
+          view: source.render_bundle.view,
+          decl: materialized.render_decl,
+        },
+        presentation,
+        presentation_notes: undefined,
+      };
+      const settled = settlePreview(current, next);
+      setPreviewReplay(next);
+      setDraft(settled);
+      return { viewId: next.view_id, replay: next, draft: settled };
     } catch (reason) {
       if (epoch !== editEpoch.current) return null;
       if (reason instanceof ApiError && reason.status === 401) return null;
@@ -148,7 +213,11 @@ export function useAnalysisEditSession({
 
   async function runPreview(): Promise<boolean> {
     if (!draft || !isAnalysisRunnable(draft)) return false;
-    const result = await previewDraft(draft);
+    const result = hasAnalysisChanges(draft)
+      ? await previewDraft(draft)
+      : hasViewChanges(draft)
+        ? await materializeViewDraft(draft)
+        : { viewId: activeReplay?.view_id ?? "" };
     if (!result) return false;
     toastManager.add({ type: "success", title: "预览已更新" });
     return true;
@@ -160,9 +229,14 @@ export function useAnalysisEditSession({
   }
 
   async function materialize(current: AnalysisEditState): Promise<string | null> {
-    if (!hasSpecChanges(current) && seed?.ownedAnalysisId) return seed.ownedAnalysisId;
-    if (isPreviewCurrent(current) && previewReplay) return previewReplay.analysis_id;
-    return (await previewDraft(current))?.analysisId ?? null;
+    if (!hasAnalysisChanges(current) && !hasViewChanges(current) && seed?.ownedViewId) {
+      return seed.ownedViewId;
+    }
+    if (isPreviewCurrent(current) && previewReplay) return previewReplay.view_id;
+    if (hasAnalysisChanges(current) || !activeReplay) {
+      return (await previewDraft(current))?.viewId ?? null;
+    }
+    return (await materializeViewDraft(current))?.viewId ?? null;
   }
 
   async function save(): Promise<boolean> {
@@ -171,7 +245,7 @@ export function useAnalysisEditSession({
       if (target.kind === "update") {
         if (!dirty) return false;
         const ifRevision = baselineRevision ?? target.ifRevision;
-        if (!hasSpecChanges(draft)) {
+        if (!hasAnalysisChanges(draft) && !hasViewChanges(draft)) {
           const renamed = await updateReport.mutateAsync({
             action: { type: "rename", name: draft.name },
             if_revision: ifRevision,
@@ -180,12 +254,12 @@ export function useAnalysisEditSession({
           toastManager.add({ type: "success", title: "已保存报告" });
           return true;
         }
-        const analysisId = await materialize(draft);
-        if (!analysisId) return false;
+        const viewId = await materialize(draft);
+        if (!viewId) return false;
         const replaced = await updateReport.mutateAsync({
           action: {
-            type: "replace_analysis",
-            analysis_id: analysisId,
+            type: "replace_view",
+            view_id: viewId,
             ...(draft.name !== draft.baseline_name ? { name: draft.name } : {}),
           },
           if_revision: ifRevision,
@@ -195,9 +269,9 @@ export function useAnalysisEditSession({
         return true;
       }
 
-      const analysisId = await materialize(draft);
-      if (!analysisId) return false;
-      const report = await createReport.mutateAsync({ analysis_id: analysisId, name: draft.name });
+      const viewId = await materialize(draft);
+      if (!viewId) return false;
+      const report = await createReport.mutateAsync({ view_id: viewId, name: draft.name });
       window.location.hash = reportHash(report.id).slice(1);
       toastManager.add({ type: "success", title: `已保存「${report.name}」` });
       return true;
@@ -226,9 +300,9 @@ export function useAnalysisEditSession({
   async function saveAs(): Promise<boolean> {
     if (!draft || !seed || !draft.name.trim()) return false;
     try {
-      const analysisId = await materialize(draft);
-      if (!analysisId) return false;
-      const report = await createReport.mutateAsync({ analysis_id: analysisId, name: draft.name });
+      const viewId = await materialize(draft);
+      if (!viewId) return false;
+      const report = await createReport.mutateAsync({ view_id: viewId, name: draft.name });
       window.location.hash = reportHash(report.id).slice(1);
       toastManager.add({ type: "success", title: `已另存为「${report.name}」` });
       return true;
@@ -260,8 +334,12 @@ export function useAnalysisEditSession({
     resultPending: seed?.hasSavedResult === true && activeReplay === null,
     preview,
     presentationNotes,
-    saving: updateReport.isPending || createReport.isPending || previewAnalysis.isPending,
-    previewing: previewAnalysis.isPending,
+    saving:
+      updateReport.isPending ||
+      createReport.isPending ||
+      previewAnalysis.isPending ||
+      materializeView.isPending,
+    previewing: previewAnalysis.isPending || materializeView.isPending,
     canSave:
       !!draft &&
       !!seed &&

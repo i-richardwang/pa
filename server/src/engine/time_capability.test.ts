@@ -14,8 +14,8 @@ import {
   type TimeCapabilities,
   type TimeIntent,
 } from "../semantic_core/time_contract.js";
-import { parseSemanticAnalysisSpec } from "../semantic_core/semantic_analysis.js";
-import { compileSemanticAnalysis } from "./semantic_analysis_compiler.js";
+import { parseAnalysisDefinition } from "../semantic_core/semantic_analysis.js";
+import { compileAnalysisView } from "./semantic_analysis_compiler.js";
 import {
   buildCatalogDocument as buildRawCatalogDocument,
   toCompilerCatalog,
@@ -76,14 +76,12 @@ const cardOf = (id: string): TimeCapabilities =>
 /** 生产路径：语义规格（带 TimeIntent）→ 编译 → 物理时间规划。抛错即该组合被拒。 */
 function rejection(measureId: string, time: TimeIntent): string | undefined {
   try {
-    const plan = compileSemanticAnalysis(
-      compiler,
-      parseSemanticAnalysisSpec({
-        version: 2,
-        analysis: { views: [{ id: "v1", measures: [measureId], time }] },
-        presentation: { type: "table" },
+    const plan = compileAnalysisView(compiler, {
+      analysis: parseAnalysisDefinition({
+        views: [{ id: "v1", measures: [measureId], time }],
       }),
-    );
+      view: { type: "table" },
+    });
     const node = plan.plan.nodes[0];
     if (!node || "from" in node) throw new Error("夹具必须编译出查询节点");
     planMetricQuery({ measures: node.measures ?? [] }, node.time, context, views);

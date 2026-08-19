@@ -24,6 +24,8 @@ export const CHART_CHROME = {
   gridEdge: { light: "rgba(0, 0, 0, 0.15)", dark: "rgba(255, 255, 255, 0.16)" },
   /** 图表所在承载面（饼图切缝、需要遮挡时的底色） */
   surface: { light: "#ffffff", dark: "#171717" },
+  /** 值标签底片：浅灰药丸垫在系列色数字底下，描边用承载面色隔开数据 */
+  labelChip: { light: "#f7f7f8", dark: "#232323" },
 
   pointerBand: { light: "rgba(0, 0, 0, 0.04)", dark: "rgba(255, 255, 255, 0.07)" },
   /** 指针竖虚线（纯折线）= text-muted：它比网格线重（要被看见），比数据轻（不与线争） */

@@ -13,7 +13,7 @@ import {
   semanticPlanningStub,
 } from "../test_support/dashboard.js";
 import { planExecution } from "../semantic_core/execution_plan.js";
-import { semanticSpecOf } from "../test_support/report.js";
+import { semanticAnalysisOf } from "../test_support/report.js";
 import { REPLAY_PAYLOAD_SCHEMA } from "../contracts/replay_contract.js";
 import {
   REPORT_DETAIL_SCHEMA,
@@ -21,8 +21,17 @@ import {
   REPORTS_PAYLOAD_SCHEMA,
 } from "../contracts/report_contract.js";
 import { SemanticQueryIncompatibleError } from "../engine/semantic_analysis_compiler.js";
-import type { SemanticAnalysisSpec } from "../semantic_core/semantic_analysis.js";
+import type { AnalysisDefinition, SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
 import { createAnalysisRepository } from "../storage/analysis_repository.js";
+import type { AnalysisRepository } from "../ports/analysis_repository.js";
+
+async function createOwned(
+  repository: AnalysisRepository,
+  owner: string,
+  fixture: { analysis: AnalysisDefinition; view: SemanticViewIntent },
+) {
+  return repository.create(owner, fixture.analysis, fixture.view);
+}
 
 const emptyStructureView = {
   id: "structure",
@@ -63,7 +72,7 @@ const emptyChartResult = {
 describe("dashboard report routes", () => {
   const recordProjectionBody = {
     revision: 1,
-    view_id: "result",
+    result_view_id: "result",
     metric_id: "measure:active_employee_count",
     coordinates: [],
     time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -149,7 +158,7 @@ describe("dashboard report routes", () => {
     expect(await response.json()).toEqual({ error: "报告规格无法读取" });
   });
 
-  test("从本人 analysis handle 保存、列出、查看并重放报告", async () => {
+  test("从本人 View 保存、列出、查看并重放报告", async () => {
     const path = freshPath();
     const repository = createAnalysisRepository(createTestAppDatabase(path));
     const reports = createReports(createTestAppDatabase(path));
@@ -169,7 +178,7 @@ describe("dashboard report routes", () => {
       semanticPlanning: semanticPlanningStub,
       usage,
     });
-    const handle = await repository.create("alice@x", semanticSpecOf(STRUCTURE_ARGS));
+    const identity = await createOwned(repository, "alice@x", semanticAnalysisOf(STRUCTURE_ARGS));
     const app = dashboardRoutes({
       auth: {
         api: {
@@ -188,12 +197,13 @@ describe("dashboard report routes", () => {
     const createdResponse = await app.request("/api/reports", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ analysis_id: handle.id, name: "组织人数报告" }),
+      body: JSON.stringify({ view_id: identity.view.id, name: "组织人数报告" }),
     });
     expect(createdResponse.status).toBe(201);
     const created = REPORT_ROW_PAYLOAD_SCHEMA.parse(await createdResponse.json());
     expect(created.revision).toBe(1);
-    expect(created.analysis_id).toBe(handle.id);
+    expect(created.analysis_id).toBe(identity.analysis.id);
+    expect(created.view_id).toBe(identity.view.id);
 
     expect(
       REPORTS_PAYLOAD_SCHEMA.parse(await (await app.request("/api/reports")).json()),
@@ -206,14 +216,20 @@ describe("dashboard report routes", () => {
       REPORT_DETAIL_SCHEMA.parse(await (await app.request(`/api/reports/${created.id}`)).json()),
     ).toMatchObject({
       owner: "alice@x",
-      spec: semanticSpecOf(STRUCTURE_ARGS),
+      analysis: semanticAnalysisOf(STRUCTURE_ARGS).analysis,
+      view: semanticAnalysisOf(STRUCTURE_ARGS).view,
     });
     const replayed = await app.request(`/api/reports/${created.id}/replay`);
     expect(replayed.status).toBe(200);
     expect(REPLAY_PAYLOAD_SCHEMA.parse(await replayed.json())).toMatchObject({
       caller: "alice@x",
-      analysis_id: handle.id,
-      payload: { analysis_id: handle.id, title: "组织人数" },
+      analysis_id: identity.analysis.id,
+      view_id: identity.view.id,
+      payload: {
+        analysis_id: identity.analysis.id,
+        view_id: identity.view.id,
+        title: "组织人数",
+      },
     });
   });
 
@@ -229,29 +245,22 @@ describe("dashboard report routes", () => {
       execute: async () => emptyChartResult,
       usage,
     });
-    const semanticSpec = {
-      version: 2 as const,
-      analysis: {
-        views: [
-          {
-            id: "structure",
-            measures: ["measure:active_employee_count"],
-            dimensions: ["dimension:category_level"],
-            time: {
-              window: { kind: "current_month" as const, month: "2026-07" },
-            },
+    const semanticAnalysis: AnalysisDefinition = {
+      views: [
+        {
+          id: "structure",
+          measures: ["measure:active_employee_count"],
+          dimensions: ["dimension:category_level"],
+          time: {
+            window: { kind: "current_month" as const, month: "2026-07" },
           },
-        ],
-      },
-      presentation: {
-        type: "bar" as const,
-        category: "dimension:category_level",
-        series: ["measure:active_employee_count"],
-      },
+        },
+      ],
     };
-    const initialSemanticSpec = {
-      ...semanticSpec,
-      presentation: { type: "table" as const },
+    const semanticView: SemanticViewIntent = {
+      type: "bar",
+      category: "dimension:category_level",
+      series: ["measure:active_employee_count"],
     };
     const compiledPresentation = {
       type: "bar" as const,
@@ -260,13 +269,17 @@ describe("dashboard report routes", () => {
     };
     const plannedFor: string[] = [];
     const semanticPlanning = {
-      compile: async (principal: { email: string }, candidate: SemanticAnalysisSpec) => {
+      compile: async (
+        principal: { email: string },
+        candidate: AnalysisDefinition,
+        _view: SemanticViewIntent,
+      ) => {
         plannedFor.push(principal.email);
-        if (candidate.analysis.title === "不兼容") {
+        if (candidate.title === "不兼容") {
           throw new SemanticQueryIncompatibleError("所选业务字段无法安全组合", [
             {
               status: "incompatible",
-              view_id: "structure",
+              result_view_id: "structure",
               reason: "所选业务字段无法安全组合",
             },
           ]);
@@ -274,7 +287,8 @@ describe("dashboard report routes", () => {
         return {
           plan: planExecution(STRUCTURE_ARGS),
           presentation: compiledPresentation,
-          routes: [{ status: "direct" as const, view_id: "structure" }],
+          render_decl: compiledPresentation,
+          routes: [{ status: "direct" as const, result_view_id: "structure" }],
           record_projection_bindings: { views: [] },
         };
       },
@@ -287,11 +301,11 @@ describe("dashboard report routes", () => {
       semanticPlanning,
       usage,
     });
-    const initialAnalysis = await repository.create("alice@x", initialSemanticSpec);
+    const initialAnalysis = await repository.create("alice@x", semanticAnalysis, { type: "table" });
     const report = await reports.create({
       owner: "alice@x",
       name: "待更新",
-      analysisId: initialAnalysis.id,
+      viewId: initialAnalysis.view.id,
     });
     const app = dashboardRoutes({
       auth: {
@@ -312,15 +326,20 @@ describe("dashboard report routes", () => {
     const preview = await app.request("/api/analyses", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ spec: semanticSpec }),
+      body: JSON.stringify({
+        analysis: semanticAnalysis,
+        view: semanticView,
+        view_preferences: {},
+      }),
     });
     expect(preview.status).toBe(200);
     const previewPayload = REPLAY_PAYLOAD_SCHEMA.parse(await preview.json());
     expect(previewPayload).toMatchObject({
-      spec: semanticSpec,
+      analysis: semanticAnalysis,
+      view: semanticView,
       presentation_notes: [
         {
-          view_id: "structure",
+          result_view_id: "structure",
           kind: "empty_result",
           note: expect.stringContaining("结果为空"),
         },
@@ -331,10 +350,9 @@ describe("dashboard report routes", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        spec: {
-          ...semanticSpec,
-          analysis: { ...semanticSpec.analysis, title: "不兼容" },
-        },
+        analysis: { ...semanticAnalysis, title: "不兼容" },
+        view: semanticView,
+        view_preferences: {},
       }),
     });
     expect(incompatible.status).toBe(400);
@@ -343,7 +361,7 @@ describe("dashboard report routes", () => {
       routes: [
         {
           status: "incompatible",
-          view_id: "structure",
+          result_view_id: "structure",
           reason: "所选业务字段无法安全组合",
         },
       ],
@@ -354,8 +372,8 @@ describe("dashboard report routes", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: {
-          type: "replace_analysis",
-          analysis_id: previewPayload.analysis_id,
+          type: "replace_view",
+          view_id: previewPayload.view_id,
           name: "语义报告",
         },
         if_revision: report.revision,
@@ -365,22 +383,24 @@ describe("dashboard report routes", () => {
     expect(await saved.json()).toMatchObject({
       name: "语义报告",
       revision: 2,
-      spec: semanticSpec,
+      analysis: semanticAnalysis,
+      view: semanticView,
     });
-    expect((await reports.get(report.id))?.analysis_id).toBe(previewPayload.analysis_id);
-    expect((await reports.listRevisions(report.id, "alice@x"))[0].analysis_id).toBe(
-      initialAnalysis.id,
+    expect((await reports.get(report.id))?.view_id).toBe(previewPayload.view_id);
+    expect((await reports.listRevisions(report.id, "alice@x"))[0].view_id).toBe(
+      initialAnalysis.view.id,
     );
 
     const replayed = await app.request(`/api/reports/${report.id}/replay`);
     expect(replayed.status).toBe(200);
     expect(REPLAY_PAYLOAD_SCHEMA.parse(await replayed.json())).toMatchObject({
-      spec: semanticSpec,
+      analysis: semanticAnalysis,
+      view: semanticView,
     });
     expect(plannedFor).toEqual(["alice@x", "alice@x", "alice@x"]);
   });
 
-  test("派生报告通过新 Analysis 指针与名称原子更新", async () => {
+  test("派生报告通过新 View 指针与名称原子更新", async () => {
     const path = freshPath();
     const repository = createAnalysisRepository(createTestAppDatabase(path));
     const reports = createReports(createTestAppDatabase(path));
@@ -417,11 +437,11 @@ describe("dashboard report routes", () => {
         },
       ],
     };
-    const initial = await repository.create("alice@x", semanticSpecOf(derivedAnalysis));
+    const initial = await createOwned(repository, "alice@x", semanticAnalysisOf(derivedAnalysis));
     const report = await reports.create({
       owner: "alice@x",
       name: "含派生汇总",
-      analysisId: initial.id,
+      viewId: initial.view.id,
     });
     const app = dashboardRoutes({
       auth: {
@@ -438,15 +458,15 @@ describe("dashboard report routes", () => {
       presentation,
     });
 
-    const next = await repository.create("alice@x", semanticSpecOf(STRUCTURE_ARGS));
+    const next = await createOwned(repository, "alice@x", semanticAnalysisOf(STRUCTURE_ARGS));
     const represented = await app.request(`/api/reports/${report.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: {
-          type: "replace_analysis",
+          type: "replace_view",
           name: "派生报告新名",
-          analysis_id: next.id,
+          view_id: next.view.id,
         },
         if_revision: report.revision,
       }),
@@ -458,7 +478,7 @@ describe("dashboard report routes", () => {
     });
     expect(logs.at(-1)?.args).toMatchObject({
       source: "editor",
-      action: "replace_analysis",
+      action: "replace_view",
       if_revision: report.revision,
     });
   });
@@ -481,11 +501,11 @@ describe("dashboard report routes", () => {
       semanticPlanning: semanticPlanningStub,
       usage: { log: async () => {} },
     });
-    const initial = await repository.create("alice@x", semanticSpecOf(STRUCTURE_ARGS));
+    const initial = await createOwned(repository, "alice@x", semanticAnalysisOf(STRUCTURE_ARGS));
     const report = await reports.create({
       owner: "alice@x",
       name: "原名",
-      analysisId: initial.id,
+      viewId: initial.view.id,
     });
     const app = dashboardRoutes({
       auth: {
@@ -511,22 +531,20 @@ describe("dashboard report routes", () => {
     expect(renamed.status).toBe(200);
     expect(await renamed.json()).toMatchObject({ name: "新名称", revision: 2 });
 
-    const chartSpec = {
-      ...semanticSpecOf(STRUCTURE_ARGS),
-      presentation: {
-        type: "bar" as const,
-        category: "test_people_metrics.category_level",
-        series: ["test_people_metrics.active_employee_count"],
-      },
+    const chartDefinition = semanticAnalysisOf(STRUCTURE_ARGS).analysis;
+    const chartView: SemanticViewIntent = {
+      type: "bar",
+      category: "test_people_metrics.category_level",
+      series: ["test_people_metrics.active_employee_count"],
     };
-    const chartAnalysis = await repository.create("alice@x", chartSpec);
+    const chartAnalysis = await repository.create("alice@x", chartDefinition, chartView);
     const updated = await app.request(`/api/reports/${report.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: {
-          type: "replace_analysis",
-          analysis_id: chartAnalysis.id,
+          type: "replace_view",
+          view_id: chartAnalysis.view.id,
         },
         if_revision: 2,
       }),
@@ -534,11 +552,11 @@ describe("dashboard report routes", () => {
     expect(updated.status).toBe(200);
     const body = (await updated.json()) as {
       revision: number;
-      spec: { presentation: unknown };
+      view: { type: string };
     };
     expect(body.revision).toBe(3);
-    expect(body.spec.presentation).toMatchObject({ type: "bar" });
-    expect((await reports.get(report.id))?.analysis_id).toBe(chartAnalysis.id);
+    expect(body.view).toMatchObject({ type: "bar" });
+    expect((await reports.get(report.id))?.view_id).toBe(chartAnalysis.view.id);
 
     const conflict = await app.request(`/api/reports/${report.id}`, {
       method: "PATCH",
@@ -586,7 +604,7 @@ describe("dashboard report routes", () => {
     expect((await app.request(`/api/reports/${report.id}`)).status).toBe(200);
   });
 
-  test("analysis handle 和报告严格按属主隔离", async () => {
+  test("AnalysisView 和报告严格按属主隔离", async () => {
     const path = freshPath();
     const repository = createAnalysisRepository(createTestAppDatabase(path));
     const reports = createReports(createTestAppDatabase(path));
@@ -605,11 +623,11 @@ describe("dashboard report routes", () => {
       semanticPlanning: semanticPlanningStub,
       usage: { log: async () => {} },
     });
-    const bob = await repository.create("bob@x", semanticSpecOf(STRUCTURE_ARGS));
+    const bob = await createOwned(repository, "bob@x", semanticAnalysisOf(STRUCTURE_ARGS));
     const bobReport = await reports.create({
       owner: "bob@x",
       name: "Bob 报告",
-      analysisId: bob.id,
+      viewId: bob.view.id,
     });
     const app = dashboardRoutes({
       auth: {
@@ -628,7 +646,7 @@ describe("dashboard report routes", () => {
         await app.request("/api/reports", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ analysis_id: bob.id, name: "越权报告" }),
+          body: JSON.stringify({ view_id: bob.view.id, name: "越权报告" }),
         })
       ).status,
     ).toBe(400);
@@ -640,11 +658,11 @@ describe("dashboard report routes", () => {
     const path = freshPath();
     const repository = createAnalysisRepository(createTestAppDatabase(path));
     const reports = createReports(createTestAppDatabase(path));
-    const analysis = await repository.create("alice@x", semanticSpecOf(STRUCTURE_ARGS));
+    const analysis = await createOwned(repository, "alice@x", semanticAnalysisOf(STRUCTURE_ARGS));
     const report = await reports.create({
       owner: "alice@x",
       name: "执行失败报告",
-      analysisId: analysis.id,
+      viewId: analysis.view.id,
     });
     const analyses = createAnalysisService({
       repository,

@@ -579,9 +579,9 @@ export function ReportQueryRail({
   // 被编辑的视图取自草稿规格的收敛点，而非上一次结果的载荷——空白起点没有结果可反查，
   // 且草稿才是编辑对象的真相（结果只是它上一次运行的产物）。
   const resultTitleOf = replay ? makeTitleOf(replay.payload.view) : (member: string) => member;
-  const hasDerivedView = draft.spec.analysis.views.some(isSemanticDerivedView);
-  const sinkId = semanticAnalysisSink(draft.spec.analysis.views);
-  const selected = draft.spec.analysis.views.find((view) => view.id === sinkId);
+  const hasDerivedView = draft.analysis.views.some(isSemanticDerivedView);
+  const sinkId = semanticAnalysisSink(draft.analysis.views);
+  const selected = draft.analysis.views.find((view) => view.id === sinkId);
   const queryView =
     !hasDerivedView && selected && !isSemanticDerivedView(selected) ? selected : null;
 

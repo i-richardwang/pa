@@ -23,19 +23,25 @@ import {
   type PresentationSpec,
 } from "../presentation_core/presentation_spec.js";
 import {
-  parseSemanticAnalysisSpec,
+  parseAnalysisDefinition,
   isSemanticDerivedView,
   semanticAnalysisSink,
+  SEMANTIC_VIEW_INTENT_INPUT,
+  type AnalysisDefinition,
   type SemanticAnalysisView,
-  type SemanticChart,
+  type SemanticViewIntent,
   type SemanticColumnOperand,
   type SemanticDerivedView,
   type SemanticExprNode,
   type SemanticLiteralOperand,
   type SemanticPercentOfTotalCalculation,
   type SemanticQueryView,
-  type SemanticAnalysisSpec,
 } from "../semantic_core/semantic_analysis.js";
+import {
+  EMPTY_VIEW_PREFERENCES,
+  validateViewPreferences,
+  type ViewPreferences,
+} from "../presentation_core/view_preferences.js";
 import {
   catalogMember,
   planQueryIntent,
@@ -47,28 +53,32 @@ import type {
 } from "../contracts/record_projection_contract.js";
 import { planMetricRecordProjection } from "../semantic_core/record_projection_planner.js";
 import { compileTimeIntent, timeOutputColumns } from "../semantic_core/time_contract.js";
+import { projectPresentation } from "../presentation_core/presentation_projection.js";
+import type { ChartDecl } from "../presentation_core/view_shape.js";
 
 /**
  * 结果血缘（对外）：只讲业务事实——单来源直查 / 跨来源组合（来源标题 + 关联键） / 不可行原因。
- * 产物只含 status、view_id、sources.title、join_keys 与 reason；物理视图选路是编译器内务，不进入产物。
+ * 产物只含 status、result_view_id、sources.title、join_keys 与 reason；物理视图选路是编译器内务，不进入产物。
  */
 export type SemanticRoute =
   | {
       status: "direct";
-      view_id: string;
+      result_view_id: string;
     }
   | {
       status: "composed";
-      view_id: string;
+      result_view_id: string;
       sources: { title: string }[];
       join_keys: { id: string; title: string }[];
     }
-  | { status: "incompatible"; view_id: string; reason: string };
+  | { status: "incompatible"; result_view_id: string; reason: string };
 
-export type CompiledSemanticAnalysis = {
+export type CompiledAnalysisView = {
   /** 私有执行计划：计算节点与唯一结果已解析必填，交付路径消费此结构或其投影。 */
   plan: ExecutionPlan;
   presentation: PresentationSpec;
+  /** 面向 Web 渲染的公共列声明；不含物理成员名。 */
+  render_decl: ChartDecl;
   routes: SemanticRoute[];
   record_projection_bindings: RecordProjectionBindings;
 };
@@ -99,7 +109,7 @@ function recordProjectionBindingForIntent(
       title: dimension.title,
     };
   }
-  return { view_id: intent.id, metrics, dimensions };
+  return { result_view_id: intent.id, metrics, dimensions };
 }
 
 export class SemanticQueryIncompatibleError extends Error {
@@ -116,9 +126,9 @@ function routesForPlans(intents: SemanticQueryView[], plans: QueryIntentPlan[]):
   return plans.map((plan, index) => {
     const viewId = intents[index].id;
     if (plan.status === "direct") {
-      return { status: "direct", view_id: viewId };
+      return { status: "direct", result_view_id: viewId };
     }
-    return { status: "incompatible", view_id: viewId, reason: plan.reason };
+    return { status: "incompatible", result_view_id: viewId, reason: plan.reason };
   });
 }
 
@@ -140,7 +150,7 @@ function routesForDerived(
     });
     return {
       status: "composed",
-      view_id: view.id,
+      result_view_id: view.id,
       sources,
       join_keys: (view.join?.on ?? []).map((member) => ({
         id: member,
@@ -179,7 +189,7 @@ function semanticDelivery(
       route.status === "composed"
         ? [
             [
-              route.view_id,
+              route.result_view_id,
               {
                 sources: route.sources,
                 join_keys: route.join_keys,
@@ -240,7 +250,8 @@ type CalculatedMeasure = { title: string; numerator_id: string };
 function compileBoundChart(
   catalog: CompilerCatalog,
   intent: SemanticQueryView,
-  chart: SemanticChart,
+  chart: SemanticViewIntent,
+  style: ViewPreferences,
   bind: ChartMemberBinder,
   calculated: ReadonlyMap<string, CalculatedMeasure> = new Map(),
 ): ChartDeclInput {
@@ -251,8 +262,7 @@ function compileBoundChart(
       chart.annotations?.length ||
       chart.group_by ||
       chart.stack !== undefined ||
-      chart.display ||
-      (chart.type === "kpi" && (chart.columns || chart.shading))
+      (chart.type === "kpi" && chart.columns)
     ) {
       throw new Error(`${chart.type} 呈现不接受数据通道绑定`);
     }
@@ -265,7 +275,7 @@ function compileBoundChart(
             ),
           }
         : {}),
-      ...(chart.type === "table" && chart.shading ? { shading: chart.shading } : {}),
+      ...(chart.type === "table" && style.table_shading ? { shading: style.table_shading } : {}),
     };
   }
   if (chart.columns) throw new Error("columns 仅支持 table 呈现");
@@ -313,10 +323,22 @@ function compileBoundChart(
   ) {
     throw new Error("结构占比与分子同查时必须进入辅助标注通道");
   }
-  const display = chart.display?.series
+  const display = style.series
     ? {
         series: Object.fromEntries(
-          Object.entries(chart.display.series).map(([id, value]) => [bind(id, "measure"), value]),
+          Object.entries(style.series).map(([id, value]) => {
+            if (!series.includes(id)) {
+              throw new Error(`系列视觉设置引用的指标「${titleOf(id)}」不在当前主系列中`);
+            }
+            return [
+              bind(id, "measure"),
+              {
+                ...(value.color ? { color: value.color } : {}),
+                ...(value.mark ? { type: value.mark } : {}),
+                ...(value.axis ? { yAxis: value.axis } : {}),
+              },
+            ];
+          }),
         ),
       }
     : undefined;
@@ -330,6 +352,7 @@ function compileBoundChart(
     ...(chart.group_by ? { group_by: bind(chart.group_by, "dimension") } : {}),
     ...(chart.stack !== undefined ? { stack: chart.stack } : {}),
     ...(display ? { display } : {}),
+    ...(style.value_labels ? { value_labels: style.value_labels } : {}),
   };
 }
 
@@ -337,9 +360,10 @@ function compileSemanticChart(
   catalog: CompilerCatalog,
   intent: SemanticQueryView,
   physical: QueryViewSpec,
-  chart: SemanticChart,
+  chart: SemanticViewIntent,
+  style: ViewPreferences,
 ): ChartDeclInput {
-  return compileBoundChart(catalog, intent, chart, (reference, kind) =>
+  return compileBoundChart(catalog, intent, chart, style, (reference, kind) =>
     bindSemantic(catalog, intent, physical, reference, kind),
   );
 }
@@ -459,7 +483,7 @@ function compileDerivedView(
   };
 }
 
-function compileDerivedChart(chart: SemanticChart): ChartDeclInput {
+function compileDerivedChart(chart: SemanticViewIntent, style: ViewPreferences): ChartDeclInput {
   if (chart.type === "table" || chart.type === "kpi") {
     if (
       chart.category ||
@@ -467,18 +491,21 @@ function compileDerivedChart(chart: SemanticChart): ChartDeclInput {
       chart.annotations?.length ||
       chart.group_by ||
       chart.stack !== undefined ||
-      chart.display ||
-      (chart.type === "kpi" && (chart.columns || chart.shading))
+      (chart.type === "kpi" && chart.columns)
     ) {
       throw new Error(`${chart.type} 呈现不接受数据通道绑定`);
     }
     return {
       type: chart.type,
       ...(chart.type === "table" && chart.columns ? { columns: chart.columns } : {}),
-      ...(chart.type === "table" && chart.shading ? { shading: chart.shading } : {}),
+      ...(chart.type === "table" && style.table_shading ? { shading: style.table_shading } : {}),
     };
   }
   if (chart.columns) throw new Error("columns 仅支持 table 呈现");
+  if (style.series && chart.series) {
+    const unknown = Object.keys(style.series).find((id) => !chart.series?.includes(id));
+    if (unknown) throw new Error(`系列视觉设置引用的派生列「${unknown}」不在当前主系列中`);
+  }
   return {
     type: chart.type,
     ...(chart.category ? { x: chart.category } : {}),
@@ -486,11 +513,27 @@ function compileDerivedChart(chart: SemanticChart): ChartDeclInput {
     ...(chart.annotations?.length ? { annotations: chart.annotations } : {}),
     ...(chart.group_by ? { group_by: chart.group_by } : {}),
     ...(chart.stack !== undefined ? { stack: chart.stack } : {}),
-    ...(chart.display ? { display: chart.display } : {}),
+    ...(style.series
+      ? {
+          display: {
+            series: Object.fromEntries(
+              Object.entries(style.series).map(([id, value]) => [
+                id,
+                {
+                  ...(value.color ? { color: value.color } : {}),
+                  ...(value.mark ? { type: value.mark } : {}),
+                  ...(value.axis ? { yAxis: value.axis } : {}),
+                },
+              ]),
+            ),
+          },
+        }
+      : {}),
+    ...(style.value_labels ? { value_labels: style.value_labels } : {}),
   };
 }
 
-function validateSemanticTableLayout(view: SemanticAnalysisView, chart: SemanticChart): void {
+function validateSemanticTableLayout(view: SemanticAnalysisView, chart: SemanticViewIntent): void {
   if (chart.type !== "table" || !chart.columns) return;
   const businessColumns = chart.columns.filter((axis) => axis !== "time" && axis !== "metrics");
   if (view.summary && businessColumns.length) {
@@ -514,7 +557,7 @@ function requireDirectPlan(
   const plan = planQueryIntent(catalog, intent);
   if (plan.status === "incompatible") {
     throw new SemanticQueryIncompatibleError(plan.reason, [
-      { status: "incompatible", view_id: intent.id, reason: plan.reason },
+      { status: "incompatible", result_view_id: intent.id, reason: plan.reason },
     ]);
   }
   return plan;
@@ -541,10 +584,12 @@ function percentOfTotalCalculation(
 
 function compilePercentOfTotalAnalysis(
   catalog: CompilerCatalog,
-  spec: SemanticAnalysisSpec,
+  definition: AnalysisDefinition,
   intent: SemanticQueryView,
   calculation: SemanticPercentOfTotalCalculation,
-): CompiledSemanticAnalysis {
+  viewIntent: SemanticViewIntent,
+  preferences: ViewPreferences,
+): CompiledAnalysisView {
   const numeratorPlan = requireDirectPlan(catalog, intent);
   const numeratorId = internalViewId(intent.id, "numerator");
   const denominatorId = internalViewId(intent.id, "denominator");
@@ -613,7 +658,7 @@ function compilePercentOfTotalAnalysis(
   const calculationInternal = calculation.title;
   const derived: DerivedViewSpec = {
     id: intent.id,
-    view_title: intent.view_title ?? spec.analysis.title ?? calculation.title,
+    view_title: intent.view_title ?? definition.title ?? calculation.title,
     from: [numeratorId, denominatorId],
     join: { on: joinKeys, how: "left", cardinality: "many_to_one" },
     columns: [
@@ -641,7 +686,7 @@ function compilePercentOfTotalAnalysis(
     structure_shares: [{ measure: calculationInternal, numerator: numeratorMeasure.internal }],
   };
   const analysis = parseAnalysisSpec({
-    ...(spec.analysis.title ? { title: spec.analysis.title } : {}),
+    ...(definition.title ? { title: definition.title } : {}),
     views: [numeratorQuery, denominatorQuery, derived],
   });
   const calculated = new Map<string, CalculatedMeasure>([
@@ -651,9 +696,9 @@ function compilePercentOfTotalAnalysis(
     if (kind === "measure" && reference === calculation.id) return calculationInternal;
     return memberShortName(bindSemantic(catalog, intent, numeratorQuery, reference, kind));
   };
-  validateSemanticTableLayout(intent, spec.presentation);
+  validateSemanticTableLayout(intent, viewIntent);
   const presentation = parsePresentationSpec(
-    compileBoundChart(catalog, intent, spec.presentation, bind, calculated),
+    compileBoundChart(catalog, intent, viewIntent, preferences, bind, calculated),
     analysis,
   );
   const joinKeyDelivery = [
@@ -677,34 +722,46 @@ function compilePercentOfTotalAnalysis(
   };
   const route: SemanticRoute = {
     status: "composed",
-    view_id: intent.id,
+    result_view_id: intent.id,
     sources: delivery.provenance!.sources,
     join_keys: delivery.provenance!.join_keys,
   };
+  const plan = planExecution(analysis, { delivery });
   return {
-    plan: planExecution(analysis, { delivery }),
+    plan,
     presentation,
+    render_decl: projectPresentation(presentation, plan.output, plan.output.id),
     routes: [route],
     record_projection_bindings: { views: [] },
   };
 }
 
 /** 在当前身份可见 catalog 上编译可执行工件。 */
-export function compileSemanticAnalysis(
+export function compileAnalysisView(
   catalog: CompilerCatalog,
-  value: SemanticAnalysisSpec,
-): CompiledSemanticAnalysis {
-  const spec = parseSemanticAnalysisSpec(value);
-  const calculationIntent = spec.analysis.views.find(
+  input: { analysis: AnalysisDefinition; view: SemanticViewIntent },
+  rawPreferences: ViewPreferences = EMPTY_VIEW_PREFERENCES,
+): CompiledAnalysisView {
+  const definition = parseAnalysisDefinition(input.analysis);
+  const intent = SEMANTIC_VIEW_INTENT_INPUT.parse(input.view);
+  const preferences = validateViewPreferences(intent, rawPreferences);
+  const calculationIntent = definition.views.find(
     (view): view is SemanticQueryView =>
       !isSemanticDerivedView(view) && Boolean(view.calculations?.length),
   );
   if (calculationIntent) {
     const calculation = percentOfTotalCalculation(catalog, calculationIntent);
     if (!calculation) throw new Error("构成占比声明缺少计算定义");
-    return compilePercentOfTotalAnalysis(catalog, spec, calculationIntent, calculation);
+    return compilePercentOfTotalAnalysis(
+      catalog,
+      definition,
+      calculationIntent,
+      calculation,
+      intent,
+      preferences,
+    );
   }
-  const intents = spec.analysis.views.filter(
+  const intents = definition.views.filter(
     (view): view is SemanticQueryView => !isSemanticDerivedView(view),
   );
   const resolved = intents.map((intent) => planQueryIntent(catalog, intent));
@@ -714,7 +771,7 @@ export function compileSemanticAnalysis(
       plan.status === "incompatible",
   );
   if (incompatible) throw new SemanticQueryIncompatibleError(incompatible.reason, routes);
-  const outputId = semanticAnalysisSink(spec.analysis.views);
+  const outputId = semanticAnalysisSink(definition.views);
   const intentById = new Map(intents.map((intent) => [intent.id, intent]));
   const directPlans = resolved.filter(
     (plan): plan is Extract<QueryIntentPlan, { status: "direct" }> => plan.status === "direct",
@@ -723,7 +780,7 @@ export function compileSemanticAnalysis(
   // 查询计划的 query.id 恒等于其意图 id；上面的 fail-closed 已保证每个意图都有 direct 计划。
   const planByIntent = new Map(directPlans.map((item) => [item.query.id, item]));
   const physicalViews: Array<QueryViewSpec | DerivedViewSpec> = [];
-  for (const view of spec.analysis.views) {
+  for (const view of definition.views) {
     if (isSemanticDerivedView(view)) {
       physicalViews.push(compileDerivedView(catalog, intentById, queryById, view));
       continue;
@@ -735,26 +792,26 @@ export function compileSemanticAnalysis(
     });
   }
   const analysis = parseAnalysisSpec({
-    ...(spec.analysis.title ? { title: spec.analysis.title } : {}),
+    ...(definition.title ? { title: definition.title } : {}),
     views: physicalViews,
   });
-  const outputIntent = spec.analysis.views.find((view) => view.id === outputId);
+  const outputIntent = definition.views.find((view) => view.id === outputId);
   const outputPhysical = analysis.views.find((view) => view.id === outputId);
   if (!outputIntent || !outputPhysical) throw new Error(`结果视图 ${outputId} 不存在`);
-  validateSemanticTableLayout(outputIntent, spec.presentation);
+  validateSemanticTableLayout(outputIntent, intent);
   const presentation = parsePresentationSpec(
     isSemanticDerivedView(outputIntent) && isDerivedViewSpec(outputPhysical)
-      ? compileDerivedChart(spec.presentation)
+      ? compileDerivedChart(intent, preferences)
       : !isSemanticDerivedView(outputIntent) && !isDerivedViewSpec(outputPhysical)
-        ? compileSemanticChart(catalog, outputIntent, outputPhysical, spec.presentation)
+        ? compileSemanticChart(catalog, outputIntent, outputPhysical, intent, preferences)
         : (() => {
             throw new Error(`结果视图 ${outputId} 的语义类型与执行类型不一致`);
           })(),
     analysis,
   );
-  const allRoutes = [...routes, ...routesForDerived(catalog, spec.analysis.views)];
+  const allRoutes = [...routes, ...routesForDerived(catalog, definition.views)];
   const plan = planExecution(analysis, {
-    delivery: semanticDelivery(catalog, spec.analysis.views, planByIntent, allRoutes, outputId),
+    delivery: semanticDelivery(catalog, definition.views, planByIntent, allRoutes, outputId),
   });
   const outputPlan = planByIntent.get(outputId);
   const recordProjectionBinding =
@@ -764,6 +821,7 @@ export function compileSemanticAnalysis(
   return {
     plan,
     presentation,
+    render_decl: projectPresentation(presentation, plan.output, plan.output.id),
     routes: allRoutes,
     record_projection_bindings: {
       views:

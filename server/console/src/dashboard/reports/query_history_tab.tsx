@@ -1,7 +1,7 @@
 /**
  * 查询记录：本人经此账号发起的分析履历（title 原文 + 结果规模）。
  * 纵向可见——只含自己，caller 由服务端锁定，仅记问题与结果规模。
- * 带 analysis handle 的记录可重放，也可升格为独立报告；审计日志本身不承载资产恢复职责。
+ * 带 view_id 的记录可重放，也可升格为独立报告；审计日志本身不承载资产恢复职责。
  * 时间窗是我的报告页题条上的页级控件，本件只按给定窗口取数并翻页。
  */
 import { useState } from "react";
@@ -81,9 +81,9 @@ export function QueryHistoryTab({
                         {formatAt(r.at)}
                       </TableCell>
                       <TableCell>
-                        {r.analysis_id ? (
+                        {r.view_id ? (
                           <a
-                            href={analysisHash(r.analysis_id)}
+                            href={analysisHash(r.view_id)}
                             className="inline-block max-w-full truncate align-bottom font-medium transition-colors duration-150"
                           >
                             {r.title}
@@ -98,12 +98,11 @@ export function QueryHistoryTab({
                         </span>
                       </TableCell>
                       <TableCell className="py-0 text-right">
-                        {r.analysis_id && (
+                        {r.view_id && (
                           <RowMenu label="分析操作">
                             <MenuItem
                               onClick={() =>
-                                r.analysis_id &&
-                                setSaveTarget({ id: r.analysis_id, title: r.title })
+                                r.view_id && setSaveTarget({ id: r.view_id, title: r.title })
                               }
                             >
                               <SaveIcon aria-hidden="true" />
