@@ -52,35 +52,35 @@ const view = (name: string, measures: CubeMember[], detail = false): CubeView =>
 describe("正式指标模型", () => {
   test("跨来源组件全部可见时替换 Cube 中的同名比例并保留目录身份", () => {
     const oldRate = {
-      ...measure("employee_leave_metrics", "current_month_turnover_rate"),
+      ...measure("employee_leave_metrics", "monthly_separation_rate"),
       description: "旧定义",
     };
     const modeled = applyFormalMetricModel(
       [
         view("employee_leave_metrics", [
-          measure("employee_leave_metrics", "turnover_count"),
+          measure("employee_leave_metrics", "separation_count"),
           oldRate,
         ]),
-        view("employee_snapshot_metrics", [
-          measure("employee_snapshot_metrics", "active_employee_count", "last"),
+        view("workforce_exposure_metrics", [
+          measure("workforce_exposure_metrics", "workforce_exposure"),
         ]),
       ],
       formalMetrics,
     );
     const rate = modeled[0].measures.find(
-      (member) => member.name === "employee_leave_metrics.current_month_turnover_rate",
+      (member) => member.name === "employee_leave_metrics.monthly_separation_rate",
     );
 
-    expect(rate?.title).toBe("本月离职率");
-    expect(rate?.description).toBe("所选月份离职人数除以同月月末在职人数。");
+    expect(rate?.title).toBe("月度离职率");
+    expect(rate?.description).toBe("所选月份离职人数除以同月按在职天数折算的平均人员规模。");
     expect(rate?.meta?.components).toEqual({
-      numerator: "turnover_count",
-      denominator: "active_employee_count",
+      numerator: "separation_count",
+      denominator: "workforce_exposure",
     });
     expect(rate && metricNodeOf(rate)).toEqual({
       kind: "ratio",
-      numerator: { metric_id: "measure:turnover_count", missing: "zero" },
-      denominator: { metric_id: "measure:active_employee_count", missing: "null" },
+      numerator: { metric_id: "measure:separation_count", missing: "zero" },
+      denominator: { metric_id: "measure:workforce_exposure", missing: "null" },
       division_by_zero: "null",
     });
   });
@@ -88,25 +88,51 @@ describe("正式指标模型", () => {
   test("组件不可见时不暴露复合指标，权限沿叶子指标闭合", () => {
     const modeled = applyFormalMetricModel(
       [
-        view("employee_leave_metrics", [measure("employee_leave_metrics", "turnover_count")]),
+        view("employee_leave_metrics", [measure("employee_leave_metrics", "separation_count")]),
         view("employee_leave_records", [], true),
       ],
       formalMetrics,
     );
     expect(
-      modeled[0].measures.some((member) => member.name.endsWith(".current_month_turnover_rate")),
+      modeled[0].measures.some((member) => member.name.endsWith(".monthly_separation_rate")),
     ).toBe(false);
     expect(
-      modeled[1].measures.some((member) => member.name.endsWith(".current_month_turnover_rate")),
+      modeled[1].measures.some((member) => member.name.endsWith(".monthly_separation_rate")),
     ).toBe(false);
+  });
+
+  test("正式指标把聚合后结果保护合同装配到公开成员", () => {
+    const modeled = applyFormalMetricModel(
+      [
+        view("q12_survey_response_metrics", [
+          measure("q12_survey_response_metrics", "q12_favorable_item_count", "last"),
+          measure("q12_survey_response_metrics", "q12_answered_item_count", "last"),
+          measure("q12_survey_response_metrics", "q12_respondent_count", "last"),
+        ]),
+      ],
+      formalMetrics,
+    );
+    const rate = modeled[0].measures.find((member) => member.name.endsWith(".q12_favorable_rate"));
+
+    expect(rate?.meta?.result_guards).toEqual([
+      {
+        kind: "minimum_support",
+        support_measure: "q12_respondent_count",
+        threshold: 5,
+      },
+    ]);
+    expect(rate?.meta?.components).toEqual({
+      numerator: "q12_favorable_item_count",
+      denominator: "q12_answered_item_count",
+    });
   });
 
   test("受控记录面使用同一正式定义并把率指标下钻绑定到分子记录集", () => {
     const modeled = applyFormalMetricModel(
       [
-        view("employee_leave_metrics", [measure("employee_leave_metrics", "turnover_count")]),
-        view("employee_snapshot_metrics", [
-          measure("employee_snapshot_metrics", "active_employee_count", "last"),
+        view("employee_leave_metrics", [measure("employee_leave_metrics", "separation_count")]),
+        view("workforce_exposure_metrics", [
+          measure("workforce_exposure_metrics", "workforce_exposure"),
         ]),
         view("employee_leave_records", [], true),
       ],
@@ -114,15 +140,15 @@ describe("正式指标模型", () => {
     );
     const detail = modeled.find((candidate) => candidate.name === "employee_leave_records")!;
     const rate = detail.measures.find(
-      (member) => member.name === "employee_leave_records.current_month_turnover_rate",
+      (member) => member.name === "employee_leave_records.monthly_separation_rate",
     );
     expect(rate?.meta?.underlying_records).toEqual({
       record_set: "termination_event",
       selection: { kind: "numerator" },
     });
     expect(rate?.meta?.components).toEqual({
-      numerator: "turnover_count",
-      denominator: "active_employee_count",
+      numerator: "separation_count",
+      denominator: "workforce_exposure",
     });
   });
 

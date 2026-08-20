@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { CubeView } from "../ports/cube_gateway.js";
-import { TEST_SEMANTIC_TAXONOMY } from "../test_support/semantic_taxonomy.js";
+import {
+  TEST_SEMANTIC_TAXONOMY,
+  TEST_TIME_SOURCE_REGISTRY,
+} from "../test_support/semantic_taxonomy.js";
 import { canonicalModelFixture } from "../test_support/canonical_semantic_model.js";
 import {
   authorizeCanonicalSemanticModel,
@@ -208,6 +211,7 @@ describe("CanonicalSemanticModel 权限投影", () => {
         },
         views: canonicalViews,
         taxonomy: TEST_SEMANTIC_TAXONOMY,
+        time_sources: TEST_TIME_SOURCE_REGISTRY,
       }),
     ).toThrow("指标能力目录");
   });

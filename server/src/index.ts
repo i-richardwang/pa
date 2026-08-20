@@ -46,6 +46,7 @@ const visibilityCube = withFormalMetricModel(
     cubeUrl: config.cubeUrl,
     apiSecret: config.apiSecret,
     serviceContext: SERVICE_CUBE_CONTEXT,
+    timeSources: semanticPackage.time_sources,
   }),
   semanticPackage.formal_metrics,
 );

@@ -1,0 +1,12 @@
+views:
+  - name: inventory_metrics
+    title: Inventory metrics
+    description: Governed query surface for regional inventory observations.
+    meta:
+      query_surface: metric_source
+      time_source: inventory_count
+      time_anchor_measure: counted_units
+      default_population_scope: "Scope: completed inventory observations."
+    cubes:
+      - join_path: inventory_count_fact
+        includes: [year, month, period_month, region, counted_units]

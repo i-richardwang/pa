@@ -8,9 +8,11 @@ import { memberDisplayTitle } from "./member_presentation.js";
 import { dimensionKind, memberSemanticId, type DimensionKind } from "./model_contract.js";
 import { memberShortName } from "../semantic_core/member_name.js";
 import {
-  parseTimeSourceKey,
+  parseKnownTimeSourceId,
+  timeSourceDefinition,
   timeSourceLabel,
-  type TimeSourceKey,
+  type TimeComparisonPolicy,
+  type TimeSourceRegistry,
 } from "../semantic_core/time_source.js";
 import type { MetricDomainId } from "../semantic_core/metric_domain_id.js";
 import {
@@ -71,7 +73,9 @@ export type CanonicalCatalog = {
 type CatalogViewDocumentBase = {
   name: string;
   title: string;
-  time_source: TimeSourceKey;
+  time_source: string;
+  time_source_title: string;
+  comparison_policy: TimeComparisonPolicy;
   measures: CatalogMember[];
   dimensions: CatalogMember[];
   hierarchies: string[][];
@@ -97,7 +101,8 @@ export type CatalogMetricDomainDocument = {
   id: MetricDomainId;
   title: string;
   description: string;
-  time_source: TimeSourceKey;
+  time_source: string;
+  time_source_title: string;
   synonyms: string[];
 };
 
@@ -248,6 +253,7 @@ function assertDeclaredWindowMatchesResolution(views: CubeView[]): void {
 export function buildCatalogDocument(
   views: CubeView[],
   taxonomy: SemanticTaxonomy,
+  timeSources: TimeSourceRegistry,
 ): CatalogDocument {
   assertDeclaredWindowMatchesResolution(views);
   const modelViews: CatalogViewDocument[] = [...views]
@@ -260,11 +266,18 @@ export function buildCatalogDocument(
           `Cube View ${view.name} 不得声明 meta.metric_domain_id；业务域归属必须声明在指标上`,
         );
       }
-      const timeSource = parseTimeSourceKey(view.meta?.time_source, `Cube View ${view.name}`);
+      const timeSource = parseKnownTimeSourceId(
+        view.meta?.time_source,
+        `Cube View ${view.name}`,
+        timeSources,
+      );
+      const timeSourceContract = timeSourceDefinition(timeSources, timeSource);
       const base: CatalogViewDocumentBase = {
         name: view.name,
         title: view.title,
         time_source: timeSource,
+        time_source_title: timeSourceContract.title,
+        comparison_policy: timeSourceContract.comparison_policy,
         measures: view.measures.map((member) => memberDocument(views, member, "measure", taxonomy)),
         dimensions: view.dimensions.map((member) =>
           memberDocument(views, member, "dimension", taxonomy),
@@ -305,6 +318,7 @@ export function buildCatalogDocument(
         title: domain.title,
         description: domain.description,
         time_source: domain.time_source,
+        time_source_title: timeSourceLabel(timeSources, domain.time_source),
         synonyms: [...domain.synonyms],
       })),
   };
@@ -618,6 +632,7 @@ export function toCompilerCatalog(document: CatalogDocument): CompilerCatalog {
       name: view.name,
       title: view.title,
       time_source: view.time_source,
+      comparison_policy: view.comparison_policy,
       ...(view.hierarchies.length
         ? {
             hierarchies: view.hierarchies.flatMap((chain) => {
@@ -665,7 +680,8 @@ export function toSemanticCatalog(
       id: domain.id,
       title: domain.title,
       query_contract: domain.query_contract,
-      time_context_title: timeSourceLabel(domain.time_source),
+      time_context_title: document.metric_domains.find((candidate) => candidate.id === domain.id)!
+        .time_source_title,
       synonyms: domain.synonyms,
       measure_ids: links.get(domain.id)?.measure_ids ?? [],
       dimension_ids: links.get(domain.id)?.dimension_ids ?? [],

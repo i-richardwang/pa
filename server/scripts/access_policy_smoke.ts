@@ -21,16 +21,12 @@ const cube = withFormalMetricModel(
     cubeUrl: process.env.CUBE_URL ?? "http://localhost:4000",
     apiSecret,
     serviceContext: SERVICE_CUBE_CONTEXT,
+    timeSources: semanticPackage.time_sources,
   }),
   semanticPackage.formal_metrics,
 );
 
 const full: CubeSecurityContext = { subject: "full", groups: ["pa_full"], orgScope: "*" };
-const scoped: CubeSecurityContext = {
-  subject: "scoped",
-  groups: ["pa_scoped"],
-  orgScope: ["Aurora Labs"],
-};
 const unknown: CubeSecurityContext = {
   subject: "unknown",
   groups: ["unknown"],
@@ -44,17 +40,21 @@ const expectedViews = [
   "employee_snapshot_metrics",
   "employee_snapshot_records",
   "headcount_plan_metrics",
+  "q12_survey_participation_metrics",
+  "q12_survey_response_metrics",
+  "workforce_exposure_metrics",
 ];
-for (const context of [full, scoped]) {
-  const names = (await cube.meta(context)).map((view) => view.name).sort();
-  assert(JSON.stringify(names) === JSON.stringify(expectedViews), `公开 View 不完整：${names}`);
-}
+const fullNames = (await cube.meta(full)).map((view) => view.name).sort();
+assert(
+  JSON.stringify(fullNames) === JSON.stringify(expectedViews),
+  `公开 View 不完整：${fullNames}`,
+);
 assert((await cube.meta(unknown)).length === 0, "未知组不应看到任何 View");
 
 const { dataAsOf } = await cube.timeContext();
 const [year, month] = dataAsOf.split("-");
 const query: CubeQuery = {
-  measures: ["employee_snapshot_metrics.active_employee_count"],
+  measures: ["employee_snapshot_metrics.active_headcount"],
   dimensions: ["employee_snapshot_metrics.organization_name"],
   filters: [
     { member: "employee_snapshot_metrics.year", operator: "equals", values: [year] },
@@ -62,23 +62,49 @@ const query: CubeQuery = {
   ],
 };
 const fullRows = (await cube.load(query, full)).data;
+const scopedOrganization = fullRows[0]?.["employee_snapshot_metrics.organization_name"];
+assert(typeof scopedOrganization === "string", "全量身份没有可用于范围回归的组织");
+const scoped: CubeSecurityContext = {
+  subject: "scoped",
+  groups: ["pa_scoped"],
+  orgScope: [scopedOrganization],
+};
+const scopedNames = (await cube.meta(scoped)).map((view) => view.name).sort();
+assert(
+  JSON.stringify(scopedNames) === JSON.stringify(expectedViews),
+  `受限身份公开 View 不完整：${scopedNames}`,
+);
 const scopedRows = (await cube.load(query, scoped)).data;
-assert(fullRows.length === 2, "全量身份应看到两个虚构组织");
+assert(fullRows.length >= 3, "全量身份应看到多个虚构组织");
 assert(
   scopedRows.length === 1 &&
-    scopedRows[0]?.["employee_snapshot_metrics.organization_name"] === "Aurora Labs",
+    scopedRows[0]?.["employee_snapshot_metrics.organization_name"] === scopedOrganization,
   "受限身份只能看到配置的虚构组织",
 );
 const sql = await cube.sql(query, scoped);
 assert(
-  sql.some((statement) => statement.params.includes("Aurora Labs")),
+  sql.some((statement) => statement.params.includes(scopedOrganization)),
   "组织范围必须进入 Cube 生成 SQL 的参数",
 );
 
 const views = await cube.meta(scoped);
 const hire = views.find((view) => view.name === "employee_hire_metrics");
 assert(
-  hire?.measures.some((measure) => measure.name.endsWith(".current_month_new_hire_rate")),
+  hire?.measures.some((measure) => measure.name.endsWith(".monthly_hire_rate")),
   "叶子指标可见时正式入职率应进入权限裁剪后的目录",
+);
+const q12 = views.find((view) => view.name === "q12_survey_response_metrics");
+const q12Favorable = q12?.measures.find((measure) => measure.name.endsWith(".q12_favorable_rate"));
+assert(q12Favorable, "Q12组件可见时正式正向作答率应进入权限裁剪后的目录");
+assert(
+  JSON.stringify(q12Favorable.meta?.result_guards) ===
+    JSON.stringify([
+      {
+        kind: "minimum_support",
+        support_measure: "q12_respondent_count",
+        threshold: 5,
+      },
+    ]),
+  "Q12正式指标必须保留最小支撑量保护合同",
 );
 console.log("公开 Demo access_policy 冒烟通过");

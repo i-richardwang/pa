@@ -2,6 +2,7 @@
 import type { CompilerCatalog } from "../semantic_core/compiler_catalog.js";
 import type { SemanticModelCatalog } from "../semantic_core/semantic_model_catalog.js";
 import type { SemanticTaxonomy } from "../semantic_core/semantic_taxonomy.js";
+import type { TimeSourceRegistry } from "../semantic_core/time_source.js";
 import { memberShortName } from "../semantic_core/member_name.js";
 import type { CubeView } from "../ports/cube_gateway.js";
 import type { CubeGateway, CubeSecurityContext } from "../ports/cube_gateway.js";
@@ -18,25 +19,29 @@ export type CanonicalSemanticModel = {
   capabilities: SemanticModelCatalog;
   views: CubeView[];
   document: CatalogDocument;
+  time_sources: TimeSourceRegistry;
 };
 
 export type AuthorizedSemanticModel = {
   views: CubeView[];
   document: CatalogDocument;
   compiler: CompilerCatalog;
+  time_sources: TimeSourceRegistry;
 };
 
 export function buildCanonicalSemanticModel(input: {
   capabilities: SemanticModelCatalog;
   views: CubeView[];
   taxonomy: SemanticTaxonomy;
+  time_sources: TimeSourceRegistry;
 }): CanonicalSemanticModel {
-  const document = buildCatalogDocument(input.views, input.taxonomy);
+  const document = buildCatalogDocument(input.views, input.taxonomy, input.time_sources);
   assertCatalogConsistency(input.capabilities, input.views, toCompilerCatalog(document));
   return {
     capabilities: input.capabilities,
     views: input.views,
     document,
+    time_sources: input.time_sources,
   };
 }
 
@@ -145,6 +150,7 @@ export async function loadCanonicalSemanticModel(input: {
     capabilities,
     views,
     taxonomy: input.semantic_package.taxonomy,
+    time_sources: input.semantic_package.time_sources,
   });
 }
 
@@ -289,6 +295,7 @@ export function authorizeCanonicalSemanticModel(
     views: authorizedViews,
     document,
     compiler: toCompilerCatalog(document),
+    time_sources: canonical.time_sources,
   };
 }
 

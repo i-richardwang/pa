@@ -80,7 +80,7 @@ meta:
 |---|---|
 | `aggregation: sum` | 在目标窗口内求和，例如离职人数。 |
 | `aggregation: average` | 在目标窗口内求平均，例如窗口月均记录数。 |
-| `aggregation: last` | 取目标桶终点结果，例如月末在职人数、月度 HC 编制目标及其完成率。 |
+| `aggregation: last` | 取目标桶终点结果，例如月末在职人数、月度计划编制及其达成率。 |
 | `aggregation: recompute` | 先按自身组件与公式聚合，再重算比例，不平均各月比例。 |
 | `window: selected` | 使用用户选择的业务桶。 |
 | `window: year_to_date` | 在每个目标桶终点读取当年年初至该终点的累计或成员资格结果。 |
@@ -95,8 +95,8 @@ meta:
 |---|---|---|
 | 月末在职人数 | `last + selected` | 单月取该月月末；年度或期间总计取桶末月。 |
 | 离职人数 | `sum + selected` | 对所选月份求和。 |
-| 当月编制完成率 | `last + selected` | 在桶末月分别聚合快照与编制事实，再重算比例；时间上不聚合月度率。 |
-| 本月离职率 | `recompute + selected + month` | 每个月用当月分子与当月分母重算，禁止把多个月合成一个率。 |
+| 编制达成率 | `last + selected` | 在桶末月分别聚合快照与编制事实，再重算比例；时间上不聚合月度率。 |
+| 月度离职率 | `recompute + selected + month` | 每个月用离职人数和按在职天数折算的平均人员规模重算，禁止把多个月合成一个率。 |
 
 `time_contract` 是计算引擎的内部元数据，不进入 Agent Catalog、MCP schema 或查询结果。用户只需理解
 指标业务口径和可用的时间选择，不需要选择求值形态。
@@ -113,28 +113,53 @@ meta:
 与服务端的事后拒绝恒一致；卡永不手写，新增守卫判据时必须同步推导规则，一致性由跨层用例逐组合
 双向断言把守。求值形态本身（interval / endpoint / year_to_date）仍是引擎私有，不出现在任何消费面。
 
-### 期次时钟（wave calendar）
+### 包驱动的时间来源与比较策略
 
-时间源除逐月连续推进的数据时钟（`calendar: continuous`）外，还有按期次投放的稀疏时钟
-（`calendar: wave`，如周期调研）。期次数据在数据层密化为月度状态快照：每个月份承载
-「最近一期投放不晚于当月月末」的全部记录，指标一律 `last + selected`，桶末读数语义与
-连续时钟的存量指标完全一致——期次日历的全部复杂度被隔离在数据生成层，时间编译零特例。
+时间来源由 `semantic_package.yml.time_sources` 登记，核心不内置任何业务时钟：
 
-wave 时钟带来两条专属规则：
+```yaml
+time_sources:
+  - id: actuals
+    title: 实际数据
+    role: actual
+    primary: true
+    comparison_policy: calendar
+  - id: plan
+    title: 实际与计划数据
+    role: plan
+    primary: false
+    reference_source: actuals
+    comparison_policy: calendar
+  - id: observations
+    title: 非定期观测数据
+    role: actual
+    primary: false
+    comparison_policy: explicit_only
+```
 
-- **日历相对对照 fail-closed**：各期投放日期不规则，「上一等长期间」「去年同期」这类按
-  日历滚动的相对对照会静默比到错误的期次，编译器在意图规划入口按视图时间源拒绝
-  （`planQueryIntent`）；显式自定义对照期间不受影响——期次环比就用两期投放月份的
-  自定义对照表达。
-- **批次血统披露**：事实携带批次维度（如「数据批次」），任何月份的读数都能回答
-  「这是哪一期的结果」；期次趋势分析先查期次维度确认投放月份，再按月份选桶。
+注册表只表达通用关系：唯一主时钟、实际或计划角色、计划引用的实际基准，以及比较策略。
+`calendar` 允许上一期间和去年同期；`explicit_only` 只允许明确的自定义对照窗口，避免非定期
+数据时点被日历平移后静默匹配错误记录。编译器以比较策略统一处理各类业务时间源。
 
-### 最小样本量保护（`min_sample`）
+若稀疏事件需要月度查询，语义包的数据构建层可将其密化为月度状态快照：每个月份承载不晚于
+桶末的最近一批记录，并用 `last + selected` 读取。批次身份应作为普通业务维度披露，密化规则由
+语义包的数据建模层负责。
 
-占比类指标可在 `meta.min_sample` 声明最小样本量阈值（配合 `components.denominator` 指明
-样本量指标）。Planner 把样本量指标自动带入查询腿，Calculator 在结果对齐后对样本量低于
-阈值的结果格置空，并在结果注记中披露被遮蔽的格数——遮蔽发生在唯一的结果装配点，
-与查询形态无关；样本量指标本身不遮蔽，供用户理解数据可用性。
+### 聚合后结果保护（`result_guards`）
+
+需要避免低支撑量结果误导时，指标显式声明保护规则：
+
+```yaml
+result_guards:
+  - kind: minimum_support
+    support_measure: respondent_count
+    threshold: 5
+```
+
+Planner 自动把 `support_measure` 展开进正式指标图；Calculator 在各事实聚合并对齐后判断支撑量，
+低于阈值或支撑量未知的结果格置空，并在结果注记中披露被保护的格数。支撑指标必须显式指定，
+核心不会从公式分母、指标名称或业务类型推断它；因此同一能力也可用于门店数、设备数、交易数等
+非 HR 数据。
 
 ## 3. Planner 编译正式指标图，Cube 负责事实内聚合
 

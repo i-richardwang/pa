@@ -1,94 +1,164 @@
-schema_version: 1
+schema_version: 2
 id: pa_demo
 model_path: model
+time_sources:
+  - id: workforce
+    title: 人员数据
+    role: actual
+    primary: true
+    comparison_policy: calendar
+  - id: headcount_plan
+    title: 人员与编制数据
+    role: plan
+    primary: false
+    reference_source: workforce
+    comparison_policy: calendar
+  - id: survey
+    title: 周期调研数据
+    role: actual
+    primary: false
+    comparison_policy: explicit_only
 taxonomy:
   metric_domains:
     - id: metric_domain:workforce_structure
       title: 人员规模与结构
-      description: 支持按组织、部门和通用员工属性分析月末人数、结构与平均特征。
+      description: 支持按组织、雇佣和岗位属性分析月末人数、FTE、结构与平均特征。
       time_source: workforce
-      synonyms: [人员规模, 人员结构, 在职人数]
+      synonyms: [人员规模, 人员结构, 在职人数, Headcount, Workforce composition]
     - id: metric_domain:workforce_movement
       title: 人员流动
-      description: 支持按组织、部门和通用员工属性分析入职、离职及相关比率。
+      description: 支持按组织、雇佣和岗位属性分析入职、离职及相关比率。
       time_source: workforce
-      synonyms: [人员流动, 入职, 离职, 离职率]
+      synonyms: [人员流动, 入职, 离职, 离职率, Hires, Separations, Turnover]
     - id: metric_domain:headcount_plan
       title: 编制计划与完成
-      description: 支持按组织和部门分析月度编制目标及完成率。
+      description: 支持按组织和部门分析月度计划编制及达成率。
       time_source: headcount_plan
-      synonyms: [编制计划, 编制完成率]
+      synonyms: [编制计划, 编制达成率, Planned headcount, Plan attainment]
+    - id: metric_domain:employee_engagement
+      title: 员工敬业度调研
+      description: 支持按Q12调研期次、组织和通用员工属性分析投放、回复、总体得分、层级得分与题项得分。
+      time_source: survey
+      synonyms: [Q12, Gallup Q12, 员工敬业度, Employee engagement]
   dimension_groups:
     - name: organization
       title: 组织与部门
-      description: 统计记录所属的组织与部门。
+      description: 统计记录所属的法人实体、事业部级组织与部门。
+    - name: employment
+      title: 雇佣信息
+      description: 员工在记录时点的工作地点、雇佣类型与司龄区间。
     - name: employee_basic_info
       title: 员工基本信息
       description: 员工在记录时点的性别与年龄段信息。
     - name: job_and_level
       title: 岗位与职级
-      description: 员工在记录时点的通用职级段信息。
+      description: 员工在记录时点的职族、职位名称与职级信息。
     - name: termination_event
       title: 离职记录属性
-      description: 离职事件对应的离职性质。
+      description: 离职事件对应的离职类型。
+    - name: survey_wave
+      title: 调研期次
+      description: 周期调研最近一期投放的期次编码、名称与实际月份。
 formal_metrics:
-  - name: current_month_new_hire_rate
+  - name: monthly_hire_rate
     metric_domain_id: metric_domain:workforce_movement
     host_view: employee_hire_metrics
-    title: 本月入职率
-    description: 所选月份入职人数除以同月月末在职人数。
+    title: 月度入职率
+    description: 所选月份入职人数除以同月按在职天数折算的平均人员规模。
     time_contract: { aggregation: recompute, window: selected, grain: month }
     node:
       kind: ratio
-      numerator: { metric_id: measure:new_hire_count, missing: zero }
-      denominator: { metric_id: measure:active_employee_count, missing: "null" }
+      numerator: { metric_id: measure:hire_count, missing: zero }
+      denominator: { metric_id: measure:workforce_exposure, missing: "null" }
       division_by_zero: "null"
     format: percent
     record_projection:
       view: employee_hire_records
-      components: { numerator: new_hire_count, denominator: active_employee_count }
+      components: { numerator: hire_count, denominator: workforce_exposure }
       underlying_records: { record_set: hire_event, selection: { kind: numerator } }
-  - name: current_month_turnover_rate
+  - name: monthly_separation_rate
     metric_domain_id: metric_domain:workforce_movement
     host_view: employee_leave_metrics
-    title: 本月离职率
-    description: 所选月份离职人数除以同月月末在职人数。
+    title: 月度离职率
+    description: 所选月份离职人数除以同月按在职天数折算的平均人员规模。
     time_contract: { aggregation: recompute, window: selected, grain: month }
     node:
       kind: ratio
-      numerator: { metric_id: measure:turnover_count, missing: zero }
-      denominator: { metric_id: measure:active_employee_count, missing: "null" }
+      numerator: { metric_id: measure:separation_count, missing: zero }
+      denominator: { metric_id: measure:workforce_exposure, missing: "null" }
       division_by_zero: "null"
     format: percent
     record_projection:
       view: employee_leave_records
-      components: { numerator: turnover_count, denominator: active_employee_count }
+      components: { numerator: separation_count, denominator: workforce_exposure }
       underlying_records: { record_set: termination_event, selection: { kind: numerator } }
-  - name: current_month_voluntary_turnover_rate
+  - name: monthly_voluntary_separation_rate
     metric_domain_id: metric_domain:workforce_movement
     host_view: employee_leave_metrics
-    title: 本月主动离职率
-    description: 所选月份主动离职人数除以同月月末在职人数。
+    title: 月度主动离职率
+    description: 所选月份主动离职人数除以同月按在职天数折算的平均人员规模。
     time_contract: { aggregation: recompute, window: selected, grain: month }
     node:
       kind: ratio
-      numerator: { metric_id: measure:voluntary_turnover_count, missing: zero }
-      denominator: { metric_id: measure:active_employee_count, missing: "null" }
+      numerator: { metric_id: measure:voluntary_separation_count, missing: zero }
+      denominator: { metric_id: measure:workforce_exposure, missing: "null" }
       division_by_zero: "null"
     format: percent
     record_projection:
       view: employee_leave_records
-      components: { numerator: voluntary_turnover_count, denominator: active_employee_count }
+      components: { numerator: voluntary_separation_count, denominator: workforce_exposure }
       underlying_records: { record_set: termination_event, selection: { kind: numerator } }
-  - name: current_month_fulfillment_rate
+  - name: headcount_plan_attainment_rate
     metric_domain_id: metric_domain:headcount_plan
     host_view: headcount_plan_metrics
-    title: 当月编制完成率
-    description: 月末在职人数占同月编制目标的比例；超过100%表示实际人数高于计划。
+    title: 编制达成率
+    description: 月末在职人数占同月计划编制的比例；超过100%表示实际人数高于计划。
     time_contract: { aggregation: last, window: selected }
     node:
       kind: ratio
-      numerator: { metric_id: measure:active_employee_count, missing: "null" }
+      numerator: { metric_id: measure:active_headcount, missing: "null" }
       denominator: { metric_id: measure:planned_headcount, missing: "null" }
       division_by_zero: "null"
     format: percent
+  - name: q12_response_rate
+    metric_domain_id: metric_domain:employee_engagement
+    host_view: q12_survey_participation_metrics
+    title: Q12回复率
+    description: 最近一期Q12调研答卷人数占投放人数的比例。
+    time_contract: { aggregation: last, window: selected }
+    node:
+      kind: ratio
+      numerator: { metric_id: measure:q12_responded_count, missing: zero }
+      denominator: { metric_id: measure:q12_invited_count, missing: "null" }
+      division_by_zero: "null"
+    format: percent
+    result_guards:
+      - { kind: minimum_support, support_measure: q12_invited_count, threshold: 5 }
+  - name: q12_favorable_rate
+    metric_domain_id: metric_domain:employee_engagement
+    host_view: q12_survey_response_metrics
+    title: Q12正向作答率
+    description: 最近一期Q12调研中评分为四分或五分的作答项数占全部有效作答项数的比例。
+    time_contract: { aggregation: last, window: selected }
+    node:
+      kind: ratio
+      numerator: { metric_id: measure:q12_favorable_item_count, missing: zero }
+      denominator: { metric_id: measure:q12_answered_item_count, missing: "null" }
+      division_by_zero: "null"
+    format: percent
+    result_guards:
+      - { kind: minimum_support, support_measure: q12_respondent_count, threshold: 5 }
+  - name: q12_strongly_agree_rate
+    metric_domain_id: metric_domain:employee_engagement
+    host_view: q12_survey_response_metrics
+    title: Q12强烈认同率
+    description: 最近一期Q12调研中评分为五分的作答项数占全部有效作答项数的比例。
+    time_contract: { aggregation: last, window: selected }
+    node:
+      kind: ratio
+      numerator: { metric_id: measure:q12_strongly_agree_item_count, missing: zero }
+      denominator: { metric_id: measure:q12_answered_item_count, missing: "null" }
+      division_by_zero: "null"
+    format: percent
+    result_guards:
+      - { kind: minimum_support, support_measure: q12_respondent_count, threshold: 5 }

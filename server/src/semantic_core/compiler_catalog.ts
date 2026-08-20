@@ -11,6 +11,7 @@
 import type { MetricDomainId } from "./metric_domain_id.js";
 import type { MetricTimeContract } from "./metric_time_contract.js";
 import type { ReportCalculationKind } from "./report_calculation.js";
+import type { TimeComparisonPolicy } from "./time_source.js";
 
 /** 率指标公式行的分子分母，已解析为中文标题（人读公式不读成员名）。 */
 export type CompilerCatalogFormula = {
@@ -62,6 +63,8 @@ export type CompilerCatalogView = {
   title: string;
   /** 内部时间源 key，只在服务端流转（对外投影为业务标签，绝不上线）。 */
   time_source?: string;
+  /** 该时钟允许的相对比较形态。 */
+  comparison_policy: TimeComparisonPolicy;
   /** 组织层级链，已解析为维度语义 id。 */
   hierarchies?: string[][];
 };

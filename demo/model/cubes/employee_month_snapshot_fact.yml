@@ -6,20 +6,36 @@ cubes:
     extends: employee_fact_base
     sql: "SELECT * FROM read_parquet('/semantic/current/employee_month_snapshot_fact.parquet')"
     measures:
-      - name: active_employee_count
+      - name: active_headcount
         title: 在职人数
-        description: 所选月末仍在职的虚构员工人数。
+        description: 所选月末具有有效雇佣关系的员工人数。
         type: count
         meta:
           metric_domain_id: metric_domain:workforce_structure
           report_calculations: [percent_of_total]
           time_contract: { aggregation: last, window: selected }
           underlying_records: { record_set: employee_snapshot, selection: { kind: self } }
+      - name: active_fte
+        title: 在职FTE
+        description: 所选月末在职员工的全职当量之和。
+        type: sum
+        sql: fte
+        meta:
+          metric_domain_id: metric_domain:workforce_structure
+          time_contract: { aggregation: last, window: selected }
       - name: average_age
         title: 平均年龄
         description: 所选月末员工年龄的算术平均值。
         type: avg
         sql: age
+        meta:
+          metric_domain_id: metric_domain:workforce_structure
+          time_contract: { aggregation: last, window: selected }
+      - name: average_tenure
+        title: 平均司龄
+        description: 所选月末在职员工本次连续雇佣年数的算术平均值。
+        type: avg
+        sql: tenure_years
         meta:
           metric_domain_id: metric_domain:workforce_structure
           time_contract: { aggregation: last, window: selected }

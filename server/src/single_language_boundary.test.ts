@@ -20,10 +20,13 @@ import { compileAnalysisView } from "./engine/semantic_analysis_compiler.js";
 import { parseAnalysisDefinition } from "./semantic_core/semantic_analysis.js";
 import { publicTimeContext } from "./application/time_context.js";
 import type { CubeView, TimeContext } from "./ports/cube_gateway.js";
-import { TEST_SEMANTIC_TAXONOMY } from "./test_support/semantic_taxonomy.js";
+import {
+  TEST_SEMANTIC_TAXONOMY,
+  TEST_TIME_SOURCE_REGISTRY,
+} from "./test_support/semantic_taxonomy.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
-  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY);
+  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY);
 
 /** 编译器内务：只应在服务端编译边界内流转，绝不进浏览器或公共契约。 */
 const FORBIDDEN = [
@@ -92,6 +95,8 @@ const DOCUMENT: CatalogDocument = {
       surface: "metric_source",
       title: "人员总览",
       time_source: "workforce",
+      time_source_title: "人员数据",
+      comparison_policy: "calendar",
       hierarchies: [],
       record_projection_members: [],
       calculation_input_titles: {},
@@ -129,6 +134,7 @@ const DOCUMENT: CatalogDocument = {
       title: "人员规模与结构",
       description: "人员规模与结构。",
       time_source: "workforce",
+      time_source_title: "人员数据",
       synonyms: ["人员规模"],
     },
   ],
@@ -172,21 +178,26 @@ describe("单语言物理绑定不上线", () => {
     const out = publicTimeContext(
       [{ time_source: "workforce" }, { time_source: "workforce" }],
       context,
+      TEST_TIME_SOURCE_REGISTRY,
     );
     expect(out).toEqual([
       { title: "人员数据", actual_through: "2026-06", available_through: "2026-07" },
     ]);
     expect(JSON.stringify(out)).not.toContain("workforce");
     expect(() =>
-      publicTimeContext([{ time_source: "unregistered_physical_clock" }], {
-        dataAsOf: "2026-06",
-        sources: {
-          unregistered_physical_clock: {
-            actualThrough: "2026-06",
-            availableThrough: "2026-06",
+      publicTimeContext(
+        [{ time_source: "unregistered_physical_clock" }],
+        {
+          dataAsOf: "2026-06",
+          sources: {
+            unregistered_physical_clock: {
+              actualThrough: "2026-06",
+              availableThrough: "2026-06",
+            },
           },
         },
-      }),
+        TEST_TIME_SOURCE_REGISTRY,
+      ),
     ).toThrow("未登记的时间来源");
   });
 

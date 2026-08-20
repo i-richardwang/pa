@@ -16,10 +16,16 @@ views:
             - { member: employee_id }
             - { member: employee_name }
             - { member: record_date, title: 离职日期 }
+            - { member: legal_entity_name }
             - { member: organization_name }
             - { member: department_name }
+            - { member: work_location }
+            - { member: employment_type }
             - { member: gender }
             - { member: age_band }
+            - { member: tenure_band }
+            - { member: job_family_name }
+            - { member: job_title }
             - { member: job_level_band }
             - { member: leave_type }
           entity_order:

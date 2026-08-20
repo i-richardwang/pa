@@ -59,6 +59,9 @@ describe("公开 Demo 语义包", () => {
       "employee_hire_event_fact",
       "employee_leave_event_fact",
       "employee_month_snapshot_fact",
+      "q12_survey_participation_fact",
+      "q12_survey_response_fact",
+      "workforce_month_exposure_fact",
     ]);
     for (const fact of facts) {
       expect(fact.sql, fact.name).toContain(`/semantic/current/${fact.name}.parquet`);
@@ -72,6 +75,9 @@ describe("公开 Demo 语义包", () => {
       "employee_leave_metrics",
       "employee_snapshot_metrics",
       "headcount_plan_metrics",
+      "q12_survey_participation_metrics",
+      "q12_survey_response_metrics",
+      "workforce_exposure_metrics",
     ]);
     expect(detailViews.map((view) => view.name).sort()).toEqual([
       "employee_hire_records",

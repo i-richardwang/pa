@@ -6,9 +6,9 @@ cubes:
     extends: employee_fact_base
     sql: "SELECT * FROM read_parquet('/semantic/current/employee_hire_event_fact.parquet')"
     measures:
-      - name: new_hire_count
+      - name: hire_count
         title: 入职人数
-        description: 所选期间发生入职的虚构员工人数。
+        description: 所选期间新增雇佣关系的员工人数。
         type: count
         meta:
           metric_domain_id: metric_domain:workforce_movement

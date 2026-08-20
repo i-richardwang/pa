@@ -10,7 +10,6 @@ import type { QueryViewSpec } from "./analysis_spec.js";
 import { completeHierarchyDimensions } from "./hierarchy_completion.js";
 import type { SemanticQueryView } from "./semantic_analysis.js";
 import { compileTimeIntent } from "./time_contract.js";
-import { timeSourceCalendar } from "./time_source.js";
 
 export type PlannedGroupDimension = {
   id: string;
@@ -251,17 +250,18 @@ export function planQueryIntent(
   const ownerViews = [...new Set(owners.map((owner) => owner.view))];
   const comparison = intent.time.comparison;
   if (comparison && comparison.kind !== "custom") {
-    const waveView = ownerViews.find((view) => {
-      const source = catalog.views.find((candidate) => candidate.name === view)?.time_source;
-      return source !== undefined && timeSourceCalendar(source) === "wave";
-    });
-    if (waveView) {
+    const explicitOnlyView = ownerViews.find(
+      (view) =>
+        catalog.views.find((candidate) => candidate.name === view)?.comparison_policy ===
+        "explicit_only",
+    );
+    if (explicitOnlyView) {
       return {
         status: "incompatible",
         reason:
-          `指标来源「${sourceTitle(catalog, waveView)}」按期次投放，各期日期不规则，` +
-          "上一期间或去年同期这类日历相对对照会静默比到错误的期次；" +
-          "请改用明确的自定义对照期间，选择要比较的投放月份",
+          `指标来源「${sourceTitle(catalog, explicitOnlyView)}」只允许显式对照，` +
+          "日历相对对照可能匹配到错误的数据时点；" +
+          "请改用明确的自定义对照期间",
       };
     }
   }

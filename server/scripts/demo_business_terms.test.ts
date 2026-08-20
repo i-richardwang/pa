@@ -18,16 +18,34 @@ const members = [
     description: "离职事件的性质。",
   },
   {
-    id: "measure:voluntary_turnover_count",
+    id: "measure:voluntary_separation_count",
     kind: "measure" as const,
     title: "主动离职人数",
     description: "所选期间主动离职人数。",
   },
   {
-    id: "measure:current_month_fulfillment_rate",
+    id: "measure:headcount_plan_attainment_rate",
     kind: "measure" as const,
-    title: "当月编制完成率",
-    description: "月末人数除以同月编制目标。",
+    title: "编制达成率",
+    description: "月末人数除以同月计划编制。",
+  },
+  {
+    id: "measure:q12_average_score",
+    kind: "measure" as const,
+    title: "Q12平均得分",
+    description: "最近一期十二项评分的平均值。",
+  },
+  {
+    id: "measure:q12_favorable_rate",
+    kind: "measure" as const,
+    title: "Q12正向作答率",
+    description: "四分或五分作答项占全部有效作答项的比例。",
+  },
+  {
+    id: "measure:q12_response_rate",
+    kind: "measure" as const,
+    title: "Q12回复率",
+    description: "答卷人数占投放人数的比例。",
   },
 ];
 describe("demo business term seed", () => {
@@ -40,7 +58,8 @@ describe("demo business term seed", () => {
     expect(first.created.map((term) => term.canonical_term)).toEqual([
       "组织",
       "主动离职",
-      "编制完成率",
+      "编制达成率",
+      "Q12调研",
     ]);
     expect(first.preserved).toEqual([]);
 
@@ -49,9 +68,10 @@ describe("demo business term seed", () => {
     expect(second.preserved.map((term) => term.canonical_term)).toEqual([
       "组织",
       "主动离职",
-      "编制完成率",
+      "编制达成率",
+      "Q12调研",
     ]);
-    expect(await repository.list()).toHaveLength(3);
+    expect(await repository.list()).toHaveLength(4);
     db.close();
   });
 
@@ -70,7 +90,11 @@ describe("demo business term seed", () => {
     );
 
     const result = await seed_demo_business_terms({ registry, members });
-    expect(result.created.map((term) => term.canonical_term)).toEqual(["组织", "编制完成率"]);
+    expect(result.created.map((term) => term.canonical_term)).toEqual([
+      "组织",
+      "编制达成率",
+      "Q12调研",
+    ]);
     expect(result.preserved[0]?.definition).toBe("管理员确认后的本地定义。");
     expect(
       (await repository.list()).find((term) => term.canonical_term === "主动离职")?.definition,

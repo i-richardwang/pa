@@ -20,14 +20,25 @@ export const DEMO_BUSINESS_TERMS = [
     definition: "由员工主动提出并在所选期间实际发生的离职事件。",
     context: "用于分析主动离职人数、主动离职率或筛选离职记录。",
     aliases: ["自愿离职"],
-    related_member_ids: ["dimension:leave_type", "measure:voluntary_turnover_count"],
+    related_member_ids: ["dimension:leave_type", "measure:voluntary_separation_count"],
   },
   {
-    canonical_term: "编制完成率",
-    definition: "月末在职人数除以同月编制目标；超过100%表示实际人数高于计划。",
-    context: "用于按组织或部门比较实际人员规模与编制目标。",
-    aliases: ["当月编制完成率"],
-    related_member_ids: ["measure:current_month_fulfillment_rate"],
+    canonical_term: "编制达成率",
+    definition: "月末在职人数除以同月计划编制；超过100%表示实际人数高于计划。",
+    context: "用于按组织或部门比较实际人员规模与计划编制。",
+    aliases: ["编制完成率"],
+    related_member_ids: ["measure:headcount_plan_attainment_rate"],
+  },
+  {
+    canonical_term: "Q12调研",
+    definition: "周期开展的十二项员工敬业度调研；公开 Demo 使用虚构答卷和行业通用短标题。",
+    context: "用于分析最近一期的总体得分、四个层级得分、正向作答率与回复率。",
+    aliases: ["员工敬业度调研", "敬业度调研"],
+    related_member_ids: [
+      "measure:q12_average_score",
+      "measure:q12_favorable_rate",
+      "measure:q12_response_rate",
+    ],
   },
 ] satisfies BusinessTermContentInput[];
 

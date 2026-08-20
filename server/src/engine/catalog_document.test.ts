@@ -13,10 +13,13 @@ import {
   type CatalogDocument,
 } from "./catalog_document.js";
 import type { CubeView } from "../ports/cube_gateway.js";
-import { TEST_SEMANTIC_TAXONOMY } from "../test_support/semantic_taxonomy.js";
+import {
+  TEST_SEMANTIC_TAXONOMY,
+  TEST_TIME_SOURCE_REGISTRY,
+} from "../test_support/semantic_taxonomy.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
-  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY);
+  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY);
 
 const active_employee_count = (view: string, viewTitle: string): CubeView["measures"][number] => ({
   name: `${view}.active_employee_count`,

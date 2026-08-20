@@ -42,6 +42,7 @@ const visibilityCube = withFormalMetricModel(
     cubeUrl: process.env.CUBE_URL ?? "http://localhost:4000",
     apiSecret,
     serviceContext: SERVICE_CUBE_CONTEXT,
+    timeSources: semanticPackage.time_sources,
   }),
   semanticPackage.formal_metrics,
 );
@@ -88,10 +89,18 @@ try {
 
   const active = measure("在职人数");
   const averageAge = measure("平均年龄");
-  const hireRate = measure("本月入职率");
-  const turnoverRate = measure("本月离职率");
-  const planned = measure("编制目标");
-  const fulfillment = measure("当月编制完成率");
+  const hireRate = measure("月度入职率");
+  const turnoverRate = measure("月度离职率");
+  const planned = measure("计划编制");
+  const fulfillment = measure("编制达成率");
+  const q12Average = measure("Q12平均得分");
+  const q12Favorable = measure("Q12正向作答率");
+  const q12Response = measure("Q12回复率");
+  const q12Respondents = measure("Q12有效答卷人数");
+  const q12BasicNeeds = measure("Q12基本需求得分");
+  const q12IndividualContribution = measure("Q12个人贡献得分");
+  const q12Teamwork = measure("Q12团队协作得分");
+  const q12Growth = measure("Q12成长得分");
   const organization = dimension("组织");
 
   type DemoReport = {
@@ -131,9 +140,9 @@ try {
       view: { type: "line", series: [hireRate, turnoverRate] },
     },
     {
-      name: "组织编制完成率",
+      name: "组织编制达成率",
       analysis: {
-        title: "按组织查看月末人数、编制目标与完成率",
+        title: "按组织查看月末人数、计划编制与达成率",
         views: [
           {
             id: "staffing",
@@ -145,6 +154,42 @@ try {
         ],
       },
       view: { type: "bar", category: organization, series: [fulfillment] },
+    },
+    {
+      name: "Q12组织敬业度",
+      analysis: {
+        title: "按组织查看最近一期Q12得分、正向作答率与回复率",
+        views: [
+          {
+            id: "engagement",
+            measures: [q12Average, q12Favorable, q12Response, q12Respondents],
+            dimensions: [organization],
+            time: { window: { kind: "current_month", month: asOf } },
+            group_sort: { dimension: organization, by: q12Average, direction: "desc" },
+          },
+        ],
+      },
+      view: { type: "table" },
+    },
+    {
+      name: "Q12层级得分",
+      analysis: {
+        title: "按组织比较最近一期Q12四个层级的平均得分",
+        views: [
+          {
+            id: "engagement_layers",
+            measures: [q12BasicNeeds, q12IndividualContribution, q12Teamwork, q12Growth],
+            dimensions: [organization],
+            time: { window: { kind: "current_month", month: asOf } },
+            group_sort: { dimension: organization, by: q12BasicNeeds, direction: "desc" },
+          },
+        ],
+      },
+      view: {
+        type: "bar",
+        category: organization,
+        series: [q12BasicNeeds, q12IndividualContribution, q12Teamwork, q12Growth],
+      },
     },
   ];
 
@@ -178,7 +223,9 @@ try {
   const placements = [
     ["组织人员规模", { x: 0, y: 0, w: 12, h: 8 }],
     ["入离职率趋势", { x: 12, y: 0, w: 12, h: 8 }],
-    ["组织编制完成率", { x: 0, y: 8, w: 12, h: 7 }],
+    ["组织编制达成率", { x: 0, y: 8, w: 12, h: 7 }],
+    ["Q12组织敬业度", { x: 12, y: 8, w: 12, h: 7 }],
+    ["Q12层级得分", { x: 0, y: 15, w: 24, h: 8 }],
   ] satisfies [string, Place][];
   const tiles = placements.map(([name, place]) => {
     const reportId = reportIds.get(name);

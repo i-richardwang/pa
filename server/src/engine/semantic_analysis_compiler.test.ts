@@ -74,11 +74,13 @@ const catalog: CompilerCatalog = {
     {
       name: "test_people_metrics",
       title: "人员总览",
+      comparison_policy: "calendar",
       hierarchies: [[ORG, DEPARTMENT]],
     },
     {
       name: "headcount_plan",
       title: "人员与编制",
+      comparison_policy: "calendar",
       hierarchies: [[ORG, DEPARTMENT]],
     },
   ],

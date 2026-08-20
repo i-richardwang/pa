@@ -135,7 +135,12 @@ export function createExportService(deps: {
       if (!view) {
         throw new Error("该分析结果不支持导出底层明细（组合或派生结果无底层明细可导）");
       }
-      const { cubeContext, views: authViews, timeContext: context } = planned.access;
+      const {
+        cubeContext,
+        views: authViews,
+        timeContext: context,
+        time_sources: timeSources,
+      } = planned.access;
       const order = view.order?.map(({ member, direction }): [string, "asc" | "desc"] => [
         member,
         direction,
@@ -171,7 +176,11 @@ export function createExportService(deps: {
         ...link,
         max_rows: EXPORT_MAX_ROWS,
         data_as_of: context.dataAsOf,
-        time_context: publicTimeContext(timeSourced(viewsForMembers(authViews, members)), context),
+        time_context: publicTimeContext(
+          timeSourced(viewsForMembers(authViews, members)),
+          context,
+          timeSources,
+        ),
       };
       await deps.usage.log({
         caller: principal.email,

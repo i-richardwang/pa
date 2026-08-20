@@ -31,6 +31,7 @@ const visibilityCube = withFormalMetricModel(
     cubeUrl: process.env.CUBE_URL ?? "http://localhost:4000",
     apiSecret,
     serviceContext: SERVICE_CUBE_CONTEXT,
+    timeSources: semanticPackage.time_sources,
   }),
   semanticPackage.formal_metrics,
 );
@@ -40,10 +41,34 @@ const canonical = await loadCanonicalSemanticModel({
   service_context: SERVICE_CUBE_CONTEXT,
 });
 const cube = withCanonicalSemanticModel(visibilityCube, canonical);
+const timeContext = await cube.timeContext();
+const scopeRows = (
+  await cube.load(
+    {
+      measures: ["employee_snapshot_metrics.active_headcount"],
+      dimensions: ["employee_snapshot_metrics.organization_name"],
+      filters: [
+        {
+          member: "employee_snapshot_metrics.year",
+          operator: "equals",
+          values: [timeContext.dataAsOf.slice(0, 4)],
+        },
+        {
+          member: "employee_snapshot_metrics.month",
+          operator: "equals",
+          values: [String(Number(timeContext.dataAsOf.slice(5, 7)))],
+        },
+      ],
+    },
+    SERVICE_CUBE_CONTEXT,
+  )
+).data;
+const scopeValue = scopeRows[0]?.["employee_snapshot_metrics.organization_name"];
+assert(typeof scopeValue === "string", "公开 Demo 没有可用于记录投影回归的组织");
 const principal: Principal = {
   email: "records-demo@example.com",
   roles: ["user"],
-  orgScope: ["Aurora Labs"],
+  orgScope: [scopeValue],
 };
 const appDb = await openAppDatabase(join(tmpdir(), `pa_demo_records_${randomUUID()}.db`));
 try {
@@ -83,7 +108,7 @@ try {
     revision: report.revision,
     result_view_id: "organization_summary",
     metric_id: active.id,
-    coordinates: [{ dimension_id: organization.id, value: "Aurora Labs" }],
+    coordinates: [{ dimension_id: organization.id, value: scopeValue }],
     time_coordinate: { from: context.dataAsOf, to: context.dataAsOf },
     data_as_of: context.dataAsOf,
     offset: 0,
@@ -93,7 +118,7 @@ try {
   const organizationColumn = payload.columns.findIndex((column) => column.includes("组织"));
   assert(organizationColumn >= 0, "明细缺少组织列");
   assert(
-    payload.rows.every((row) => row[organizationColumn] === "Aurora Labs"),
+    payload.rows.every((row) => row[organizationColumn] === scopeValue),
     "受限身份看到了授权组织之外的记录",
   );
   console.log("公开 Demo 记录投影冒烟通过");

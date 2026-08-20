@@ -56,7 +56,10 @@ export type CatalogQueryPayload = {
   ambiguous_terms: string[];
 } & CatalogQueryResult;
 
-export type AuthorizedSemanticContext = Pick<AuthorizedSemanticModel, "views" | "compiler"> & {
+export type AuthorizedSemanticContext = Pick<
+  AuthorizedSemanticModel,
+  "views" | "compiler" | "time_sources"
+> & {
   principal: Principal;
   cubeContext: CubeSecurityContext;
   timeContext: TimeContext;
@@ -109,6 +112,7 @@ export function createCatalogService(deps: {
       cubeContext: authorized.context,
       views: authorized.views,
       compiler: authorized.compiler,
+      time_sources: authorized.time_sources,
       timeContext,
     };
   };
@@ -121,7 +125,7 @@ export function createCatalogService(deps: {
       const shared = {
         default_population_scope: catalog.default_population_scope,
         data_as_of: context?.dataAsOf ?? "未知",
-        time_context: publicTimeContext(catalog.views, context),
+        time_context: publicTimeContext(catalog.views, context, deps.canonical.time_sources),
       };
       if (input.mode === "overview") {
         return {
@@ -176,7 +180,7 @@ export function createCatalogService(deps: {
       const context = await deps.cube.timeContext().catch(() => null);
       return toSemanticCatalog(catalog, {
         data_as_of: context?.dataAsOf ?? "未知",
-        time_context: publicTimeContext(catalog.views, context),
+        time_context: publicTimeContext(catalog.views, context, deps.canonical.time_sources),
       });
     },
 

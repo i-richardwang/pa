@@ -1,0 +1,18 @@
+cubes:
+  - name: workforce_month_exposure_fact
+    title: 员工在职人月
+    public: false
+    description: 公开演示数据中每名员工每个存在雇佣关系的月份一行，按在职天数折算人月。
+    extends: employee_fact_base
+    sql: "SELECT * FROM read_parquet('/semantic/current/workforce_month_exposure_fact.parquet')"
+    measures:
+      - name: workforce_exposure
+        title: 在职人月
+        description: 所选期间按当月在职天数折算的人月之和。
+        type: sum
+        sql: workforce_exposure
+        public: false
+        meta:
+          internal: true
+          member_role: calculation_input
+          time_contract: { aggregation: sum, window: selected }

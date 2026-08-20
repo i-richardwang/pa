@@ -1,0 +1,14 @@
+[
+  { "code": "q01", "title": "工作期望清晰", "category": "基本需求" },
+  { "code": "q02", "title": "工作资源支持", "category": "基本需求" },
+  { "code": "q03", "title": "发挥优势机会", "category": "个人贡献" },
+  { "code": "q04", "title": "及时认可", "category": "个人贡献" },
+  { "code": "q05", "title": "人际关怀", "category": "个人贡献" },
+  { "code": "q06", "title": "成长支持", "category": "个人贡献" },
+  { "code": "q07", "title": "意见受到重视", "category": "团队协作" },
+  { "code": "q08", "title": "工作意义", "category": "团队协作" },
+  { "code": "q09", "title": "团队质量承诺", "category": "团队协作" },
+  { "code": "q10", "title": "工作关系联结", "category": "团队协作" },
+  { "code": "q11", "title": "进展反馈", "category": "成长" },
+  { "code": "q12", "title": "学习与成长", "category": "成长" }
+]

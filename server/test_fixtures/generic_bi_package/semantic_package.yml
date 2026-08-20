@@ -1,0 +1,45 @@
+schema_version: 2
+id: generic_bi_acceptance
+model_path: model
+time_sources:
+  - id: sales_actual
+    title: Sales actuals
+    role: actual
+    primary: true
+    comparison_policy: calendar
+  - id: inventory_count
+    title: Inventory counts
+    role: actual
+    primary: false
+    comparison_policy: explicit_only
+taxonomy:
+  metric_domains:
+    - id: metric_domain:sales_performance
+      title: Sales performance
+      description: Revenue and order value by region.
+      time_source: sales_actual
+      synonyms: [Sales, Revenue, Orders]
+    - id: metric_domain:inventory_position
+      title: Inventory position
+      description: Counted inventory by region.
+      time_source: inventory_count
+      synonyms: [Inventory, Stock count]
+  dimension_groups:
+    - name: market
+      title: Market
+      description: Commercial reporting region.
+formal_metrics:
+  - name: average_order_value
+    metric_domain_id: metric_domain:sales_performance
+    host_view: sales_metrics
+    title: Average order value
+    description: Revenue divided by completed orders in the selected period.
+    time_contract: { aggregation: recompute, window: selected }
+    node:
+      kind: ratio
+      numerator: { metric_id: measure:revenue, missing: zero }
+      denominator: { metric_id: measure:order_count, missing: "null" }
+      division_by_zero: "null"
+    format: number
+    result_guards:
+      - { kind: minimum_support, support_measure: order_count, threshold: 5 }

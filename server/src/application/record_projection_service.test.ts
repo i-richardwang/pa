@@ -10,14 +10,17 @@ import { memberShortName } from "../semantic_core/member_name.js";
 import { compileAnalysisView } from "../engine/semantic_analysis_compiler.js";
 import type { AnalysisDefinition, SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
 import { createRecordProjectionService } from "./record_projection_service.js";
-import { TEST_SEMANTIC_TAXONOMY } from "../test_support/semantic_taxonomy.js";
+import {
+  TEST_SEMANTIC_TAXONOMY,
+  TEST_TIME_SOURCE_REGISTRY,
+} from "../test_support/semantic_taxonomy.js";
 import { cubeSecurityContext } from "../engine/cube_security.js";
 import type { CompiledAnalysisView } from "../engine/semantic_analysis_compiler.js";
 import type { AuthorizedAnalysisPlan } from "./semantic_planning_service.js";
 import { NotFoundError } from "./errors.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
-  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY);
+  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY);
 
 const principal: Principal = {
   email: "viewer@example.com",
@@ -192,6 +195,7 @@ const authorizedPlan = (
     cubeContext: cubeSecurityContext(caller),
     views: fixtureViews,
     compiler: toCompilerCatalog(document),
+    time_sources: TEST_TIME_SOURCE_REGISTRY,
     timeContext: {
       dataAsOf: "2026-07",
       sources: {

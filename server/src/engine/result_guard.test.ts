@@ -26,7 +26,9 @@ const views: CubeView[] = [
             numerator: "positive_response_count",
             denominator: "sample_count",
           },
-          min_sample: 5,
+          result_guards: [
+            { kind: "minimum_support", support_measure: "sample_count", threshold: 5 },
+          ],
         },
       },
       {
@@ -77,8 +79,8 @@ function cubeWith(
   };
 }
 
-describe("最小样本量保护", () => {
-  test("样本量不足的结果格置空并统计，达到阈值的原样保留", async () => {
+describe("聚合后结果保护", () => {
+  test("支撑量不足的结果格置空并统计，达到阈值的原样保留", async () => {
     const plan = planMetricQuery(
       { measures: [agreeRate], dimensions: [organization] },
       { cutoff: "2026-07", grain: "total" },
@@ -87,13 +89,14 @@ describe("最小样本量保护", () => {
       periodic,
     );
 
-    // 分母（样本量）指标未被请求，Planner 必须自动带上。
+    // 支撑指标未被请求，Planner 必须自动带上。
     expect(plan.legs).toHaveLength(1);
     expect(plan.legs[0].plan.query.measures).toContain(sampleCount);
-    expect(plan.min_sample).toEqual([
+    expect(plan.result_guards).toEqual([
       {
+        kind: "minimum_support",
         measure: agreeRate,
-        denominator: "measure:sample_count",
+        support_measure: "measure:sample_count",
         threshold: 5,
       },
     ]);
@@ -115,7 +118,7 @@ describe("最小样本量保护", () => {
     expect(result.masked).toEqual([{ member: agreeRate, threshold: 5, groups: 2 }]);
   });
 
-  test("全部结果格样本充足时不产生遮蔽统计", async () => {
+  test("全部结果格支撑量充足时不产生遮蔽统计", async () => {
     const plan = planMetricQuery(
       { measures: [agreeRate], dimensions: [organization] },
       { cutoff: "2026-07", grain: "total" },
@@ -132,7 +135,7 @@ describe("最小样本量保护", () => {
     expect(result.masked).toBeUndefined();
   });
 
-  test("声明 min_sample 但缺少 components.denominator 时 fail-closed", () => {
+  test("minimum_support 缺少显式支撑指标时 fail-closed", () => {
     const broken: CubeView[] = [
       {
         ...views[0],
@@ -143,7 +146,7 @@ describe("最小样本量保护", () => {
             type: "number",
             meta: {
               time_contract: { aggregation: "last", window: "selected" },
-              min_sample: 5,
+              result_guards: [{ kind: "minimum_support", threshold: 5 }],
             },
           },
         ],
@@ -157,10 +160,72 @@ describe("最小样本量保护", () => {
         broken,
         periodic,
       ),
-    ).toThrow("components.denominator");
+    ).toThrow("支撑指标必须显式声明");
   });
 
-  test("min_sample 不是正整数时 fail-closed", () => {
+  test("支撑指标独立于公式分母并可来自另一张事实", () => {
+    const supportView = "periodic_quality_support";
+    const withRespondents: CubeView[] = [
+      {
+        ...views[0],
+        measures: [
+          {
+            ...views[0].measures[0],
+            meta: {
+              ...views[0].measures[0].meta,
+              result_guards: [
+                {
+                  kind: "minimum_support",
+                  support_measure: "respondent_count",
+                  threshold: 5,
+                },
+              ],
+            },
+          },
+          views[0].measures[1],
+        ],
+      },
+      {
+        name: supportView,
+        title: "评估参与情况",
+        meta: { time_source: "workforce" },
+        measures: [
+          {
+            name: `${supportView}.respondent_count`,
+            title: "答卷人数",
+            type: "number",
+            meta: { time_contract: { aggregation: "last", window: "selected" } },
+          },
+        ],
+        dimensions: [
+          { name: `${supportView}.year`, title: "年", type: "number" },
+          { name: `${supportView}.month`, title: "月", type: "number" },
+          { name: `${supportView}.period_month`, title: "期间", type: "time" },
+        ],
+      },
+    ];
+    const plan = planMetricQuery(
+      { measures: [agreeRate] },
+      { cutoff: "2026-07", grain: "total" },
+      context,
+      withRespondents,
+      periodic,
+    );
+    expect(plan.result_guards).toEqual([
+      {
+        kind: "minimum_support",
+        measure: agreeRate,
+        support_measure: "measure:respondent_count",
+        threshold: 5,
+      },
+    ]);
+    expect(plan.legs).toHaveLength(2);
+    expect(plan.legs.find((leg) => leg.source_view === supportView)?.plan.query.measures).toContain(
+      `${supportView}.respondent_count`,
+    );
+  });
+
+  test("minimum_support 阈值不是正整数时 fail-closed", () => {
     const broken: CubeView[] = [
       {
         ...views[0],
@@ -172,7 +237,9 @@ describe("最小样本量保护", () => {
             meta: {
               time_contract: { aggregation: "last", window: "selected" },
               components: { numerator: "x", denominator: "sample_count" },
-              min_sample: 0,
+              result_guards: [
+                { kind: "minimum_support", support_measure: "sample_count", threshold: 0 },
+              ],
             },
           },
           views[0].measures[1],

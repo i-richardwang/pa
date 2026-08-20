@@ -1,0 +1,12 @@
+views:
+  - name: sales_metrics
+    title: Sales metrics
+    description: Governed query surface for regional sales performance.
+    meta:
+      query_surface: metric_source
+      time_source: sales_actual
+      time_anchor_measure: order_count
+      default_population_scope: "Scope: completed sales orders."
+    cubes:
+      - join_path: sales_actual_fact
+        includes: [year, month, period_month, region, revenue, order_count]

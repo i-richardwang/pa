@@ -3,6 +3,7 @@ import { memberShortName } from "../semantic_core/member_name.js";
 import type { MetricDomainId } from "../semantic_core/metric_domain_id.js";
 import type { MetricTimeContract } from "../semantic_core/metric_time_contract.js";
 import type { SemanticCatalogFormalMetric } from "../semantic_core/semantic_model_catalog.js";
+import type { ResultGuard } from "../semantic_core/result_guard.js";
 
 export type MetricComponent = {
   /** 组件的规范指标身份；解析时必须唯一落到一个普通指标来源。 */
@@ -48,6 +49,7 @@ export type FormalMetricDefinition = {
   time_contract: MetricTimeContract;
   node: MetricNode;
   format?: "number" | "percent";
+  result_guards?: ResultGuard[];
   sensitivity?: "restricted";
   ai_context?: string;
   incompatible_dimensions?: Array<{ member: string; reason: string }>;
@@ -59,15 +61,23 @@ export function semanticCatalogFormalMetrics(
   formalMetrics: readonly FormalMetricDefinition[],
 ): SemanticCatalogFormalMetric[] {
   const short = (id: string) => id.slice("measure:".length);
-  return formalMetrics.map((metric) => ({
-    name: metric.name,
-    title: metric.title,
-    metric_domain_id: metric.metric_domain_id,
-    components:
+  return formalMetrics.map((metric) => {
+    const nodeComponents =
       metric.node.kind === "ratio"
         ? [short(metric.node.numerator.metric_id), short(metric.node.denominator.metric_id)]
-        : [short(metric.node.value.metric_id), short(metric.node.availability.metric_id)],
-  }));
+        : [short(metric.node.value.metric_id), short(metric.node.availability.metric_id)];
+    return {
+      name: metric.name,
+      title: metric.title,
+      metric_domain_id: metric.metric_domain_id,
+      components: [
+        ...new Set([
+          ...nodeComponents,
+          ...(metric.result_guards ?? []).map((guard) => guard.support_measure),
+        ]),
+      ],
+    };
+  });
 }
 
 export function metricNodeOf(member: CubeMember): MetricNode | undefined {
@@ -107,6 +117,7 @@ function virtualMember(
       ...(previous?.meta ?? {}),
       time_contract: definition.time_contract,
       ...(components ? { components } : {}),
+      ...(definition.result_guards ? { result_guards: definition.result_guards } : {}),
       metric_domain_id: definition.metric_domain_id,
       metric_node: definition.node,
       ...(definition.sensitivity ? { sensitivity: definition.sensitivity } : {}),
@@ -138,10 +149,15 @@ export function applyFormalMetricModel(
   while (changed) {
     changed = false;
     for (const metric of formalMetrics) {
-      const components =
-        metric.node.kind === "ratio"
+      const components = [
+        ...(metric.node.kind === "ratio"
           ? [metric.node.numerator, metric.node.denominator]
-          : [metric.node.value, metric.node.availability];
+          : [metric.node.value, metric.node.availability]),
+        ...(metric.result_guards ?? []).map((guard) => ({
+          metric_id: `measure:${guard.support_measure}`,
+          missing: "null" as const,
+        })),
+      ];
       const id = `measure:${metric.name}`;
       if (
         !visibleMetricIds.has(id) &&

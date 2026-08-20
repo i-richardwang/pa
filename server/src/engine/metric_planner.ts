@@ -40,12 +40,13 @@ export type MetricQueryLeg = {
   measures: Record<string, string>;
 };
 
-/** 最小样本量保护：输出指标在分母（样本量）指标低于阈值的结果格上置空。 */
-export type MinSampleRule = {
+/** 聚合后最小支撑量保护；Planner 已确保支撑指标叶子进入查询腿。 */
+export type PlannedResultGuard = {
+  kind: "minimum_support";
   /** 受保护的输出指标限定名。 */
   measure: string;
-  /** 判定样本量的分母指标语义 id；Planner 已确保其叶子进入查询腿。 */
-  denominator: string;
+  /** 判定支撑量的指标语义 id。 */
+  support_measure: string;
   threshold: number;
 };
 
@@ -58,7 +59,7 @@ export type MetricQueryPlan = {
   dimensions: string[];
   measures: string[];
   output_metric_ids: Record<string, string>;
-  min_sample?: MinSampleRule[];
+  result_guards?: PlannedResultGuard[];
   order?: [string, "asc" | "desc"][];
   selection?: TopNSelectionSpec;
 };
@@ -108,12 +109,13 @@ const METRIC_QUERY_PLAN_SCHEMA: z.ZodType<MetricQueryPlan> = z
     dimensions: z.array(z.string()),
     measures: z.array(z.string()),
     output_metric_ids: z.record(z.string(), z.string()),
-    min_sample: z
+    result_guards: z
       .array(
         z
           .object({
+            kind: z.literal("minimum_support"),
             measure: z.string().min(1),
-            denominator: z.string().min(1),
+            support_measure: z.string().min(1),
             threshold: z.number().int().positive(),
           })
           .strict(),
@@ -257,7 +259,7 @@ export function planMetricQuery(
   const index = metricIndex(views);
   const outputMetricIds = new Map<string, string>();
   const nodes = new Map<string, ExecutableMetricNode>();
-  const minSampleRules: MinSampleRule[] = [];
+  const resultGuards: PlannedResultGuard[] = [];
   for (const memberName of requested) {
     const member = views
       .filter((view) => !isDetail(view))
@@ -267,8 +269,7 @@ export function planMetricQuery(
     const id = memberSemanticId("measure", member);
     outputMetricIds.set(memberName, id);
     expandMetricGraph(id, index, nodes, new Set());
-    const rule = minSampleRuleOf(member, index, nodes);
-    if (rule) minSampleRules.push(rule);
+    resultGuards.push(...resultGuardsOf(member, index, nodes));
   }
   const leaves = physicalLeaves(nodes);
   if (!leaves.length && requested.length) throw new Error("正式指标图没有可执行叶子指标");
@@ -327,46 +328,56 @@ export function planMetricQuery(
     dimensions,
     measures: requested,
     output_metric_ids: Object.fromEntries(outputMetricIds),
-    ...(minSampleRules.length ? { min_sample: minSampleRules } : {}),
+    ...(resultGuards.length ? { result_guards: resultGuards } : {}),
     ...(query.order ? { order: query.order } : {}),
     ...(selection ? { selection } : {}),
   };
 }
 
 /**
- * 从模型声明提取最小样本量规则，并把分母（样本量）指标展入执行图，
- * 保证遮蔽判定所需的样本量随任何查询形态一起取回。声明不完整时 fail-closed。
+ * 从模型声明提取聚合后结果保护规则，并把显式支撑指标展入执行图。
  */
-function minSampleRuleOf(
+function resultGuardsOf(
   member: CubeMember,
   index: MetricIndex,
   nodes: Map<string, ExecutableMetricNode>,
-): MinSampleRule | null {
-  const raw = member.meta?.min_sample;
-  if (raw === undefined) return null;
-  const threshold = Number(raw);
-  if (!Number.isInteger(threshold) || threshold <= 0) {
-    throw new Error(`指标「${member.title ?? member.name}」的 min_sample 必须是正整数`);
+): PlannedResultGuard[] {
+  const raw = member.meta?.result_guards;
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw) || !raw.length) {
+    throw new Error(`指标「${member.title ?? member.name}」的 result_guards 必须是非空数组`);
   }
-  const components = member.meta?.components as { denominator?: unknown } | undefined;
-  if (typeof components?.denominator !== "string") {
-    throw new Error(
-      `指标「${member.title ?? member.name}」声明 min_sample 但缺少 components.denominator`,
-    );
-  }
-  const qualified = components.denominator.includes(".")
-    ? components.denominator
-    : `${member.name.split(".")[0]}.${components.denominator}`;
-  const denominator = [...index.byId.entries()].find(
-    ([, candidate]) => candidate.name === qualified,
-  );
-  if (!denominator) {
-    throw new Error(
-      `指标「${member.title ?? member.name}」的样本量指标 ${qualified} 不在当前身份可见目录中`,
-    );
-  }
-  expandMetricGraph(denominator[0], index, nodes, new Set());
-  return { measure: member.name, denominator: denominator[0], threshold };
+  return raw.map((candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      throw new Error(`指标「${member.title ?? member.name}」的结果保护规则无效`);
+    }
+    const guard = candidate as Record<string, unknown>;
+    if (guard.kind !== "minimum_support") {
+      throw new Error(`指标「${member.title ?? member.name}」声明了未知结果保护类型`);
+    }
+    if (typeof guard.support_measure !== "string" || !guard.support_measure) {
+      throw new Error(`指标「${member.title ?? member.name}」的支撑指标必须显式声明`);
+    }
+    const threshold = Number(guard.threshold);
+    if (!Number.isInteger(threshold) || threshold <= 0) {
+      throw new Error(`指标「${member.title ?? member.name}」的最小支撑量必须是正整数`);
+    }
+    const supportId = guard.support_measure.startsWith("measure:")
+      ? guard.support_measure
+      : `measure:${memberShortName(guard.support_measure)}`;
+    if (!index.byId.has(supportId)) {
+      throw new Error(
+        `指标「${member.title ?? member.name}」的支撑指标 ${supportId} 不在当前身份可见目录中`,
+      );
+    }
+    expandMetricGraph(supportId, index, nodes, new Set());
+    return {
+      kind: "minimum_support",
+      measure: member.name,
+      support_measure: supportId,
+      threshold,
+    };
+  });
 }
 
 export function metricTimeMembers(plan: MetricQueryPlan): string[] {

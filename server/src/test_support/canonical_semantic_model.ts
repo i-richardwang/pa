@@ -3,11 +3,16 @@ import { buildCatalogDocument, toCompilerCatalog } from "../engine/catalog_docum
 import type { CubeView } from "../ports/cube_gateway.js";
 import type { SemanticTaxonomy } from "../semantic_core/semantic_taxonomy.js";
 import { memberShortName } from "../semantic_core/member_name.js";
-import { parseTimeSourceKey } from "../semantic_core/time_source.js";
+import { parseKnownTimeSourceId, type TimeSourceRegistry } from "../semantic_core/time_source.js";
+import { TEST_TIME_SOURCE_REGISTRY } from "./semantic_taxonomy.js";
 
 /** 由 CubeView 夹具生成与其一致的能力层，供应用层单测经过完整 canonical 门禁。 */
-export function canonicalModelFixture(views: CubeView[], taxonomy: SemanticTaxonomy) {
-  const document = buildCatalogDocument(views, taxonomy);
+export function canonicalModelFixture(
+  views: CubeView[],
+  taxonomy: SemanticTaxonomy,
+  timeSources: TimeSourceRegistry = TEST_TIME_SOURCE_REGISTRY,
+) {
+  const document = buildCatalogDocument(views, taxonomy, timeSources);
   const compiler = toCompilerCatalog(document);
   const dimensionGroups = new Map<string, Set<string>>();
   for (const dimension of compiler.dimensions) {
@@ -43,7 +48,11 @@ export function canonicalModelFixture(views: CubeView[], taxonomy: SemanticTaxon
         return typeof anchor === "string"
           ? [
               {
-                key: parseTimeSourceKey(view.meta?.time_source, `Cube View ${view.name}`),
+                key: parseKnownTimeSourceId(
+                  view.meta?.time_source,
+                  `Cube View ${view.name}`,
+                  timeSources,
+                ),
                 anchor: { view: view.name, measure: memberShortName(anchor) },
               },
             ]
@@ -52,5 +61,6 @@ export function canonicalModelFixture(views: CubeView[], taxonomy: SemanticTaxon
     },
     views,
     taxonomy,
+    time_sources: timeSources,
   });
 }

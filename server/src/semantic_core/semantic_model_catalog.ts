@@ -10,7 +10,7 @@ import {
   parseKnownMetricDomainId,
   type SemanticTaxonomy,
 } from "./semantic_taxonomy.js";
-import { TIME_SOURCES, parseTimeSourceKey, type TimeSourceKey } from "./time_source.js";
+import { parseKnownTimeSourceId, type TimeSourceRegistry } from "./time_source.js";
 
 export type SemanticCatalogMemberKind = "dimension" | "measure";
 export type SemanticCatalogMemberRole =
@@ -84,7 +84,7 @@ export type SemanticCatalogMetricDomain = {
 };
 
 export type SemanticCatalogTimeSource = {
-  key: TimeSourceKey;
+  key: string;
   anchor: { view: string; measure: string };
 };
 
@@ -355,6 +355,7 @@ type MetricSource = { fact: string; member: string };
 export function buildSemanticModelCatalog(
   files: SemanticModelYamlFile[],
   taxonomy: SemanticTaxonomy,
+  timeSourceRegistry: TimeSourceRegistry,
   formalMetrics: readonly SemanticCatalogFormalMetric[] = [],
 ): SemanticModelCatalog {
   const documents = [...files]
@@ -385,8 +386,8 @@ export function buildSemanticModelCatalog(
 
   const sourceByMetric = new Map<string, MetricSource>();
   const publicDimensionsByFact = new Map<string, Set<string>>();
-  const usedTimeSources = new Set<TimeSourceKey>();
-  const timeAnchors = new Map<TimeSourceKey, SemanticCatalogTimeSource["anchor"]>();
+  const usedTimeSources = new Set<string>();
+  const timeAnchors = new Map<string, SemanticCatalogTimeSource["anchor"]>();
   for (const { file, doc } of documents) {
     for (const view of doc.views ?? []) {
       const viewName = required(view.name, "view name", file.path);
@@ -396,9 +397,10 @@ export function buildSemanticModelCatalog(
           `semantic model catalog: ${file.path} 的 View ${viewName} 缺少有效 query_surface`,
         );
       }
-      const timeSource = parseTimeSourceKey(
+      const timeSource = parseKnownTimeSourceId(
         view.meta?.time_source,
         `semantic model catalog: ${file.path} 的 View ${viewName}`,
+        timeSourceRegistry,
       );
       if (surface === "detail") {
         if (view.meta?.time_anchor_measure !== undefined) {
@@ -568,10 +570,12 @@ export function buildSemanticModelCatalog(
   }
 
   facts.sort((a, b) => a.name.localeCompare(b.name));
-  const timeSources = TIME_SOURCES.flatMap((source): SemanticCatalogTimeSource[] => {
-    const anchor = timeAnchors.get(source.key);
-    return anchor ? [{ key: source.key, anchor }] : [];
-  });
+  const timeSources = timeSourceRegistry.definitions.flatMap(
+    (source): SemanticCatalogTimeSource[] => {
+      const anchor = timeAnchors.get(source.id);
+      return anchor ? [{ key: source.id, anchor }] : [];
+    },
+  );
   return {
     facts,
     dimension_groups: dimensionGroups,

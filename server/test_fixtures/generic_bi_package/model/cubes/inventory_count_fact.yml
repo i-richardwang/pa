@@ -1,0 +1,37 @@
+cubes:
+  - name: inventory_count_fact
+    title: Inventory count fact
+    description: Monthly regional inventory counts used by the generic BI acceptance test.
+    sql: "SELECT 1"
+    dimensions:
+      - name: year
+        title: Year
+        description: Calendar year of the inventory count.
+        type: number
+        public: false
+        meta: { internal: true, member_role: time_control }
+      - name: month
+        title: Month
+        description: Calendar month number of the inventory count.
+        type: number
+        public: false
+        meta: { internal: true, member_role: time_control }
+      - name: period_month
+        title: Period month
+        description: Calendar month of the inventory count.
+        type: time
+        public: false
+        meta: { internal: true, member_role: time_control }
+      - name: region
+        title: Region
+        description: Commercial reporting region.
+        type: string
+        meta: { dimension_group: market }
+    measures:
+      - name: counted_units
+        title: Counted units
+        description: Physical units counted in the selected inventory observation.
+        type: sum
+        meta:
+          metric_domain_id: metric_domain:inventory_position
+          time_contract: { aggregation: last, window: selected }

@@ -1,4 +1,23 @@
 import type { SemanticTaxonomy } from "../semantic_core/semantic_taxonomy.js";
+import { buildTimeSourceRegistry } from "../semantic_core/time_source.js";
+
+export const TEST_TIME_SOURCE_REGISTRY = buildTimeSourceRegistry([
+  {
+    id: "workforce",
+    title: "人员数据",
+    role: "actual",
+    primary: true,
+    comparison_policy: "calendar",
+  },
+  {
+    id: "headcount_plan",
+    title: "人员与编制数据",
+    role: "plan",
+    primary: false,
+    reference_source: "workforce",
+    comparison_policy: "calendar",
+  },
+]);
 
 /** 通用目录装配夹具；业务默认 taxonomy 只能来自语义包，不能来自核心。 */
 export const TEST_SEMANTIC_TAXONOMY: SemanticTaxonomy = {

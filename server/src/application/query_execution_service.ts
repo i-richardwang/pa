@@ -318,11 +318,11 @@ async function executeView(
       member?.title ?? memberShortName(mask.member),
     );
     const text =
-      `「${title}」有 ${mask.groups} 个结果格的样本量不足 ${mask.threshold} 人，` +
-      "数值按最小样本量保护未显示。";
+      `「${title}」有 ${mask.groups} 个结果格的支撑量不足 ${mask.threshold}，` +
+      "数值按最小支撑量保护未显示。";
     const note = {
-      member: `notice:min_sample:${memberShortName(mask.member)}`,
-      title: "最小样本量保护",
+      member: `notice:minimum_support:${memberShortName(mask.member)}`,
+      title: "最小支撑量保护",
       text,
     };
     notes.push(note);

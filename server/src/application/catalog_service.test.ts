@@ -12,11 +12,14 @@ import {
   createCatalogService,
   SemanticModelUnavailableError,
 } from "./catalog_service.js";
-import { TEST_SEMANTIC_TAXONOMY } from "../test_support/semantic_taxonomy.js";
+import {
+  TEST_SEMANTIC_TAXONOMY,
+  TEST_TIME_SOURCE_REGISTRY,
+} from "../test_support/semantic_taxonomy.js";
 import { canonicalModelFixture } from "../test_support/canonical_semantic_model.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
-  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY);
+  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY);
 
 const principal: Principal = {
   email: "h@x",

@@ -1,0 +1,22 @@
+views:
+  - name: workforce_exposure_metrics
+    title: 在职人月指标执行面
+    description: 入职率与离职率分母的权限受控执行面。
+    meta:
+      query_surface: metric_source
+      time_source: workforce
+      default_population_scope: 统计范围：公开虚构数据中的示例员工。
+    access_policy:
+      - groups: [pa_full, pa_service]
+        member_level:
+          includes: &members
+            [year, month, period_month, legal_entity_name, organization_name, department_name, work_location, employment_type, gender, age_band, tenure_band, job_family_name, job_title, job_level_band, workforce_exposure]
+        row_level: { allow_all: true }
+      - group: pa_scoped
+        member_level: { includes: *members }
+        row_level:
+          filters:
+            - { member: organization_name, operator: equals, values: securityContext.org_scope }
+    cubes:
+      - join_path: workforce_month_exposure_fact
+        includes: *members

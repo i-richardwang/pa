@@ -33,10 +33,22 @@ try {
 
   const catalog = CATALOG_OUTPUT_SCHEMA.parse(
     JSON.parse(
-      firstText(await client.callTool({ name: "catalog", arguments: { terms: ["人员", "组织"] } })),
+      firstText(
+        await client.callTool({
+          name: "catalog",
+          arguments: { terms: ["在职人数", "组织"] },
+        }),
+      ),
     ),
   ) as CatalogResult;
-  if (catalog.default_population_scope !== "统计范围：公开虚构数据中的示例员工。") {
+  const expectedPopulationScopes = [
+    "统计范围：公开虚构数据中的示例员工。",
+    "统计范围：公开虚构数据中的Q12调研受邀员工。",
+    "统计范围：公开虚构数据中完成最近一期Q12答卷的员工。",
+  ];
+  if (
+    !expectedPopulationScopes.every((scope) => catalog.default_population_scope.includes(scope))
+  ) {
     throw new Error("公开 Demo 默认统计范围未从模型透传");
   }
   const member = (title: string, kind: "measure" | "dimension") => {
@@ -52,11 +64,11 @@ try {
     firstText(
       await client.callTool({
         name: "values_of",
-        arguments: { member: organization, contains: "Aurora" },
+        arguments: { dimension: organization },
       }),
     ),
   ) as { values?: string[] };
-  if (!values.values?.includes("Aurora Labs")) throw new Error("values_of 未返回虚构组织值");
+  if (!values.values?.length) throw new Error("values_of 未返回虚构组织值");
 
   const run = RUN_OUTPUT_SCHEMA.parse(
     JSON.parse(

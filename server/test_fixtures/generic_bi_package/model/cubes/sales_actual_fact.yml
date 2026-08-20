@@ -1,0 +1,44 @@
+cubes:
+  - name: sales_actual_fact
+    title: Sales actual fact
+    description: Monthly regional sales actuals used by the generic BI acceptance test.
+    sql: "SELECT 1"
+    dimensions:
+      - name: year
+        title: Year
+        description: Calendar year of the sales record.
+        type: number
+        public: false
+        meta: { internal: true, member_role: time_control }
+      - name: month
+        title: Month
+        description: Calendar month number of the sales record.
+        type: number
+        public: false
+        meta: { internal: true, member_role: time_control }
+      - name: period_month
+        title: Period month
+        description: Calendar month of the sales record.
+        type: time
+        public: false
+        meta: { internal: true, member_role: time_control }
+      - name: region
+        title: Region
+        description: Commercial reporting region.
+        type: string
+        meta: { dimension_group: market }
+    measures:
+      - name: revenue
+        title: Revenue
+        description: Recognized sales revenue in the selected period.
+        type: sum
+        meta:
+          metric_domain_id: metric_domain:sales_performance
+          time_contract: { aggregation: sum, window: selected }
+      - name: order_count
+        title: Completed orders
+        description: Completed sales orders in the selected period.
+        type: sum
+        meta:
+          metric_domain_id: metric_domain:sales_performance
+          time_contract: { aggregation: sum, window: selected }

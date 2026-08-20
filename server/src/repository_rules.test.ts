@@ -18,6 +18,9 @@ const consumerReadmeTemplate = "templates/consumer/readme.md";
 const consumerSkillReadmeTemplate = "templates/consumer/skill_readme.md";
 const consumerCursorTemplate = "templates/consumer/cursor_mcp.json";
 
+const containsDemoBusinessLiteral = (source: string): boolean =>
+  /["'](?:workforce|headcount_plan|survey|q12)["']/i.test(source);
+
 async function sourceFiles(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
   const nested = await Promise.all(
@@ -58,6 +61,25 @@ test("package and runtime expose one first-release version", async () => {
     version: string;
   };
   expect(packageMetadata.version).toBe(PRODUCT_VERSION);
+});
+
+test("通用 BI 核心不内置 Demo 业务时间源或调研类型", async () => {
+  const directories = ["semantic_core", "engine", "adapters", "application"];
+  const files = (
+    await Promise.all(
+      directories.map((directory) => sourceFiles(join(rootPath, "server", "src", directory))),
+    )
+  ).flat();
+  expect(files.length).toBeGreaterThan(0);
+  expect(containsDemoBusinessLiteral('const source = "survey";')).toBe(true);
+  expect(containsDemoBusinessLiteral('const source = "inventory_count";')).toBe(false);
+  const violations: string[] = [];
+  for (const path of files) {
+    if (containsDemoBusinessLiteral(await readFile(path, "utf8"))) {
+      violations.push(relative(rootPath, path));
+    }
+  }
+  expect(violations).toEqual([]);
 });
 
 test("应用库只有 composition root 与 app_database 可以打开连接", async () => {

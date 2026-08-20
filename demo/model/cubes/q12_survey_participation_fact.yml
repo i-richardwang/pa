@@ -1,0 +1,50 @@
+cubes:
+  - name: q12_survey_participation_fact
+    title: Q12调研投放
+    public: false
+    description: 公开演示数据中每名受邀员工在每个月度状态下一行，记录最近一期Q12调研的投放与回复状态。
+    extends: employee_fact_base
+    sql: "SELECT * FROM read_parquet('/semantic/current/q12_survey_participation_fact.parquet')"
+    dimensions:
+      - name: wave_id
+        title: 调研期次编码
+        description: 最近一期Q12调研的稳定期次编码。
+        sql: wave_id
+        type: string
+        meta: { dimension_group: survey_wave }
+      - name: wave_name
+        title: 调研期次
+        description: 最近一期Q12调研的可读期次名称。
+        sql: wave_name
+        type: string
+        meta: { dimension_group: survey_wave }
+      - name: wave_month
+        title: 调研月份
+        description: 最近一期Q12调研实际投放所在月份。
+        sql: wave_month
+        type: time
+        meta: { dimension_group: survey_wave }
+      - name: responded_flag
+        title: 是否回复
+        description: 受邀员工是否完成该期Q12答卷。
+        sql: responded_flag
+        type: number
+        public: false
+        meta: { internal: true, member_role: calculation_input }
+    measures:
+      - name: q12_invited_count
+        title: Q12投放人数
+        description: 最近一期Q12调研中收到投放邀请的员工人数。
+        type: count
+        meta:
+          metric_domain_id: metric_domain:employee_engagement
+          time_contract: { aggregation: last, window: selected }
+      - name: q12_responded_count
+        title: Q12答卷人数
+        description: 最近一期Q12调研中完成答卷的员工人数。
+        type: count
+        filters:
+          - sql: "{CUBE}.responded_flag = 1"
+        meta:
+          metric_domain_id: metric_domain:employee_engagement
+          time_contract: { aggregation: last, window: selected }

@@ -21,8 +21,9 @@ const view = (name: string, measure: string): CubeView => ({
 
 test("正式指标由端口装饰层叠加，原始 Cube gateway 保持物理模型", async () => {
   const physical = [
-    view("employee_hire_metrics", "new_hire_count"),
-    view("employee_snapshot_metrics", "active_employee_count"),
+    view("employee_hire_metrics", "hire_count"),
+    view("employee_snapshot_metrics", "active_headcount"),
+    view("workforce_exposure_metrics", "workforce_exposure"),
   ];
   const gateway = {
     meta: async () => physical,
@@ -37,10 +38,10 @@ test("正式指标由端口装饰层叠加，原始 Cube gateway 保持物理模
   const hires = views.find((candidate) => candidate.name === "employee_hire_metrics");
 
   expect(physical[0].measures.map((member) => member.name)).toEqual([
-    "employee_hire_metrics.new_hire_count",
+    "employee_hire_metrics.hire_count",
   ]);
   expect(hires?.measures.map((member) => member.name)).toContain(
-    "employee_hire_metrics.current_month_new_hire_rate",
+    "employee_hire_metrics.monthly_hire_rate",
   );
   expect(modeled.load).toBe(gateway.load);
 });

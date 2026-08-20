@@ -19,6 +19,7 @@ import {
   type SemanticModelCatalog,
   type SemanticModelYamlFile,
 } from "../semantic_core/semantic_model_catalog.js";
+import { buildTimeSourceRegistry, type TimeSourceRegistry } from "../semantic_core/time_source.js";
 
 const memberName = z.string().regex(/^[a-z][a-z0-9_]*$/);
 const metricId = z.string().regex(METRIC_DOMAIN_ID_PATTERN);
@@ -59,6 +60,18 @@ const formalMetric = z
     time_contract: METRIC_TIME_CONTRACT_SCHEMA,
     node: z.discriminatedUnion("kind", [ratioNode, availabilityGuardNode]),
     format: z.enum(["number", "percent"]).optional(),
+    result_guards: z
+      .array(
+        z
+          .object({
+            kind: z.literal("minimum_support"),
+            support_measure: memberName,
+            threshold: z.number().int().positive(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .optional(),
     sensitivity: z.literal("restricted").optional(),
     ai_context: z.string().trim().min(1).max(180).optional(),
     incompatible_dimensions: z
@@ -84,7 +97,7 @@ const metricDomain = z
     id: metricId,
     title: z.string().trim().min(1),
     description: z.string().trim().min(1),
-    time_source: z.enum(["workforce", "headcount_plan", "survey"]),
+    time_source: memberName,
     synonyms: z.array(z.string().trim().min(1)),
   })
   .strict();
@@ -97,9 +110,23 @@ const dimensionGroup = z
   .strict();
 const manifestSchema = z
   .object({
-    schema_version: z.literal(1),
+    schema_version: z.literal(2),
     id: memberName,
     model_path: z.string().trim().min(1),
+    time_sources: z
+      .array(
+        z
+          .object({
+            id: memberName,
+            title: z.string().trim().min(1),
+            role: z.enum(["actual", "plan"]),
+            primary: z.boolean(),
+            reference_source: memberName.optional(),
+            comparison_policy: z.enum(["calendar", "explicit_only"]),
+          })
+          .strict(),
+      )
+      .min(1),
     taxonomy: z
       .object({
         metric_domains: z.array(metricDomain).min(1),
@@ -111,10 +138,11 @@ const manifestSchema = z
   .strict();
 
 export type SemanticPackage = {
-  schema_version: 1;
+  schema_version: 2;
   id: string;
   root: string;
   model_root: string;
+  time_sources: TimeSourceRegistry;
   taxonomy: SemanticTaxonomy;
   formal_metrics: readonly FormalMetricDefinition[];
 };
@@ -145,7 +173,7 @@ export async function loadSemanticPackage(root: string): Promise<SemanticPackage
   const raw = parse(await readFile(manifestPath, "utf8"));
   const parsed = manifestSchema.safeParse(raw);
   if (!parsed.success) {
-    throw new Error(`语义包 ${manifestPath} 不符合 schema_version 1 合同`, {
+    throw new Error(`语义包 ${manifestPath} 不符合 schema_version 2 合同`, {
       cause: parsed.error,
     });
   }
@@ -158,10 +186,16 @@ export async function loadSemanticPackage(root: string): Promise<SemanticPackage
     metric_domains: parsed.data.taxonomy.metric_domains as MetricDomainDefinition[],
     dimension_groups: parsed.data.taxonomy.dimension_groups as DimensionGroupDefinition[],
   };
+  const timeSources = buildTimeSourceRegistry(parsed.data.time_sources);
   unique(
     taxonomy.metric_domains.map((domain) => domain.id),
     "metric_domains.id",
   );
+  for (const domain of taxonomy.metric_domains) {
+    if (!timeSources.by_id.has(domain.time_source)) {
+      throw new Error(`语义包业务指标域 ${domain.id} 引用了未登记的时间来源`);
+    }
+  }
   unique(
     taxonomy.dimension_groups.map((group) => group.name),
     "dimension_groups.name",
@@ -175,12 +209,17 @@ export async function loadSemanticPackage(root: string): Promise<SemanticPackage
     if (!knownDomains.has(metric.metric_domain_id as MetricDomainId)) {
       throw new Error(`语义包正式指标 ${metric.name} 引用了未登记的业务指标域`);
     }
+    unique(
+      (metric.result_guards ?? []).map((guard) => guard.kind),
+      `formal_metrics.${metric.name}.result_guards.kind`,
+    );
   }
   return {
-    schema_version: 1,
+    schema_version: 2,
     id: parsed.data.id,
     root: packageRoot,
     model_root: modelRoot,
+    time_sources: timeSources,
     taxonomy,
     formal_metrics: parsed.data.formal_metrics as FormalMetricDefinition[],
   };
@@ -205,6 +244,7 @@ export async function loadSemanticModelCatalog(
   return buildSemanticModelCatalog(
     files,
     semanticPackage.taxonomy,
+    semanticPackage.time_sources,
     semanticCatalogFormalMetrics(semanticPackage.formal_metrics),
   );
 }

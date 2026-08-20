@@ -6,6 +6,32 @@ import {
   resolveTimeSourceAnchors,
 } from "./cube_gateway.js";
 import type { CubeView } from "../ports/cube_gateway.js";
+import { buildTimeSourceRegistry } from "../semantic_core/time_source.js";
+
+const GENERIC_TIME_SOURCES = buildTimeSourceRegistry([
+  {
+    id: "sales_actual",
+    title: "Sales actuals",
+    role: "actual",
+    primary: true,
+    comparison_policy: "calendar",
+  },
+  {
+    id: "sales_plan",
+    title: "Sales plan",
+    role: "plan",
+    primary: false,
+    reference_source: "sales_actual",
+    comparison_policy: "calendar",
+  },
+  {
+    id: "inventory_count",
+    title: "Inventory counts",
+    role: "actual",
+    primary: false,
+    comparison_policy: "explicit_only",
+  },
+]);
 
 test("内部成员只保留在服务端契约解析面", () => {
   const view = {
@@ -47,10 +73,10 @@ test("内部成员只保留在服务端契约解析面", () => {
   ]);
 });
 
-test("数据时钟从执行 View 元数据解析，不维护物理 View 名映射", () => {
+test("非 HR 数据时钟从包注册表和执行 View 元数据解析", () => {
   const metricView = (
     name: string,
-    source: "workforce" | "headcount_plan" | "survey",
+    source: "sales_actual" | "sales_plan" | "inventory_count",
     measure: string,
   ): CubeView => ({
     name,
@@ -63,38 +89,48 @@ test("数据时钟从执行 View 元数据解析，不维护物理 View 名映�
     measures: [{ name: `${name}.${measure}`, title: measure, type: "number" }],
     dimensions: [],
   });
-  const anchors = resolveTimeSourceAnchors([
-    metricView("snapshot_execution", "workforce", "active_employee_count"),
-    metricView("plan_execution", "headcount_plan", "plan"),
-    metricView("sentiment_execution", "survey", "sample_count"),
-  ]);
+  const anchors = resolveTimeSourceAnchors(
+    [
+      metricView("sales_execution", "sales_actual", "revenue"),
+      metricView("plan_execution", "sales_plan", "planned_revenue"),
+      metricView("inventory_execution", "inventory_count", "counted_units"),
+    ],
+    GENERIC_TIME_SOURCES,
+  );
   expect(Object.fromEntries(anchors)).toEqual({
-    workforce: { view: "snapshot_execution", measure: "active_employee_count" },
-    headcount_plan: { view: "plan_execution", measure: "plan" },
-    survey: { view: "sentiment_execution", measure: "sample_count" },
+    sales_actual: { view: "sales_execution", measure: "revenue" },
+    sales_plan: { view: "plan_execution", measure: "planned_revenue" },
+    inventory_count: { view: "inventory_execution", measure: "counted_units" },
   });
-  // 包里没有的来源不要求锚点：公开 Demo 包没有调研域，也没有编制域时同样合法
+  // 注册表里的非主来源不在当前包模型中出现时，不要求锚点。
   expect(
     Object.fromEntries(
-      resolveTimeSourceAnchors([
-        metricView("snapshot_execution", "workforce", "active_employee_count"),
-      ]),
+      resolveTimeSourceAnchors(
+        [metricView("sales_execution", "sales_actual", "revenue")],
+        GENERIC_TIME_SOURCES,
+      ),
     ),
-  ).toEqual({ workforce: { view: "snapshot_execution", measure: "active_employee_count" } });
+  ).toEqual({ sales_actual: { view: "sales_execution", measure: "revenue" } });
   // 声明了某来源的执行 View 在场却没人给锚点：fail-closed
   expect(() =>
-    resolveTimeSourceAnchors([
-      metricView("snapshot_execution", "workforce", "active_employee_count"),
-      {
-        ...metricView("plan_execution", "headcount_plan", "plan"),
-        meta: { query_surface: "metric_source", time_source: "headcount_plan" },
-      },
-    ]),
-  ).toThrow("headcount_plan 缺少唯一时间锚点");
+    resolveTimeSourceAnchors(
+      [
+        metricView("sales_execution", "sales_actual", "revenue"),
+        {
+          ...metricView("plan_execution", "sales_plan", "planned_revenue"),
+          meta: { query_surface: "metric_source", time_source: "sales_plan" },
+        },
+      ],
+      GENERIC_TIME_SOURCES,
+    ),
+  ).toThrow("sales_plan 缺少唯一时间锚点");
   // 主时钟恒必须在场
   expect(() =>
-    resolveTimeSourceAnchors([metricView("plan_execution", "headcount_plan", "plan")]),
-  ).toThrow("workforce 缺少唯一时间锚点");
+    resolveTimeSourceAnchors(
+      [metricView("plan_execution", "sales_plan", "planned_revenue")],
+      GENERIC_TIME_SOURCES,
+    ),
+  ).toThrow("sales_actual 缺少唯一时间锚点");
 });
 
 describe("normalizeSqlResponse", () => {

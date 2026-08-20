@@ -7,26 +7,46 @@ cubes:
     sql: "SELECT * FROM read_parquet('/semantic/current/employee_leave_event_fact.parquet')"
     dimensions:
       - name: leave_type
-        title: 离职性质
-        description: 离职事件属于主动离职或被动离职。
+        title: 离职类型
+        description: 离职事件属于主动离职、被动离职或其他离职。
         sql: leave_type
         type: string
         meta: { dimension_group: termination_event }
     measures:
-      - name: turnover_count
+      - name: separation_count
         title: 离职人数
-        description: 所选期间发生离职的虚构员工人数。
+        description: 所选期间结束雇佣关系的员工人数。
         type: count
         meta:
           metric_domain_id: metric_domain:workforce_movement
           time_contract: { aggregation: sum, window: selected }
           underlying_records: { record_set: termination_event, selection: { kind: self } }
-      - name: voluntary_turnover_count
+      - name: voluntary_separation_count
         title: 主动离职人数
-        description: 所选期间发生主动离职的虚构员工人数。
+        description: 所选期间由员工主动发起的离职人数。
         type: count
         filters:
           - sql: "{CUBE}.leave_type = '主动离职'"
+        meta:
+          metric_domain_id: metric_domain:workforce_movement
+          time_contract: { aggregation: sum, window: selected }
+          underlying_records: { record_set: termination_event, selection: { kind: self } }
+      - name: involuntary_separation_count
+        title: 被动离职人数
+        description: 所选期间由雇主发起的离职人数。
+        type: count
+        filters:
+          - sql: "{CUBE}.leave_type = '被动离职'"
+        meta:
+          metric_domain_id: metric_domain:workforce_movement
+          time_contract: { aggregation: sum, window: selected }
+          underlying_records: { record_set: termination_event, selection: { kind: self } }
+      - name: other_separation_count
+        title: 其他离职人数
+        description: 所选期间因未归入主动或被动类别的其他原因结束雇佣关系的人数。
+        type: count
+        filters:
+          - sql: "{CUBE}.leave_type = '其他离职'"
         meta:
           metric_domain_id: metric_domain:workforce_movement
           time_contract: { aggregation: sum, window: selected }

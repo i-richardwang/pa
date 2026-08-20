@@ -1,0 +1,23 @@
+views:
+  - name: q12_survey_participation_metrics
+    title: Q12调研投放指标
+    description: Q12调研投放、答卷人数和回复率的权限受控查询入口。
+    meta:
+      query_surface: metric_source
+      time_source: survey
+      time_anchor_measure: q12_invited_count
+      default_population_scope: 统计范围：公开虚构数据中的Q12调研受邀员工。
+    access_policy:
+      - groups: [pa_full, pa_service]
+        member_level:
+          includes: &members
+            [year, month, period_month, wave_id, wave_name, wave_month, legal_entity_name, organization_name, department_name, work_location, employment_type, gender, age_band, tenure_band, job_family_name, job_title, job_level_band, q12_invited_count, q12_responded_count]
+        row_level: { allow_all: true }
+      - group: pa_scoped
+        member_level: { includes: *members }
+        row_level:
+          filters:
+            - { member: organization_name, operator: equals, values: securityContext.org_scope }
+    cubes:
+      - join_path: q12_survey_participation_fact
+        includes: *members

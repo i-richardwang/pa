@@ -40,7 +40,12 @@ function buildMap(
   formalMetrics: readonly SemanticCatalogFormalMetric[] = [],
 ) {
   return projectDataCapabilityMap(
-    buildSemanticModelCatalog(files, semanticPackage.taxonomy, formalMetrics),
+    buildSemanticModelCatalog(
+      files,
+      semanticPackage.taxonomy,
+      semanticPackage.time_sources,
+      formalMetrics,
+    ),
   );
 }
 
@@ -48,6 +53,7 @@ test("Demo 能力地图参考夹具与统一语义模型一致", async () => {
   const catalog = buildSemanticModelCatalog(
     await modelFiles(),
     semanticPackage.taxonomy,
+    semanticPackage.time_sources,
     semanticCatalogFormalMetrics(semanticPackage.formal_metrics),
   );
   const built = projectDataCapabilityMap(catalog);
@@ -59,21 +65,26 @@ test("统一语义目录装配唯一的数据时钟锚点", async () => {
   const catalog = buildSemanticModelCatalog(
     await modelFiles(),
     semanticPackage.taxonomy,
+    semanticPackage.time_sources,
     semanticCatalogFormalMetrics(semanticPackage.formal_metrics),
   );
   expect(catalog.time_sources).toEqual([
     {
       key: "workforce",
-      anchor: { view: "employee_snapshot_metrics", measure: "active_employee_count" },
+      anchor: { view: "employee_snapshot_metrics", measure: "active_headcount" },
     },
     {
       key: "headcount_plan",
       anchor: { view: "headcount_plan_metrics", measure: "planned_headcount" },
     },
+    {
+      key: "survey",
+      anchor: { view: "q12_survey_participation_metrics", measure: "q12_invited_count" },
+    },
   ]);
 });
 
-test("地图呈现四张公开演示事实、三个业务指标域且不引入运行时 join", async () => {
+test("地图呈现七张公开演示事实、四个业务指标域且不引入运行时 join", async () => {
   const graph = buildMap(
     await modelFiles(),
     semanticCatalogFormalMetrics(semanticPackage.formal_metrics),
@@ -83,11 +94,15 @@ test("地图呈现四张公开演示事实、三个业务指标域且不引入�
     "employee_hire_event_fact",
     "employee_leave_event_fact",
     "employee_month_snapshot_fact",
+    "q12_survey_participation_fact",
+    "q12_survey_response_fact",
+    "workforce_month_exposure_fact",
   ]);
   expect(graph.metric_domains.map((domain) => domain.id)).toEqual([
     "metric_domain:workforce_structure",
     "metric_domain:workforce_movement",
     "metric_domain:headcount_plan",
+    "metric_domain:employee_engagement",
   ]);
   expect(
     Object.fromEntries(
@@ -101,11 +116,15 @@ test("地图呈现四张公开演示事实、三个业务指标域且不引入�
     "metric_domain:workforce_movement": [
       "employee_hire_event_fact",
       "employee_leave_event_fact",
-      "employee_month_snapshot_fact",
+      "workforce_month_exposure_fact",
     ],
     "metric_domain:headcount_plan": [
       "department_headcount_plan_fact",
       "employee_month_snapshot_fact",
+    ],
+    "metric_domain:employee_engagement": [
+      "q12_survey_participation_fact",
+      "q12_survey_response_fact",
     ],
   });
 });
@@ -117,9 +136,11 @@ test("维度构件是全局语义身份，事实只保留物理绑定", async ()
   );
   expect(graph.dimension_groups.map((group) => group.name)).toEqual([
     "organization",
+    "employment",
     "employee_basic_info",
     "job_and_level",
     "termination_event",
+    "survey_wave",
   ]);
   expect(new Set(graph.dimension_groups.map((group) => group.name)).size).toBe(
     graph.dimension_groups.length,
@@ -127,10 +148,12 @@ test("维度构件是全局语义身份，事实只保留物理绑定", async ()
   expect(
     Object.fromEntries(graph.dimension_groups.map((group) => [group.name, group.bindings.length])),
   ).toEqual({
-    organization: 4,
-    employee_basic_info: 3,
-    job_and_level: 3,
+    organization: 7,
+    employment: 6,
+    employee_basic_info: 6,
+    job_and_level: 6,
     termination_event: 1,
+    survey_wave: 2,
   });
 
   const grouped = new Set(

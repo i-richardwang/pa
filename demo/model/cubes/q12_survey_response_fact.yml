@@ -1,0 +1,168 @@
+cubes:
+  - name: q12_survey_response_fact
+    title: Q12调研答卷
+    public: false
+    description: 公开演示数据中每名答卷员工在每个月度状态下一行，承载最近一期Q12的十二项虚构评分。
+    extends: employee_fact_base
+    sql: "SELECT * FROM read_parquet('/semantic/current/q12_survey_response_fact.parquet')"
+    dimensions:
+      - name: wave_id
+        title: 调研期次编码
+        description: 最近一期Q12调研的稳定期次编码。
+        sql: wave_id
+        type: string
+        meta: { dimension_group: survey_wave }
+      - name: wave_name
+        title: 调研期次
+        description: 最近一期Q12调研的可读期次名称。
+        sql: wave_name
+        type: string
+        meta: { dimension_group: survey_wave }
+      - name: wave_month
+        title: 调研月份
+        description: 最近一期Q12调研实际投放所在月份。
+        sql: wave_month
+        type: time
+        meta: { dimension_group: survey_wave }
+    measures:
+      - name: q12_respondent_count
+        title: Q12有效答卷人数
+        description: 最近一期Q12调研中具有完整十二项评分的员工人数。
+        type: count
+        meta:
+          metric_domain_id: metric_domain:employee_engagement
+          time_contract: { aggregation: last, window: selected }
+      - name: q12_answered_item_count
+        title: Q12有效作答项数
+        description: 最近一期Q12调研中十二项有效评分的合计项数。
+        type: sum
+        sql: q12_answered_item_count
+        meta:
+          metric_domain_id: metric_domain:employee_engagement
+          time_contract: { aggregation: last, window: selected }
+      - name: q12_favorable_item_count
+        title: Q12正向作答项数
+        description: 最近一期Q12调研中评分为四分或五分的作答项数。
+        type: sum
+        sql: q12_favorable_item_count
+        meta:
+          metric_domain_id: metric_domain:employee_engagement
+          time_contract: { aggregation: last, window: selected }
+      - name: q12_strongly_agree_item_count
+        title: Q12强烈认同项数
+        description: 最近一期Q12调研中评分为五分的作答项数。
+        type: sum
+        sql: q12_strongly_agree_item_count
+        meta:
+          metric_domain_id: metric_domain:employee_engagement
+          time_contract: { aggregation: last, window: selected }
+      - name: q12_average_score
+        title: Q12平均得分
+        description: 最近一期Q12调研十二项评分在一至五分量表上的平均值。
+        type: avg
+        sql: q12_average_score
+        meta:
+          metric_domain_id: metric_domain:employee_engagement
+          time_contract: { aggregation: last, window: selected }
+          result_guards:
+            - { kind: minimum_support, support_measure: q12_respondent_count, threshold: 5 }
+      - name: q12_basic_needs_score
+        title: Q12基本需求得分
+        description: 最近一期Q12调研基本需求层题项在一至五分量表上的平均值。
+        type: avg
+        sql: q12_basic_needs_score
+        meta: &score_meta
+          metric_domain_id: metric_domain:employee_engagement
+          time_contract: { aggregation: last, window: selected }
+          result_guards:
+            - { kind: minimum_support, support_measure: q12_respondent_count, threshold: 5 }
+      - name: q12_individual_contribution_score
+        title: Q12个人贡献得分
+        description: 最近一期Q12调研个人贡献层题项在一至五分量表上的平均值。
+        type: avg
+        sql: q12_individual_contribution_score
+        meta: *score_meta
+      - name: q12_teamwork_score
+        title: Q12团队协作得分
+        description: 最近一期Q12调研团队协作层题项在一至五分量表上的平均值。
+        type: avg
+        sql: q12_teamwork_score
+        meta: *score_meta
+      - name: q12_growth_score
+        title: Q12成长得分
+        description: 最近一期Q12调研成长层题项在一至五分量表上的平均值。
+        type: avg
+        sql: q12_growth_score
+        meta: *score_meta
+      - name: q01_score
+        title: Q01工作期望清晰得分
+        description: 最近一期Q12调研中工作期望清晰项在一至五分量表上的平均值。
+        type: avg
+        sql: q01_score
+        meta: *score_meta
+      - name: q02_score
+        title: Q02工作资源支持得分
+        description: 最近一期Q12调研中工作资源支持项在一至五分量表上的平均值。
+        type: avg
+        sql: q02_score
+        meta: *score_meta
+      - name: q03_score
+        title: Q03发挥优势机会得分
+        description: 最近一期Q12调研中发挥优势机会项在一至五分量表上的平均值。
+        type: avg
+        sql: q03_score
+        meta: *score_meta
+      - name: q04_score
+        title: Q04及时认可得分
+        description: 最近一期Q12调研中及时认可项在一至五分量表上的平均值。
+        type: avg
+        sql: q04_score
+        meta: *score_meta
+      - name: q05_score
+        title: Q05人际关怀得分
+        description: 最近一期Q12调研中人际关怀项在一至五分量表上的平均值。
+        type: avg
+        sql: q05_score
+        meta: *score_meta
+      - name: q06_score
+        title: Q06成长支持得分
+        description: 最近一期Q12调研中成长支持项在一至五分量表上的平均值。
+        type: avg
+        sql: q06_score
+        meta: *score_meta
+      - name: q07_score
+        title: Q07意见受到重视得分
+        description: 最近一期Q12调研中意见受到重视项在一至五分量表上的平均值。
+        type: avg
+        sql: q07_score
+        meta: *score_meta
+      - name: q08_score
+        title: Q08工作意义得分
+        description: 最近一期Q12调研中工作意义项在一至五分量表上的平均值。
+        type: avg
+        sql: q08_score
+        meta: *score_meta
+      - name: q09_score
+        title: Q09团队质量承诺得分
+        description: 最近一期Q12调研中团队质量承诺项在一至五分量表上的平均值。
+        type: avg
+        sql: q09_score
+        meta: *score_meta
+      - name: q10_score
+        title: Q10工作关系联结得分
+        description: 最近一期Q12调研中工作关系联结项在一至五分量表上的平均值。
+        type: avg
+        sql: q10_score
+        meta: *score_meta
+      - name: q11_score
+        title: Q11进展反馈得分
+        description: 最近一期Q12调研中进展反馈项在一至五分量表上的平均值。
+        type: avg
+        sql: q11_score
+        meta: *score_meta
+      - name: q12_score
+        title: Q12学习与成长得分
+        description: 最近一期Q12调研中学习与成长项在一至五分量表上的平均值。
+        type: avg
+        sql: q12_score
+        meta: *score_meta

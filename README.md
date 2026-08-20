@@ -42,6 +42,9 @@ flowchart LR
    uv run demo/generate_demo_data.py
    ```
 
+   生成器默认以部署前最后一个完整月份为截止月，发布连续五年的月度人员数据和多期 Q12 虚构调研数据。需要固定截图或回归期间时，使用
+   `PA_DEMO_AS_OF_MONTH=YYYY-MM uv run demo/generate_demo_data.py`。
+
 3. 启动服务：
 
    ```sh
@@ -65,19 +68,25 @@ flowchart LR
 
 ```text
 your_semantic_package/
-├── semantic_package.yml   # schema 版本、业务分类、正式指标图
+├── semantic_package.yml   # schema 版本、时间源、业务分类、正式指标图
 └── model/
     ├── cubes/             # 独立宽事实叶子模型
     └── views/             # 指标执行面与受控记录面
 ```
 
-`semantic_package.yml` 是纯声明文件，不能执行代码。加载器会拒绝未知结构、重复身份、未登记指标域、缺失模型目录和逃逸包目录的路径。
+`semantic_package.yml` 是纯声明文件，不能执行代码。当前 `schema_version: 2` 由包登记时间源、比较策略、
+业务分类和正式指标图；加载器会拒绝未知结构、重复身份、无效时间源关系、未登记指标域、缺失模型目录
+和逃逸包目录的路径。
 
 公开版本默认使用 [`demo/`](./demo)。
 
 ## 数据合同
 
-Cube 只读取 `$PA_SEMANTIC_DATA_DIR/current/*.parquet`。公开 Demo 生成器写入版本目录，校验完成后原子切换 `current`。
+Cube 只读取 `$PA_SEMANTIC_DATA_DIR/current/*.parquet`。公开 Demo 从固定模拟起点重放虚构员工生命周期，派生月末、入职、离职、在职人月和编制事实，并生成随月份向前滚动的多期 Q12 投放与答卷事实；校验时间覆盖、人员守恒、投放回复和评分边界后，生成器写入带内容指纹的不可变版本目录，再原子切换 `current`。
+
+Q12 题项使用稳定的 `Q01`–`Q12` 编码、公开四层结构和概括性短标题，不包含企业内部问卷、真实答卷、真实基准或官方完整题干。调研指标默认至少需要 5 份有效样本，避免 Demo 在过细切分时展示误导性得分。
+
+Q12® 是 Gallup, Inc. 的商标，正式题项属于其专有内容；本项目与 Gallup 无隶属或认可关系，也不提供或实施官方问卷，仅生成用于产品演示的虚构评分。框架说明参见 [Gallup 的公开 Q12 介绍](https://www.gallup.com/workplace/285674/employee-engagement.aspx)。
 
 数据目录不进入 Git；`.gitignore` 已排除本地 parquet、数据库、密钥和环境配置。
 

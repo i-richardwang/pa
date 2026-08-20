@@ -1,10 +1,6 @@
 /** Cube Core HTTP 适配器：负责鉴权、缓存、协议调用与响应归一。 */
 import { SignJWT } from "jose";
-import {
-  TIME_SOURCES,
-  parseTimeSourceKey,
-  type TimeSourceKey,
-} from "../semantic_core/time_source.js";
+import { parseKnownTimeSourceId, type TimeSourceRegistry } from "../semantic_core/time_source.js";
 import { CubeGatewayError } from "../ports/cube_gateway.js";
 import type {
   CubeGateway,
@@ -29,6 +25,7 @@ export type CubeGatewayConfig = {
   cubeUrl: string;
   apiSecret: string;
   serviceContext: CubeSecurityContext;
+  timeSources: TimeSourceRegistry;
 };
 
 const TOKEN_TTL_S = 3600;
@@ -259,14 +256,21 @@ export type TimeSourceAnchor = { view: string; measure: string };
 /**
  * 时间锚点由执行 View 显式声明；重命名物理 View 时不会在客户端留下第二份映射。
  * 哪些时间来源在场由当前语义包决定：主时钟必须在场；其余来源只要有执行 View 声明了它，
- * 就必须给出唯一锚点；包里没有的来源不要求（公开 Demo 包没有调研域）。
+ * 就必须给出唯一锚点；当前模型未使用的非主来源不要求锚点。
  */
-export function resolveTimeSourceAnchors(views: CubeView[]): Map<TimeSourceKey, TimeSourceAnchor> {
-  const anchors = new Map<TimeSourceKey, TimeSourceAnchor>();
-  const declared = new Set<TimeSourceKey>();
+export function resolveTimeSourceAnchors(
+  views: CubeView[],
+  registry: TimeSourceRegistry,
+): Map<string, TimeSourceAnchor> {
+  const anchors = new Map<string, TimeSourceAnchor>();
+  const declared = new Set<string>();
   for (const view of views) {
     if (view.meta?.query_surface !== "metric_source") continue;
-    const source = parseTimeSourceKey(view.meta.time_source, `执行 View ${view.name}`);
+    const source = parseKnownTimeSourceId(
+      view.meta.time_source,
+      `执行 View ${view.name}`,
+      registry,
+    );
     declared.add(source);
     const anchorMeasure = view.meta.time_anchor_measure;
     if (anchorMeasure === undefined) continue;
@@ -280,9 +284,9 @@ export function resolveTimeSourceAnchors(views: CubeView[]): Map<TimeSourceKey, 
     if (anchors.has(source)) throw new Error(`时间来源 ${source} 声明了多个锚点`);
     anchors.set(source, { view: view.name, measure: anchorMeasure });
   }
-  for (const source of TIME_SOURCES) {
-    if (!source.primary && !declared.has(source.key)) continue;
-    if (!anchors.has(source.key)) throw new Error(`时间来源 ${source.key} 缺少唯一时间锚点`);
+  for (const source of registry.definitions) {
+    if (!source.primary && !declared.has(source.id)) continue;
+    if (!anchors.has(source.id)) throw new Error(`时间来源 ${source.id} 缺少唯一时间锚点`);
   }
   return anchors;
 }
@@ -313,8 +317,7 @@ async function latestMonth(
 }
 
 /**
- * 数据时间上下文：人员数据与编制计划分别取真实数据边界；跨指标域查询默认取人员数据截至月，
- * 但允许显式查询到编制计划上界。
+ * 数据时间上下文：各来源读取自己的可用边界；计划来源从 reference_source 取得实际参考月。
  * actualThrough 是默认参考月，availableThrough 是显式查询上界。
  */
 async function fetchTimeContext(state: CubeGatewayState): Promise<TimeContext> {
@@ -324,33 +327,34 @@ async function fetchTimeContext(state: CubeGatewayState): Promise<TimeContext> {
   ) {
     return state.timeContextCache.value;
   }
-  const anchors = resolveTimeSourceAnchors(await fetchMeta(state, state.config.serviceContext));
+  const anchors = resolveTimeSourceAnchors(
+    await fetchMeta(state, state.config.serviceContext),
+    state.config.timeSources,
+  );
   // 只为当前包在场的时间来源取边界；不在场的来源不进上下文，客户端按目录 time_sources 感知
-  const present = TIME_SOURCES.filter((source) => anchors.has(source.key));
+  const present = state.config.timeSources.definitions.filter((source) => anchors.has(source.id));
   const anchorMonths = new Map(
     await Promise.all(
       present.map(async (source) => {
-        const anchor = anchors.get(source.key)!;
-        return [source.key, await latestMonth(state, anchor.view, anchor.measure)] as const;
+        const anchor = anchors.get(source.id)!;
+        return [source.id, await latestMonth(state, anchor.view, anchor.measure)] as const;
       }),
     ),
   );
   const sources: Record<string, TimeSourceContext> = {};
   for (const source of present) {
-    const actualThrough = anchorMonths.get(source.actual_source);
+    const actualThrough = anchorMonths.get(source.reference_source);
     if (actualThrough === undefined) {
-      throw new Error(`时间来源 ${source.key} 依赖的实际数据时钟 ${source.actual_source} 不在场`);
+      throw new Error(`时间来源 ${source.id} 依赖的实际数据时钟 ${source.reference_source} 不在场`);
     }
-    const availableThrough = anchorMonths.get(source.key)!;
-    sources[source.key] = {
+    const availableThrough = anchorMonths.get(source.id)!;
+    sources[source.id] = {
       actualThrough,
       availableThrough,
-      ...(source.horizon === "plan" ? { planThrough: availableThrough } : {}),
+      ...(source.role === "plan" ? { planThrough: availableThrough } : {}),
     };
   }
-  const primary = TIME_SOURCES.find((source) => source.primary);
-  if (!primary) throw new Error("时间来源缺少主数据时钟");
-  const dataAsOf = anchorMonths.get(primary.key)!;
+  const dataAsOf = anchorMonths.get(state.config.timeSources.primary.id)!;
   const value: TimeContext = {
     dataAsOf,
     sources,

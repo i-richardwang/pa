@@ -30,7 +30,7 @@ export type MetricSelectionOutcome = {
   hasMoreGroups: boolean;
 };
 
-/** 一个输出指标被最小样本量保护置空的结果格统计，用于结果注记披露。 */
+/** 一个输出指标被最小支撑量保护置空的结果格统计，用于结果注记披露。 */
 export type MaskedMeasureSummary = {
   member: string;
   threshold: number;
@@ -41,7 +41,7 @@ export type ResolvedMetricLoad = ResolvedLoad & {
   selection?: MetricSelectionOutcome;
   /** 选中分组的规范维度过滤，仅供总体与完整展示查询复用。 */
   selectionFilter?: CubeFilter;
-  /** 最小样本量保护实际生效的指标；空缺表示本次结果没有格被置空。 */
+  /** 结果保护实际生效的指标；空缺表示本次结果没有格被置空。 */
   masked?: MaskedMeasureSummary[];
 };
 
@@ -288,17 +288,17 @@ export function alignMetricLoads(
     for (const member of plan.measures) {
       output[member] = metricValue(plan.output_metric_ids[member], internal, plan.nodes, memo);
     }
-    for (const rule of plan.min_sample ?? []) {
+    for (const rule of plan.result_guards ?? []) {
       if (output[rule.measure] == null) continue;
-      const sample = metricValue(rule.denominator, internal, plan.nodes, memo);
-      if (sample === null || sample < rule.threshold) {
+      const support = metricValue(rule.support_measure, internal, plan.nodes, memo);
+      if (support === null || support < rule.threshold) {
         output[rule.measure] = null;
         maskedGroups.set(rule.measure, (maskedGroups.get(rule.measure) ?? 0) + 1);
       }
     }
     return Object.fromEntries(outputMembers.map((member) => [member, output[member] ?? null]));
   });
-  const masked = (plan.min_sample ?? [])
+  const masked = (plan.result_guards ?? [])
     .filter((rule) => maskedGroups.has(rule.measure))
     .map((rule) => ({
       member: rule.measure,

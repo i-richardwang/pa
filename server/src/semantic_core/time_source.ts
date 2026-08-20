@@ -1,66 +1,90 @@
-/**
- * 内部时间源的唯一事实源：声明时钟 key、对外业务标签、实际数据基准和可用上界语义。
- *
- * 时间源 key 是执行侧内务（Cube gateway 时钟、time_plan、application 层据此读 TimeContext.sources），
- * 绝不上线；对外只出现业务标签。此映射是这条边界上唯一的标签来源——公共时间上下文数组项标题、
- * 公共场景的 time_context_title 与 Cube Client 的时间上下文装配都取自这里；具体时钟指标由执行
- * View 的 time_anchor_measure 声明，Web 与客户端不得再维护第二份物理映射。
- */
-export const TIME_SOURCES = [
-  {
-    key: "workforce",
-    label: "人员数据",
-    actual_source: "workforce",
-    horizon: "actual",
-    calendar: "continuous",
-    primary: true,
-  },
-  {
-    key: "headcount_plan",
-    label: "人员与编制数据",
-    actual_source: "workforce",
-    horizon: "plan",
-    calendar: "continuous",
-    primary: false,
-  },
-  {
-    key: "survey",
-    label: "周期调研数据",
-    actual_source: "survey",
-    horizon: "actual",
-    calendar: "wave",
-    primary: false,
-  },
-] as const;
+/** 时间源是语义包声明的数据时钟，不携带任何业务域身份。 */
+export type TimeSourceRole = "actual" | "plan";
+export type TimeComparisonPolicy = "calendar" | "explicit_only";
 
-export type TimeSourceKey = (typeof TIME_SOURCES)[number]["key"];
+export type TimeSourceDefinition = {
+  id: string;
+  title: string;
+  role: TimeSourceRole;
+  primary: boolean;
+  /** 计划时钟引用其实际基准；实际时钟规范化为引用自身。 */
+  reference_source: string;
+  comparison_policy: TimeComparisonPolicy;
+};
+
+export type TimeSourceRegistry = {
+  definitions: readonly TimeSourceDefinition[];
+  by_id: ReadonlyMap<string, TimeSourceDefinition>;
+  primary: TimeSourceDefinition;
+};
+
+export type TimeSourceInput = Omit<TimeSourceDefinition, "reference_source"> & {
+  reference_source?: string;
+};
+
+const TIME_SOURCE_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
 /**
- * 时钟日历形态：continuous 是逐月连续推进的数据时钟；wave 是按期次投放的稀疏时钟
- * （月度桶承载「最近一期 ≤ 桶末」的读数）。wave 时钟上的日历相对对照（上一等长期间、
- * 去年同期）会静默跨期错位，编译器据此 fail-closed；显式自定义对照期间不受影响。
+ * 把语义包声明装配为 fail-closed 注册表，验证唯一身份、唯一主时钟和计划到实际的基准关系。
  */
-export type TimeSourceCalendar = "continuous" | "wave";
+export function buildTimeSourceRegistry(inputs: readonly TimeSourceInput[]): TimeSourceRegistry {
+  if (!inputs.length) throw new Error("语义包至少需要一个时间来源");
+  const definitions = inputs.map((input) => {
+    if (!TIME_SOURCE_ID_PATTERN.test(input.id)) {
+      throw new Error(`时间来源 ${input.id} 的 id 无效`);
+    }
+    return {
+      ...input,
+      reference_source: input.reference_source ?? input.id,
+    } satisfies TimeSourceDefinition;
+  });
+  const byId = new Map<string, TimeSourceDefinition>();
+  for (const definition of definitions) {
+    if (byId.has(definition.id)) throw new Error(`时间来源 ${definition.id} 重复登记`);
+    byId.set(definition.id, definition);
+  }
+  const primaries = definitions.filter((definition) => definition.primary);
+  if (primaries.length !== 1) throw new Error("语义包必须且只能声明一个主时间来源");
+  if (primaries[0].role !== "actual") throw new Error("主时间来源必须是 actual");
 
-const TIME_SOURCE_BY_KEY = new Map(TIME_SOURCES.map((source) => [source.key, source]));
+  for (const definition of definitions) {
+    const reference = byId.get(definition.reference_source);
+    if (!reference) {
+      throw new Error(
+        `时间来源 ${definition.id} 引用了未登记的基准 ${definition.reference_source}`,
+      );
+    }
+    if (definition.role === "actual" && definition.reference_source !== definition.id) {
+      throw new Error(`实际时间来源 ${definition.id} 必须引用自身`);
+    }
+    if (definition.role === "plan" && reference.role !== "actual") {
+      throw new Error(`计划时间来源 ${definition.id} 必须引用 actual 基准`);
+    }
+  }
+  return { definitions, by_id: byId, primary: primaries[0] };
+}
 
-export function parseTimeSourceKey(value: unknown, owner: string): TimeSourceKey {
-  if (typeof value !== "string" || !TIME_SOURCE_BY_KEY.has(value as TimeSourceKey)) {
+export function parseKnownTimeSourceId(
+  value: unknown,
+  owner: string,
+  registry: TimeSourceRegistry,
+): string {
+  if (typeof value !== "string" || !registry.by_id.has(value)) {
     throw new Error(`${owner} 声明了未登记的时间来源`);
   }
-  return value as TimeSourceKey;
+  return value;
 }
 
-/** 内部时间源 key → 对外业务标签；未知 key fail-closed，绝不把执行标识回显给客户端。 */
-export function timeSourceLabel(key: string): string {
-  const source = TIME_SOURCE_BY_KEY.get(key as TimeSourceKey);
-  if (!source) throw new Error(`模型声明了未登记的时间来源；请联系服务维护者`);
-  return source.label;
+export function timeSourceDefinition(
+  registry: TimeSourceRegistry,
+  id: string,
+): TimeSourceDefinition {
+  const definition = registry.by_id.get(id);
+  if (!definition) throw new Error("模型声明了未登记的时间来源；请联系服务维护者");
+  return definition;
 }
 
-/** 内部时间源 key → 日历形态；未知 key fail-closed。 */
-export function timeSourceCalendar(key: string): TimeSourceCalendar {
-  const source = TIME_SOURCE_BY_KEY.get(key as TimeSourceKey);
-  if (!source) throw new Error(`模型声明了未登记的时间来源；请联系服务维护者`);
-  return source.calendar;
+/** 内部时间源 id → 语义包业务标题；未知 id fail-closed，绝不回显执行标识。 */
+export function timeSourceLabel(registry: TimeSourceRegistry, id: string): string {
+  return timeSourceDefinition(registry, id).title;
 }

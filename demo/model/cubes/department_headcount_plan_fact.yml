@@ -2,7 +2,7 @@ cubes:
   - name: department_headcount_plan_fact
     title: 部门编制计划
     public: false
-    description: 公开演示数据中每个部门每月一行的编制目标事实。
+    description: 公开演示数据中每个部门每月一行的计划编制事实。
     sql: "SELECT * FROM read_parquet('/semantic/current/department_headcount_plan_fact.parquet')"
     dimensions:
       - name: record_key
@@ -32,9 +32,15 @@ cubes:
         type: time
         public: false
         meta: { internal: true, member_role: time_control }
+      - name: legal_entity_name
+        title: 法人实体
+        description: 员工雇佣关系所属的法人实体。
+        sql: legal_entity_name
+        type: string
+        meta: { dimension_group: organization }
       - name: organization_name
         title: 组织
-        description: 统计记录所属的一级组织。
+        description: 员工在记录时点所属的事业部级组织。
         sql: organization_name
         type: string
         meta: { dimension_group: organization }
@@ -46,7 +52,7 @@ cubes:
         meta: { dimension_group: organization }
     measures:
       - name: planned_headcount
-        title: 编制目标
+        title: 计划编制
         description: 所选月份各部门计划配置的员工人数。
         type: sum
         sql: planned_headcount

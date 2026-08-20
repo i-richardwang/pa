@@ -37,9 +37,21 @@ const JULY_2026 = {
 const catalog: CompilerCatalog = {
   default_population_scope: "测试口径。",
   views: [
-    { name: "employee_snapshot_metrics", title: "员工月末快照" },
-    { name: "employee_leave_metrics", title: "员工离职事件" },
-    { name: "headcount_plan_metrics", title: "部门编制计划" },
+    {
+      name: "employee_snapshot_metrics",
+      title: "员工月末快照",
+      comparison_policy: "calendar",
+    },
+    {
+      name: "employee_leave_metrics",
+      title: "员工离职事件",
+      comparison_policy: "calendar",
+    },
+    {
+      name: "headcount_plan_metrics",
+      title: "部门编制计划",
+      comparison_policy: "calendar",
+    },
   ],
   metric_domains: [
     {
@@ -220,35 +232,40 @@ describe("semantic query intent", () => {
     });
   });
 
-  test("期次时钟来源拒绝日历相对对照，自定义对照期间放行", () => {
-    const withSurvey: CompilerCatalog = {
+  test("explicit_only 时钟拒绝日历相对对照，自定义对照期间放行", () => {
+    const withInventory: CompilerCatalog = {
       ...catalog,
       views: [
         ...catalog.views,
-        { name: "periodic_survey_metrics", title: "周期调研指标执行面", time_source: "survey" },
+        {
+          name: "inventory_count_metrics",
+          title: "库存盘点指标",
+          time_source: "inventory_count",
+          comparison_policy: "explicit_only",
+        },
       ],
       measures: [
         ...catalog.measures,
         member(
-          "measure:survey_score",
-          "调研得分",
+          "measure:counted_units",
+          "盘点数量",
           "measure",
-          [["periodic_survey_metrics", "periodic_survey_metrics.survey_score"]],
+          [["inventory_count_metrics", "inventory_count_metrics.counted_units"]],
           { metric_domain_id: "metric_domain:workforce_movement" },
         ),
       ],
       dimensions: [
         ...catalog.dimensions,
-        member("dimension:survey_org", "组织", "dimension", [
-          ["periodic_survey_metrics", "periodic_survey_metrics.organization_name"],
+        member("dimension:warehouse", "仓库", "dimension", [
+          ["inventory_count_metrics", "inventory_count_metrics.warehouse"],
         ]),
       ],
     };
     for (const kind of ["previous_year", "previous_period"] as const) {
-      const blocked = planQueryIntent(withSurvey, {
+      const blocked = planQueryIntent(withInventory, {
         id: "query_1",
-        measures: ["measure:survey_score"],
-        dimensions: ["dimension:survey_org"],
+        measures: ["measure:counted_units"],
+        dimensions: ["dimension:warehouse"],
         time: {
           window: { kind: "range" as const, from: "2026-01", to: "2026-07" },
           comparison: { kind },
@@ -256,14 +273,14 @@ describe("semantic query intent", () => {
       });
       expect(blocked.status).toBe("incompatible");
       if (blocked.status === "incompatible") {
-        expect(blocked.reason).toContain("期次");
+        expect(blocked.reason).toContain("只允许显式对照");
       }
     }
     expect(
-      planQueryIntent(withSurvey, {
+      planQueryIntent(withInventory, {
         id: "query_1",
-        measures: ["measure:survey_score"],
-        dimensions: ["dimension:survey_org"],
+        measures: ["measure:counted_units"],
+        dimensions: ["dimension:warehouse"],
         time: {
           ...JULY_2026,
           comparison: {
@@ -272,16 +289,31 @@ describe("semantic query intent", () => {
           },
         },
       }),
-    ).toMatchObject({ status: "direct", view: "periodic_survey_metrics" });
+    ).toMatchObject({ status: "direct", view: "inventory_count_metrics" });
   });
 
-  test("连续时钟来源不受期次日历对照守卫影响", () => {
+  test("calendar 时钟来源允许日历相对对照", () => {
     const continuous: CompilerCatalog = {
       ...catalog,
       views: [
-        { name: "employee_snapshot_metrics", title: "员工月末快照", time_source: "workforce" },
-        { name: "employee_leave_metrics", title: "员工离职事件", time_source: "workforce" },
-        { name: "headcount_plan_metrics", title: "部门编制计划", time_source: "headcount_plan" },
+        {
+          name: "employee_snapshot_metrics",
+          title: "员工月末快照",
+          time_source: "workforce",
+          comparison_policy: "calendar",
+        },
+        {
+          name: "employee_leave_metrics",
+          title: "员工离职事件",
+          time_source: "workforce",
+          comparison_policy: "calendar",
+        },
+        {
+          name: "headcount_plan_metrics",
+          title: "部门编制计划",
+          time_source: "headcount_plan",
+          comparison_policy: "calendar",
+        },
       ],
     };
     expect(

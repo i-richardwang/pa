@@ -176,7 +176,13 @@ export async function runQueryPipeline(
   presentation: PresentationSpec,
 ): Promise<QueryRunResult> {
   // 执行器只消费已解析的不透明 plan，呈现按其唯一 output 投影。
-  const { principal, cubeContext, views: authViews, timeContext: context } = access;
+  const {
+    principal,
+    cubeContext,
+    views: authViews,
+    timeContext: context,
+    time_sources: timeSources,
+  } = access;
   const caller = principal.email;
   const specs = plan.nodes;
   const queryEntries = specs.flatMap((spec) =>
@@ -246,7 +252,7 @@ export async function runQueryPipeline(
       queriedViews.length ? queriedViews : authViews,
     ),
     data_as_of: context.dataAsOf,
-    time_context: publicTimeContext(timeSourced(queriedViews), context),
+    time_context: publicTimeContext(timeSourced(queriedViews), context, timeSources),
   };
   // 内部执行腿全部算过但不进交付面，也不序列化给模型。
   const outputId = plan.output.id;

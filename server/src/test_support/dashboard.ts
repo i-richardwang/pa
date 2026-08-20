@@ -8,6 +8,7 @@ import { createFeedbackStore } from "../storage/feedback.js";
 import type { AnalysisSpec, ExprNode } from "../semantic_core/analysis_spec.js";
 import { planExecution } from "../semantic_core/execution_plan.js";
 import { memberShortName } from "../semantic_core/member_name.js";
+import { TEST_TIME_SOURCE_REGISTRY } from "./semantic_taxonomy.js";
 import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
 import type { ViewPreferences } from "../presentation_core/view_preferences.js";
 import { bindSemanticFilter } from "../semantic_core/query_intent.js";
@@ -152,6 +153,7 @@ export function semanticAccessStub(principal: Principal): AuthorizedSemanticCont
       dimensions: [],
     },
     timeContext: { dataAsOf: "2026-07", sources: {} },
+    time_sources: TEST_TIME_SOURCE_REGISTRY,
   };
 }
 

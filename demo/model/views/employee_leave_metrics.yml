@@ -10,7 +10,7 @@ views:
       - groups: [pa_full, pa_service]
         member_level:
           includes: &members
-            [year, month, period_month, organization_name, department_name, gender, age_band, job_level_band, leave_type, turnover_count, voluntary_turnover_count]
+            [year, month, period_month, legal_entity_name, organization_name, department_name, work_location, employment_type, gender, age_band, tenure_band, job_family_name, job_title, job_level_band, leave_type, separation_count, voluntary_separation_count, involuntary_separation_count, other_separation_count]
         row_level: { allow_all: true }
       - group: pa_scoped
         member_level: { includes: *members }

@@ -1,11 +1,10 @@
 import { parseMetricDomainId, type MetricDomainId } from "./metric_domain_id.js";
-import type { TimeSourceKey } from "./time_source.js";
 
 export type MetricDomainDefinition = {
   id: MetricDomainId;
   title: string;
   description: string;
-  time_source: TimeSourceKey;
+  time_source: string;
   synonyms: readonly string[];
 };
 
