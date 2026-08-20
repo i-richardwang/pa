@@ -70,6 +70,15 @@ PUBLIC_SURFACE_FILES = {
 }
 YAML_NAME = re.compile(r"^\s*-\s+name:\s*([a-z][a-z0-9_]*)\s*(?:#.*)?$", re.MULTILINE)
 
+# 公共核心测试长期使用的行业通用指标标识；它们与任一企业语义包无专属关系。
+PUBLIC_GENERIC_SEMANTIC_NAMES = {
+    "active_employee_count",
+    "current_month_fulfillment_rate",
+    "current_month_turnover_rate",
+    "new_hire_count",
+    "turnover_count",
+}
+
 
 def repository_files() -> list[str]:
     output = subprocess.check_output(
@@ -113,7 +122,7 @@ def private_only_semantic_names() -> set[str]:
     demo_paths = sorted((demo_root / "model").rglob("*.yml"))
     demo_paths.extend(sorted((demo_root / "model").rglob("*.yaml")))
     demo_paths.extend(path for path in [demo_root / "semantic_package.yml"] if path.is_file())
-    return yaml_names(private_paths) - yaml_names(demo_paths)
+    return yaml_names(private_paths) - yaml_names(demo_paths) - PUBLIC_GENERIC_SEMANTIC_NAMES
 
 
 def is_public_surface(relative_path: str) -> bool:
