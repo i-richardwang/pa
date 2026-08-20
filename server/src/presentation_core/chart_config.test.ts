@@ -6,12 +6,16 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildViewChart,
+  CHART_CHROME,
   compilePresentationBlock,
+  focusedColor,
+  focusPatch,
   isViewChart,
   isPresentationBlock,
   RANK_ROW,
   SERIES_COLORS,
   type PaChartExtension,
+  type ViewChart,
 } from "./chart_config.js";
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
 import type { ChartDecl, SeriesDisplay } from "./chart_decl.js";
@@ -184,12 +188,10 @@ describe("趋势折线", () => {
       lineStyle: { width: number; color: string };
       areaStyle?: { color: string };
       emphasis: {
-        focus: string;
         scale: number;
         lineStyle: { color: string };
         itemStyle: Record<string, unknown>;
       };
-      blur: { lineStyle: Record<string, unknown>; itemStyle: Record<string, unknown> };
     }[];
     // 空心圆点 = 承载面色填充 + 系列色描边（边宽 = 线宽）：填充要挡住身下的线
     expect(series[0].itemStyle).toEqual({
@@ -209,26 +211,99 @@ describe("趋势折线", () => {
     });
     // 焦点保持本色：不重申一遍，echarts 会自动提亮成第四种颜色
     expect(series[0].emphasis.lineStyle.color).toBe(series[0].lineStyle.color);
-    // 单系列聚焦自己；失焦只换色——不透明度显式钉死 1，否则 echarts 默认再乘 0.1，
-    // 线淡到看不见、只剩被密度规则抬回来的那串点（判据见 ui_spec「图表画布」节）
-    expect(series[0].emphasis.focus).toBe("self");
-    expect(series[0].blur.lineStyle).toEqual({ color: "#dedede", opacity: 1 });
-    expect(series[0].blur.itemStyle).toEqual({
-      color: "#ffffff",
-      borderColor: "#dedede",
-      opacity: 1,
-    });
-    expect(series[0].blur.lineStyle.color).not.toBe(series[0].lineStyle.color);
   });
 
-  test("纯折线整列触发，指针是一条竖虚线", () => {
+  test("失焦取色：无焦点时人人本色，有焦点时只落选换成统一失焦色", () => {
+    const pair = buildViewChart(
+      view(
+        ["year", "month", "active_employee_count", "new_hire_count"],
+        [
+          [2026, 1, 100, 8],
+          [2026, 2, 120, 11],
+        ],
+      ),
+      { type: "line", y: ["active_employee_count", "new_hire_count"], valueLabels: "all" },
+    );
+    if (!pair) throw new Error("应产出双系列折线配置");
+    const color = SERIES_COLORS[0];
+    expect(focusedColor(color, 0, null)).toBe(color);
+    expect(focusedColor(color, 1, 1)).toBe(color);
+    expect(focusedColor(color, 0, 1)).toBe(CHART_CHROME.blurred.light);
+
+    // 换焦点只重发样式段：本色出现在哪几处就换哪几处，data 不重发（重发要把静态形状重画一遍）
+    const focused = focusPatch(pair, 0).series;
+    const dimmed = focused[1] as {
+      lineStyle: { color: string };
+      itemStyle: { borderColor: string; color: string };
+      emphasis: { lineStyle: { color: string }; itemStyle: { color: string } };
+      data?: unknown;
+    };
+    expect(dimmed.lineStyle.color).toBe(CHART_CHROME.blurred.light);
+    expect(dimmed.itemStyle.borderColor).toBe(CHART_CHROME.blurred.light);
+    // 承载面色不是任何系列的本色，换焦点时原样留着：圆点心与激活点的描边仍挡得住身下的线
+    expect(dimmed.itemStyle.color).toBe(CHART_CHROME.surface.light);
+    expect(dimmed.emphasis.lineStyle.color).toBe(CHART_CHROME.blurred.light);
+    expect(dimmed.emphasis.itemStyle.color).toBe(CHART_CHROME.blurred.light);
+    expect(dimmed).not.toHaveProperty("data");
+
+    const self = focused[0] as { lineStyle: { color: string } };
+    expect(self.lineStyle.color).toBe(SERIES_COLORS[0]);
+    // 收回焦点：人人本色，与编译期那一份同形
+    const rest = focusPatch(pair, null).series[0] as { lineStyle: { color: string } };
+    expect(rest.lineStyle.color).toBe(SERIES_COLORS[0]);
+
+    // 置灰全由这道取色式算出：编译期的 option 里没有第二套交互态，故绘图区内的悬停改不动谁的色
+    const compiled = pair.option.series as { emphasis: Record<string, unknown> }[];
+    expect(compiled[0].emphasis).not.toHaveProperty("focus");
+    expect(compiled[0]).not.toHaveProperty("blur");
+  });
+
+  test("数值标签跟焦点走：焦点在时只有焦点那条印数，档位没选中的也现出来", () => {
+    const labelsOf = (chart: ViewChart | null, focused: number | null) => {
+      if (!chart) throw new Error("应产出双系列折线配置");
+      return focusPatch(chart, focused).series.map(
+        (series) => (series.label as { show: boolean }).show,
+      );
+    };
+    const twoLines = (valueLabels: "main" | "all") =>
+      buildViewChart(
+        view(
+          ["year", "month", "active_employee_count", "new_hire_count"],
+          [
+            [2026, 1, 100, 8],
+            [2026, 2, 120, 11],
+          ],
+        ),
+        { type: "line", y: ["active_employee_count", "new_hire_count"], valueLabels },
+      );
+
+    // 无焦点：印谁由图级档位定
+    expect(labelsOf(twoLines("all"), null)).toEqual([true, true]);
+    expect(labelsOf(twoLines("main"), null)).toEqual([true, false]);
+    // 有焦点：只有焦点那条印数——十几个底片压在一堆灰线上，认不出哪个数属于正在看的那条
+    expect(labelsOf(twoLines("all"), 1)).toEqual([false, true]);
+    // 焦点落在「仅主指标」没选中的那条上：把它现出来，焦点即此刻要读的那条
+    expect(labelsOf(twoLines("main"), 1)).toEqual([false, true]);
+
+    // 形制编译期就配齐（现出来那条不是现搭的），余量按印得出数的全部系列留，框不随悬停移动
+    const compiled = twoLines("main")?.option.series as { label: Record<string, unknown> }[];
+    expect(compiled[1].label.backgroundColor).toBe(compiled[0].label.backgroundColor);
+    expect(compiled[1].label.color).toBe(SERIES_COLORS[1]);
+  });
+
+  test("纯折线整列触发，指针是一条竖虚线，卡片内容不归 echarts", () => {
     if (!chart) throw new Error("应产出折线配置");
     const tooltip = chart.option.tooltip as {
       trigger: string;
+      showContent: boolean;
       axisPointer: { type: string; lineStyle: Record<string, unknown> };
     };
     // 整列触发：折线的命中体只有 6px 圆点、密集时还被藏起来，逐项触发等于读不出数
     expect(tooltip.trigger).toBe("axis");
+    // echarts 只画指针、只报落在哪一格；读数卡是与菜单同层的浮层，要能钉住能命中
+    expect(tooltip.showContent).toBe(false);
+    expect(tooltip).not.toHaveProperty("formatter");
+    expect(tooltip).not.toHaveProperty("backgroundColor");
     expect(tooltip.axisPointer.type).toBe("line");
     expect(tooltip.axisPointer.lineStyle).toEqual({
       color: "#767676",
@@ -428,7 +503,7 @@ describe("分类柱线组合（量+率混量纲）", () => {
     ).toBeNull();
   });
 
-  test("人数结构占比仍随分类行交付给 tooltip", () => {
+  test("人数结构占比仍随分类行交付给读数卡", () => {
     const chart = buildViewChart(
       view(
         [
@@ -594,7 +669,7 @@ describe("分类条形", () => {
     });
   });
 
-  test("显式辅助通道控制占比是否进入柱图 tooltip", () => {
+  test("显式辅助通道控制占比是否进入柱图读数卡", () => {
     const source = view(
       ["job_level_band", "active_employee_count", "active_employee_share"],
       [
@@ -981,10 +1056,8 @@ describe("服务端物理呈现声明", () => {
     expect(series[0].labelLine.show).toBe(false);
     expect(series[0].data.map((d) => d.name)).toEqual(["A", "B"]);
     expect(series[0].data.map((d) => d.itemStyle.color)).toEqual(["#3b6fdb", "#e0857a"]);
-    // 饼图没有类目轴，逐项触发且无指针（整列触发在这里无所依附）
-    const tooltip = chart.option.tooltip as { trigger: string; axisPointer?: unknown };
-    expect(tooltip.trigger).toBe("item");
-    expect(tooltip.axisPointer).toBeUndefined();
+    // 饼图没有类目轴也就没有指针，落在哪一片由逐项事件报，echarts 那层整个关掉
+    expect(chart.option.tooltip).toEqual({ show: false });
     expect(chart.option.legend).toBeUndefined();
     expect(pa(chart).legend).toEqual([
       { name: "A", color: "#3b6fdb" },
@@ -1135,6 +1208,10 @@ describe("对照叠加折线的交付形态", () => {
     const points = pa(block.chart!).records?.points;
     expect(points?.[0]?.[7]?.row).toBe(15);
     expect(points?.[1]?.[7]?.row).toBe(7);
+    // 「谁减谁」在编排期立好：读数卡照这条关系读差值，不去猜哪条是主期
+    const legend = pa(block.chart!).legend;
+    expect(legend?.[0]).not.toHaveProperty("baseline");
+    expect(legend?.[1]?.baseline).toBe(0);
   });
 
   test("同一结果的月度交叉表在对照列旁给出差值列", () => {
@@ -1259,4 +1336,135 @@ describe("小数位随系列进 pa 扩展块", () => {
     expect(pa(plain).decimals).toBeUndefined();
     expect(pa(plain).axis_decimals).toBeUndefined();
   });
+});
+
+/**
+ * 焦点这套机制与形态无关：凡是画得出图例的图，落选一律换成同一个失焦色。
+ * 逐形态各写一遍取色只会漏掉后加的那一种，故此处按形态清单一次点名。
+ */
+test("每种形态一律照同一道取色式置灰：折线、柱线组合、分类柱、堆叠、对照叠加、饼图", () => {
+  const comparisonView = {
+    ...view(
+      ["year", "month", "ytd_primary_event_rate"],
+      [
+        [2025, 1, 0.01],
+        [2025, 2, 0.02],
+        [2026, 1, 0.03],
+        [2026, 2, 0.04],
+      ],
+      { formats: { ytd_primary_event_rate: "percent" } },
+    ),
+    time: {
+      grain: "month",
+      coordinates: [
+        { role: "primary", from: "2026-01", to: "2026-02" },
+        { role: "comparison", from: "2025-01", to: "2025-02" },
+      ],
+      buckets: [2026, 2025].flatMap((year) =>
+        [1, 2].map((month) => {
+          const at = `${year}-${String(month).padStart(2, "0")}`;
+          return { key: { year, month }, from: at, to: at };
+        }),
+      ),
+    },
+  } as ViewBlock;
+
+  const forms: [string, ViewChart | null][] = [
+    [
+      "折线",
+      buildViewChart(
+        view(
+          ["year", "month", "active_employee_count", "new_hire_count"],
+          [
+            [2026, 1, 100, 8],
+            [2026, 2, 120, 11],
+          ],
+        ),
+        { type: "line", y: ["active_employee_count", "new_hire_count"] },
+      ),
+    ],
+    [
+      "柱线组合",
+      buildViewChart(
+        view(
+          ["year", "turnover_count", "ytd_primary_event_rate"],
+          [
+            [2024, 80, 0.011],
+            [2025, 90, 0.015],
+          ],
+          { formats: { ytd_primary_event_rate: "percent" } },
+        ),
+        { type: "line", y: ["turnover_count", "ytd_primary_event_rate"] },
+      ),
+    ],
+    [
+      "分类柱",
+      buildViewChart(
+        view(
+          ["organization_name", "new_hire_count", "leave_count"],
+          [
+            ["A", 5, 2],
+            ["B", 7, 3],
+          ],
+        ),
+        { type: "bar", x: "organization_name", y: ["new_hire_count", "leave_count"] },
+      ),
+    ],
+    [
+      "堆叠条形",
+      buildViewChart(
+        view(
+          ["organization_name", "degree", "active_employee_count"],
+          [
+            ["A", "本科", 5],
+            ["A", "硕士", 2],
+            ["B", "本科", 7],
+            ["B", "硕士", 3],
+          ],
+        ),
+        {
+          type: "bar",
+          x: "organization_name",
+          y: ["active_employee_count"],
+          groupBy: "degree",
+          stack: true,
+        },
+      ),
+    ],
+    [
+      "对照叠加",
+      compilePresentationBlock(
+        comparisonView,
+        completeDecl({ type: "line", y: ["ytd_primary_event_rate"] }),
+      ).chart ?? null,
+    ],
+    [
+      "饼图",
+      buildViewChart(
+        view(
+          ["organization_name", "active_employee_count"],
+          [
+            ["A", 5],
+            ["B", 7],
+          ],
+        ),
+        { type: "pie", x: "organization_name", y: ["active_employee_count"] },
+      ),
+    ],
+  ];
+
+  for (const [name, chart] of forms) {
+    if (!chart) throw new Error(`${name}没编译出来，下面全部落空`);
+    const legend = pa(chart).legend ?? [];
+    expect(legend.length, `${name}应有两条以上图例才谈得上焦点`).toBeGreaterThan(1);
+    // 饼图的落选是同一条系列里的别的切片，故焦点写在切片上；其余按系列对位
+    const patched = focusPatch(chart, 0).series;
+    const [self, other] = chart.form === "pie" ? (patched[0].data as unknown[]) : patched;
+    expect(JSON.stringify(other), `${name}的落选没换成失焦色`).toContain(
+      CHART_CHROME.blurred.light,
+    );
+    expect(JSON.stringify(self), `${name}的焦点被一起置灰了`).not.toContain(
+      CHART_CHROME.blurred.light,
+    );
+  }
 });

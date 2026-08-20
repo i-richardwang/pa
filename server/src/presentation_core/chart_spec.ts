@@ -43,7 +43,7 @@ export const CHART_INPUT = z
     annotations: z
       .array(z.string())
       .optional()
-      .describe("bar 的辅助标注度量；不占 Y 轴系列，只随对应主系列进入标签或 tooltip"),
+      .describe("bar 的辅助标注度量；不占 Y 轴系列，只随对应主系列进入标签或读数卡"),
     group_by: z
       .string()
       .optional()

@@ -1,5 +1,5 @@
 /**
- * 渲染端补全的两件事：绘图留白 / plot 框的归属，以及读数卡的骨架。
+ * 渲染端补全：绘图留白 / plot 框的归属，以及注入的那几个格式化器。
  *
  * 留白与框：编译期给的是紧凑档，宿主换档必须**从 PLOT_PADDING / PLOT_FRAME 取**。
  * 渲染产物必须等于表里那一行——若渲染端另写一组数字，两处各持一份留白，改哪边都只改对
@@ -7,12 +7,10 @@
  * 「渲染端写了某个数字」上。框的归属同理：整页的框归舞台，瓦片与整页图内关框，
  * 关不掉就是双层框，而双层框在截图上很容易被当成「设计就是这样」。
  *
- * 读数卡：壳只许取 `.pa-popup-surface`（配方在令牌源），单读数与多系列是两种版式，
- * 行多了要横向分栏。这三件都只在悬停时现形，跑用例是唯一不靠手动悬停就能守住的办法。
+ * 读数卡的行与版式在 `readout.test.ts` 与 `readout_card.test.tsx`。
  */
 import { expect, test } from "bun:test";
 import {
-  LEGEND_MARKER_CLASS,
   PLOT_FRAME,
   PLOT_PADDING,
   type PaChartExtension,
@@ -107,69 +105,6 @@ test("绘图区边框由 DOM 绘制，grid 不重复画框", () => {
   }
 });
 
-/** 带 pa 扩展块的多系列柱图：系列名即读数卡行名 */
-function seriesChart(names: string[]): ViewChart {
-  const pa: PaChartExtension = {
-    series: Object.fromEntries(names.map((name) => [name, "number" as const])),
-    axes: {},
-    legend: names.map((name, i) => ({ name, color: `#00000${i % 10}` })),
-  };
-  return {
-    form: "bar",
-    height: 300,
-    option: {
-      xAxis: { type: "category", data: ["2026-07"] },
-      yAxis: { type: "value" },
-      series: names.map((name, i) => ({ type: "bar", name, data: [100 + i] })),
-      pa,
-    },
-  };
-}
-
-const cardHtml = (chart: ViewChart) => {
-  const tooltip = prepareOption(chart, false).tooltip as {
-    formatter: (params: unknown) => string;
-  };
-  return tooltip.formatter({ name: "2026-07", dataIndex: 0, seriesIndex: 0 });
-};
-
-test("读数卡的壳只取 .pa-popup-surface，不自带底色与投影", () => {
-  const html = cardHtml(seriesChart(["在职人数", "离职人数"]));
-  expect(html).toContain('class="pa-popup-surface"');
-  // 壳的配方在令牌源；卡片自己写底色或投影即是第二处可写
-  expect(html).not.toMatch(/background-color:\s*(?!transparent)[^;"]*;[^"]*box-shadow/);
-  expect(html).not.toContain("box-shadow");
-});
-
-test("单读数排成值大名小，多系列排成名左值右", () => {
-  const sole = cardHtml(seriesChart(["在职人数"]));
-  // 值 18px 主行 + 名 13px 次行：只有一个数时先读到的是数
-  expect(sole).toContain("font-size:18px");
-  expect(sole).toContain("var(--pa-faint)");
-  expect(sole).not.toContain("min-content");
-
-  const many = cardHtml(seriesChart(["在职人数", "离职人数"]));
-  // 三栏（点 / 名 / 值）同字号，只靠颜色分层
-  expect(many).toContain("grid-template-columns:12px 1fr min-content");
-  expect(many).not.toContain("font-size:18px");
-  expect(many).toContain("var(--pa-muted)");
-});
-
-test("行数按 17 行一栏横向分档，至多四栏", () => {
-  const names = (count: number) => Array.from({ length: count }, (_, i) => `系列${i}`);
-  const columnsOf = (count: number) =>
-    cardHtml(seriesChart(names(count))).match(/repeat\((\d),1fr\)/)?.[1];
-
-  expect(columnsOf(17)).toBe("1");
-  expect(columnsOf(18)).toBe("2");
-  expect(columnsOf(35)).toBe("3");
-  // 封顶：再多也不横着长，否则卡片宽过画布
-  expect(columnsOf(200)).toBe("4");
-  // 栏宽随栏数成档，不是一个定值
-  expect(cardHtml(seriesChart(names(2)))).toContain("max-width:300px");
-  expect(cardHtml(seriesChart(names(18)))).toContain("max-width:500px");
-});
-
 function areaLineChart(color: string): ViewChart {
   return {
     form: "line",
@@ -212,16 +147,7 @@ test("解析不了的自定义色退成平涂，不留一块实色", () => {
   expect(area.opacity).toBe(0.05);
 });
 
-test("图例的色点与读数卡的色点是同一颗", () => {
-  expect(cardHtml(seriesChart(["在职人数", "离职人数"]))).toContain(
-    "width:8px;height:8px;border-radius:100%",
-  );
-  expect(LEGEND_MARKER_CLASS).toContain("size-2");
-  expect(LEGEND_MARKER_CLASS).toContain("rounded-full");
-  expect(LEGEND_MARKER_CLASS).not.toContain("w-0.5");
-});
-
-test("刻度、读数卡与值标签都按列声明的小数位报数：整数百分比就是整数", () => {
+test("刻度与值标签都按列声明的小数位报数：整数百分比就是整数", () => {
   const pa: PaChartExtension = {
     series: { 组织推荐指数: "percent" },
     decimals: { 组织推荐指数: 0 },
@@ -242,8 +168,6 @@ test("刻度、读数卡与值标签都按列声明的小数位报数：整数�
   const option = prepareOption(chart, false);
   const yAxis = option.yAxis as { axisLabel: { formatter: (value: number) => string } };
   expect(yAxis.axisLabel.formatter(0.225)).toBe("23%");
-  const tooltip = option.tooltip as { formatter: (params: unknown) => string };
-  expect(tooltip.formatter({ name: "研发", dataIndex: 0, seriesIndex: 0 })).toContain("23%");
   const series = (option.series as { label: { formatter: (p: { value: unknown }) => string } }[])[0];
   expect(series.label.formatter({ value: 0.2349 })).toBe("23%");
 
@@ -253,6 +177,40 @@ test("刻度、读数卡与值标签都按列声明的小数位报数：整数�
     false,
   );
   expect((plain.yAxis as { axisLabel: { formatter: (value: number) => string } }).axisLabel.formatter(0.225)).toBe("22.5%");
+});
+
+test("焦点现出的那条也带格式化器：此刻不印数的系列同样配齐格式与步距", () => {
+  const pa: PaChartExtension = {
+    series: { 在职人数: "number", 离职率: "percent" },
+    decimals: { 离职率: 0 },
+    axes: { y: ["number"] },
+    legend: [
+      { name: "在职人数", color: "#000000" },
+      { name: "离职率", color: "#111111" },
+    ],
+  };
+  const chart: ViewChart = {
+    form: "line",
+    height: 300,
+    option: {
+      xAxis: { type: "category", data: ["1月", "2月"] },
+      yAxis: { type: "value" },
+      series: [
+        { type: "line", name: "在职人数", data: [10, 20], label: { show: true } },
+        // 「仅主指标」档：形制配齐、此刻不印；焦点落在它身上才现出来
+        { type: "line", name: "离职率", data: [0.0234, 0.0312], label: { show: false } },
+      ],
+      pa,
+    },
+  };
+  type Formatter = (params: { value?: unknown; dataIndex?: number }) => string;
+  const prepared = prepareOption(chart, false);
+  const hidden = (prepared.series as { label: { formatter: Formatter } }[])[1];
+  expect(hidden.label.formatter({ value: 0.0234 })).toBe("2%");
+
+  let patch: { series?: { label?: { formatter?: Formatter } }[] } = {};
+  applyValueLabelDensity({ setOption: (option) => (patch = option as typeof patch) }, chart, 200);
+  expect(patch.series?.[1]?.label?.formatter?.({ value: 0.0312, dataIndex: 1 })).toBe("3%");
 });
 
 test("值标签密度守卫：局促时按步距挑桶印数且恒印末点，充裕时逐点印", () => {

@@ -105,7 +105,7 @@ export function formatTick(
   return compact.format(value);
 }
 
-/** tooltip / 图例 / 值标签数值：率带单位、定位小数，普通数值用千分位。 */
+/** 读数卡 / 读数条 / 值标签数值：率带单位、定位小数，普通数值用千分位。 */
 export function formatSeriesValue(
   value: unknown,
   format: ColumnFormat,

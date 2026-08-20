@@ -1,7 +1,7 @@
 /**
  * 声明式呈现编译：在完整行上确定性编译表格、KPI 或 Agent 显式声明的图表。
  * 服务端产出可序列化的完整呈现块并在此完成选型，浏览器只布局和渲染。
- * 函数不可序列化，tooltip 与数值轴格式化由渲染端按 option.pa 注入。
+ * 函数不可序列化，数值轴与值标签的格式化由渲染端按 option.pa 注入。
  * 视觉常量取自 design_tokens.ts，
  * 序列化 option 恒为亮色原值，暗色由渲染端按 CHART_DARK_COLORS 映射翻转。
  * 本文件只做数据编排与样式声明，零度量算术（engine_boundary 守护）。
@@ -41,7 +41,7 @@ const MOTION = {
 /** tool result `_meta` 中完整呈现块的键名（带命名空间前缀，MCP _meta 键名规范） */
 export const PRESENTATION_META_KEY = "ai.pa/presentation";
 
-/** 值轴的格式声明：widget 据此注入刻度与 tooltip 格式化函数（0–1 标度 → 百分比/百分点） */
+/** 值轴的格式声明：渲染端据此注入刻度格式化函数（0–1 标度 → 百分比/百分点） */
 export type AxisFormats = {
   x?: (ColumnFormat | null)[];
   y?: (ColumnFormat | null)[];
@@ -55,7 +55,7 @@ export type AxisDecimals = {
 
 /** option.pa：本产品的非样式扩展块，承载不可序列化格式化所需的声明 */
 export type PaChartExtension = {
-  /** 系列名 → 值格式（tooltip 数值按此格式化） */
+  /** 系列名 → 值格式（读数卡与值标签的数值按此格式化） */
   series: Record<string, ColumnFormat>;
   /** 系列名 → 模型声明的小数位；未声明的系列不列，走呈现层默认 */
   decimals?: Record<string, number>;
@@ -63,7 +63,7 @@ export type PaChartExtension = {
   axes: AxisFormats;
   /** 值轴刻度小数位；只在有系列声明过位数时下发 */
   axis_decimals?: AxisDecimals;
-  /** 结构占比注释：分类值 → 占比（0–1）；tooltip 随行附一条占比说明 */
+  /** 结构占比注释：分类值 → 占比（0–1）；读数卡随附一行占比说明 */
   share?: { title: string; values: Record<string, number | null> };
   /**
    * 图例清单（图例是 HTML 而非 echarts legend 组件）：渲染端据此画图例行、
@@ -74,7 +74,16 @@ export type PaChartExtension = {
    * 图例是画面上唯一还剩的读数位。它取的是画面上真实存在的那一个点，不是另算的合计——
    * 哪一桶由 `legend_latest_label` 挑明，两者恒同进同出。
    */
-  legend?: { name: string; color: string; latest?: number | null }[];
+  legend?: {
+    name: string;
+    color: string;
+    latest?: number | null;
+    /**
+     * 本系列所对照的那条系列的序号（同期叠加里各对照期都指向主期）。读数卡据此在行上
+     * 附一枚差值芯片；无对照关系的系列不列此字段。
+     */
+    baseline?: number;
+  }[];
   /** `legend[].latest` 所属的时间桶名（末桶的横轴标签）；无 latest 时缺席。 */
   legend_latest_label?: string;
   /** ECharts seriesIndex/dataIndex → 原始结果格；只在浏览器交互通道消费。 */
@@ -183,7 +192,7 @@ const POINTER_BAND = CHART_CHROME.pointerBand.light;
 const POINTER_LINE = CHART_CHROME.pointerLine.light;
 const BLURRED = CHART_CHROME.blurred.light;
 
-/** 渲染端补全（tooltip 结构、饼图中心总计）需要与序列化 option 同源的 chrome 色与字体栈 */
+/** 渲染端补全（读数卡、饼图环心总计）需要与序列化 option 同源的 chrome 色与字体栈 */
 export { CHART_CHROME, FONT_FAMILY } from "./design_tokens.js";
 export { DIVERGING_PALETTES, shadingStops } from "./table_shading.js";
 
@@ -193,6 +202,11 @@ export const CHART_DARK_COLORS: Record<string, string> = Object.fromEntries(
     .filter((pair) => pair.light !== pair.dark)
     .map((pair) => [pair.light.toLowerCase(), pair.dark]),
 );
+
+/** 亮色原值 → 当前主题的那一档：映射表只此一张，取色处不各查一遍。 */
+export function themedColor(color: string, dark: boolean): string {
+  return dark ? (CHART_DARK_COLORS[color.toLowerCase()] ?? color) : color;
+}
 
 const axisLabelStyle = {
   color: AXIS_TEXT,
@@ -248,12 +262,18 @@ function seriesColorAt(index: number): string {
   return SERIES_COLORS[index % SERIES_COLORS.length];
 }
 
-/** pa.legend：HTML 图例与 tooltip 标记的色源（图例组件本体在渲染端） */
-function legendItems(names: string[], colorAt: (i: number) => string, latest?: (number | null)[]) {
+/** pa.legend：读数条与读数卡标记的色源（两者的件本体都在渲染端） */
+function legendItems(
+  names: string[],
+  colorAt: (i: number) => string,
+  latest?: (number | null)[],
+  baselines?: (number | null)[],
+) {
   return names.map((name, i) => ({
     name,
     color: colorAt(i),
     ...(latest ? { latest: latest[i] ?? null } : {}),
+    ...(baselines?.[i] != null ? { baseline: baselines[i] as number } : {}),
   }));
 }
 
@@ -264,6 +284,79 @@ function labelColumnWidth(labels: string[]): number {
     [...text].reduce((sum, ch) => sum + (/[⺀-￯]/.test(ch) ? 12 : 6.6), 0);
   const widest = labels.reduce((max, label) => Math.max(max, width(label)), 0);
   return Math.ceil(Math.min(widest, LABEL_COLUMN.max));
+}
+
+/**
+ * 失焦是一次取色。
+ *
+ * 「谁在焦点」只有图例悬停一个来源，两个消费点——图例上的色点、画布上的系列——都按这一道
+ * 式子取色，故两处不可能各自置灰一半。绘图区内的悬停只出读数（判据见 ui_spec「图表画布」节），
+ * 而 echarts 自带的 emphasis/blur 恒由鼠标命中图形触发，故编译期不声明这两个状态。
+ */
+export function focusedColor(color: string, index: number, focused: number | null): string {
+  return focused === null || focused === index ? color : BLURRED;
+}
+
+/** 系列色写得出的几个段：线、面、柱面与激活态都在其中。 */
+const STYLE_KEYS = ["lineStyle", "itemStyle", "areaStyle", "emphasis"] as const;
+
+function recolor<T>(node: T, from: string, to: string): T {
+  if (typeof node === "string") return (node === from ? to : node) as T;
+  if (Array.isArray(node)) return node.map((v) => recolor(v, from, to)) as T;
+  if (node && typeof node === "object") {
+    return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, recolor(v, from, to)])) as T;
+  }
+  return node;
+}
+
+/**
+ * 换焦点下发的补丁：只重出样式段，`data` 不动——重发数据要把静态形状连带重画一遍。
+ * 段内凡是这条系列的本色一律换成取色结果，就地认色，不必逐形态各记一份「色写在哪几处」。
+ * 饼图的色写在切片自己身上，故按切片重出一份数据。
+ */
+export function focusPatch(
+  chart: ViewChart,
+  focused: number | null,
+): { series: Record<string, unknown>[] } {
+  const pa = chart.option.pa as PaChartExtension | undefined;
+  const items = pa?.legend ?? [];
+  const series = (Array.isArray(chart.option.series) ? chart.option.series : []) as Record<
+    string,
+    unknown
+  >[];
+  if (chart.form === "pie") {
+    const data = ((series[0]?.data ?? []) as Record<string, unknown>[]).map((slice, i) =>
+      recolor(slice, items[i]?.color ?? "", focusedColor(items[i]?.color ?? "", i, focused)),
+    );
+    return { series: [{ data }] };
+  }
+  return {
+    series: items.map((item, i) => {
+      const shown = focusedColor(item.color, i, focused);
+      const source = series[i] ?? {};
+      const styles = Object.fromEntries(
+        STYLE_KEYS.filter((key) => key in source).map((key) => [
+          key,
+          recolor(source[key], item.color, shown),
+        ]),
+      );
+      const label = source.label as { show?: boolean } | undefined;
+      return label ? { ...styles, label: { show: valueLabelShown(label, i, focused) } } : styles;
+    }),
+  };
+}
+
+/**
+ * 数值标签跟着焦点走：焦点在时只有焦点那条印数——十几个底片同时压在一堆灰线上，
+ * 读的人认不出哪个数属于他正看的那条。焦点不在时按图级档位印（档位写在编译期的 `show` 里），
+ * 焦点落在档位没选中的系列上时把它现出来：焦点即「此刻要读的那条」。
+ */
+function valueLabelShown(
+  label: { show?: boolean },
+  index: number,
+  focused: number | null,
+): boolean {
+  return focused === null ? label.show === true : focused === index;
 }
 
 export const SERIES_Z = { focused: 1000 } as const;
@@ -283,7 +376,6 @@ function lineHalo(source: Record<string, unknown>, index: number) {
     showSymbol: false,
     lineStyle: { width: 4, color: CHART_SURFACE },
     emphasis: { disabled: true },
-    blur: { lineStyle: { color: CHART_SURFACE, opacity: 1 } },
   };
 }
 
@@ -320,15 +412,10 @@ function lineSeriesPreferences(color: string, multi: boolean) {
     itemStyle: { color: CHART_SURFACE, borderColor: color, borderWidth: 1.5 },
     ...(multi ? {} : { areaStyle: { color } }),
     emphasis: {
-      focus: multi ? "series" : "self",
       scale: 1.35,
 
       lineStyle: { color },
       itemStyle: { color, borderColor: CHART_SURFACE, borderWidth: 1, opacity: 1 },
-    },
-    blur: {
-      lineStyle: { color: BLURRED, opacity: 1 },
-      itemStyle: { color: CHART_SURFACE, borderColor: BLURRED, opacity: 1 },
     },
   };
 }
@@ -337,31 +424,30 @@ function lineSeriesPreferences(color: string, multi: boolean) {
  * 柱系列：同类目多柱紧贴（barGap 0）、类目带留 40% 白，方角无边框。
  * 柱占带宽 60%——柱之间要留得出「这是相邻两个桶」的间隙，贴太近就读成一条被切开的带子。
  */
-function barSeriesPreferences(color: string, multi: boolean) {
+function barSeriesPreferences(color: string) {
   return {
     color,
     itemStyle: { color },
     barGap: 0,
     barCategoryGap: "40%",
-    emphasis: { focus: multi ? "series" : "self", itemStyle: { color } },
-    blur: { itemStyle: { color: BLURRED, opacity: 1 } },
+    emphasis: { itemStyle: { color } },
   };
 }
 
 /**
- * 读数卡的触发与指针。
+ * 指针与读数索引：echarts 的 tooltip 组件只留下这两件事，卡片本体不归它。
  *
  * **整列触发**（trigger axis）：指针落在类目带内的任意高度都读得出数。逐项触发要求精确
  * 命中图形本身，而折线的命中体只有那颗 6px 圆点、密集时还被密度规则藏起来——那等于折线
  * 根本没有读数卡。整列触发同时让「一列多系列」只出一张卡，与卡内逐系列成行的排版同构。
  *
  * **指针形按图型分档**：有柱的图画整条列高亮带（柱已经占满高度，再叠一条竖线就是第二根
- * 轴）；纯折线画一条竖虚线（无柱可依，需要一条线把读数与横坐标对上）。饼图没有类目轴，
- * 保持逐项触发、无指针。
+ * 轴）；纯折线画一条竖虚线（无柱可依，需要一条线把读数与横坐标对上）。
  *
- * echarts 自己那层容器一律**退成透明无框无影**：玻璃壳由 formatter 返回的内层 div 挂
- * `.pa-popup-surface` 承担，与菜单、Popover 同一张壳。容器上给壳会被 echarts 的内联
- * 样式压过，也就再无第二处可写。
+ * **内容不由它出**（`showContent: false`）：读数卡是与菜单同层的浮层，要能钉住、能命中、
+ * 卡内行还要回头驱动系列聚焦——echarts 那只 HTML 盒子给不了这些，它只负责把指针画在
+ * 该在的一列，并按 `updateAxisPointer` 报出落在哪一格。饼图没有类目轴也就没有指针，
+ * 索引由逐项的 mouseover 报出，故整个组件关掉。
  */
 export type PointerForm = "band" | "line" | "item";
 
@@ -371,18 +457,20 @@ function axisPointer(form: Exclude<PointerForm, "item">) {
     : { type: "line", lineStyle: { color: POINTER_LINE, type: "dashed", width: 1 } };
 }
 
-function tooltip(form: PointerForm) {
+function pointerOption(form: PointerForm) {
+  if (form === "item") return { show: false };
   return {
     show: true,
-    ...(form === "item"
-      ? { trigger: "item" }
-      : { trigger: "axis", axisPointer: axisPointer(form) }),
-    confine: true,
-    padding: 0,
-    borderWidth: 0,
-    backgroundColor: "transparent",
-    extraCssText: "box-shadow: none;",
+    showContent: false,
+    trigger: "axis",
+    axisPointer: axisPointer(form),
   };
+}
+
+/** 系列 key → 序号：对照关系在编排期按 key 立，图例与 series 数组按序号对位。 */
+function seriesIndexOf(series: { key: string }[], key: string): number | null {
+  const index = series.findIndex((item) => item.key === key);
+  return index < 0 ? null : index;
 }
 
 /** 指针形出自「图里有没有柱」这一件事实，故恒由已编译的 series 现算，不另存一份 */
@@ -419,8 +507,18 @@ export function legendRowClass(plot: keyof typeof PLOT_PADDING, withLatest = fal
   }`;
 }
 
-export const LEGEND_MARKER_CLASS =
-  "mt-[4.5px] size-2 shrink-0 self-start rounded-full pointer-coarse:mt-[3px] pointer-coarse:size-3";
+/**
+ * 系列色点：读数条与读数卡逐行都是这一颗，故形制只此一处。
+ * `lead` 是读数卡单读数那一档——值印到 18px，点要跟着再落下来一点才在同一条视线上。
+ * 下移用位移不用外边距：点与首行文字对的是视线，不该把自己那半像素算进行高。
+ */
+export function chartMarkerClass(variant: "row" | "lead" = "row"): string {
+  const drop =
+    variant === "lead"
+      ? "translate-y-[7px] pointer-coarse:translate-y-[4.5px]"
+      : "translate-y-[4.5px] pointer-coarse:translate-y-[3px]";
+  return `${drop} size-2 shrink-0 self-start rounded-full pointer-coarse:size-3`;
+}
 
 /**
  * plot 场地。`containLabel` 恒关，框也不由 grid 画（见 `PLOT_FRAME`）：绘图区四缘必须
@@ -479,7 +577,7 @@ function applyDisplay(
       intent.color ?? (typeof target.color === "string" ? target.color : seriesColorAt(index));
 
     if (intent.type === "bar") {
-      Object.assign(target, { type: "bar" }, barSeriesPreferences(color, multi));
+      Object.assign(target, { type: "bar" }, barSeriesPreferences(color));
       delete target.showSymbol;
       delete target.symbol;
       delete target.symbolSize;
@@ -534,9 +632,9 @@ function applyDisplay(
   });
 
   // 指针形取决于覆盖后的系列类型，避免纯折线仍使用列高亮带。
-  const currentTooltip = option.tooltip as Record<string, unknown> | undefined;
-  if (currentTooltip?.trigger === "axis") {
-    currentTooltip.axisPointer = axisPointer(pointerFormOf(optionSeries));
+  const pointer = option.tooltip as Record<string, unknown> | undefined;
+  if (pointer?.trigger === "axis") {
+    pointer.axisPointer = axisPointer(pointerFormOf(optionSeries));
   }
 }
 
@@ -559,10 +657,12 @@ function applyValueLabels(
   if (!Array.isArray(optionSeries)) return;
   const pa = option.pa as PaChartExtension | undefined;
   const count = pa?.legend?.length ?? optionSeries.length;
-  const labeled = optionSeries.slice(0, mode === "main" ? 1 : count);
+  // 每条真系列都配齐标签形制，`show` 才是那个开关：焦点期间「只有焦点系列印数」要把
+  // 档位没选中的那些也现出来，形制现搭会与编译期这份长不一样（见 focusPatch）。
+  const labeled = optionSeries.slice(0, count);
   labeled.forEach((target, index) => {
     target.label = {
-      show: true,
+      show: mode === "all" || index === 0,
       // 堆叠段的外侧是相邻段不是空场地：标签进段内；平铺条才朝值轴末端画
       position:
         target.stack !== undefined ? "inside" : orientation === "horizontal" ? "right" : "top",
@@ -577,7 +677,8 @@ function applyValueLabels(
       borderRadius: 4,
     };
   });
-  // 段内标签不占余量；贴上限的平铺标签朝框缘画，框内不留这道就被画布裁掉
+  // 段内标签不占余量；贴上限的平铺标签朝框缘画，框内不留这道就被画布裁掉。
+  // 余量按「印得出数的全部系列」留：焦点能现出档位没选中的那条，框却不该随悬停移动
   const flat = labeled.filter((target) => target.stack === undefined);
   if (flat.length === 0) return;
   const inset =
@@ -665,6 +766,7 @@ function trendOption(spec: TrendSpec): ViewChart {
       seriesColorAt,
       // 值取自铺开的行本身，不重算：图例给的就是画面上那一列真实的点。
       latestRow ? spec.series.map((s) => cellNumber(latestRow[s.key])) : undefined,
+      spec.series.map((s) => (s.baselineKey ? seriesIndexOf(spec.series, s.baselineKey) : null)),
     ),
     ...(latestRow ? { legend_latest_label: String(latestRow.t ?? "") } : {}),
     records: recordProjectionPoints(spec.rows, spec.sourceRows, spec.series),
@@ -677,7 +779,7 @@ function trendOption(spec: TrendSpec): ViewChart {
       textStyle: { fontFamily: FONT_FAMILY },
       ...MOTION,
       grid: grid(),
-      tooltip: tooltip(hasBar ? "band" : "line"),
+      tooltip: pointerOption(hasBar ? "band" : "line"),
       xAxis: {
         type: "category",
         data: labels,
@@ -701,7 +803,7 @@ function trendOption(spec: TrendSpec): ViewChart {
           type: s.mark === "bar" ? "bar" : "line",
           data: s.mark === "bar" ? values : withLatestMarker(values, seriesColorAt(i)),
           ...(s.mark === "bar"
-            ? { yAxisIndex: 0, ...barSeriesPreferences(seriesColorAt(i), multi) }
+            ? { yAxisIndex: 0, ...barSeriesPreferences(seriesColorAt(i)) }
             : {
                 yAxisIndex: spec.mixedAxes ? 1 : 0,
                 ...lineSeriesPreferences(seriesColorAt(i), multi),
@@ -752,7 +854,7 @@ function categoryComboOption(spec: CategoryComboSpec): ViewChart {
       textStyle: { fontFamily: FONT_FAMILY },
       ...MOTION,
       grid: grid(),
-      tooltip: tooltip("band"),
+      tooltip: pointerOption("band"),
       xAxis: {
         type: "category",
         data: labels,
@@ -776,14 +878,14 @@ function categoryComboOption(spec: CategoryComboSpec): ViewChart {
         data: spec.rows.map((row) => cellNumber(row[series.key])),
         ...(series.isRate
           ? lineSeriesPreferences(seriesColorAt(index), multi)
-          : barSeriesPreferences(seriesColorAt(index), multi)),
+          : barSeriesPreferences(seriesColorAt(index))),
       })),
       pa,
     },
   };
 }
 
-/** 分类条形（横排容纳中文长标签）：多系列并列、双分类构成堆叠；占比注释随 tooltip */
+/** 分类条形（横排容纳中文长标签）：多系列并列、双分类构成堆叠；占比注释随读数卡 */
 function barOption(spec: BarSpec): ViewChart {
   const multi = spec.series.length > 1;
   const labels = spec.rows.map((r) => String(r.label ?? ""));
@@ -826,7 +928,7 @@ function barOption(spec: BarSpec): ViewChart {
           name: s.name,
           type: "bar",
           data: spec.rows.map((r) => cellNumber(r[s.key])),
-          ...barSeriesPreferences(seriesColorAt(i), multi),
+          ...barSeriesPreferences(seriesColorAt(i)),
         })),
         pa,
       },
@@ -843,7 +945,7 @@ function barOption(spec: BarSpec): ViewChart {
       ...MOTION,
       // 类目在左轴（中文长标签），刻度留在框外自占一栏
       grid: grid(gutter),
-      tooltip: tooltip("band"),
+      tooltip: pointerOption("band"),
       xAxis: {
         type: "value",
         splitNumber: VALUE_SPLIT,
@@ -870,7 +972,7 @@ function barOption(spec: BarSpec): ViewChart {
         name: s.name,
         type: "bar",
         data: spec.rows.map((r) => cellNumber(r[s.key])),
-        ...barSeriesPreferences(seriesColorAt(i), multi),
+        ...barSeriesPreferences(seriesColorAt(i)),
         ...(spec.stacked ? { stack: "total" } : {}),
       })),
       pa,
@@ -909,7 +1011,7 @@ function pieOption(spec: PieSpec): ViewChart {
       color: [...SERIES_COLORS],
       textStyle: { fontFamily: FONT_FAMILY },
       ...MOTION,
-      tooltip: tooltip("item"),
+      tooltip: pointerOption("item"),
       series: [
         {
           name: spec.seriesName,
@@ -919,8 +1021,7 @@ function pieOption(spec: PieSpec): ViewChart {
           label: { show: false },
           labelLine: { show: false },
           itemStyle: { borderColor: CHART_SURFACE, borderWidth: 2 },
-          emphasis: { focus: "self", scaleSize: 4 },
-          blur: { itemStyle: { color: BLURRED, opacity: 1 } },
+          emphasis: { scaleSize: 4 },
           data: spec.rows.map((r, i) => ({
             name: r.label,
             value: r.value,

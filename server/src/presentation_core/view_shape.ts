@@ -68,6 +68,11 @@ export type SeriesDef = {
   mark?: "bar";
   /** 条形图专用：本系列对应的结构占比值在 ChartRow 中的键。 */
   shareKey?: string;
+  /**
+   * 本系列所对照的那条系列的 `key`：同期叠加把各对照期都对到主期上。有它才谈得上差值，
+   * 「谁减谁」是编排期就定下的事实，读数卡不去猜哪条是主期。
+   */
+  baselineKey?: string;
 };
 export type ChartRow = Record<string, Cell>;
 export type ChartSourceRow = {
@@ -101,7 +106,7 @@ export type BarSpec = {
   isRate: boolean;
   /** 双分类构成呈现：系列堆叠在同一条上（仅计数度量） */
   stacked: boolean;
-  /** rows 带结构占比值时 tooltip 随附占比 */
+  /** rows 带结构占比值时读数卡随附占比 */
   hasShare: boolean;
 };
 
@@ -125,7 +130,7 @@ export type PieSpec = {
   column: string;
   /** 切片分类来源列（载荷列短名） */
   categoryColumn: string;
-  /** 度量展示名（图例/ tooltip 系列名） */
+  /** 度量展示名（读数条与读数卡的系列名） */
   seriesName: string;
   format: ColumnFormat;
   decimals?: number;
@@ -383,6 +388,7 @@ function comparisonLine(
 ): TrendSpec | null {
   if (periods.length > MAX_LINE_SERIES) return null;
   const format = columnFormat(view.columns[valIdx], view.column_formats);
+  // periods[0] 是主期（桶序也由它铺开），其余各期都对照它读差值
   const series = periods.map((period, index) => ({
     key: `s${index}`,
     name: periodLabel(period),
@@ -390,6 +396,7 @@ function comparisonLine(
     format,
     ...declaredDecimals(view, valIdx),
     isRate: isRateColumn(view.columns[valIdx], view.column_formats),
+    ...(index === 0 ? {} : { baselineKey: "s0" }),
   }));
   const at = new Map<number, { seriesKey: string; position: number }>();
   periods.forEach((period, index) => {
@@ -527,7 +534,7 @@ function declaredShareIdx(
   return annotations === undefined || annotations.has(shareIdx) ? shareIdx : -1;
 }
 
-/** 关系推断优先画分子、把同查结构占比作为标签/tooltip；只查占比时它仍是一等度量。 */
+/** 关系推断优先画分子、把同查结构占比作为标签或读数卡上的注释；只查占比时它仍是一等度量。 */
 export function primaryMeasureIndices(view: ViewBlock, measureIdx: number[]): number[] {
   const selected = new Set(measureIdx);
   const auxiliary = new Set(
@@ -604,7 +611,7 @@ function categoryBar(
  * 分类拆系列条形图核心：双分类 × 单度量——一侧做分类轴，另一侧派生系列（堆叠段或并列组）。
  * 堆叠仅限计数度量（率的分段相加无意义）；分类值对重复时数据不成矩阵退空。
  * 缺席的 (分类, 系列) 对：计数补 0（构成语义上缺席即为零），率留空（0 是实值不可混）。
- * 服务端派生占比列存在时，分类占比 = 该分类各段占比之和，随 tooltip 交付。
+ * 服务端派生占比列存在时，分类占比 = 该分类各段占比之和，随读数卡交付。
  */
 function categorySeriesBar(
   view: ViewBlock,

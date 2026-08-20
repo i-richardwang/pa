@@ -1,28 +1,24 @@
 /**
  * 图表配置的渲染端补全：option 由 chart_config.ts 在完整行上生成（服务端查询管线，
  * 或编辑器草稿预览在浏览器直调同一份实现），函数不可序列化，
- * 故读数卡与数值轴刻度的格式化在这里按 option.pa 扩展块注入。
+ * 故数值轴刻度与值标签的格式化在这里按 option.pa 扩展块注入。
  *
- * 读数卡（tooltip）是**玻璃浮层，不是深色板**：与菜单、Popover 共用外壳。
- * 单系列以值为主、系列名为次；多系列使用「色点 / 名 / 值」三栏。内容过多时横向分栏，
- * 避免单栏超出画布。
- * 行内标记色取 pa.legend（空心圆点把 itemStyle.color 让给了底面填充，params.color 不可用）。
- * 卡内不标「指针在哪一根」：那件事由画布的指针（列高亮带或竖虚线）与激活点交代，卡片只管读数。
+ * 读数卡不在此列：它是与菜单同层的浮层件（`readout_card.tsx`），要印的行出自 `readout.ts`。
  * 饼图另注入环心总计；单系列折线的面积渐变也在这里现拼——序列化只带得动纯色，
  * 而渐变必须用**已按主题翻转过的**那个色去算。
  * 暗色主题：option 恒为亮色原值，这里按 CHART_DARK_COLORS 映射递归替换字符串
- * （系列色与中性色均可按映射适配暗色）；读数卡取 CSS 令牌，明暗自随。
+ * （系列色与中性色均可按映射适配暗色）。
  */
 import {
   CHART_CHROME,
   CHART_DARK_COLORS,
   FONT_FAMILY,
   PLOT_PADDING,
-  SERIES_COLORS,
   valueLabelPillWidth,
   type PaChartExtension,
   type ViewChart,
 } from "../../src/presentation_core/chart_config.js";
+import { asArray, type MutableOption, pieData, pieTotal } from "./chart_option.js";
 import { formatSeriesValue, formatTick } from "../../src/presentation_core/view_format.js";
 import type { ColumnFormat } from "../../src/semantic_core/query_payload.js";
 
@@ -45,187 +41,7 @@ export function watchTheme(onChange: () => void): () => void {
   };
 }
 
-function escapeHtml(value: unknown): string {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-const CARD_TEXT = "font-size:13px;font-weight:420;line-height:16px";
-/** 数字恒等宽——列对不齐时，同一列上下两个数就没法直接比大小 */
-const TABULAR = "font-variant-numeric:tabular-nums";
-const TRUNCATE = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
-
-type CardRow = {
-  color?: string;
-  name: string;
-  value: string;
-  /** 随行的次要读数（占比），落在值下方那一行 */
-  secondary?: string;
-};
-
-/** 一行一栏排到 17 行才另起一栏，至多四栏；栏宽随栏数成档。 */
-const COLUMN_TIERS = [
-  { min: 200, max: 300 },
-  { min: 400, max: 500 },
-  { min: 600, max: 700 },
-  { min: 800, max: 900 },
-] as const;
-
-function columnTier(rowCount: number): { columns: number; min: number; max: number } {
-  const columns = Math.min(COLUMN_TIERS.length, Math.max(1, Math.ceil(rowCount / 17)));
-  return { columns, ...COLUMN_TIERS[columns - 1] };
-}
-
-function marker(color: string | undefined, offset: string, span: number): string {
-  const box =
-    `grid-row:span ${span};align-self:start;width:8px;height:8px;border-radius:100%;` +
-    `transform:translateY(${offset})`;
-  if (!color) return `<span style="${box}"></span>`;
-  return `<span style="${box};background-color:${escapeHtml(color)}"></span>`;
-}
-
-/**
- * 单读数行：值 18px 主行 + 系列名 13px faint 次行。
- * 只有一个数时把名字压到次要层——先读数，再读它是什么。
- */
-function soleRow(row: CardRow): string {
-  return (
-    `<div style="display:grid;grid-template-columns:12px auto;column-gap:6px;row-gap:2px;` +
-    `padding:4px 0">${marker(row.color, "7px", 2)}` +
-    `<span title="${escapeHtml(row.value)}" style="${TRUNCATE};${TABULAR};font-size:18px;` +
-    `font-weight:450;line-height:21px;color:var(--pa-fg)">${escapeHtml(row.value)}</span>` +
-    `<span style="${TRUNCATE};${CARD_TEXT};color:var(--pa-faint)">${escapeHtml(row.name)}</span>` +
-    "</div>"
-  );
-}
-
-function seriesRow(row: CardRow): string {
-  const span = row.secondary ? 2 : 1;
-  const sub = row.secondary
-    ? `<span></span><span style="${TRUNCATE};${TABULAR};${CARD_TEXT};text-align:right;` +
-      `color:var(--pa-muted)">${escapeHtml(row.secondary)}</span>`
-    : "";
-  return (
-    `<div style="display:grid;grid-template-columns:12px 1fr min-content;column-gap:6px;` +
-    `row-gap:2px;padding:4px 0">${marker(row.color, "4.5px", span)}` +
-    `<span style="${TRUNCATE};${CARD_TEXT};color:var(--pa-muted)">${escapeHtml(row.name)}</span>` +
-    `<span title="${escapeHtml(row.value)}" style="${TRUNCATE};${TABULAR};${CARD_TEXT};` +
-    `text-align:right;color:var(--pa-fg)">${escapeHtml(row.value)}</span>${sub}</div>`
-  );
-}
-
-function tooltipCard(header: string, rows: CardRow[]): string {
-  if (rows.length === 0) return "";
-  const tier = columnTier(rows.length);
-  const body =
-    rows.length === 1
-      ? soleRow(rows[0])
-      : `<div style="display:grid;grid-template-columns:repeat(${tier.columns},1fr);` +
-        `column-gap:16px">${rows.map(seriesRow).join("")}</div>`;
-  const head = header
-    ? `<div style="${TRUNCATE};${CARD_TEXT};padding:12px 16px 2px;color:var(--pa-fg)">` +
-      `${escapeHtml(header)}</div>`
-    : "";
-  return (
-    `<div class="pa-popup-surface" style="overflow:hidden;min-width:${tier.min}px;` +
-    `max-width:${tier.max}px;font-family:${FONT_FAMILY}">${head}` +
-    `<div style="padding:8px 16px">${body}</div></div>`
-  );
-}
-
-type TooltipParam = {
-  name?: string;
-  seriesName?: string;
-  seriesIndex?: number;
-  dataIndex?: number;
-};
-
-type MutableOption = Record<string, unknown>;
-
-function asArray(value: unknown): MutableOption[] {
-  if (Array.isArray(value)) return value as MutableOption[];
-  if (value && typeof value === "object") return [value as MutableOption];
-  return [];
-}
-
-function markerColorAt(pa: PaChartExtension, index: number): string {
-  return pa.legend?.[index]?.color ?? SERIES_COLORS[index % SERIES_COLORS.length];
-}
-
-/** 饼图数据与总量（占比与中心总计共用；求和是呈现算术，与 {d}% 同级，不进服务端） */
-function pieData(option: MutableOption): { name: string; value: number | null }[] {
-  const data = (asArray(option.series)[0]?.data ?? []) as { name?: unknown; value?: unknown }[];
-  return data.map((d) => ({
-    name: String(d.name ?? ""),
-    value: typeof d.value === "number" ? d.value : null,
-  }));
-}
-
-function pieTotal(option: MutableOption): number {
-  return pieData(option).reduce((sum, d) => sum + (d.value ?? 0), 0);
-}
-
-/**
- * 逐项触发（无十字准星）下的全系列读数：抬头 = 分类值，行 = 每个系列在该分类上的值。
- * 占比（饼图切片占比、结构占比注释）作次要读数随行，不另起一列。
- */
-function makeTooltipFormatter(
-  form: ViewChart["form"],
-  option: MutableOption,
-  pa: PaChartExtension,
-) {
-  return (params: TooltipParam | TooltipParam[]): string => {
-    const p = Array.isArray(params) ? params[0] : params;
-    if (!p) return "";
-
-    if (form === "pie") {
-      const data = pieData(option);
-      const total = pieTotal(option);
-      const format: ColumnFormat = Object.values(pa.series)[0] ?? "number";
-      const decimals = Object.values(pa.decimals ?? {})[0];
-      const rows: CardRow[] = data.map((d, i) => ({
-        color: markerColorAt(pa, i),
-        name: d.name,
-        value: d.value === null ? "—" : formatSeriesValue(d.value, format, decimals),
-        secondary:
-          d.value === null || total <= 0
-            ? undefined
-            : formatSeriesValue(d.value / total, "percent"),
-      }));
-      const seriesName = Object.keys(pa.series)[0] ?? "";
-      return tooltipCard(seriesName, rows);
-    }
-
-    const dataIndex = p.dataIndex ?? 0;
-    // 只取真系列：折线的垫层追加在它们之后，是同一条线的第二遍描边，不是第二个读数
-    const rows: CardRow[] = asArray(option.series)
-      .slice(0, pa.legend?.length ?? 0)
-      .map((s, i) => {
-      const name = String(s.name ?? "");
-      const raw = Array.isArray(s.data) ? (s.data as unknown[])[dataIndex] : null;
-      const value = typeof raw === "number" ? raw : null;
-      const format: ColumnFormat = pa.series[name] ?? "number";
-      return {
-        color: markerColorAt(pa, i),
-        name,
-        value: value === null ? "—" : formatSeriesValue(value, format, pa.decimals?.[name]),
-      };
-    });
-    const header = String(p.name ?? "");
-    const share = pa.share;
-    if (share && header in share.values) {
-      const value = share.values[header];
-      if (value !== null && value !== undefined) {
-        rows.push({ name: share.title, value: formatSeriesValue(value, "percent") });
-      }
-    }
-    return tooltipCard(header, rows);
-  };
-}
-
+/** 值轴刻度：与读数卡同源的格式与位数，率轴按百分比/百分点标单位。 */
 function injectAxisFormatters(option: MutableOption, pa: PaChartExtension): void {
   const inject = (
     axes: MutableOption[],
@@ -248,11 +64,13 @@ function injectAxisFormatters(option: MutableOption, pa: PaChartExtension): void
   inject(asArray(option.yAxis), pa.axes.y, pa.axis_decimals?.y);
 }
 
-/** 值标签：与 tooltip 同一套格式（率带单位、位数随列声明），否则 0–1 标度的率会以小数印在图上。 */
+/** 值标签：与读数卡同一套格式（率带单位、位数随列声明），否则 0–1 标度的率会以小数印在图上。 */
 function injectValueLabelFormatters(option: MutableOption, pa: PaChartExtension): void {
   asArray(option.series).forEach((series) => {
     const label = series.label as MutableOption | undefined;
-    if (!label?.show) return;
+    // 配了标签形制就装格式化器，不看此刻印不印：焦点会现出档位没选中的那条，
+    // 缺格式化器它就按 echarts 的原样印，率会以 0–1 的小数落在图上
+    if (!label) return;
     const name = String(series.name ?? "");
     const format: ColumnFormat = pa.series[name] ?? "number";
     const decimals = pa.decimals?.[name];
@@ -290,9 +108,10 @@ export function applyValueLabelDensity(
   let touched = false;
   const patch = series.map((s) => {
     const record = s as Record<string, unknown>;
-    const label = record.label as { show?: boolean } | undefined;
+    const label = record.label as Record<string, unknown> | undefined;
     const kind = record.type;
-    if ((kind !== "line" && kind !== "bar") || !label?.show || !Array.isArray(record.data))
+    // 按「配了标签形制」认领而非按此刻是否印：焦点能现出档位没选中的那条，格式化器得先在
+    if ((kind !== "line" && kind !== "bar") || !label || !Array.isArray(record.data))
       return {};
     touched = true;
     const count = (record.data as unknown[]).length;
@@ -408,8 +227,8 @@ function injectAreaGradient(option: MutableOption): void {
   }
 }
 
-/** 亮色 → 暗色：递归替换 option 里的已知颜色字符串。 */
-function applyDarkColors(value: unknown): unknown {
+/** 亮色 → 暗色：递归替换 option 里的已知颜色字符串。交互期的增量补丁走同一道翻译。 */
+export function applyDarkColors(value: unknown): unknown {
   if (typeof value === "string") return CHART_DARK_COLORS[value.toLowerCase()] ?? value;
   if (Array.isArray(value)) return value.map(applyDarkColors);
   if (value && typeof value === "object") {
@@ -463,7 +282,7 @@ export function prepareOption(
     ? (applyDarkColors(chart.option) as MutableOption)
     : (structuredClone(chart.option) as MutableOption);
   // 动画契约：option 保留静态形状，仅允许交互态透明度过渡。
-  // 形状不做动画、只保留 emphasis/blur 的透明度过渡（否则悬停明暗瞬时跳变成闪烁）。
+  // 形状不做动画、只保留悬停态的透明度过渡（否则明暗瞬时跳变成闪烁）。
   // 系统开了减动效时在渲染端整体关闭。
   if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) {
     base.animation = false;
@@ -482,7 +301,5 @@ export function prepareOption(
   injectValueLabelFormatters(base, pa);
   injectAreaGradient(base);
   if (chart.form === "pie") injectPieCenterTotal(base, pa, dark);
-  const tooltip = (base.tooltip ?? {}) as MutableOption;
-  base.tooltip = { ...tooltip, formatter: makeTooltipFormatter(chart.form, base, pa) };
   return base;
 }

@@ -40,10 +40,10 @@ test("tokens.css and design_tokens.ts define the same values", async () => {
     expect(cssTokens.get(name), `tokens.css lacks --pa-${name}`).toEqual({ ...pair });
   }
   // 反向：CSS 侧不允许存在 TS 镜像之外的**字面**颜色令牌。
-  // 例外都不是颜色：popover-glow 是投影；selected 由 ink 现算（color-mix），
-  // 没有可镜像的明暗字面值。
+  // 例外都不是颜色：popover-glow 是投影，glass-blur 两档是模糊半径；selected 由 ink
+  // 现算（color-mix），没有可镜像的明暗字面值。
   const extra = [...cssTokens.keys()].filter((name) => !(name in expected));
-  expect(extra).toEqual(["selected", "popover-glow"]);
+  expect(extra).toEqual(["selected", "glass-blur", "glass-blur-card", "popover-glow"]);
 });
 
 test("chart series stay in sync across css tokens and serialized options", () => {

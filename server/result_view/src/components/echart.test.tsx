@@ -8,19 +8,22 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   applyValueTickDensity,
-  focusActions,
-  focusTarget,
+  applyFocus,
+  applyPin,
   raiseSeries,
+  readoutPosition,
   ViewChartCanvas,
 } from "./echart.js";
 import { plotRect } from "../chart_render.js";
 import { ViewRenderer } from "./view_renderer.js";
 import {
   compilePresentationBlock,
-  LEGEND_MARKER_CLASS,
+  chartMarkerClass,
   PLOT_FRAME,
   PLOT_PADDING,
   PLOT_RADIUS,
+  CHART_CHROME,
+  CHART_DARK_COLORS,
   SERIES_COLORS,
   SERIES_Z,
   haloZ,
@@ -81,7 +84,7 @@ test("渲染器忠实呈现声明的图或表", () => {
       scene="page"
     />,
   );
-  expect(chart).toContain(LEGEND_MARKER_CLASS);
+  expect(chart).toContain(chartMarkerClass());
   expect(chart).not.toContain("<tbody");
 
   const table = renderToStaticMarkup(
@@ -97,7 +100,7 @@ test("渲染器忠实呈现声明的图或表", () => {
     />,
   );
   expect(table).toContain("<tbody");
-  expect(table).not.toContain(LEGEND_MARKER_CLASS);
+  expect(table).not.toContain(chartMarkerClass());
 });
 
 /** 场地是场景的取舍，不是形态的：同一场景里图与表落在同一块场地上、同框或同不框。 */
@@ -302,21 +305,66 @@ test("聚焦某条系列时它单独抬层，收回时按序号落回各自那�
   expect(patches, "单系列也去抬层，白改一次 option").toEqual([]);
 });
 
-test("换焦点一趟发完，不经由「谁都没聚焦」那一态", () => {
-  const a = focusTarget(CHART!, 0, "在职人数");
-  const b = focusTarget(CHART!, 1, "入职人数");
-  // 从 a 换到 b：收回与点亮同在一个序列里，中间没有「只收回」的一趟
-  expect(focusActions(a, b)).toEqual([
-    { type: "downplay", seriesName: "在职人数" },
-    { type: "highlight", seriesName: "入职人数" },
+test("焦点只改色不换态：落选换成失焦色，暗色下走与首帧同一道主题翻译", () => {
+  expect(CHART, "柱图没编译出来，下面全部落空").not.toBeNull();
+  const patches: { series: { itemStyle: { color: string } }[] }[] = [];
+  const stub = { setOption: (option: unknown) => void patches.push(option as never) };
+
+  applyFocus(stub as never, CHART!, false, 0);
+  expect(patches.pop()?.series.map((s) => s.itemStyle.color)).toEqual([
+    SERIES_COLORS[0],
+    CHART_CHROME.blurred.light,
   ]);
-  // 首次进入只点亮，离开整条读数条只收回
-  expect(focusActions(null, a)).toEqual([{ type: "highlight", seriesName: "在职人数" }]);
-  expect(focusActions(a, null)).toEqual([{ type: "downplay", seriesName: "在职人数" }]);
-  expect(focusTarget({ ...CHART!, form: "pie" }, 1, "研发")).toEqual({
-    seriesIndex: 0,
-    dataIndex: 1,
-  });
+
+  applyFocus(stub as never, CHART!, false, null);
+  expect(patches.pop()?.series.map((s) => s.itemStyle.color)).toEqual([
+    SERIES_COLORS[0],
+    SERIES_COLORS[1],
+  ]);
+
+  // 暗色：色出自同一张对照表，交互期不另立一套灰
+  applyFocus(stub as never, CHART!, true, 0);
+  expect(patches.pop()?.series.map((s) => s.itemStyle.color)).toEqual([
+    CHART_DARK_COLORS[SERIES_COLORS[0].toLowerCase()],
+    CHART_CHROME.blurred.dark,
+  ]);
+});
+
+test("读数卡落在光标左侧 24，左边放不下才翻到右侧，且恒夹在场地内留一道边", () => {
+  const card = { width: 200, height: 100 };
+  const bounds = { width: 800, height: 400 };
+  // 左置：卡的右缘离光标 24
+  expect(readoutPosition({ x: 500, y: 200 }, card, bounds)).toEqual({ left: 276, top: 150 });
+  // 左边放不下就翻到右侧，同样是 24
+  expect(readoutPosition({ x: 100, y: 200 }, card, bounds).left).toBe(124);
+  // 纵向随光标居中，但不许越出场地上下缘——越出去的那半张卡等于没印
+  expect(readoutPosition({ x: 500, y: 10 }, card, bounds).top).toBe(10);
+  expect(readoutPosition({ x: 500, y: 390 }, card, bounds).top).toBe(290);
+  // 场地比卡还窄时贴着那道边，不给出负的落点
+  expect(readoutPosition({ x: 60, y: 10 }, card, { width: 150, height: 400 }).left).toBe(10);
+});
+
+test("钉住期间指针停在被钉的那一格，撤钉即交还给鼠标", () => {
+  const calls: unknown[] = [];
+  const stub = {
+    setOption: (option: unknown) => void calls.push(option),
+    dispatchAction: (action: unknown) => void calls.push(action),
+  };
+
+  applyPin(stub as never, CHART!, 3);
+  expect(calls).toEqual([
+    { tooltip: { triggerOn: "none" } },
+    { type: "showTip", seriesIndex: 0, dataIndex: 3 },
+  ]);
+
+  calls.length = 0;
+  applyPin(stub as never, CHART!, null);
+  expect(calls).toEqual([{ tooltip: { triggerOn: "mousemove|click" } }, { type: "hideTip" }]);
+
+  // 饼图没有指针可冻：那一路的索引出自逐项事件，钉住只冻卡片自己
+  calls.length = 0;
+  applyPin(stub as never, { ...CHART!, form: "pie" }, 3);
+  expect(calls).toEqual([]);
 });
 
 test("绘图区那块场地是圆角的，且瓦片档不画框", () => {

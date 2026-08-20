@@ -1,5 +1,4 @@
-
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import * as echarts from "echarts/core";
 import { BarChart, LineChart, PieChart } from "echarts/charts";
 import {
@@ -10,30 +9,34 @@ import {
 } from "echarts/components";
 import { SVGRenderer } from "echarts/renderers";
 import {
+  applyDarkColors,
   applyValueLabelDensity,
   gridRect,
   plotRect,
   plotWidth,
   prepareOption,
 } from "../chart_render.js";
+import { pieData, pieTotal } from "../chart_option.js";
+import { useDismiss } from "../dismiss.js";
+import { readoutModel, type ReadoutModel } from "../readout.js";
 import { useDarkTheme } from "../use_dark_theme.js";
 import { PlotSlab } from "./plot_slab.js";
 import { RankRows } from "./rank_rows.js";
+import { ReadoutCard } from "./readout_card.js";
 import { observeElementSize } from "../element_size.js";
 import { formatSeriesValue } from "../../../src/presentation_core/view_format.js";
 import {
-  CHART_CHROME,
-  CHART_DARK_COLORS,
+  chartMarkerClass,
+  focusedColor,
+  focusPatch,
+  legendRowClass,
   type PaChartExtension,
+  // 只取档位名（keyof typeof），留白数值本身归 chart_config 与 prepareOption
+  type PLOT_PADDING,
   SERIES_Z,
   seriesZ,
+  themedColor,
   type ViewChart,
-} from "../../../src/presentation_core/chart_config.js";
-// 只取档位名（keyof typeof），留白数值本身归 chart_config 与 prepareOption
-import {
-  LEGEND_MARKER_CLASS,
-  legendRowClass,
-  type PLOT_PADDING,
 } from "../../../src/presentation_core/chart_config.js";
 echarts.use([
   BarChart,
@@ -55,12 +58,7 @@ function applySymbolDensity(instance: echarts.ECharts, chart: ViewChart, width: 
     if (record.type !== "line" || !Array.isArray(record.data)) return {};
     touched = true;
     const visible = (record.data as unknown[]).length <= width / 12;
-
-    // 再压一道透明度，落选的点就与换过色的线不同步，糊成两种灰。
-    return {
-      itemStyle: { opacity: visible ? 1 : 0 },
-      blur: { itemStyle: { opacity: visible ? 1 : 0 } },
-    };
+    return { itemStyle: { opacity: visible ? 1 : 0 } };
   });
   if (touched) instance.setOption({ series: patch });
 }
@@ -107,67 +105,104 @@ export function raiseSeries(
   });
 }
 
-/** 聚焦某一项在 echarts 那边的指名方式：饼图按切片、其余按系列名 */
-export type FocusTarget = { seriesIndex: number; dataIndex: number } | { seriesName: string };
-
-export function focusTarget(chart: ViewChart, index: number, name: string): FocusTarget {
-  return chart.form === "pie" ? { seriesIndex: 0, dataIndex: index } : { seriesName: name };
+/** 焦点下发：编译期的色恒为亮色原值，故补丁与首帧走同一道主题翻译再进 echarts。 */
+export function applyFocus(
+  instance: Pick<echarts.ECharts, "setOption"> | null,
+  chart: ViewChart,
+  dark: boolean,
+  focused: number | null,
+): void {
+  if (!instance) return;
+  const patch = focusPatch(chart, focused);
+  instance.setOption(dark ? (applyDarkColors(patch) as typeof patch) : patch);
 }
 
-export function focusActions(
-  previous: FocusTarget | null,
-  next: FocusTarget | null,
-): ({ type: "downplay" | "highlight" } & FocusTarget)[] {
-  const actions: ({ type: "downplay" | "highlight" } & FocusTarget)[] = [];
-  if (previous) actions.push({ type: "downplay", ...previous });
-  if (next) actions.push({ type: "highlight", ...next });
-  return actions;
+/**
+ * 钉住期间指针停在被钉的那一格：交出 `triggerOn` 后鼠标不再驱动指针，再点名画一次。
+ * 不这么做，卡片冻在原地而指针继续跟着鼠标走，画面上就有两个「当前在哪一格」。
+ */
+export function applyPin(
+  instance: Pick<echarts.ECharts, "setOption" | "dispatchAction"> | null,
+  chart: ViewChart,
+  pinned: number | null,
+): void {
+  if (!instance || chart.form === "pie") return;
+  if (pinned === null) {
+    instance.setOption({ tooltip: { triggerOn: "mousemove|click" } });
+    instance.dispatchAction({ type: "hideTip" });
+    return;
+  }
+  instance.setOption({ tooltip: { triggerOn: "none" } });
+  instance.dispatchAction({ type: "showTip", seriesIndex: 0, dataIndex: pinned });
 }
 
-/** 饼图图例的占比列：切片值 / 总量（呈现算术，与 tooltip 占比同源同级） */
+/** 读数卡与光标的距离；左置放不下才翻到右侧。 */
+const READOUT_OFFSET = 24;
+/** 卡片与场地四缘的最小留白：贴着缘印的卡读起来是被裁了一半的。 */
+const READOUT_EDGE = 10;
+/**
+ * 进出同一道时长（ms）。它同时是过渡时长与卸载计时器的时长，两者差一点卡片就会在淡出中途
+ * 被摘掉，故不写成 `duration-150` 类——那样这个数就有了两处拼写。
+ */
+const READOUT_FADE = 150;
+
+/**
+ * 卡片落点：默认在光标左侧、纵向随光标居中，边界恒是结果面这一块（含读数条）。
+ * 夹在场地内而不是画布内——卡片本就该盖在图上，越出场地才叫跑出画面。
+ */
+export function readoutPosition(
+  pointer: { x: number; y: number },
+  card: { width: number; height: number },
+  bounds: { width: number; height: number },
+): { left: number; top: number } {
+  const clamp = (value: number, room: number) =>
+    Math.max(READOUT_EDGE, Math.min(value, Math.max(READOUT_EDGE, room - READOUT_EDGE)));
+  const leftSide = pointer.x - READOUT_OFFSET - card.width;
+  const left = leftSide >= READOUT_EDGE ? leftSide : pointer.x + READOUT_OFFSET;
+  return {
+    left: clamp(left, bounds.width - card.width),
+    top: clamp(pointer.y - card.height / 2, bounds.height - card.height),
+  };
+}
+
+/** 一次读数：读第几格，卡片落在哪。光标坐标与格序号分头供给，合成在此。 */
+type Readout = { index: number; x: number; y: number };
+
+/** 饼图读数条的占比列：切片值 / 总量，与卡内占比读同一份切片。 */
 function piePercents(chart: ViewChart): (string | null)[] | null {
   if (chart.form !== "pie") return null;
-  const series = chart.option.series;
-  const data = (Array.isArray(series) ? (series[0]?.data ?? []) : []) as { value?: unknown }[];
-  const values = data.map((d) => (typeof d.value === "number" ? d.value : null));
-  const total = values.reduce<number>((sum, v) => sum + (v ?? 0), 0);
-  if (total <= 0) return values.map(() => null);
-  return values.map((v) => (v === null ? null : formatSeriesValue(v / total, "percent")));
+  const total = pieTotal(chart.option);
+  return pieData(chart.option).map((slice) =>
+    slice.value === null || total <= 0 ? null : formatSeriesValue(slice.value / total, "percent"),
+  );
 }
 
 function LegendRow({
   chart,
   dark,
   plot = "compact",
-  onHover,
+  focused,
+  onFocus,
 }: {
   chart: ViewChart;
   dark: boolean;
-
   plot?: keyof typeof PLOT_PADDING;
-  onHover: (index: number | null, name: string) => void;
+  /** 焦点归画布层：图例色点与画布系列是同一个状态的两个消费点 */
+  focused: number | null;
+  onFocus: (index: number | null) => void;
 }) {
   const pa = chart.option.pa as PaChartExtension | undefined;
   const items = pa?.legend ?? [];
   const isPie = chart.form === "pie";
   if (isPie ? items.length === 0 : items.length < 2) return null;
-  const colorOf = (color: string) =>
-    dark ? (CHART_DARK_COLORS[color.toLowerCase()] ?? color) : color;
   const percents = piePercents(chart);
   const withLatest = items.some((item) => item.latest != null);
   const latestLabel = pa?.legend_latest_label;
 
-  const [focused, setFocused] = useState<number | null>(null);
   const dotColor = (item: { color: string }, i: number) =>
-    colorOf(focused !== null && focused !== i ? CHART_CHROME.blurred.light : item.color);
-
-  const focus = (i: number | null) => {
-    setFocused(i);
-    onHover(i, i === null ? "" : (items[i]?.name ?? ""));
-  };
+    themedColor(focusedColor(item.color, i, focused), dark);
   return (
-
-    <div className={legendRowClass(plot, withLatest)} onMouseLeave={() => focus(null)}>
+    <div className={legendRowClass(plot, withLatest)} onMouseLeave={() => onFocus(null)}>
       {/* 末桶名占满一行：值是那一桶的读数，不说是哪一桶就成了没有出处的数。
           桌面档 hidden 不占位，故这一行不影响既有版式。 */}
       {latestLabel && withLatest && (
@@ -176,35 +211,111 @@ function LegendRow({
         </p>
       )}
       {items.map((item, i) => (
-
+        <span
+          key={`${item.name}-${i}`}
+          className="flex min-w-0 items-start gap-1.5 text-xs text-pa-muted"
+          onMouseEnter={() => onFocus(i)}
+        >
           <span
-            key={`${item.name}-${i}`}
-            className="flex min-w-0 items-start gap-1.5 text-xs text-pa-muted"
-            onMouseEnter={() => focus(i)}
-          >
-            <span
-              aria-hidden="true"
-              className={LEGEND_MARKER_CLASS}
-              style={{ backgroundColor: dotColor(item, i) }}
-            />
-            <span className="flex min-w-0 flex-col">
-              <span className={`truncate ${focused === i ? "text-pa-fg" : ""}`}>{item.name}</span>
-              {item.latest != null && (
-                <span className="hidden truncate font-medium text-base text-pa-fg tabular-nums pointer-coarse:block">
-                  {formatSeriesValue(
-                    item.latest,
-                    pa?.series?.[item.name] ?? "number",
-                    pa?.decimals?.[item.name],
-                  )}
-                </span>
-              )}
-            </span>
-
-            {percents?.[i] != null && (
-              <span className="font-normal text-pa-faint tabular-nums">{percents[i]}</span>
+            aria-hidden="true"
+            className={chartMarkerClass()}
+            style={{ backgroundColor: dotColor(item, i) }}
+          />
+          <span className="flex min-w-0 flex-col">
+            <span className={`truncate ${focused === i ? "text-pa-fg" : ""}`}>{item.name}</span>
+            {item.latest != null && (
+              <span className="hidden truncate font-medium text-base text-pa-fg tabular-nums pointer-coarse:block">
+                {formatSeriesValue(
+                  item.latest,
+                  pa?.series?.[item.name] ?? "number",
+                  pa?.decimals?.[item.name],
+                )}
+              </span>
             )}
           </span>
+          {percents?.[i] != null && (
+            <span className="font-normal text-pa-faint tabular-nums">{percents[i]}</span>
+          )}
+        </span>
       ))}
+    </div>
+  );
+}
+
+/**
+ * 浮层的进与出走同一道时长：值在时淡入，值撤走后卡片再留 `duration` 淡出。
+ * 不留这一手，钉住与移出都是瞬时消失，玻璃壳会像闪了一下。
+ */
+function useFloatingPresence<T>(value: T | null, duration: number): { held: T | null; open: boolean } {
+  const [held, setHeld] = useState<T | null>(value);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (value !== null) {
+      setHeld(value);
+      const frame = requestAnimationFrame(() => setOpen(true));
+      return () => cancelAnimationFrame(frame);
+    }
+    setOpen(false);
+    const timer = setTimeout(() => setHeld(null), duration);
+    return () => clearTimeout(timer);
+  }, [value, duration]);
+  return { held, open };
+}
+
+function ReadoutLayer({
+  chart,
+  dark,
+  readout,
+  pinned,
+  bounds,
+  onClose,
+  onFocus,
+  onOpenPoint,
+}: {
+  chart: ViewChart;
+  dark: boolean;
+  readout: Readout | null;
+  pinned: boolean;
+  bounds: { width: number; height: number };
+  onClose: () => void;
+  onFocus: (series: number | null) => void;
+  onOpenPoint?: (point: { row: number; column: string }) => void;
+}) {
+  const card = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: 0, top: 0 });
+  const model: ReadoutModel | null = readout ? readoutModel(chart, readout.index) : null;
+  const { held, open } = useFloatingPresence(model && readout ? { model, readout } : null, READOUT_FADE);
+
+  // 量过再落点：卡宽随行数成档，落点要按这一档的实际尺寸算，否则左置那一版恒偏。
+  useLayoutEffect(() => {
+    const node = card.current;
+    if (!node || !held) return;
+    setPosition(
+      readoutPosition(held.readout, { width: node.offsetWidth, height: node.offsetHeight }, bounds),
+    );
+  }, [held, bounds]);
+
+  if (!held) return null;
+  return (
+    <div
+      ref={card}
+      className={`absolute z-10 transition-opacity motion-reduce:transition-none ${
+        open ? "opacity-100" : "opacity-0"
+      } ${pinned ? "" : "pointer-events-none"}`}
+      style={{
+        left: position.left,
+        top: position.top,
+        transitionDuration: `${READOUT_FADE}ms`,
+      }}
+    >
+      <ReadoutCard
+        model={held.model}
+        dark={dark}
+        pinned={pinned}
+        onClose={onClose}
+        onRowHover={onFocus}
+        onRowClick={onOpenPoint}
+      />
     </div>
   );
 }
@@ -223,12 +334,24 @@ export function ViewChartCanvas({
   plot?: keyof typeof PLOT_PADDING;
   /** 冻结尺寸响应（拖拽缩放期），解除时补渲一次。 */
   suspendResize?: boolean;
+  /** 下钻：钉住读数卡后点卡内那一行开明细，画布本身不接管点击。 */
   onPointClick?: (point: { row: number; column: string }) => void;
 }) {
+  const block = useRef<HTMLDivElement>(null);
   const container = useRef<HTMLDivElement>(null);
   const instance = useRef<echarts.ECharts | null>(null);
   const size = useRef({ width: 0, height: 0 });
+  const [bounds, setBounds] = useState({ width: 0, height: 0 });
   const dark = useDarkTheme();
+  const [focused, setFocused] = useState<number | null>(null);
+  // 格序号出自 echarts，光标坐标出自容器上的 mousemove：两个来源各存各的，合成才是一次读数
+  const [index, setIndex] = useState<number | null>(null);
+  const [pointer, setPointer] = useState({ x: 0, y: 0 });
+  const [pinned, setPinned] = useState<Readout | null>(null);
+  const hover: Readout | null = index === null ? null : { index, ...pointer };
+  const readout = pinned ?? hover;
+  // 钉住的卡片会留在原地等人，故按浮层那套撤下（策略与订阅见 dismiss.ts）
+  useDismiss(pinned !== null, block, () => setPinned(null));
 
   useEffect(() => {
     const el = container.current;
@@ -254,20 +377,50 @@ export function ViewChartCanvas({
     applyValueTickDensity(current, chart, plot, size.current);
   }, [chart, dark, plot]);
 
+  // 换图即散场：新的一张图上，旧的焦点与旧的那一格都不再指向任何东西
+  useEffect(() => {
+    setFocused(null);
+    setIndex(null);
+    setPinned(null);
+  }, [chart]);
+
+  // 焦点与钉住都是打在首帧那份 option 上的补丁，故 option 每重出一次（换图、换主题、
+  // 换留白档）都要照当前状态再打一遍——依赖里的 dark/plot 是「option 重出了」这件事的凭据
+  useEffect(() => {
+    applyFocus(instance.current, chart, dark, focused);
+    raiseSeries(instance.current, chart, focused);
+  }, [chart, dark, plot, focused]);
+
+  useEffect(() => {
+    applyPin(instance.current, chart, pinned?.index ?? null);
+  }, [chart, dark, plot, pinned]);
+
+  /**
+   * 落在哪一格由 echarts 报：整列触发的图报 `updateAxisPointer`（与画出来的指针同源），
+   * 饼图没有类目轴，改由逐项的进出事件报。光标坐标另由容器上的 mousemove 供给。
+   */
   useEffect(() => {
     const current = instance.current;
-    if (!current || !onPointClick) return;
-    const click = (params: { seriesIndex?: number; dataIndex?: number }) => {
-      if (params.seriesIndex === undefined || params.dataIndex === undefined) return;
-      const pa = chart.option.pa as PaChartExtension | undefined;
-      const point = pa?.records?.points[params.seriesIndex]?.[params.dataIndex];
-      if (point) onPointClick(point);
+    if (!current) return;
+    const report = (...args: unknown[]) => {
+      const params = args[0] as { dataIndex?: number } | undefined;
+      setIndex(typeof params?.dataIndex === "number" ? params.dataIndex : null);
     };
-    current.on("click", click);
+    const leave = () => setIndex(null);
+    if (chart.form === "pie") {
+      current.on("mouseover", report);
+      current.on("mouseout", leave);
+    } else {
+      current.on("updateAxisPointer", report);
+    }
+    current.getZr().on("globalout", leave);
     return () => {
-      current.off("click", click);
+      current.off("mouseover", report);
+      current.off("mouseout", leave);
+      current.off("updateAxisPointer", report);
+      current.getZr().off("globalout", leave);
     };
-  }, [chart, onPointClick]);
+  }, [chart]);
 
   // 解冻时 effect 重订阅，observeElementSize 立即以当前尺寸回调一次即补渲
   useEffect(() => {
@@ -285,14 +438,17 @@ export function ViewChartCanvas({
     });
   }, [suspendResize, chart, plot]);
 
-  const hovered = useRef<FocusTarget | null>(null);
-  const hoverLegend = (index: number | null, name: string) => {
-    const current = instance.current;
-    if (!current) return;
-    const next = index === null ? null : focusTarget(chart, index, name);
-    for (const action of focusActions(hovered.current, next)) current.dispatchAction(action);
-    hovered.current = next;
-    raiseSeries(current, chart, index);
+  // 卡片的边界是结果面这一块（含读数条），故尺寸取外层而非画布
+  useEffect(() => {
+    const el = block.current;
+    if (!el) return;
+    return observeElementSize(el, (next) => setBounds({ width: next.width, height: next.height }));
+  }, []);
+
+  const trackPointer = (event: { clientX: number; clientY: number }) => {
+    const rect = block.current?.getBoundingClientRect();
+    if (!rect) return;
+    setPointer({ x: event.clientX - rect.left, y: event.clientY - rect.top });
   };
 
   const rect = plotRect(chart, plot);
@@ -310,8 +466,11 @@ export function ViewChartCanvas({
     );
   }
   return (
-    <div className={fill ? "flex h-full min-h-0 w-full flex-col" : "w-full"}>
-      <LegendRow chart={chart} dark={dark} onHover={hoverLegend} plot={plot} />
+    <div
+      ref={block}
+      className={`relative ${fill ? "flex h-full min-h-0 w-full flex-col" : "w-full"}`}
+    >
+      <LegendRow chart={chart} dark={dark} onFocus={setFocused} focused={focused} plot={plot} />
 
       <div
         className={`relative ${fill ? "min-h-0 w-full flex-1" : "w-full"}`}
@@ -320,9 +479,23 @@ export function ViewChartCanvas({
         <PlotSlab plot={plot} rect={rect} />
         <div
           ref={container}
-          className={`absolute inset-0 ${onPointClick ? "cursor-pointer" : ""}`}
+          className="absolute inset-0"
+          onMouseMove={trackPointer}
+          onMouseLeave={() => setIndex(null)}
+          // 点一下钉住，再点一下撤下：钉住期间指针停着不走，落点也就无处可换
+          onClick={() => setPinned(pinned ? null : hover)}
         />
       </div>
+      <ReadoutLayer
+        chart={chart}
+        dark={dark}
+        readout={readout}
+        pinned={pinned !== null}
+        bounds={bounds}
+        onClose={() => setPinned(null)}
+        onFocus={setFocused}
+        onOpenPoint={onPointClick}
+      />
     </div>
   );
 }
