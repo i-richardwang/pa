@@ -62,6 +62,26 @@ flowchart LR
 
 控制台地址为 `http://127.0.0.1:8788/dashboard`，MCP Streamable HTTP 入口为 `http://127.0.0.1:8788/mcp`。
 
+### 本机并行运行多套语义包
+
+Compose 不固定容器名；项目名负责隔离容器、网络和服务发现。每个实例还必须使用不同的
+`PA_CUBE_PORT`、`PA_SERVER_PORT`、`PA_SEMANTIC_DATA_DIR` 和 `PA_SERVER_DATA_DIR`，并让 Cube 与
+应用服务读取同一个 `PA_SEMANTIC_PACKAGE_DIR`。
+
+公开 Demo 的独立本地配置以 [`deploy/local/public.env.example`](./deploy/local/public.env.example)
+为事实源：
+
+```sh
+cp deploy/local/public.env.example .env.public.local
+# 将 .env.public.local 中的 CUBEJS_API_SECRET 改成随机值
+PA_SEMANTIC_DATA_DIR=./data/public_semantic_data uv run demo/generate_demo_data.py
+docker compose --env-file .env.public.local up -d --build
+```
+
+第二套实例使用另一个不提交的环境文件和 Compose 项目名，指向它自己的语义包、只读语义数据目录、
+应用状态目录及端口。原始业务数据不挂载给 Cube；私有数据构建器只把生成后的
+`$PA_SEMANTIC_DATA_DIR/current/*.parquet` 挂载给对应实例。
+
 ## 语义包：公开与内部差异的正式边界
 
 部署只选择一个语义包目录。目录内必须包含：

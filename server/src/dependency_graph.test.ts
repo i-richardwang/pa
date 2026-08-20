@@ -358,9 +358,9 @@ test("Cube HTTP 实现只由 composition roots 创建", () => {
     .sort();
   expect(consumers).toEqual([
     "server/scripts/access_policy_smoke.ts",
+    "server/scripts/formal_metric_eval_runtime.ts",
     "server/scripts/record_projection_smoke.ts",
     "server/scripts/seed_demo.ts",
-    "server/scripts/time_eval.ts",
     "server/src/index.ts",
   ]);
 });

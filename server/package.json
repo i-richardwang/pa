@@ -13,6 +13,7 @@
     "build:console": "vite build console && vite build console --mode dashboard",
     "start": "node dist/index.js",
     "test": "bun test",
+    "eval:formal": "bun --env-file=../.env scripts/formal_metric_smoke.ts",
     "eval:time": "bun --env-file=../.env scripts/time_eval.ts",
     "eval:access": "bun --env-file=../.env scripts/access_policy_smoke.ts",
     "eval:records": "bun --env-file=../.env scripts/record_projection_smoke.ts",
