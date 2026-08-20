@@ -598,7 +598,7 @@ function uniqueNotes(notes: (QueryNote | undefined)[]): QueryNote[] {
   });
 }
 
-const INHERITED_POLICY_NOTES = new Set(["org_scope", "sensitivity"]);
+const INHERITED_POLICY_NOTES = new Set(["access_scope", "sensitivity"]);
 
 function inheritedPolicyNotes(
   spec: DerivedViewSpec,
@@ -824,7 +824,7 @@ export function transformDerivedView(
     summary: {
       kind: "grand_total",
       label: selected ? "所选分组总体" : "总体",
-      scope: selected ? "selected_groups" : "filtered_population",
+      scope: selected ? "selected_groups" : "filtered_set",
       rows: summaryBlock.rows,
     },
   };

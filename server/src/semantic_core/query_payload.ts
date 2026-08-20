@@ -107,7 +107,7 @@ const SUMMARY_BLOCK_SCHEMA = z
   .object({
     kind: z.literal("grand_total"),
     label: z.string().min(1),
-    scope: z.enum(["filtered_population", "selected_groups"]),
+    scope: z.enum(["filtered_set", "selected_groups"]),
     rows: z.array(ROW_SCHEMA).min(1),
   })
   .strict();
@@ -443,7 +443,7 @@ export const QUERY_PAYLOAD_OUTPUT = {
   view_id: z.string().optional().describe("本次结果使用的不可变呈现视图身份"),
   title: z.string().optional().describe("回显调用方声明的卡片标题"),
   view: VIEW_BLOCK_SCHEMA.describe("唯一用户可见结果；计算中间结果不进入公共载荷"),
-  default_population_scope: z.string(),
+  observation_scopes: z.array(z.string()),
   data_as_of: z.string(),
   time_context: PUBLIC_TIME_CONTEXT_SCHEMA,
   capabilities: OUTPUT_CAPABILITIES_SCHEMA.optional().describe("唯一结果的能力声明（如导出）"),

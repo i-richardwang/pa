@@ -22,11 +22,12 @@ const members: PublicCatalogMember[] = [
   },
 ];
 const usage = { log: async () => {} };
-const admin: Principal = { email: "admin@x", roles: ["admin"], orgScope: "*" };
-const user: Principal = { email: "user@x", roles: ["user"], orgScope: "*" };
+const admin: Principal = { email: "admin@x", roles: ["admin"], accessScope: { kind: "all" } };
+const user: Principal = { email: "user@x", roles: ["user"], accessScope: { kind: "all" } };
 const catalog = (visible = members) => ({
   publicDocument: async () => ({
-    default_population_scope: "测试口径",
+    access_scope: { id: "organization", title: "组织" },
+    observation_scopes: ["测试口径"],
     data_as_of: "2026-08-01",
     time_context: [],
     metric_domains: [],

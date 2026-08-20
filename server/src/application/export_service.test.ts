@@ -89,7 +89,11 @@ const plan: MetricQueryPlan = {
   ],
 };
 
-const owner: Principal = { email: "owner@example.com", roles: ["user"], orgScope: "*" };
+const owner: Principal = {
+  email: "owner@example.com",
+  roles: ["user"],
+  accessScope: { kind: "all" },
+};
 
 const cube = {
   meta: async () => [],
@@ -173,7 +177,7 @@ describe("export service", () => {
 
     await expect(
       service.readResource(
-        { email: "other@example.com", roles: ["viewer"], orgScope: "*" },
+        { email: "other@example.com", roles: ["viewer"], accessScope: { kind: "all" } },
         "ticket",
       ),
     ).rejects.toBeInstanceOf(ExportTicketUnavailableError);

@@ -1,6 +1,6 @@
 /**
  * 查询形态契约。跨事实边界由窄 View 的显式 includes 白名单决定；同一 View 内仍有
- * 少数指标专属限制（如年底编制不能下钻最细节点），由结构化元数据声明。
+ * 少数指标专属限制由结构化元数据声明，不在查询协议中写业务分支。
  */
 import type {
   CubeFilter,
@@ -9,7 +9,6 @@ import type {
   CubeView,
 } from "../ports/cube_gateway.js";
 import { memberShortName } from "../semantic_core/member_name.js";
-import { isIndividualDimension } from "./model_contract.js";
 
 const isCondition = (filter: CubeFilter): filter is CubeFilterCondition => "member" in filter;
 
@@ -75,12 +74,6 @@ export function assertMeasureFilterCompatibility(query: CubeQuery, views: CubeVi
         name,
         dimension: findDimension(views, name),
       }));
-      if (grouped.some(({ dimension }) => isIndividualDimension(dimension))) {
-        throw new Error(
-          `指标「${measure.title ?? measureName}」不能用于人员名单；` +
-            "结构占比只适用于职级、组织、序列等分类汇总。",
-        );
-      }
       const categoryDimensions = grouped.filter(({ name, dimension }) => {
         return !isTimeAxis(dimension) && !fixed.some((member) => sameMember(member, name));
       });

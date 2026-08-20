@@ -633,10 +633,7 @@ export function ReportQueryRail({
       measures.includes(member.id) && member.report_calculations?.includes("percent_of_total"),
   );
   const calculationDimensions = catalog.dimensions.filter(
-    (member) =>
-      dimensions.includes(member.id) &&
-      member.dimension_kind !== "individual" &&
-      member.dimension_kind !== "overlapping",
+    (member) => dimensions.includes(member.id) && member.dimension_kind !== "overlapping",
   );
 
   const steps: React.ReactNode[] = [];

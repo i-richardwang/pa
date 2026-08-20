@@ -19,17 +19,20 @@ import {
 import { canonicalModelFixture } from "../test_support/canonical_semantic_model.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
-  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY);
+  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY, {
+    id: "test_scope",
+    title: "测试数据范围",
+  });
 
 const principal: Principal = {
   email: "h@x",
   roles: ["user"],
-  orgScope: ["Aurora Labs"],
+  accessScope: { kind: "limited", values: ["Aurora Labs"] },
 };
 const context: CubeSecurityContext = {
   subject: principal.email,
   groups: ["pa_scoped"],
-  orgScope: principal.orgScope,
+  accessScope: principal.accessScope,
 };
 
 const views: CubeView[] = [
@@ -38,7 +41,7 @@ const views: CubeView[] = [
     title: "人员流动",
     meta: {
       query_surface: "metric_source",
-      default_population_scope: "统计范围",
+      observation_scope: "统计范围",
       time_source: "workforce",
     },
     measures: [],
@@ -57,7 +60,7 @@ const views: CubeView[] = [
     title: "在职员工信息",
     meta: {
       query_surface: "metric_source",
-      default_population_scope: "统计范围",
+      observation_scope: "统计范围",
       time_source: "workforce",
     },
     measures: [],

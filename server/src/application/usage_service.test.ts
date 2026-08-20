@@ -5,8 +5,8 @@ import { createUsageService } from "./usage_service.js";
 import type { Principal } from "../contracts/principal.js";
 import { ForbiddenError } from "./errors.js";
 
-const admin: Principal = { email: "admin@x", roles: ["admin"], orgScope: "*" };
-const alice: Principal = { email: "alice@x", roles: ["user"], orgScope: "*" };
+const admin: Principal = { email: "admin@x", roles: ["admin"], accessScope: { kind: "all" } };
+const alice: Principal = { email: "alice@x", roles: ["user"], accessScope: { kind: "all" } };
 
 const unused = async (): Promise<never> => {
   throw new Error("not used");

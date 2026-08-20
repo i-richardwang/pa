@@ -9,7 +9,7 @@ import { buildAuth, initializeAuthSchema, type Auth } from "./auth.js";
 import { createApplication } from "./composition/application.js";
 import { config } from "./config.js";
 import { createCubeGateway } from "./adapters/cube_gateway.js";
-import { createBetterAuthUserScopeWriter } from "./adapters/better_auth_user_scope.js";
+import { createBetterAuthUserAccountAdministration } from "./adapters/better_auth_user_account_administration.js";
 import { SERVICE_CUBE_CONTEXT } from "./engine/cube_security.js";
 import { withFormalMetricModel } from "./engine/formal_metric_gateway.js";
 import { dashboardRoutes } from "./dashboard/index.js";
@@ -26,7 +26,7 @@ import {
   loadCanonicalSemanticModel,
   withCanonicalSemanticModel,
 } from "./engine/canonical_semantic_model.js";
-import { createUserScopeService } from "./application/user_scope_service.js";
+import { createUserAdministrationService } from "./application/user_administration_service.js";
 
 // 鉴权 fail-closed：基座未配置即拒绝启动；PA_ALLOW_OPEN=1 是部署者对当前监听范围的显式放行。
 if (!config.authSecret && !config.allowOpen) {
@@ -45,6 +45,7 @@ const visibilityCube = withFormalMetricModel(
   createCubeGateway({
     cubeUrl: config.cubeUrl,
     apiSecret: config.apiSecret,
+    accessScopeId: semanticPackage.access_scope.id,
     serviceContext: SERVICE_CUBE_CONTEXT,
     timeSources: semanticPackage.time_sources,
   }),
@@ -76,7 +77,11 @@ const serverDependencies: McpServerDependencies = {
 };
 await application.maintenance.removeExpiredAnalyses();
 
-const LOCAL_PRINCIPAL: Principal = { email: "local", roles: ["admin"], orgScope: "*" };
+const LOCAL_PRINCIPAL: Principal = {
+  email: "local",
+  roles: ["admin"],
+  accessScope: { kind: "all" },
+};
 
 app.get("/healthz", (c) => c.json({ ok: true }));
 
@@ -116,9 +121,6 @@ if (config.authSecret) {
   await initializeAuthSchema(authCfg, authDb);
   auth = buildAuth(authCfg, authDb);
   const enabledAuth = auth;
-  const userScope = createUserScopeService({
-    writer: createBetterAuthUserScopeWriter(enabledAuth),
-  });
 
   app.on(["GET", "POST"], "/api/auth/*", (c) => enabledAuth.handler(c.req.raw));
   // 根路径发现端点：部分客户端不解析 WWW-Authenticate，直接探测 /.well-known（MCP 规范要求）
@@ -153,9 +155,17 @@ if (config.authSecret) {
     "/dashboard",
     dashboardRoutes({
       auth: enabledAuth,
+      accessScopeDefinition: canonicalModel.access_scope,
       usage: application.usage,
       html: pageLoader("dashboard.html"),
-      userScope,
+      userAdministration: (headers) =>
+        createUserAdministrationService({
+          accounts: createBetterAuthUserAccountAdministration(
+            enabledAuth,
+            canonicalModel.access_scope,
+            headers,
+          ),
+        }),
       analyses: application.analysis,
       reportService: application.report,
       presentation: application.presentation,
@@ -169,22 +179,25 @@ if (config.authSecret) {
   );
 }
 
-// 授权主体解析：token（OAuth 或 API key）只带 userId，回查 email + 数据角色 +
-// 有权组织。API key 与 OAuth 同一套用户身份，故共用此解析并生成同一 Cube securityContext。
-// 不缓存：角色/组织权限由管理员随时调整，鉴权正确性优先于按请求省一次查库（与 key 校验同理）。
+// 授权主体解析：token（OAuth 或 API key）只带 userId，回查 email、数据角色和授权范围。
+// API key 与 OAuth 共用此解析并生成同一 Cube securityContext。
+// 不缓存：角色与数据范围可被管理员随时调整，鉴权正确性优先于按请求省一次查库（与 key 校验同理）。
 async function resolvePrincipal(a: Auth, userId: string): Promise<Principal> {
   const ctx = await a.$context;
   const user = (await ctx.internalAdapter.findUserById(userId).catch(() => null)) as {
     email?: string;
     role?: string;
-    org_scope?: string;
+    access_scope?: string;
   } | null;
   const email = user?.email ?? userId;
-  return principalFromAttributes({
-    email,
-    role: user?.role,
-    org_scope: user?.org_scope,
-  });
+  return principalFromAttributes(
+    {
+      email,
+      role: user?.role,
+      access_scope: user?.access_scope,
+    },
+    semanticPackage.access_scope,
+  );
 }
 
 // /mcp 鉴权：Bearer 先按 API key 校验（apiKey 插件，key 绑用户），再落 OAuth session；
@@ -244,7 +257,7 @@ const exportDownload = async (c: Context<AppEnv>) => {
     const session = auth ? await auth.api.getSession({ headers: c.req.raw.headers }) : null;
     const principal = auth
       ? session
-        ? principalFromAttributes(session.user)
+        ? principalFromAttributes(session.user, semanticPackage.access_scope)
         : null
       : LOCAL_PRINCIPAL;
     if (!principal) return c.text("请先登录后再下载。", 401);

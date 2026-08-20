@@ -30,11 +30,15 @@ test("Feedback Application 一次完成输入、审核说明与分页规范化",
     },
   } satisfies FeedbackRepository;
   const service = createFeedbackService({ repository, usage: { log: async () => {} } });
-  const admin = { email: "admin@x", roles: ["admin" as const], orgScope: "*" as const };
-  const user = { email: "user@x", roles: ["user" as const], orgScope: "*" as const };
+  const admin = {
+    email: "admin@x",
+    roles: ["admin" as const],
+    accessScope: { kind: "all" } as const,
+  };
+  const user = { email: "user@x", roles: ["user" as const], accessScope: { kind: "all" } as const };
 
   await service.submit(
-    { email: "user@x", roles: ["user"], orgScope: "*" },
+    { email: "user@x", roles: ["user"], accessScope: { kind: "all" } },
     { ask: " 能看工时吗？ ", detail: " 缺少工时指标 " },
   );
   await service.list(admin, Number.POSITIVE_INFINITY, -2);

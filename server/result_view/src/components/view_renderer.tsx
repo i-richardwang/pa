@@ -48,7 +48,7 @@ export type ViewRendererProps = {
   interacting?: boolean;
   /** 浏览器报告页注入的格子明细能力；MCP Widget 不注入，因而没有明细请求入口。 */
   records?: {
-    /** 能否查看构成记录由指标的人员记录绑定决定，与具体值无关——零值同样开放，名单为空是诚实答案。 */
+    /** 能否查看构成记录由指标的记录集绑定决定，与具体值无关——零值同样开放，空集也是诚实答案。 */
     canOpen: (viewId: string, column: string) => boolean;
     /**
      * `time` 是被点击读数的真实覆盖期间：指标卡的大数覆盖整窗（或降级后的终点期），
@@ -407,7 +407,9 @@ export function ViewRenderer({
         <div className="flex shrink-0 flex-col items-start gap-2 border-pa-line border-t bg-pa-surface px-4 py-3">
           <div className="flex gap-1.5 text-pa-muted text-xs">
             <CircleAlertIcon className="mt-0.5 size-3 shrink-0" />
-            <p>{payload.default_population_scope}</p>
+            {payload.observation_scopes.map((scope) => (
+              <p key={scope}>{scope}</p>
+            ))}
           </div>
           <QueryNotesDetails payload={payload} />
         </div>

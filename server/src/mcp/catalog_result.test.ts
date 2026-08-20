@@ -14,7 +14,7 @@ const views: CubeView[] = [
     meta: {
       query_surface: "metric_source",
       time_source: "workforce",
-      default_population_scope: "统计范围",
+      observation_scope: "统计范围",
     },
     measures: [
       {
@@ -66,7 +66,7 @@ const views: CubeView[] = [
 ];
 
 test("Agent Catalog 从真实授权目录显式移除仅供 Web 导航的字段", async () => {
-  const principal: Principal = { email: "agent@x", roles: ["user"], orgScope: "*" };
+  const principal: Principal = { email: "agent@x", roles: ["user"], accessScope: { kind: "all" } };
   const service = createCatalogService({
     canonical: canonicalModelFixture(views, TEST_SEMANTIC_TAXONOMY),
     cube: {

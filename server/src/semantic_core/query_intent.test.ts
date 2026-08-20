@@ -35,7 +35,8 @@ const JULY_2026 = {
 };
 
 const catalog: CompilerCatalog = {
-  default_population_scope: "测试口径。",
+  access_scope: { id: "organization", title: "组织" },
+  observation_scopes: ["测试口径。"],
   views: [
     {
       name: "employee_snapshot_metrics",

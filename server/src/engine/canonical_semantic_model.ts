@@ -6,6 +6,7 @@ import type { TimeSourceRegistry } from "../semantic_core/time_source.js";
 import { memberShortName } from "../semantic_core/member_name.js";
 import type { CubeView } from "../ports/cube_gateway.js";
 import type { CubeGateway, CubeSecurityContext } from "../ports/cube_gateway.js";
+import type { AccessScopeDefinition } from "../contracts/access_scope.js";
 import { loadSemanticModelCatalog, type SemanticPackage } from "./semantic_package.js";
 import { projectRecordMetadata, recordProjectionTargetsOf } from "./record_metadata.js";
 import {
@@ -20,6 +21,7 @@ export type CanonicalSemanticModel = {
   views: CubeView[];
   document: CatalogDocument;
   time_sources: TimeSourceRegistry;
+  access_scope: AccessScopeDefinition;
 };
 
 export type AuthorizedSemanticModel = {
@@ -27,6 +29,7 @@ export type AuthorizedSemanticModel = {
   document: CatalogDocument;
   compiler: CompilerCatalog;
   time_sources: TimeSourceRegistry;
+  access_scope: AccessScopeDefinition;
 };
 
 export function buildCanonicalSemanticModel(input: {
@@ -34,14 +37,21 @@ export function buildCanonicalSemanticModel(input: {
   views: CubeView[];
   taxonomy: SemanticTaxonomy;
   time_sources: TimeSourceRegistry;
+  access_scope: AccessScopeDefinition;
 }): CanonicalSemanticModel {
-  const document = buildCatalogDocument(input.views, input.taxonomy, input.time_sources);
+  const document = buildCatalogDocument(
+    input.views,
+    input.taxonomy,
+    input.time_sources,
+    input.access_scope,
+  );
   assertCatalogConsistency(input.capabilities, input.views, toCompilerCatalog(document));
   return {
     capabilities: input.capabilities,
     views: input.views,
     document,
     time_sources: input.time_sources,
+    access_scope: input.access_scope,
   };
 }
 
@@ -151,6 +161,7 @@ export async function loadCanonicalSemanticModel(input: {
     views,
     taxonomy: input.semantic_package.taxonomy,
     time_sources: input.semantic_package.time_sources,
+    access_scope: input.semantic_package.access_scope,
   });
 }
 
@@ -244,7 +255,7 @@ export function projectAuthorizedSemanticViews(
 ): CubeView[] {
   if (!visibleViews.length) {
     throw new Error(
-      "当前账号在 Cube 中没有可见数据视图；查询参数无需修改，请停止重试并让管理员检查账号角色、组织范围与 access_policy",
+      "当前账号在 Cube 中没有可见数据视图；查询参数无需修改，请停止重试并让管理员检查账号角色、数据范围与 access_policy",
     );
   }
   assertUnique(
@@ -285,7 +296,8 @@ export function authorizeCanonicalSemanticModel(
       .flatMap((view) => view.measures.flatMap((member) => member.metric_domain_id ?? [])),
   );
   const document: CatalogDocument = {
-    default_population_scope: canonical.document.default_population_scope,
+    access_scope: canonical.access_scope,
+    observation_scopes: canonical.document.observation_scopes,
     views: projected.sort((a, b) => a.name.localeCompare(b.name)),
     metric_domains: canonical.document.metric_domains.filter((domain) =>
       visibleDomainIds.has(domain.id),
@@ -296,6 +308,7 @@ export function authorizeCanonicalSemanticModel(
     document,
     compiler: toCompilerCatalog(document),
     time_sources: canonical.time_sources,
+    access_scope: canonical.access_scope,
   };
 }
 

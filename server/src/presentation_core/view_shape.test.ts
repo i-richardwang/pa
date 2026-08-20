@@ -484,7 +484,7 @@ describe("compileTable", () => {
         summary: {
           kind: "grand_total",
           label: "总体",
-          scope: "filtered_population",
+          scope: "filtered_set",
           rows: [
             [null, 2025, 30],
             [null, 2026, 34],

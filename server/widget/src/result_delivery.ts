@@ -90,12 +90,12 @@ export function deliverAnalysisResult(result: ToolResult): DeliveredAnalysis {
 /** 个体记录只认 App 私有 `_meta`；structuredContent/content 即使出现同名字段也不读取。 */
 export function deliverRecordProjection(result: ToolResult): DeliveredRecords {
   if (result.isError) {
-    return { ok: false, error: firstText(result.content) ?? "人员名单加载失败。" };
+    return { ok: false, error: firstText(result.content) ?? "构成记录加载失败。" };
   }
   const parsed = RECORD_PROJECTION_PAYLOAD_SCHEMA.safeParse(
     result._meta?.[RECORD_PROJECTION_META_KEY],
   );
   return parsed.success
     ? { ok: true, payload: parsed.data }
-    : { ok: false, error: "人员名单缺少有效的受控记录载荷。" };
+    : { ok: false, error: "构成记录缺少有效的受控记录载荷。" };
 }

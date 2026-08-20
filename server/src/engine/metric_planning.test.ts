@@ -125,7 +125,7 @@ const context = {
 const security: CubeSecurityContext = {
   subject: "tester",
   groups: [],
-  orgScope: "*",
+  accessScope: { kind: "all" },
 };
 
 function response(query: CubeQuery, rows: Record<string, unknown>[]): LoadResponse {

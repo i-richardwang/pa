@@ -25,7 +25,7 @@ export function registerFeedbackTool(
           .string()
           .min(1)
           .max(FEEDBACK_LIMITS.ask)
-          .describe("用户问题原文；不要放人员名单、工号或其他逐人信息"),
+          .describe("用户问题原文；不要放逐条敏感记录、标识符或其他明细信息"),
         detail: z
           .string()
           .min(1)

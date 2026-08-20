@@ -20,6 +20,7 @@ const cube = withFormalMetricModel(
   createCubeGateway({
     cubeUrl: config.cubeUrl,
     apiSecret: config.apiSecret,
+    accessScopeId: semanticPackage.access_scope.id,
     serviceContext: SERVICE_CUBE_CONTEXT,
     timeSources: semanticPackage.time_sources,
   }),

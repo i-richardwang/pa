@@ -1,6 +1,9 @@
 schema_version: 2
 id: generic_bi_acceptance
 model_path: model
+access_scope:
+  id: region
+  title: Region
 time_sources:
   - id: sales_actual
     title: Sales actuals

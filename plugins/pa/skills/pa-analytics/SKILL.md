@@ -27,7 +27,7 @@ description: 查询 PA 组织与人才数据；用于人员规模、入离职、
    跨来源率、不同时间求值方式和结果对齐均由服务端正式指标模型处理；不要拆查分子分母，也不要用
    派生除法复刻已有指标。每个查询或派生视图使用唯一 ASCII snake_case `id`。
 4. 根据结果的 `time`（已解析主/对比期间、业务粒度与业务桶）、`time_context`、`data_as_of`、
-   `default_population_scope`、`display_notes` 和结果字段作答。不要向用户复述 `query_notes`，
+   `observation_scopes`、`display_notes` 和结果字段作答。不要向用户复述 `query_notes`，
    它只用于正确执行查询。
 5. 保留成功响应的 `analysis_id` 与 `view_id`。工具面提供 `show_analysis` 时，用 `view_id` 打开交互结果卡；
    用户询问“谁、名单、人员明细”时，按下文“人员明细与导出”把问题收敛成一个聚合结果格，
@@ -140,7 +140,7 @@ description: 查询 PA 组织与人才数据；用于人员规模、入离职、
 - 多行数据使用 Markdown 表格；人数用整数，率保留 1–2 位小数并带 `%`。
 - 率的同比或环比使用百分点差（pp），并说明是两期之差。
 - 给数时以 `time.coordinates` 复述服务端最终解析的主/对比期间，以 `time.buckets` 对齐结果行，并附相关的实际/计划截至月和
-  `default_population_scope`；人员数据使用 `data_as_of`，编制计划使用 `time_context`。
+  `observation_scopes`；人员数据使用 `data_as_of`，编制计划使用 `time_context`。
   只在 `display_notes` 非空且与结论相关时补充成员业务口径。
 - 结果过长时给摘要并建议缩小范围，或在用户需要文件时导出。
 

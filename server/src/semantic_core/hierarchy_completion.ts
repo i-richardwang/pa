@@ -6,7 +6,7 @@ export type HierarchyCondition = {
 
 export type CompletedHierarchyDimensions = {
   dimensions: string[];
-  added: string[];
+  added: { member: string; children: string[] }[];
 };
 
 /** 层级子项只有在全部上级可见或被单值等值过滤约束时才可唯一识别。 */
@@ -25,15 +25,21 @@ export function completeHierarchyDimensions(
       (filter) => filter.member === member && filter.includes && filter.values?.length === 1,
     );
 
-  const added: string[] = [];
+  const added = new Map<string, Set<string>>();
   for (const chain of chains) {
     for (let index = chain.length - 1; index >= 1; index -= 1) {
       if (!referenced.has(chain[index])) continue;
-      for (const ancestor of chain.slice(0, index)) {
-        if (!constrained(ancestor) && !added.includes(ancestor)) added.push(ancestor);
+      for (let ancestorIndex = 0; ancestorIndex < index; ancestorIndex += 1) {
+        const ancestor = chain[ancestorIndex];
+        const child = chain[ancestorIndex + 1];
+        if (!ancestor || !child || constrained(ancestor)) continue;
+        const children = added.get(ancestor) ?? new Set<string>();
+        children.add(child);
+        added.set(ancestor, children);
       }
       break;
     }
   }
-  return { dimensions: [...added, ...grouped], added };
+  const additions = [...added].map(([member, children]) => ({ member, children: [...children] }));
+  return { dimensions: [...additions.map((item) => item.member), ...grouped], added: additions };
 }

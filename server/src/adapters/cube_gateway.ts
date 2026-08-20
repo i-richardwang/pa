@@ -1,5 +1,6 @@
 /** Cube Core HTTP 适配器：负责鉴权、缓存、协议调用与响应归一。 */
 import { SignJWT } from "jose";
+import { accessScopeValues } from "../contracts/access_scope.js";
 import { parseKnownTimeSourceId, type TimeSourceRegistry } from "../semantic_core/time_source.js";
 import { CubeGatewayError } from "../ports/cube_gateway.js";
 import type {
@@ -24,6 +25,7 @@ const unavailable = (diagnostic: string, cause?: unknown): CubeGatewayError =>
 export type CubeGatewayConfig = {
   cubeUrl: string;
   apiSecret: string;
+  accessScopeId: string;
   serviceContext: CubeSecurityContext;
   timeSources: TimeSourceRegistry;
 };
@@ -39,7 +41,7 @@ type CubeGatewayState = {
 };
 
 function contextKey(context: CubeSecurityContext): string {
-  return JSON.stringify([context.subject, context.groups, context.orgScope]);
+  return JSON.stringify([context.subject, context.groups, context.accessScope]);
 }
 
 async function token(state: CubeGatewayState, context: CubeSecurityContext): Promise<string> {
@@ -49,7 +51,10 @@ async function token(state: CubeGatewayState, context: CubeSecurityContext): Pro
   const jwt = await new SignJWT({
     email: context.subject,
     groups: context.groups,
-    org_scope: context.orgScope,
+    data_scope: {
+      id: state.config.accessScopeId,
+      values: accessScopeValues(context.accessScope),
+    },
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(context.subject)

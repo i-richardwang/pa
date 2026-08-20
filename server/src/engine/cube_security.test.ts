@@ -8,59 +8,81 @@ import {
 import { principalFromAttributes, type Principal } from "../contracts/principal.js";
 
 describe("Cube securityContext 映射", () => {
-  test("Better Auth 字段统一解析角色与组织范围", () => {
+  test("Better Auth 字段统一解析角色与数据范围", () => {
     expect(
-      principalFromAttributes({
-        email: "user@example.com",
-        role: "user, admin ",
-        org_scope: " Aurora Labs, Harbor Works ",
-      }),
+      principalFromAttributes(
+        {
+          email: "user@example.com",
+          role: "user, admin ",
+          access_scope:
+            '{"scope_id":"organization","kind":"limited","values":["Aurora Labs","Harbor Works"]}',
+        },
+        { id: "organization", title: "组织" },
+      ),
     ).toEqual({
       email: "user@example.com",
       roles: ["user", "admin"],
-      orgScope: ["Aurora Labs", "Harbor Works"],
+      accessScope: { kind: "limited", values: ["Aurora Labs", "Harbor Works"] },
     });
     expect(
-      principalFromAttributes({ email: "admin@example.com", role: "admin", org_scope: "*" }),
+      principalFromAttributes(
+        {
+          email: "admin@example.com",
+          role: "admin",
+          access_scope: '{"scope_id":"organization","kind":"all"}',
+        },
+        { id: "organization", title: "组织" },
+      ),
     ).toEqual({
       email: "admin@example.com",
       roles: ["admin"],
-      orgScope: "*",
+      accessScope: { kind: "all" },
     });
   });
 
   test("已知角色按组织范围映射到唯一策略组", () => {
-    const full: Principal = { email: "admin@example.com", roles: ["admin"], orgScope: "*" };
+    const full: Principal = {
+      email: "admin@example.com",
+      roles: ["admin"],
+      accessScope: { kind: "all" },
+    };
     const scoped: Principal = {
       email: "user@example.com",
       roles: ["user"],
-      orgScope: ["Aurora Labs", "Harbor Works"],
+      accessScope: { kind: "limited", values: ["Aurora Labs", "Harbor Works"] },
     };
     expect(cubeSecurityContext(full)).toEqual({
       subject: "admin@example.com",
       groups: [CUBE_ACCESS_GROUP.full],
-      orgScope: "*",
+      accessScope: { kind: "all" },
     });
     expect(cubeSecurityContext(scoped)).toEqual({
       subject: "user@example.com",
       groups: [CUBE_ACCESS_GROUP.scoped],
-      orgScope: ["Aurora Labs", "Harbor Works"],
+      accessScope: { kind: "limited", values: ["Aurora Labs", "Harbor Works"] },
     });
   });
 
   test("多角色不叠加策略，当前等价角色仍只产生一个组", () => {
     expect(
-      cubeSecurityContext({ email: "admin@example.com", roles: ["admin", "user"], orgScope: "*" })
-        .groups,
+      cubeSecurityContext({
+        email: "admin@example.com",
+        roles: ["admin", "user"],
+        accessScope: { kind: "all" },
+      }).groups,
     ).toEqual([CUBE_ACCESS_GROUP.full]);
   });
 
   test("未知角色与空组织范围 fail-closed", () => {
-    expect(() => cubeSecurityContext({ email: "x@x", roles: [], orgScope: "*" })).toThrow(
-      AuthzError,
-    );
     expect(() =>
-      cubeSecurityContext({ email: "y@example.com", roles: ["user"], orgScope: [] }),
+      cubeSecurityContext({ email: "x@x", roles: [], accessScope: { kind: "all" } }),
+    ).toThrow(AuthzError);
+    expect(() =>
+      cubeSecurityContext({
+        email: "y@example.com",
+        roles: ["user"],
+        accessScope: { kind: "limited", values: [] },
+      }),
     ).toThrow(AuthzError);
   });
 
@@ -68,7 +90,7 @@ describe("Cube securityContext 映射", () => {
     expect(SERVICE_CUBE_CONTEXT).toEqual({
       subject: "pa-service",
       groups: [CUBE_ACCESS_GROUP.service],
-      orgScope: "*",
+      accessScope: { kind: "all" },
     });
   });
 });

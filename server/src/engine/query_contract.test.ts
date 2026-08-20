@@ -59,19 +59,6 @@ const views: CubeView[] = [
     ],
   },
   {
-    name: "individual_fixture",
-    title: "人员名单",
-    measures: [],
-    dimensions: [
-      {
-        name: "individual_fixture.employee_id",
-        title: "员工工号",
-        type: "string",
-        meta: { dimension_kind: "individual" },
-      },
-    ],
-  },
-  {
     name: "headcount_plan",
     title: "人员与编制",
     measures: [
@@ -280,17 +267,5 @@ describe("query contract", () => {
         views,
       ),
     ).not.toThrow();
-  });
-
-  test("结构占比不进入人员名单，即使同时带其他分类维度", () => {
-    expect(() =>
-      assertMeasureFilterCompatibility(
-        {
-          measures: ["test_people_metrics.active_employee_share"],
-          dimensions: ["individual_fixture.employee_id", "test_people_metrics.category_band"],
-        },
-        views,
-      ),
-    ).toThrow(/不能用于人员名单.*分类汇总/);
   });
 });

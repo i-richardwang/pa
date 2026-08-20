@@ -11,11 +11,12 @@ import {
 import { TIME_CAPABILITIES_INPUT } from "../semantic_core/time_contract.js";
 import { BUSINESS_TERM_RESOLUTION_SCHEMA } from "../contracts/business_term_contract.js";
 import { EXPORT_TICKET_TTL_MINUTES } from "../contracts/export_contract.js";
+import { ACCESS_SCOPE_DEFINITION_SCHEMA } from "../contracts/access_scope.js";
 
 export const SERVER_INSTRUCTIONS =
   "PA 是权限裁剪的封闭查询面。成员只引用 catalog 的语义 id；先用 catalog(terms) 读取 term_resolutions，名录值不确定时用 values_of。" +
   "术语解释仅供查前理解，不改写查询；歧义先确认。查询只声明指标、维度与 time，不使用标题、物理字段、SQL，也不补充用户未要求的范围或比较。" +
-  "名单仅用于单结果格、单时间桶且 records_available 的分析，个体行只在受控 App 展示。";
+  "构成记录仅用于单结果格、单时间桶且 records_available 的分析，逐条记录只在受控 App 展示。";
 
 export const TOOL_DESCRIPTIONS = {
   catalog:
@@ -30,7 +31,7 @@ export const TOOL_DESCRIPTIONS = {
   load_analysis_card: "按 view_id 实时加载当前聚合结果，仅供 PA 结果卡渲染。",
   show_records:
     "为单结果格、单时间桶的本人分析打开受控构成记录；分类条件应在分析 filters 中表达，不能用 dimensions 展开名单。",
-  load_records_page: "按 view_id 加载受控构成记录分页，仅供 PA 名单卡渲染。",
+  load_records_page: "按 view_id 加载受控构成记录分页，仅供 PA 记录卡渲染。",
   export_result: `从本人不可变 View 对应的分析生成 ${EXPORT_TICKET_TTL_MINUTES} 分钟有效的 CSV 交付。`,
   save_report: "把本人不可变 View 保存为报告；不重新执行查询。",
   update_report: "修改本人报告的名称、当前 view_id 指针或归档状态。",
@@ -80,7 +81,7 @@ const CATALOG_MEMBER_OUTPUT = z
       .describe("呈现格式；percent 与 percentage_point 的原始值均为 0–1"),
     ai_context: z.string().optional().describe("仅供 Agent 的成员选择、查询方式与避坑规则"),
     sensitivity: z.string().optional(),
-    dimension_kind: z.enum(["categorical", "overlapping", "individual"]).optional(),
+    dimension_kind: z.enum(["categorical", "overlapping"]).optional(),
     records_available: z.literal(true).optional().describe("指标结果可投影受控构成记录"),
     incompatible_dimensions: z
       .array(z.string())
@@ -106,13 +107,16 @@ const CATALOG_MEMBER_OUTPUT = z
   })
   .strict();
 
-/** 数据时间为有序展示数组：每项 title 是业务标签（如「人员数据」「人员与编制数据」），内部 source key 不上线。 */
+/** 数据时间为有序展示数组：每项 title 是语义包提供的业务标签，内部 source key 不上线。 */
 export const TIME_CONTEXT_OUTPUT = PUBLIC_TIME_CONTEXT_SCHEMA;
 
 export const CATALOG_OUTPUT = {
-  default_population_scope: z.string(),
-  data_as_of: z.string().describe("人员快照与流量数据的截至月；编制计划可能包含未来月份"),
-  time_context: TIME_CONTEXT_OUTPUT.describe("各数据场景的实际与计划时间可用性"),
+  access_scope: ACCESS_SCOPE_DEFINITION_SCHEMA.describe(
+    "当前语义包定义的行级授权维度标题；具体过滤由服务端策略执行",
+  ),
+  observation_scopes: z.array(z.string()),
+  data_as_of: z.string().describe("当前结果的数据截至月"),
+  time_context: TIME_CONTEXT_OUTPUT.describe("各数据来源的时间可用性"),
   metric_domains: z.array(
     z
       .object({

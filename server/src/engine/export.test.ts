@@ -158,7 +158,7 @@ test("异构时间指标计划的导出与预览复用同一结果计算", async
   const result = await runExport(cube, plan, {
     subject: "tester",
     groups: [],
-    orgScope: "*",
+    accessScope: { kind: "all" },
   });
   expect(result.complete).toBe(true);
   expect(result.rowCount).toBe(2);

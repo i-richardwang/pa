@@ -1,4 +1,4 @@
-import { defaultPopulationScope } from "../engine/catalog_document.js";
+import { observationScopes } from "../engine/catalog_document.js";
 import type { Principal } from "../contracts/principal.js";
 import type { CubeSecurityContext, CubeView, TimeContext } from "../ports/cube_gateway.js";
 import type { ExportService } from "./export_service.js";
@@ -53,6 +53,7 @@ type ExecuteView = (
   time: TimeContext,
   includeSummary: boolean,
   includeTotals: boolean,
+  accessScopeTitle: string,
 ) => Promise<ExecutedViewResult>;
 
 function publicColumnId(delivery: OutputDelivery, internal: string): string | undefined {
@@ -203,6 +204,7 @@ export async function runQueryPipeline(
         context,
         summarySources.has(spec.id),
         spec.id === plan.output.id,
+        access.compiler.access_scope.title,
       ),
     ),
   );
@@ -248,9 +250,7 @@ export async function runQueryPipeline(
   );
   const shared = {
     ...(plan.title ? { title: plan.title } : {}),
-    default_population_scope: defaultPopulationScope(
-      queriedViews.length ? queriedViews : authViews,
-    ),
+    observation_scopes: observationScopes(queriedViews.length ? queriedViews : authViews),
     data_as_of: context.dataAsOf,
     time_context: publicTimeContext(timeSourced(queriedViews), context, timeSources),
   };

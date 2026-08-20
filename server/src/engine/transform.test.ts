@@ -334,14 +334,14 @@ describe("transformDerivedView", () => {
           {
             query_notes: [
               {
-                member: "org_scope",
+                member: "access_scope",
                 title: "数据范围",
                 text: "仅限 Aurora Labs",
               },
             ],
             display_notes: [
               {
-                member: "org_scope",
+                member: "access_scope",
                 title: "数据范围",
                 text: "仅含有权组织",
               },
@@ -389,11 +389,11 @@ describe("transformDerivedView", () => {
       title: "组合维度空值",
       text: "组合维度中的空值按空值参与对齐；只有其余组合维度也一致时才合并。",
     });
-    expect(result.query_notes.filter((note) => note.member === "org_scope")).toEqual([
-      { member: "org_scope", title: "数据范围", text: "仅限 Aurora Labs" },
+    expect(result.query_notes.filter((note) => note.member === "access_scope")).toEqual([
+      { member: "access_scope", title: "数据范围", text: "仅限 Aurora Labs" },
     ]);
-    expect(result.display_notes?.filter((note) => note.member === "org_scope")).toEqual([
-      { member: "org_scope", title: "数据范围", text: "仅含有权组织" },
+    expect(result.display_notes?.filter((note) => note.member === "access_scope")).toEqual([
+      { member: "access_scope", title: "数据范围", text: "仅含有权组织" },
     ]);
   });
 

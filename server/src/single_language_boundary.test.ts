@@ -26,7 +26,10 @@ import {
 } from "./test_support/semantic_taxonomy.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
-  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY);
+  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY, {
+    id: "test_scope",
+    title: "测试数据范围",
+  });
 
 /** 编译器内务：只应在服务端编译边界内流转，绝不进浏览器或公共契约。 */
 const FORBIDDEN = [
@@ -88,7 +91,8 @@ describe("单语言边界门禁", () => {
  * 物理限定名、执行 view 名与 aliasMember 仍只在服务端编译目录中流转。
  */
 const DOCUMENT: CatalogDocument = {
-  default_population_scope: "统计口径：测试",
+  access_scope: { id: "test_scope", title: "测试数据范围" },
+  observation_scopes: ["统计口径：测试"],
   views: [
     {
       name: "employee_and_key_talent",
@@ -265,7 +269,7 @@ function fixtureView(name: string, _rank: number, over: Partial<CubeView>): Cube
     dimensions: [],
     ...rest,
     meta: {
-      default_population_scope: CALIBRE,
+      observation_scope: CALIBRE,
       query_surface: "metric_source",
       time_source: "workforce",
       ...meta,
@@ -411,7 +415,7 @@ describe("公共 catalog 检索不接受物理成员语言", () => {
   const fixture = fixtureView("fact_x", 1, {
     title: "人员场景",
     meta: {
-      default_population_scope: CALIBRE,
+      observation_scope: CALIBRE,
     },
     dimensions: [orgDim("fact_x")],
     measures: [

@@ -1,7 +1,6 @@
 import type { Hono, MiddlewareHandler } from "hono";
 import type { DashboardDependencies, DashboardEnv } from "./types.js";
 import { RESOLVE_FEEDBACK_BODY } from "../contracts/feedback_contract.js";
-import { SET_ORG_SCOPE_BODY } from "../contracts/session_contract.js";
 
 const days = (request: { query(name: string): string | undefined }) =>
   Number(request.query("days") ?? 30);
@@ -14,21 +13,14 @@ function page(request: { query(name: string): string | undefined }) {
 
 export function registerUsageRoutes(
   dashboard: Hono<DashboardEnv>,
-  deps: Pick<DashboardDependencies, "usage" | "userScope" | "feedback">,
+  deps: Pick<DashboardDependencies, "usage" | "feedback">,
   requireAdmin: MiddlewareHandler<DashboardEnv>,
 ): void {
-  const { usage, userScope, feedback } = deps;
+  const { usage, feedback } = deps;
 
   dashboard.get("/api/usage/mine", async (c) => {
     const { limit, offset } = page(c.req);
     return c.json(await usage.mine(c.get("principal"), days(c.req), limit, offset));
-  });
-
-  dashboard.post("/api/users/scope", requireAdmin, async (c) => {
-    const parsed = SET_ORG_SCOPE_BODY.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "缺少 userId 或 org_scope" }, 400);
-    await userScope.setOrgScope(c.get("principal"), parsed.data);
-    return c.json({ ok: true as const });
   });
 
   dashboard.get("/api/usage/overview", requireAdmin, async (c) =>

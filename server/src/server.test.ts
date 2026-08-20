@@ -226,7 +226,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
         meta: {
           query_surface: "metric_source",
           time_source: "workforce",
-          default_population_scope: "统计范围：测试。",
+          observation_scope: "统计范围：测试。",
         },
         measures: [],
         dimensions: [],
@@ -280,7 +280,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
       payload: {
         analysis_id: analysisId,
         view_id: viewId,
-        default_population_scope: "统计范围",
+        observation_scopes: ["统计范围"],
         data_as_of: "2026-07",
         time_context: [],
         view,
@@ -355,7 +355,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
       payload: {
         analysis_id: analysisId,
         view_id: viewId,
-        default_population_scope: "统计范围",
+        observation_scopes: ["统计范围"],
         data_as_of: "2026-07",
         time_context: [],
         view,
@@ -391,7 +391,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     };
   };
   const server = buildServer({
-    principal: { email: "test@x", roles: ["admin"], orgScope: "*" },
+    principal: { email: "test@x", roles: ["admin"], accessScope: { kind: "all" } },
     dependencies: {
       analysis: {
         run: async (_principal, definition, intent) => {
@@ -638,7 +638,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
       name: "show_records",
       arguments: { view_id: rerunViewId, metric_id: "measure:active_employee_count" },
     });
-    expect(records.content).toEqual([{ type: "text", text: "人员名单已打开。" }]);
+    expect(records.content).toEqual([{ type: "text", text: "构成记录已打开。" }]);
     expect(records.structuredContent).toEqual({
       view_id: rerunViewId,
       metric_id: "measure:active_employee_count",

@@ -19,7 +19,10 @@ import {
 } from "../test_support/semantic_taxonomy.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
-  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY);
+  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY, {
+    id: "test_scope",
+    title: "测试数据范围",
+  });
 
 const active_employee_count = (view: string, viewTitle: string): CubeView["measures"][number] => ({
   name: `${view}.active_employee_count`,
@@ -44,7 +47,7 @@ const metaViews: CubeView[] = [
     meta: {
       query_surface: "metric_source",
       time_source: "workforce",
-      default_population_scope: "统计范围：公开虚构数据中的示例员工。",
+      observation_scope: "统计范围：公开虚构数据中的示例员工。",
     },
     measures: [
       {
@@ -109,7 +112,7 @@ const metaViews: CubeView[] = [
         description: "员工姓名。",
         type: "string",
         aliasMember: "test_people_metrics.employee_name",
-        meta: { dimension_kind: "individual" },
+        meta: {},
       },
       {
         name: "test_people_metrics.department_name",
@@ -132,7 +135,7 @@ const metaViews: CubeView[] = [
     meta: {
       query_surface: "metric_source",
       time_source: "workforce",
-      default_population_scope: "统计范围：公开虚构数据中的示例员工。",
+      observation_scope: "统计范围：公开虚构数据中的示例员工。",
     },
     measures: [
       active_employee_count("employee_attributes_fixture", "员工信息"),
@@ -207,7 +210,7 @@ const metaViews: CubeView[] = [
     meta: {
       query_surface: "detail",
       time_source: "workforce",
-      default_population_scope: "统计范围：公开虚构数据中的示例员工。",
+      observation_scope: "统计范围：公开虚构数据中的示例员工。",
       record_sets: {
         employee: {
           title: "员工记录",
@@ -248,7 +251,7 @@ const metaViews: CubeView[] = [
         description: "员工姓名。",
         type: "string",
         aliasMember: "employee_detail_fixture.employee_name",
-        meta: { dimension_kind: "individual" },
+        meta: {},
       },
     ],
     internalDimensions: [
@@ -264,7 +267,7 @@ const views: CubeView[] = [...metaViews].sort((a, b) => a.name.localeCompare(b.n
 describe("CatalogDocument", () => {
   test("从权限裁剪后的 views 归一成员与时间源", () => {
     const document = buildCatalogDocument(views);
-    expect(document.default_population_scope).toBe("统计范围：公开虚构数据中的示例员工。");
+    expect(document.observation_scopes).toEqual(["统计范围：公开虚构数据中的示例员工。"]);
     expect(views[0].name).toBe("employee_attributes_fixture");
     expect(document.views.map((view) => view.name)).toEqual([
       "employee_attributes_fixture",
@@ -285,7 +288,7 @@ describe("CatalogDocument", () => {
       },
     });
     expect(document.views[2].dimensions[0].dimension_kind).toBe("categorical");
-    expect(document.views[2].dimensions[1].dimension_kind).toBe("individual");
+    expect(document.views[2].dimensions[1].dimension_kind).toBe("categorical");
   });
 
   test("规范同名身份跨事实归并，available_in 载明精确查询绑定", () => {
@@ -477,7 +480,7 @@ describe("CatalogDocument", () => {
       meta: {
         query_surface: "metric_source",
         time_source: "workforce",
-        default_population_scope: "测试口径。",
+        observation_scope: "测试口径。",
         record_sets: {
           employee: {
             title: "员工记录",
@@ -608,7 +611,7 @@ describe("CatalogDocument", () => {
       {
         name: "flow",
         title: "流动",
-        meta: { time_source: "workforce", default_population_scope: "统计范围：测试" },
+        meta: { time_source: "workforce", observation_scope: "统计范围：测试" },
         dimensions: [],
         measures: [
           {
@@ -658,7 +661,7 @@ describe("CatalogDocument", () => {
       const view = (name: string, measures: CubeView["measures"]): CubeView => ({
         name,
         title: name,
-        meta: { time_source: "workforce", default_population_scope: "统计范围：测试" },
+        meta: { time_source: "workforce", observation_scope: "统计范围：测试" },
         dimensions: [],
         measures,
       });
@@ -805,7 +808,7 @@ test("装配不向未声明时间合同的内部辅助度量索要合同", () =>
   const view: CubeView = {
     name: "flow",
     title: "人员流动",
-    meta: { time_source: "workforce", default_population_scope: "测试人群口径。" },
+    meta: { time_source: "workforce", observation_scope: "测试人群口径。" },
     measures: [
       {
         name: "flow.turnover_count",

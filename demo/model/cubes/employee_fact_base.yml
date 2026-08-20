@@ -18,14 +18,14 @@ cubes:
         sql: employee_id
         type: string
         public: false
-        meta: { internal: true, member_role: restricted_detail, dimension_kind: individual }
+        meta: { internal: true, member_role: restricted_detail }
       - name: employee_name
         title: 员工姓名
         description: 公开演示数据中的虚构员工姓名。
         sql: employee_name
         type: string
         public: false
-        meta: { internal: true, member_role: restricted_detail, dimension_kind: individual }
+        meta: { internal: true, member_role: restricted_detail }
       - name: year
         title: 年
         description: 数据记录所属的自然年。

@@ -34,7 +34,7 @@ const spec = (id = "result") => ({
 const principal = (email: string): Principal => ({
   email,
   roles: ["user"],
-  orgScope: "*",
+  accessScope: { kind: "all" },
 });
 const execution = {
   executeReferenced: async () => {
@@ -217,7 +217,7 @@ describe("report aggregate", () => {
           payload: {
             analysis_id: current.analysis.id,
             view_id: current.view.id,
-            default_population_scope: "统计范围",
+            observation_scopes: ["统计范围"],
             data_as_of: "2026-07",
             time_context: [],
             view: resultView,

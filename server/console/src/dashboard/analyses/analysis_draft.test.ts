@@ -23,7 +23,8 @@ import {
 } from "./analysis_draft";
 
 const catalog: CatalogPayload = {
-  default_population_scope: "统计口径",
+  access_scope: { id: "organization", title: "组织" },
+  observation_scopes: ["统计口径"],
   data_as_of: "2026-07",
   time_context: [],
   metric_domains: [],
@@ -109,7 +110,7 @@ function replay(view: ReplayPayload["view"] = { type: "table" }): ReplayPayload 
     record_projection_bindings: { views: [] },
     payload: {
       view: rawView,
-      default_population_scope: "统计口径",
+      observation_scopes: ["统计口径"],
       data_as_of: "2026-07",
       time_context: [],
     },

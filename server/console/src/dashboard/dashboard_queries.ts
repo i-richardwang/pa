@@ -130,7 +130,7 @@ export function useDeleteBusinessTerm() {
 /**
  * 维度取值现查：与 MCP values_of 同路径、同分类/个体粒度守卫。
  * 值集合随行权限与数据刷新变化，故每次打开重取、不跨开留存（staleTime/gcTime 皆 0）——
- * 缓存会让「我有权看到哪些组织」过期。输入去抖期保留上一批结果（只压暗、不清空）。
+ * 缓存会让当前权限下可见的分类值过期。输入去抖期保留上一批结果（只压暗、不清空）。
  */
 export function useDimensionValues(member: string, contains: string, enabled = true) {
   return useQuery({

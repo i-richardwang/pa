@@ -1,6 +1,8 @@
 /** Cube /sql 单窗与多窗原始形态的产品边界归一。 */
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { decodeJwt } from "jose";
 import {
+  createCubeGateway,
   normalizeMetaViews,
   normalizeSqlResponse,
   resolveTimeSourceAnchors,
@@ -32,6 +34,39 @@ const GENERIC_TIME_SOURCES = buildTimeSourceRegistry([
     comparison_policy: "explicit_only",
   },
 ]);
+
+test("通用授权范围只以 data_scope 投影到 Cube JWT", async () => {
+  const authorizations: string[] = [];
+  const fetchMock = spyOn(globalThis, "fetch").mockImplementation((async (_input, init) => {
+    authorizations.push(new Headers(init?.headers).get("Authorization") ?? "");
+    return new Response(JSON.stringify({ cubes: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch);
+  try {
+    const gateway = createCubeGateway({
+      cubeUrl: "http://cube.test",
+      apiSecret: "test-secret",
+      accessScopeId: "region",
+      serviceContext: { subject: "service", groups: ["pa_service"], accessScope: { kind: "all" } },
+      timeSources: GENERIC_TIME_SOURCES,
+    });
+    await gateway.meta({
+      subject: "regional-user",
+      groups: ["pa_scoped"],
+      accessScope: { kind: "limited", values: ["North", "West"] },
+    });
+    const token = authorizations[0]?.replace(/^Bearer\s+/, "");
+    expect(decodeJwt(token)).toMatchObject({
+      email: "regional-user",
+      groups: ["pa_scoped"],
+      data_scope: { id: "region", values: ["North", "West"] },
+    });
+  } finally {
+    fetchMock.mockRestore();
+  }
+});
 
 test("内部成员只保留在服务端契约解析面", () => {
   const view = {

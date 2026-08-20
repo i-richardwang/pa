@@ -64,7 +64,7 @@ const emptyStructureView = {
 const result = {
   payload: {
     title: "组织人数",
-    default_population_scope: "统计范围",
+    observation_scopes: ["统计范围"],
     data_as_of: "2026-07",
     time_context: [],
     view: emptyStructureView,

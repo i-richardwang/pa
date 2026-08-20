@@ -3,7 +3,7 @@
  * 也是 MCP 客户端连接器接入的硬前提——连接器只认 OAuth，无 API key 入口）；
  * apiKey 插件让用户自助签发绑定本人身份的 key，OAuth 与 API key 的 caller 均为属主 email。
  * 存储为 SQLite 单文件（运行时内置驱动，无原生依赖）；表结构在服务启动时初始化。
- * 无自助注册：用户由管理员经 scripts/create_user.ts 开通。
+ * 无自助注册：用户由管理员通过管理界面或受控命令开通。
  */
 import { apiKey } from "@better-auth/api-key";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
@@ -38,15 +38,15 @@ function authOptions(cfg: AuthConfig, db: SqliteDatabase) {
       enabled: true,
       disableSignUp: !cfg.allowSignUp,
     },
-    // Cube access_policy 的行权限属性:有权组织的 organization_name 清单——"*"=全量、""=无权（fail-closed）、
-    // 否则逗号分隔（一级组织名无逗号）。input:false = 非自助字段,仅管理员经 admin 端点/脚本写。
+    // access_scope 是 Better Auth 的持久化适配字段；领域层解析为判别联合，Cube JWT 投影为 data_scope。
+    // input:false = 非自助字段，仅由管理员用户管理用例或受控命令写入。
     user: {
       additionalFields: {
-        org_scope: { type: "string", required: false, defaultValue: "", input: false },
+        access_scope: { type: "string", required: false, defaultValue: "", input: false },
       },
     },
     // admin 插件 = 角色模型（user.role，默认 admin/user 两角色）：
-    // 控制台 /dashboard 按角色分层的依据；用户开通/晋升角色经 scripts/create_user.ts。
+    // 控制台 /dashboard 按角色分层的依据；角色和数据范围由同一个用户管理动作提交。
     // apiKey 插件 = /mcp bearer 通道的 key 来源：key 绑 session 用户，自助创建/吊销；
     plugins: [
       mcp({ loginPage: "/login" }),

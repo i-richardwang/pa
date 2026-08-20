@@ -20,17 +20,22 @@ const cube = withFormalMetricModel(
   createCubeGateway({
     cubeUrl: process.env.CUBE_URL ?? "http://localhost:4000",
     apiSecret,
+    accessScopeId: semanticPackage.access_scope.id,
     serviceContext: SERVICE_CUBE_CONTEXT,
     timeSources: semanticPackage.time_sources,
   }),
   semanticPackage.formal_metrics,
 );
 
-const full: CubeSecurityContext = { subject: "full", groups: ["pa_full"], orgScope: "*" };
+const full: CubeSecurityContext = {
+  subject: "full",
+  groups: ["pa_full"],
+  accessScope: { kind: "all" },
+};
 const unknown: CubeSecurityContext = {
   subject: "unknown",
   groups: ["unknown"],
-  orgScope: "*",
+  accessScope: { kind: "all" },
 };
 const expectedViews = [
   "employee_hire_metrics",
@@ -67,7 +72,7 @@ assert(typeof scopedOrganization === "string", "全量身份没有可用于范�
 const scoped: CubeSecurityContext = {
   subject: "scoped",
   groups: ["pa_scoped"],
-  orgScope: [scopedOrganization],
+  accessScope: { kind: "limited", values: [scopedOrganization] },
 };
 const scopedNames = (await cube.meta(scoped)).map((view) => view.name).sort();
 assert(

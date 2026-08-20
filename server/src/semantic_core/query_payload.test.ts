@@ -47,7 +47,7 @@ describe("freshnessLabel", () => {
 
 const payload = (result: QueryPayload["view"]): QueryPayload => ({
   view: result,
-  default_population_scope: "统计范围",
+  observation_scopes: ["统计范围"],
   data_as_of: "2026-06",
   time_context: [{ title: "人员数据", actual_through: "2026-06", available_through: "2026-06" }],
 });
@@ -72,7 +72,7 @@ describe("mergeFullRows：全量行并回载荷", () => {
     const full = Array.from({ length: 201 }, (_, i) => [`org${i}`, i]);
     const p = payload({ ...view(full.slice(0, 200), 201), sampled: "样本注记" });
     const merged = mergeFullRows(p, { rows: full });
-    expect(merged.default_population_scope).toBe(p.default_population_scope);
+    expect(merged.observation_scopes).toBe(p.observation_scopes);
     expect(merged.view.sampled).toBe("样本注记");
   });
 });

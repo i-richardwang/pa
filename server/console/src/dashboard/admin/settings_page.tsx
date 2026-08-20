@@ -10,6 +10,7 @@ import {
   UsersIcon,
   XIcon,
 } from "lucide-react";
+import type { PresentedAccessScope } from "@contracts/access_scope";
 import type { MePayload } from "@contracts/session_contract";
 import { LoadingMark } from "pa-result-view";
 import { useCopyToClipboard } from "@/hooks/use_copy_text";
@@ -278,14 +279,11 @@ function roleLabel(role: string): string {
   return names.join(" · ");
 }
 
-function scopeLabel(orgScope: string): string {
-  if (orgScope === "*") return "全部组织";
-  if (!orgScope) return "未授权（暂无组织数据可查，请联系管理员开通）";
-  return orgScope
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .join("、");
+function scopeLabel(accessScope: PresentedAccessScope): string {
+  if (accessScope.kind === "all") return `全部${accessScope.title}`;
+  if (!accessScope.values.length)
+    return `未授权（暂无${accessScope.title}数据可查，请联系管理员开通）`;
+  return accessScope.values.join("、");
 }
 
 function AccountPage({ me }: { me: MePayload }) {
@@ -306,8 +304,11 @@ function AccountPage({ me }: { me: MePayload }) {
             <Badge>{me.is_admin ? "管理员" : "成员"}</Badge>
           </span>
         </SettingsRow>
-        <SettingsRow description="行权限：能查哪些组织的数据。" label="数据权限（可查组织）">
-          {scopeLabel(me.org_scope)}
+        <SettingsRow
+          description={`行权限：能查哪些${me.access_scope.title}的数据。`}
+          label={`数据权限（可查${me.access_scope.title}）`}
+        >
+          {scopeLabel(me.access_scope)}
         </SettingsRow>
       </SettingsCard>
       <SettingsGroupTitle>当前权限</SettingsGroupTitle>

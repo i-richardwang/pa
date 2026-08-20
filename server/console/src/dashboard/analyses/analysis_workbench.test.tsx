@@ -19,7 +19,8 @@ import { ReportInspector } from "./report_inspector";
 import type { AnalysisEditSession } from "./use_analysis_edit_session";
 
 const catalog: CatalogPayload = {
-  default_population_scope: "统计口径",
+  access_scope: { id: "organization", title: "组织" },
+  observation_scopes: ["统计口径"],
   data_as_of: "2026-07",
   time_context: [],
   metric_domains: [],
@@ -83,7 +84,7 @@ const tableReplay: ReplayPayload = {
   },
   payload: {
     view: rawView,
-    default_population_scope: "统计口径",
+    observation_scopes: ["统计口径"],
     data_as_of: "2026-07",
     time_context: [],
   },

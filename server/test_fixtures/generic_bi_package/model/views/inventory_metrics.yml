@@ -6,7 +6,17 @@ views:
       query_surface: metric_source
       time_source: inventory_count
       time_anchor_measure: counted_units
-      default_population_scope: "Scope: completed inventory observations."
+      observation_scope: "Scope: completed inventory observations."
+    access_policy:
+      - groups: [pa_full, pa_service]
+        member_level:
+          includes: &members [year, month, period_month, region, counted_units]
+        row_level: { allow_all: true }
+      - group: pa_scoped
+        member_level: { includes: *members }
+        row_level:
+          filters:
+            - { member: region, operator: equals, values: securityContext.data_scope.values }
     cubes:
       - join_path: inventory_count_fact
-        includes: [year, month, period_month, region, counted_units]
+        includes: *members

@@ -74,9 +74,15 @@ your_semantic_package/
     └── views/             # 指标执行面与受控记录面
 ```
 
-`semantic_package.yml` 是纯声明文件，不能执行代码。当前 `schema_version: 2` 由包登记时间源、比较策略、
-业务分类和正式指标图；加载器会拒绝未知结构、重复身份、无效时间源关系、未登记指标域、缺失模型目录
+`semantic_package.yml` 是纯声明文件，不能执行代码。当前 `schema_version: 2` 由包登记授权维度稳定 id 与标题、
+时间源、比较策略、业务分类和正式指标图；每个公开 View 另以 `meta.observation_scope` 声明自己的
+观察对象与纳入范围。加载器会拒绝未知结构、重复身份、无效时间源关系、未登记指标域、缺失模型目录
 和逃逸包目录的路径。
+
+应用身份只携带结构化的“全部 / 限定值”授权范围，持久化授权绑定当前包的稳定 id；不匹配的包身份
+会 fail-closed。JWT 将它投影为通用 `data_scope: { id, values }`；核心不解释这些
+值是组织、区域、门店还是法人。具体过滤字段与规则只在语义包的 Cube `access_policy` 中声明，控制台和
+结果注释则使用包内 `access_scope.title` 展示业务名称。
 
 公开版本默认使用 [`demo/`](./demo)。
 

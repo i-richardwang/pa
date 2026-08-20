@@ -47,7 +47,7 @@ function payload(overrides: Partial<QueryPayload> = {}): QueryPayload {
   return {
     title: "各组织在职人数",
     view: view(),
-    default_population_scope: "口径：在职含试用期",
+    observation_scopes: ["口径：在职含试用期"],
     data_as_of: "2026-06-30",
     time_context: [],
     ...overrides,

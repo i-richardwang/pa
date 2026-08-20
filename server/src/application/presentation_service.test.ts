@@ -35,7 +35,7 @@ const result = (rows: ViewBlock["rows"]): QueryRunResult => {
   const view = block(rows);
   return {
     payload: {
-      default_population_scope: "统计范围",
+      observation_scopes: ["统计范围"],
       data_as_of: "2026-07",
       time_context: [],
       view,
@@ -62,7 +62,7 @@ const pivotResult = (rows: ViewBlock["rows"]): QueryRunResult => {
   };
   return {
     payload: {
-      default_population_scope: "统计范围",
+      observation_scopes: ["统计范围"],
       data_as_of: "2026-07",
       time_context: [],
       view,

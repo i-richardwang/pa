@@ -4,7 +4,7 @@ import type { SemanticQueryView } from "./semantic_analysis.js";
 import { compileTimeIntent } from "./time_contract.js";
 
 /**
- * 指标域与人员记录面职责分离。这里只在模型标记为 detail 的技术绑定中寻找
+ * 指标域与受控记录面职责分离。这里只在模型标记为 detail 的技术绑定中寻找
  * 记录来源，并要求报告的全部分组与筛选都能原样绑定；业务指标域不参与记录投影选路。
  */
 export function planMetricRecordProjection(

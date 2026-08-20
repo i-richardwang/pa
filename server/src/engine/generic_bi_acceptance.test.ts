@@ -16,6 +16,9 @@ import { planMetricQuery } from "./metric_planner.js";
 import { loadCanonicalSemanticModel } from "./canonical_semantic_model.js";
 import { toCompilerCatalog } from "./catalog_document.js";
 import { loadSemanticPackage } from "./semantic_package.js";
+import { createCatalogService } from "../application/catalog_service.js";
+import type { Principal } from "../contracts/principal.js";
+import { cubeSecurityContext } from "./cube_security.js";
 
 const packageRoot = fileURLToPath(
   new URL("../../test_fixtures/generic_bi_package/", import.meta.url),
@@ -71,7 +74,7 @@ function runtimeViews(): CubeView[] {
         query_surface: "metric_source",
         time_source: "sales_actual",
         time_anchor_measure: "order_count",
-        default_population_scope: "Scope: completed sales orders.",
+        observation_scope: "Scope: completed sales orders.",
       },
       measures: [
         metric(sales, "revenue", "Revenue", "sum", "metric_domain:sales_performance"),
@@ -88,7 +91,7 @@ function runtimeViews(): CubeView[] {
         query_surface: "metric_source",
         time_source: "inventory_count",
         time_anchor_measure: "counted_units",
-        default_population_scope: "Scope: completed inventory observations.",
+        observation_scope: "Scope: completed inventory observations.",
       },
       measures: [
         metric(
@@ -122,7 +125,11 @@ function response(query: CubeQuery, rows: Record<string, unknown>[]): LoadRespon
 test("非 HR 语义包走通注册、canonical model、比较策略、规划与结果保护", async () => {
   const semanticPackage = await loadSemanticPackage(packageRoot);
   const views = applyFormalMetricModel(runtimeViews(), semanticPackage.formal_metrics);
-  const security: CubeSecurityContext = { subject: "acceptance", groups: [], orgScope: "*" };
+  const security: CubeSecurityContext = {
+    subject: "acceptance",
+    groups: [],
+    accessScope: { kind: "all" },
+  };
   const canonical = await loadCanonicalSemanticModel({
     semantic_package: semanticPackage,
     cube: { meta: async () => views },
@@ -132,6 +139,11 @@ test("非 HR 语义包走通注册、canonical model、比较策略、规划与�
   const compiler = toCompilerCatalog(canonical.document);
 
   expect(canonical.time_sources.primary.id).toBe("sales_actual");
+  expect(canonical.access_scope).toEqual({ id: "region", title: "Region" });
+  expect(canonical.document.observation_scopes).toEqual([
+    "Scope: completed sales orders.",
+    "Scope: completed inventory observations.",
+  ]);
   expect(canonical.capabilities.metric_domains.map((domain) => domain.id)).toEqual([
     "metric_domain:sales_performance",
     "metric_domain:inventory_position",
@@ -208,4 +220,31 @@ test("非 HR 语义包走通注册、canonical model、比较策略、规划与�
   expect(result.masked).toEqual([
     { member: "sales_metrics.average_order_value", threshold: 5, groups: 1 },
   ]);
+
+  const principal: Principal = {
+    email: "regional-analyst@example.com",
+    roles: ["user"],
+    accessScope: { kind: "limited", values: ["North"] },
+  };
+  const observedContexts: CubeSecurityContext[] = [];
+  const catalog = createCatalogService({
+    canonical,
+    cube: {
+      meta: async (context) => {
+        observedContexts.push(context);
+        return views;
+      },
+      load: async () => response({}, []),
+      timeContext: async () => context,
+    },
+    businessTerms: { resolve: async () => [] },
+  });
+  const publicCatalog = await catalog.query(principal, {});
+  expect(publicCatalog.access_scope).toEqual({ id: "region", title: "Region" });
+  expect(publicCatalog.observation_scopes).toEqual(canonical.document.observation_scopes);
+  expect(observedContexts).toEqual([cubeSecurityContext(principal)]);
+  expect(observedContexts[0]).toMatchObject({
+    groups: ["pa_scoped"],
+    accessScope: { kind: "limited", values: ["North"] },
+  });
 });

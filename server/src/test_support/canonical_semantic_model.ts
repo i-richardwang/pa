@@ -12,7 +12,8 @@ export function canonicalModelFixture(
   taxonomy: SemanticTaxonomy,
   timeSources: TimeSourceRegistry = TEST_TIME_SOURCE_REGISTRY,
 ) {
-  const document = buildCatalogDocument(views, taxonomy, timeSources);
+  const accessScope = { id: "test_scope", title: "测试范围" };
+  const document = buildCatalogDocument(views, taxonomy, timeSources, accessScope);
   const compiler = toCompilerCatalog(document);
   const dimensionGroups = new Map<string, Set<string>>();
   for (const dimension of compiler.dimensions) {
@@ -62,5 +63,6 @@ export function canonicalModelFixture(
     views,
     taxonomy,
     time_sources: timeSources,
+    access_scope: accessScope,
   });
 }

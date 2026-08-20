@@ -14,7 +14,11 @@ import type { PresentationSpec } from "../presentation_core/presentation_spec.js
  */
 const GOLDEN_PATH = new URL("./query_time_payload.golden.json", import.meta.url);
 
-const principal: Principal = { email: "viewer@example.com", roles: ["user"], orgScope: ["研发"] };
+const principal: Principal = {
+  email: "viewer@example.com",
+  roles: ["user"],
+  accessScope: { kind: "limited", values: ["研发"] },
+};
 const TABLE_PRESENTATION: PresentationSpec = {
   type: "table",
   y: [],
@@ -26,7 +30,7 @@ const TIME_SOURCE = "workforce";
 const view: CubeView = {
   name: VIEW,
   title: "人员总览",
-  meta: { time_source: TIME_SOURCE, default_population_scope: "测试人群口径。" },
+  meta: { time_source: TIME_SOURCE, observation_scope: "测试人群口径。" },
   measures: [
     {
       name: `${VIEW}.active_employee_count`,

@@ -6,7 +6,7 @@
  * OAuth 侧改动后必跑。
  * 前置：服务已启用 OAuth（PA_AUTH_SECRET）且测试用户已开通。
  * 运行：PA_OAUTH_EMAIL=... PA_OAUTH_PASSWORD=... bun run smoke:oauth [-- http://127.0.0.1:8788]
- * 受限权限回归：账号先配置单一 org_scope，再加 PA_EXPECT_ORG_SCOPE=<组织名>；脚本会验证派生查询及重放。
+ * 受限权限回归：账号先配置单一 access_scope，再加 PA_EXPECT_ACCESS_SCOPE_VALUE=<授权值>；脚本会验证派生查询及重放。
  */
 import { createHash, randomBytes } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -418,7 +418,7 @@ await callTool({
 });
 
 // 派生链路恒验两路输入、关联与逐行算式；受限账号额外验证三张结果都只出现 scope 内组织。
-const expectedScopedOrg = process.env.PA_EXPECT_ORG_SCOPE?.trim();
+const expectedScopedOrg = process.env.PA_EXPECT_ACCESS_SCOPE_VALUE?.trim();
 const scopedTitle = `oauth-smoke ${expectedScopedOrg ? "受限" : ""}派生 ${Date.now()}`;
 const scopedQuery = await callTool({
   name: "run_analysis",

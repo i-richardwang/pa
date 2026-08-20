@@ -1,33 +1,41 @@
 /**
  * 用户开通（管理员在本机执行）：
  *   bun run user:create -- <email> <password> [显示名] [--admin] \
- *     [--org-scope=<组织清单|*>] [--with-key]
+ *     [--data-scope=<授权值>]... [--data-scope=*] [--with-key]
  * 写入与服务同一 SQLite 文件（PA_AUTH_DB，默认 data/auth.db，相对 server/ 目录）。
  * 服务端无自助注册，本脚本是唯一开通入口。
  *
  * 授权（见 src/engine/cube_security.ts 与 view.access_policy）:
  * --admin 设为管理员；省略时为普通分析用户。
- * --org-scope 行权限——有权组织的 organization_name 清单（逗号分隔）或 "*" 全量；
+ * --data-scope 行权限——可重复传入语义包所定义授权维度的单个值，或单独传 "*" 表示全量；
  *             缺省为空，账号可登录但不能查询数据。
  * --with-key 开通后签发一枚绑定该用户的 API key；明文只打印一次。
  *
- * 经 admin 插件的 createUser 与 apiKey 插件的 createApiKey 端点（服务端直调不经 HTTP、
- * 无会话要求）；org_scope 经 Better Auth 用户范围适配器写入（input:false 字段）。密码散列（scrypt）
+ * 经用户账号适配器与 apiKey 插件端点（服务端直调不经 HTTP、无会话要求）；账号创建时同时写入
+ * 绑定当前语义包身份的 access_scope。密码散列（scrypt）
  * 与 key 散列（SHA-256）均不依赖 PA_AUTH_SECRET。
  * 注意：容器内服务持有长连接，跨 Docker 挂载边界的新写入对其不可见（virtiofs 缓存），
  * 开通后须 docker compose restart server 生效。
  */
 import { buildAuth, initializeAuthSchema } from "../src/auth.js";
-import { createBetterAuthUserScopeWriter } from "../src/adapters/better_auth_user_scope.js";
+import { createBetterAuthUserAccountAdministration } from "../src/adapters/better_auth_user_account_administration.js";
+import {
+  configuredSemanticPackageDir,
+  loadSemanticPackage,
+} from "../src/engine/semantic_package.js";
 import { openSqlite } from "../src/sqlite.js";
 
 const argv = process.argv.slice(2);
 const opts = new Map<string, string>();
+const accessScopeValues: string[] = [];
 const positional: string[] = [];
 for (const a of argv) {
   if (a.startsWith("--")) {
     const eq = a.indexOf("=");
-    opts.set(eq >= 0 ? a.slice(2, eq) : a.slice(2), eq >= 0 ? a.slice(eq + 1) : "");
+    const key = eq >= 0 ? a.slice(2, eq) : a.slice(2);
+    const value = eq >= 0 ? a.slice(eq + 1) : "";
+    if (key === "data-scope") accessScopeValues.push(value.trim());
+    else opts.set(key, value);
   } else {
     positional.push(a);
   }
@@ -36,13 +44,22 @@ const [email, password, name] = positional;
 if (!email || !password) {
   console.error(
     "用法：bun run user:create -- <email> <password> [显示名] " +
-      "[--admin] [--org-scope=<组织清单|*>] [--with-key]",
+      "[--admin] [--data-scope=<授权值>]... [--data-scope=*] [--with-key]",
   );
   process.exit(1);
 }
 
 const role = opts.has("admin") ? "admin" : "user";
-const orgScope = opts.get("org-scope") ?? "";
+if (accessScopeValues.includes("*") && accessScopeValues.length > 1) {
+  throw new Error("--data-scope=* 不能与限定值同时使用");
+}
+const accessScope =
+  accessScopeValues[0] === "*"
+    ? ({ kind: "all" } as const)
+    : {
+        kind: "limited" as const,
+        values: accessScopeValues.filter(Boolean),
+      };
 const withKey = opts.has("with-key");
 
 const cfg = {
@@ -55,17 +72,22 @@ const cfg = {
 const authDb = await openSqlite(cfg.dbPath);
 await initializeAuthSchema(cfg, authDb);
 const auth = buildAuth(cfg, authDb);
-const res = await auth.api.createUser({
-  body: { email, password, name: name ?? email.split("@")[0], role },
+const semanticPackage = await loadSemanticPackage(configuredSemanticPackageDir());
+const accounts = createBetterAuthUserAccountAdministration(auth, semanticPackage.access_scope);
+const user = await accounts.create({
+  email,
+  password,
+  name: name ?? email.split("@")[0] ?? email,
+  role,
+  accessScope,
 });
-await createBetterAuthUserScopeWriter(auth).setOrgScope(res.user.id, orgScope);
 console.log(
-  `已开通：${res.user.email}（id=${res.user.id}，角色=${role}，` +
-    `组织权限=${orgScope || "（空:无行权限,待授组织）"}）`,
+  `已开通：${user.email}（id=${user.id}，角色=${role}，` +
+    `数据范围=${accessScopeValues.join("、") || "（空：无行权限，待授权）"}）`,
 );
 
 if (withKey) {
-  const key = await auth.api.createApiKey({ body: { name: "onboarding", userId: res.user.id } });
+  const key = await auth.api.createApiKey({ body: { name: "onboarding", userId: user.id } });
   console.log("API Key（明文仅此一次，请妥善保管）：");
   console.log(key.key);
 }

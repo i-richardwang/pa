@@ -41,19 +41,6 @@ const views: CubeView[] = [
       },
     ],
   },
-  {
-    name: "individual_fixture",
-    title: "人员名单",
-    measures: [],
-    dimensions: [
-      {
-        name: "individual_fixture.employee_name",
-        title: "姓名",
-        type: "string",
-        meta: { dimension_kind: "individual" },
-      },
-    ],
-  },
 ];
 
 describe("findSearchableDimension", () => {
@@ -69,12 +56,6 @@ describe("findSearchableDimension", () => {
     expect(
       findSearchableDimension(views, "employee_attributes_fixture.assessment_year").title,
     ).toBe("评定年份");
-  });
-
-  test("个体粒度维度恒拒绝", () => {
-    expect(() => findSearchableDimension(views, "individual_fixture.employee_name")).toThrow(
-      "show_records",
-    );
   });
 
   test("度量与未知成员拒绝并给出入参指引（语义 id，不教物理全名）", () => {

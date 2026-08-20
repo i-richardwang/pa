@@ -1,7 +1,7 @@
 /**
  * 维度真实值弹窗：以浏览者身份现查 /dashboard/api/catalog/values（与 MCP values_of 同一条
  * 路径、同一套分类与个体粒度守卫）。每次打开重取、不缓存——值集合随行权限与数据
- * 刷新变化，缓存会让「我有权看到哪些组织」过期。关键词交给服务端过滤（Cube contains），
+ * 刷新变化，缓存会让当前权限下可见的分类值过期。关键词交给服务端过滤（Cube contains），
  * 本地不截值：截断上限由服务端裁决并随 truncated 文案透出。
  */
 import { useEffect, useState } from "react";

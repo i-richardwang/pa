@@ -1027,12 +1027,7 @@ function MemberProfileBody({
     term.related_members.some((relatedMember) => relatedMember.id === member.id),
   );
   const format = formatLabel(member.format);
-  const dimensionKind =
-    member.dimension_kind === "individual"
-      ? "人级"
-      : member.dimension_kind === "overlapping"
-        ? "可重叠"
-        : null;
+  const dimensionKind = member.dimension_kind === "overlapping" ? "可重叠" : null;
   // 翻值入口挂在口径旁：「它是什么」与「它都有哪些值」是同一个问题的两半。
   const action = isSearchableCatalogDimension(member) ? (
     <Button

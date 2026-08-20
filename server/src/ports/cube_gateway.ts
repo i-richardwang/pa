@@ -1,3 +1,5 @@
+import type { AccessScope } from "../contracts/access_scope.js";
+
 /**
  * Cube 查询引擎端口：领域与应用层只依赖这里的稳定产品契约。
  * HTTP、JWT、缓存、重试和原始响应归一属于外部适配器实现，不进入本模块。
@@ -97,7 +99,7 @@ export type TimeSourceContext = {
 };
 
 export type TimeContext = {
-  /** 人员快照与流量的统一业务截至月，保留为回答级 data_as_of。 */
+  /** 当前语义包各时间源汇合后的业务截至月，保留为回答级 data_as_of。 */
   dataAsOf: string;
   /** view.meta.time_source 指向这里的时钟。 */
   sources: Record<string, TimeSourceContext>;
@@ -107,7 +109,7 @@ export type TimeContext = {
 export type CubeSecurityContext = {
   subject: string;
   groups: string[];
-  orgScope: "*" | string[];
+  accessScope: AccessScope;
 };
 
 export type CubeGateway = {

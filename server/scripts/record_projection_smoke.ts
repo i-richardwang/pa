@@ -30,6 +30,7 @@ const visibilityCube = withFormalMetricModel(
   createCubeGateway({
     cubeUrl: process.env.CUBE_URL ?? "http://localhost:4000",
     apiSecret,
+    accessScopeId: semanticPackage.access_scope.id,
     serviceContext: SERVICE_CUBE_CONTEXT,
     timeSources: semanticPackage.time_sources,
   }),
@@ -68,7 +69,7 @@ assert(typeof scopeValue === "string", "公开 Demo 没有可用于记录投影�
 const principal: Principal = {
   email: "records-demo@example.com",
   roles: ["user"],
-  orgScope: [scopeValue],
+  accessScope: { kind: "limited", values: [scopeValue] },
 };
 const appDb = await openAppDatabase(join(tmpdir(), `pa_demo_records_${randomUUID()}.db`));
 try {

@@ -20,12 +20,15 @@ import type { AuthorizedAnalysisPlan } from "./semantic_planning_service.js";
 import { NotFoundError } from "./errors.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
-  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY);
+  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY, {
+    id: "test_scope",
+    title: "测试数据范围",
+  });
 
 const principal: Principal = {
   email: "viewer@example.com",
   roles: ["user"],
-  orgScope: ["研发"],
+  accessScope: { kind: "limited", values: ["研发"] },
 };
 
 const test_people_metrics: CubeView = {
@@ -35,7 +38,7 @@ const test_people_metrics: CubeView = {
   meta: {
     query_surface: "detail",
     time_source: "workforce",
-    default_population_scope: "测试人群口径。",
+    observation_scope: "测试人群口径。",
     record_sets: {
       employee: {
         title: "员工记录",
@@ -160,7 +163,7 @@ const workforce_metrics: CubeView = {
   meta: {
     query_surface: "metric_source",
     time_source: "workforce",
-    default_population_scope: "测试人群口径。",
+    observation_scope: "测试人群口径。",
   },
   measures: test_people_metrics.measures.map((member) => ({
     ...member,

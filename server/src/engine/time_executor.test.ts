@@ -211,7 +211,7 @@ test("完整执行按单窗探测上限 fail-closed，不返回部分比较矩�
   const failure = executeCompletePlanned(
     cube,
     compared,
-    { subject: "test", groups: ["pa_full"], orgScope: "*" },
+    { subject: "test", groups: ["pa_full"], accessScope: { kind: "all" } },
     2,
   );
   await expect(failure).rejects.toThrow(/完整查询命中单窗取回上限/);

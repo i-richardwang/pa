@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ACCESS_SCOPE_DEFINITION_SCHEMA, type AccessScopeDefinition } from "./access_scope.js";
 import {
   METRIC_DOMAIN_ID_PATTERN,
   type MetricDomainId,
@@ -6,7 +7,7 @@ import {
 import { TIME_CAPABILITIES_INPUT, type TimeCapabilities } from "../semantic_core/time_contract.js";
 import type { ReportCalculationKind } from "../semantic_core/report_calculation.js";
 
-export type CatalogDimensionKind = "categorical" | "overlapping" | "individual";
+export type CatalogDimensionKind = "categorical" | "overlapping";
 
 /**
  * 指标字典的语义消费面契约（对外唯一投影）；只含语义身份与允许公开给已授权 PA 用户的模型字段。
@@ -81,7 +82,8 @@ export type PublicMetricDomain = {
 
 /** GET /dashboard/api/catalog */
 export type PublicCatalogDocument = {
-  default_population_scope: string;
+  access_scope: AccessScopeDefinition;
+  observation_scopes: string[];
   data_as_of: string;
   time_context: {
     title: string;
@@ -111,7 +113,7 @@ const CATALOG_MEMBER_SCHEMA: z.ZodType<PublicCatalogMember> = z
     format: z.string().optional(),
     ai_context: z.string().optional(),
     sensitivity: z.string().optional(),
-    dimension_kind: z.enum(["categorical", "overlapping", "individual"]).optional(),
+    dimension_kind: z.enum(["categorical", "overlapping"]).optional(),
     dimension_group: z.object({ id: z.string(), title: z.string() }).strict().optional(),
     records_available: z.literal(true).optional(),
     incompatible_dimensions: z.array(z.string()).optional(),
@@ -147,7 +149,8 @@ const METRIC_DOMAIN_SCHEMA: z.ZodType<PublicMetricDomain> = z
 
 export const PUBLIC_CATALOG_DOCUMENT_SCHEMA: z.ZodType<PublicCatalogDocument> = z
   .object({
-    default_population_scope: z.string(),
+    access_scope: ACCESS_SCOPE_DEFINITION_SCHEMA,
+    observation_scopes: z.array(z.string()),
     data_as_of: z.string(),
     time_context: z.array(
       z

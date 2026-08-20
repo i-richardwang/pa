@@ -1,7 +1,7 @@
 # PA 存储模型：Analysis、View 与 Report
 
 PA 自有持久层保存分析定义、呈现视图、报告身份、看板、导出票据、业务词典与观察记录。
-查询结果、`RenderBundle`、CSV、人员名单和只读 parquet 不进入 SQLite。
+查询结果、`RenderBundle`、CSV、构成记录和只读 parquet 不进入 SQLite。
 
 ## 1. 值与身份
 
@@ -55,7 +55,7 @@ CAS 冲突直接拒绝。保存、替换、恢复、Report 重放与 Board 重�
 - 按 Report 访问时先校验 Report owner；按 Board 访问时校验看板包含该 Report，再以当前查看者身份执行。
 - Record Projection 通过 Analysis、Report 与 Board Application Service 取得由各聚合完成鉴权和装配的上下文。
 - View、Report 与 Board 重放都读取当前数据、重新鉴权、重新编译和执行，不持久化 Run 产物。
-- 即席 View、Report 与 Board 共用 Record Projection Service。即席名单只接受无分组、单业务时间桶的聚合结果；Report 与 Board 格点入口校验服务端签发的指标、维度和时间坐标。
+- 即席 View、Report 与 Board 共用 Record Projection Service。即席记录投影只接受无分组、单业务时间桶的聚合结果；Report 与 Board 格点入口校验服务端签发的指标、维度和时间坐标。
 - 展示、受控记录投影与导出都使用 `view_id` 定位完整定义；`analysis_id` 只标识可被多个 View 复用的数据问题。
 
 ## 4. 瞬态 Run 与呈现提示

@@ -32,7 +32,8 @@ const member = (source: CatalogQueryPayload["measures"][number]) => ({
 /** MCP 目录只投影 Agent 查询所需字段；Web 导航字段保留在 PublicCatalogDocument。 */
 export function projectAgentCatalog(source: CatalogQueryPayload): AgentCatalogPayload {
   return CATALOG_OUTPUT_SCHEMA.parse({
-    default_population_scope: source.default_population_scope,
+    access_scope: source.access_scope,
+    observation_scopes: source.observation_scopes,
     data_as_of: source.data_as_of,
     time_context: source.time_context,
     metric_domains: source.metric_domains.map((domain) => ({

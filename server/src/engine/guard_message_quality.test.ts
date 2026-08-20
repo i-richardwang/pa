@@ -8,14 +8,14 @@ import { describe, expect, test } from "bun:test";
 import type { CubeView, TimeContext } from "../ports/cube_gateway.js";
 import { assertMeasureFilterCompatibility } from "./query_contract.js";
 import { parseAnalysisSpec } from "../semantic_core/analysis_spec.js";
-import { defaultPopulationScope } from "./catalog_document.js";
+import { observationScopes } from "./catalog_document.js";
 import { planTimeQuery } from "./time_plan.js";
 
 const views: CubeView[] = [
   {
     name: "flow",
     title: "人员流动",
-    meta: { time_source: "workforce", default_population_scope: "统计范围" },
+    meta: { time_source: "workforce", observation_scope: "统计范围" },
     dimensions: [
       { name: "flow.org", title: "组织", type: "string" },
       { name: "flow.year", title: "年", type: "number" },
@@ -50,7 +50,7 @@ const views: CubeView[] = [
   {
     name: "hc",
     title: "编制",
-    meta: { time_source: "hc", default_population_scope: "统计范围" },
+    meta: { time_source: "hc", observation_scope: "统计范围" },
     dimensions: [],
     measures: [
       {
@@ -149,7 +149,7 @@ describe("拒绝文案", () => {
   });
 
   test("零可见视图明确归因授权", () => {
-    const message = errorMessage(() => defaultPopulationScope([]));
+    const message = errorMessage(() => observationScopes([]));
     expect(message).toMatch(/没有可见数据视图.*查询参数无需修改.*管理员/);
   });
 });

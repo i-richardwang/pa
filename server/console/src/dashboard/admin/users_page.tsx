@@ -1,14 +1,25 @@
 /**
- * 成员（admin）：列表 / 新建 / 配权（数据角色 + 有权组织）/ 重置密码。
+ * 成员（admin）：列表 / 新建 / 配权（数据角色 + 授权范围）/ 重置密码。
  * 承载在设置弹层的一节里（`settings_page.tsx`），不占整页、不进主导航——
  * 它管的是工作区里的人，与账号、API Key 同属设置。
- * 角色与账号操作经 Better Auth admin 插件，有权组织经服务端 admin 守卫端点写入。
+ * 用户读取与写入只消费服务端结构化应用合同。
  * 权限边界始终是服务端守卫，隐藏 UI 不构成授权。
  */
 import { useEffect, useMemo, useState } from "react";
 import { CircleAlertIcon, KeyRoundIcon, PlusIcon, ShieldIcon } from "lucide-react";
 import { OK_PAYLOAD_SCHEMA } from "@contracts/response_contract";
-import type { MePayload, SetOrgScopeBody } from "@contracts/session_contract";
+import type { AccessScope } from "@contracts/access_scope";
+import type { MePayload } from "@contracts/session_contract";
+import {
+  ACCESS_ROLE_SCHEMA,
+  ADMIN_USERS_PAYLOAD_SCHEMA,
+  ADMIN_USER_SCHEMA,
+  type AccessRole,
+  type AdminUser,
+  type CreateAdminUserBody,
+  type ResetUserPasswordBody,
+  type UpdateUserAuthorizationBody,
+} from "@contracts/user_administration_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -25,9 +36,10 @@ import {
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Form } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { MenuItem } from "@/components/ui/menu";
 import { toastManager } from "@/components/ui/toast";
-import { postJson } from "../api";
+import { getJson, postJson, putJson } from "../api";
 import {
   Select,
   SelectItem,
@@ -47,22 +59,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { authClient } from "../../auth_client";
-import {
-  authErrorText,
-  parseAccessRole,
-  toBetterAuthAdminRole,
-  type AccessRole,
-} from "../better_auth_adapter";
-
-type AdminUser = {
-  id: string;
-  email: string;
-  name: string;
-  role?: string | null;
-  org_scope?: string | null;
-  banned?: boolean | null;
-};
 
 const DATA_ROLES = [
   { value: "user", label: "分析用户" },
@@ -71,29 +67,32 @@ const DATA_ROLES = [
 
 const ROLE_ITEMS = DATA_ROLES.map((r) => ({ label: r.label, value: r.value }));
 
-/** 角色分面：恒有一档选中，「全部角色」是那个不筛的档。 */
 const ROLE_FACETS = [{ label: "全部角色", value: "all" }, ...ROLE_ITEMS] as const;
 
-/** 角色串按顺序取首个已知数据角色，缺省为普通用户。 */
-function primaryRole(role?: string | null): AccessRole {
-  const parts = (role ?? "").split(",").map((r) => r.trim());
-  const matched = parts.find((r) => DATA_ROLES.some((d) => d.value === r));
-  return matched ? parseAccessRole(matched) : "user";
+function roleLabel(role: AccessRole): string {
+  return DATA_ROLES.find((item) => item.value === role)?.label ?? role;
 }
 
-function roleLabel(role?: string | null): string {
-  const r = primaryRole(role);
-  return DATA_ROLES.find((d) => d.value === r)?.label ?? r;
+function scopeLabel(accessScope: AccessScope, title: string): string {
+  if (accessScope.kind === "all") return `全部${title}`;
+  return accessScope.values.length ? accessScope.values.join("、") : "未授权";
 }
 
-function scopeLabel(orgScope?: string | null): string {
-  if (orgScope === "*") return "全部组织";
-  if (!orgScope) return "未授权";
-  return orgScope
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .join("、");
+function scopeInput(accessScope: AccessScope): string {
+  return accessScope.kind === "all" ? "*" : accessScope.values.join("\n");
+}
+
+function scopeFromInput(value: string): AccessScope {
+  const trimmed = value.trim();
+  return trimmed === "*"
+    ? { kind: "all" }
+    : {
+        kind: "limited",
+        values: value
+          .split(/\r?\n/)
+          .map((item) => item.trim())
+          .filter(Boolean),
+      };
 }
 
 const USER_SORT: Record<
@@ -110,17 +109,6 @@ function initialOf(user: AdminUser): string {
   return (user.name.trim().charAt(0) || user.email.charAt(0) || "?").toUpperCase();
 }
 
-/** 写有权组织时必须经过服务端 admin 守卫。 */
-async function saveScope(userId: string, orgScope: string): Promise<string | null> {
-  const payload: SetOrgScopeBody = { userId, org_scope: orgScope };
-  try {
-    await postJson("/dashboard/api/users/scope", payload, OK_PAYLOAD_SCHEMA);
-    return null;
-  } catch (error) {
-    return error instanceof Error ? error.message : String(error);
-  }
-}
-
 export function UsersPage({ me }: { me: MePayload }) {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +120,7 @@ export function UsersPage({ me }: { me: MePayload }) {
   const matched = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return (users ?? []).filter((u) => {
-      if (roleFacet !== "all" && primaryRole(u.role) !== roleFacet) return false;
+      if (roleFacet !== "all" && u.role !== roleFacet) return false;
       if (!needle) return true;
       return `${u.name} ${u.email}`.toLowerCase().includes(needle);
     });
@@ -141,14 +129,12 @@ export function UsersPage({ me }: { me: MePayload }) {
 
   async function load() {
     setError(null);
-    const { data, error: err } = await authClient.admin.listUsers({
-      query: { limit: 200, sortBy: "createdAt", sortDirection: "desc" },
-    });
-    if (err) {
-      setError(authErrorText(err));
-      return;
+    try {
+      const payload = await getJson("/dashboard/api/users", ADMIN_USERS_PAYLOAD_SCHEMA);
+      setUsers(payload.users);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
     }
-    setUsers((data?.users ?? []) as AdminUser[]);
   }
 
   useSetSettingsActions(
@@ -215,7 +201,7 @@ export function UsersPage({ me }: { me: MePayload }) {
                   onToggle={toggle}
                   className="min-w-[120px]"
                 />
-                <TableHead className="min-w-[120px]">有权组织</TableHead>
+                <TableHead className="min-w-[120px]">有权{me.access_scope.title}</TableHead>
                 <TableHead className="min-w-[30px]" />
               </TableRow>
             </TableHeader>
@@ -237,10 +223,12 @@ export function UsersPage({ me }: { me: MePayload }) {
                     {/*
                       角色不摆胶囊：胶囊在本仓是「资源自己挑的那个归类」的记号（报告的图型、
                       指标的分类），成员的角色不是他挑的，是这套系统给的固定几档，与邮箱、
-                      有权组织同属账号属性——同一行里三个属性两种排法，会读成角色更要紧。
+                      授权范围同属账号属性——同一行里三个属性两种排法，会读成角色更要紧。
                     */}
                     <TableCell className="text-pa-muted">{roleLabel(u.role)}</TableCell>
-                    <TableCell className="text-pa-muted">{scopeLabel(u.org_scope)}</TableCell>
+                    <TableCell className="text-pa-muted">
+                      {scopeLabel(u.access_scope, me.access_scope.title)}
+                    </TableCell>
                     <TableCell className="relative p-2 text-right">
                       <RowMenu label="用户操作">
                         <MenuItem onClick={() => setGrantTarget(u)}>
@@ -262,6 +250,7 @@ export function UsersPage({ me }: { me: MePayload }) {
       )}
       <CreateUserDialog
         open={showCreate}
+        accessScopeTitle={me.access_scope.title}
         onClose={() => setShowCreate(false)}
         onCreated={async () => {
           setShowCreate(false);
@@ -271,6 +260,7 @@ export function UsersPage({ me }: { me: MePayload }) {
       <GrantDialog
         user={grantTarget}
         meEmail={me.email}
+        accessScopeTitle={me.access_scope.title}
         onClose={() => setGrantTarget(null)}
         onSaved={async () => {
           setGrantTarget(null);
@@ -282,16 +272,18 @@ export function UsersPage({ me }: { me: MePayload }) {
   );
 }
 
-/** 配权：数据角色 + 有权组织，Dialog 表单提交后即时生效 */
+/** 配权：数据角色 + 授权范围，Dialog 表单提交后即时生效 */
 function GrantDialog({
   user,
   meEmail,
+  accessScopeTitle,
   onClose,
   onSaved,
 }: {
   /** 配权目标；null = 关闭 */
   user: AdminUser | null;
   meEmail: string;
+  accessScopeTitle: string;
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
@@ -303,8 +295,8 @@ function GrantDialog({
 
   useEffect(() => {
     if (!user) return;
-    setRole(primaryRole(user.role));
-    setScope(user.org_scope === "*" ? "*" : (user.org_scope ?? ""));
+    setRole(user.role);
+    setScope(scopeInput(user.access_scope));
     setFormError(null);
   }, [user]);
 
@@ -313,24 +305,20 @@ function GrantDialog({
     if (!user) return;
     setPending(true);
     setFormError(null);
-    if (role !== primaryRole(user.role)) {
-      const { error: err } = await authClient.admin.setRole({
-        userId: user.id,
-        role: toBetterAuthAdminRole(role),
-      });
-      if (err) {
-        setPending(false);
-        setFormError(authErrorText(err));
-        return;
-      }
-    }
-    if (scope.trim() !== (user.org_scope ?? "")) {
-      const scopeErr = await saveScope(user.id, scope.trim());
-      if (scopeErr) {
-        setPending(false);
-        setFormError(scopeErr);
-        return;
-      }
+    const payload: UpdateUserAuthorizationBody = {
+      role,
+      access_scope: scopeFromInput(scope),
+    };
+    try {
+      await putJson(
+        `/dashboard/api/users/${encodeURIComponent(user.id)}/authorization`,
+        payload,
+        ADMIN_USER_SCHEMA,
+      );
+    } catch (saveError) {
+      setPending(false);
+      setFormError(saveError instanceof Error ? saveError.message : String(saveError));
+      return;
     }
     setPending(false);
     await onSaved();
@@ -351,7 +339,7 @@ function GrantDialog({
                 items={ROLE_ITEMS}
                 value={role}
                 disabled={self}
-                onValueChange={(v) => setRole(parseAccessRole(v))}
+                onValueChange={(v) => setRole(ACCESS_ROLE_SCHEMA.parse(v))}
               >
                 <SelectTrigger label="数据角色">
                   <SelectValue />
@@ -369,12 +357,14 @@ function GrantDialog({
               )}
             </Field>
             <Field>
-              <FieldLabel>有权组织（行权限）</FieldLabel>
-              <Input
-                placeholder="* 或 组织名,逗号分隔"
+              <FieldLabel>有权{accessScopeTitle}（行权限）</FieldLabel>
+              <Textarea
+                rows={5}
+                placeholder={`* 表示全部；限定范围时每行填写一个${accessScopeTitle}值`}
                 value={scope}
                 onChange={(e) => setScope(e.target.value)}
               />
+              <FieldDescription>每行一个值，值本身可以包含逗号。</FieldDescription>
             </Field>
             {formError && (
               <Field>
@@ -394,7 +384,7 @@ function GrantDialog({
   );
 }
 
-/** 重置密码：Dialog 表单，提交经 admin 插件直写 */
+/** 重置密码：Dialog 表单，提交到服务端用户管理用例。 */
 function ResetPasswordDialog({
   user,
   onClose,
@@ -418,15 +408,19 @@ function ResetPasswordDialog({
     if (!user) return;
     setPending(true);
     setFormError(null);
-    const { error: err } = await authClient.admin.setUserPassword({
-      userId: user.id,
-      newPassword: password,
-    });
-    setPending(false);
-    if (err) {
-      setFormError(authErrorText(err));
+    const payload: ResetUserPasswordBody = { password };
+    try {
+      await postJson(
+        `/dashboard/api/users/${encodeURIComponent(user.id)}/password`,
+        payload,
+        OK_PAYLOAD_SCHEMA,
+      );
+    } catch (resetError) {
+      setPending(false);
+      setFormError(resetError instanceof Error ? resetError.message : String(resetError));
       return;
     }
+    setPending(false);
     toastManager.add({ type: "success", title: `已重置「${user.name || user.email}」的密码` });
     onClose();
   }
@@ -472,10 +466,12 @@ function ResetPasswordDialog({
 
 function CreateUserDialog({
   open,
+  accessScopeTitle,
   onClose,
   onCreated,
 }: {
   open: boolean;
+  accessScopeTitle: string;
   onClose: () => void;
   onCreated: () => void | Promise<void>;
 }) {
@@ -483,7 +479,7 @@ function CreateUserDialog({
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<AccessRole>("user");
-  const [orgScope, setOrgScope] = useState("");
+  const [accessScope, setAccessScope] = useState("");
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -491,33 +487,26 @@ function CreateUserDialog({
     e.preventDefault();
     setPending(true);
     setFormError(null);
-    const { data, error: err } = await authClient.admin.createUser({
+    const payload: CreateAdminUserBody = {
       email,
       password,
-      name: name || email.split("@")[0],
-      role: toBetterAuthAdminRole(role),
-    });
-    if (err || !data?.user?.id) {
+      ...(name.trim() ? { name } : {}),
+      role,
+      access_scope: scopeFromInput(accessScope),
+    };
+    try {
+      await postJson("/dashboard/api/users", payload, ADMIN_USER_SCHEMA);
+    } catch (createError) {
       setPending(false);
-      setFormError(err?.message ?? "创建失败");
+      setFormError(createError instanceof Error ? createError.message : String(createError));
       return;
-    }
-    // org_scope 是 input:false 字段,createUser 不透传,开通后经直写端点补写
-    if (orgScope.trim()) {
-      const scopeErr = await saveScope(data.user.id, orgScope.trim());
-      if (scopeErr) {
-        setPending(false);
-        setFormError(`账号已建,但组织权限写入失败：${scopeErr}`);
-        await onCreated();
-        return;
-      }
     }
     setPending(false);
     setEmail("");
     setName("");
     setPassword("");
     setRole("user");
-    setOrgScope("");
+    setAccessScope("");
     await onCreated();
   }
 
@@ -525,7 +514,7 @@ function CreateUserDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       {/*
         表单弹层不分栏、不加宽：字段并排会让眼睛在两列之间来回跳，且「邮箱 / 显示名」
-        与「角色 / 有权组织」并不是成对的一件事，摆成一行读起来像它们是。
+        与「角色 / 授权范围」并不是成对的一件事，摆成一行读起来像它们是。
       */}
       <DialogPopup className="sm:max-w-sm">
         <DialogHeader>
@@ -533,7 +522,9 @@ function CreateUserDialog({
         </DialogHeader>
         <Form className="contents" onSubmit={onSubmit}>
           <DialogPanel className="grid gap-4">
-            <DialogDescription>不填「有权组织」的账号查不到任何数据</DialogDescription>
+            <DialogDescription>
+              不填「有权{accessScopeTitle}」的账号查不到任何数据
+            </DialogDescription>
             <Field>
               <FieldLabel htmlFor="new-email">邮箱</FieldLabel>
               <Input
@@ -562,7 +553,7 @@ function CreateUserDialog({
             <Select
               items={ROLE_ITEMS}
               value={role}
-              onValueChange={(v) => setRole(parseAccessRole(v))}
+              onValueChange={(v) => setRole(ACCESS_ROLE_SCHEMA.parse(v))}
             >
               <SelectTrigger label="角色（可见字段）">
                 <SelectValue />
@@ -576,13 +567,15 @@ function CreateUserDialog({
               </SelectPopup>
             </Select>
             <Field>
-              <FieldLabel htmlFor="new-scope">有权组织（行权限）</FieldLabel>
-              <Input
+              <FieldLabel htmlFor="new-scope">有权{accessScopeTitle}（行权限）</FieldLabel>
+              <Textarea
                 id="new-scope"
-                placeholder="* 或 组织名,逗号分隔"
-                value={orgScope}
-                onChange={(e) => setOrgScope(e.target.value)}
+                rows={5}
+                placeholder={`* 表示全部；限定范围时每行填写一个${accessScopeTitle}值`}
+                value={accessScope}
+                onChange={(e) => setAccessScope(e.target.value)}
               />
+              <FieldDescription>每行一个值，值本身可以包含逗号。</FieldDescription>
             </Field>
             {formError && (
               <Field>

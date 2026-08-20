@@ -15,6 +15,7 @@ import { normalizeCatalogQuery, type CatalogQueryInput } from "../contracts/cata
 import type { CubeGateway } from "../ports/cube_gateway.js";
 import { cubeSecurityContext } from "../engine/cube_security.js";
 import type { Principal } from "../contracts/principal.js";
+import type { AccessScopeDefinition } from "../contracts/access_scope.js";
 import {
   DIMENSION_VALUES_CAP,
   DIMENSION_VALUES_SCAN_LIMIT,
@@ -48,7 +49,8 @@ export class SemanticModelUnavailableError extends UnavailableError {
 }
 
 export type CatalogQueryPayload = {
-  default_population_scope: string;
+  access_scope: AccessScopeDefinition;
+  observation_scopes: string[];
   data_as_of: string;
   time_context: ReturnType<typeof publicTimeContext>;
   term_knowledge_status: "available" | "unavailable";
@@ -123,7 +125,8 @@ export function createCatalogService(deps: {
       const catalog = await document(principal);
       const context = await deps.cube.timeContext().catch(() => null);
       const shared = {
-        default_population_scope: catalog.default_population_scope,
+        access_scope: catalog.access_scope,
+        observation_scopes: catalog.observation_scopes,
         data_as_of: context?.dataAsOf ?? "未知",
         time_context: publicTimeContext(catalog.views, context, deps.canonical.time_sources),
       };

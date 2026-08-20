@@ -97,9 +97,9 @@ test("应用库只有 composition root 与 app_database 可以打开连接", asy
   ]);
 });
 
-test("Better Auth 用户元数据写入只存在于 UserScope adapter", async () => {
-  const marker = "internalAdapter.updateUser(";
-  expect(`context.${marker}`).toContain(marker);
+test("Better Auth 授权持久化只由用户账号适配器编码", async () => {
+  const marker = "access_scope: serializeAccessScope(";
+  expect(`${marker}scope, definition.id)`).toContain(marker);
   const files = (
     await Promise.all([
       sourceFiles(join(rootPath, "server", "src")),
@@ -110,7 +110,7 @@ test("Better Auth 用户元数据写入只存在于 UserScope adapter", async ()
   for (const path of files) {
     if ((await readFile(path, "utf8")).includes(marker)) callers.push(relative(rootPath, path));
   }
-  expect(callers).toEqual(["server/src/adapters/better_auth_user_scope.ts"]);
+  expect(callers).toEqual(["server/src/adapters/better_auth_user_account_administration.ts"]);
 });
 
 test("报告更新动作只有一个领域定义，各呈现面只引用共享子集", async () => {

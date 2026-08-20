@@ -41,6 +41,7 @@ const visibilityCube = withFormalMetricModel(
   createCubeGateway({
     cubeUrl: process.env.CUBE_URL ?? "http://localhost:4000",
     apiSecret,
+    accessScopeId: semanticPackage.access_scope.id,
     serviceContext: SERVICE_CUBE_CONTEXT,
     timeSources: semanticPackage.time_sources,
   }),
@@ -71,7 +72,11 @@ try {
       },
     },
   });
-  const principal: Principal = { email: owner, roles: ["admin"], orgScope: "*" };
+  const principal: Principal = {
+    email: owner,
+    roles: ["admin"],
+    accessScope: { kind: "all" },
+  };
   const document = await catalog.publicDocument(principal);
   const timeContext = await cube.timeContext();
   const asOf = timeContext.dataAsOf;

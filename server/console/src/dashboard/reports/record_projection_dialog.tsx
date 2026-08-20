@@ -116,7 +116,8 @@ export function RecordProjectionDialog({
 
   const start = data && data.rows.length ? data.offset + 1 : 0;
   const end = data ? data.offset + data.rows.length : 0;
-  const title = data?.metric_title ?? request?.display.metric_title ?? "人员明细";
+  const title = data?.metric_title ?? request?.display.metric_title ?? "构成记录";
+  const recordTitle = data?.record_set_title ?? "构成记录";
   const pageLabel = data ? (data.rows.length ? `第 ${start}–${end} 条` : "当前页没有记录") : "";
 
   return (
@@ -130,7 +131,7 @@ export function RecordProjectionDialog({
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:h-full">
             {/* 题条：与报告内 Edit / Explore 同一根基线；分页与关闭住动作槽 */}
             <Titlebar align="between" as="div" className="pr-2.5">
-              <span className="truncate text-sm font-medium text-pa-fg">人员明细</span>
+              <span className="truncate text-sm font-medium text-pa-fg">{recordTitle}</span>
               <div className="flex shrink-0 items-center gap-1">
                 {pageLabel ? (
                   <span className="mr-1 hidden text-sm text-pa-muted sm:inline">{pageLabel}</span>
@@ -154,7 +155,7 @@ export function RecordProjectionDialog({
             </Titlebar>
 
             <DialogTitle className="sr-only">{title}</DialogTitle>
-            <DialogDescription className="sr-only">人员明细列表</DialogDescription>
+            <DialogDescription className="sr-only">{recordTitle}列表</DialogDescription>
 
             <ChartStageHeading
               className="px-6"
@@ -167,7 +168,7 @@ export function RecordProjectionDialog({
                 <Alert className="mb-3" variant="warning">
                   <CircleAlertIcon />
                   <AlertDescription>
-                    数据已从结果显示时的截至点更新，以下名单按当前数据重新计算。
+                    数据已从结果显示时的截至点更新，以下记录按当前数据重新计算。
                   </AlertDescription>
                 </Alert>
               )}
@@ -175,7 +176,7 @@ export function RecordProjectionDialog({
                 <Alert className="mb-3" variant="warning">
                   <CircleAlertIcon />
                   <AlertDescription>
-                    人员数量超过交互查看上限；请回到报告添加筛选条件，缩小范围后再查看。
+                    记录数量超过交互查看上限；请回到报告添加筛选条件，缩小范围后再查看。
                   </AlertDescription>
                 </Alert>
               )}
@@ -189,9 +190,9 @@ export function RecordProjectionDialog({
                   <LoadingMark className="py-16" />
                 </div>
               ) : data && !data.rows.length && !data.offset ? (
-                // 零值格同样可点，空名单是对「0 个人是谁」的诚实回答——须明说，不能只留一张空表头。
+                // 零值格同样可点，空记录集是诚实答案——须明说，不能只留一张空表头。
                 <div className="flex min-h-48 items-center justify-center text-sm text-pa-muted">
-                  该口径下没有人员记录。
+                  该口径下没有构成记录。
                 </div>
               ) : data ? (
                 <Table>

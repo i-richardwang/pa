@@ -6,7 +6,17 @@ views:
       query_surface: metric_source
       time_source: sales_actual
       time_anchor_measure: order_count
-      default_population_scope: "Scope: completed sales orders."
+      observation_scope: "Scope: completed sales orders."
+    access_policy:
+      - groups: [pa_full, pa_service]
+        member_level:
+          includes: &members [year, month, period_month, region, revenue, order_count]
+        row_level: { allow_all: true }
+      - group: pa_scoped
+        member_level: { includes: *members }
+        row_level:
+          filters:
+            - { member: region, operator: equals, values: securityContext.data_scope.values }
     cubes:
       - join_path: sales_actual_fact
-        includes: [year, month, period_month, region, revenue, order_count]
+        includes: *members

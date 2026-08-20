@@ -8,7 +8,7 @@ const { formal_metrics: formalMetrics } = await loadSemanticPackage(configuredSe
 const context: CubeSecurityContext = {
   subject: "test",
   groups: ["pa_full"],
-  orgScope: "*",
+  accessScope: { kind: "all" },
 };
 
 const view = (name: string, measure: string): CubeView => ({

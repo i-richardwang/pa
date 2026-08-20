@@ -61,7 +61,7 @@ function uniqueMembers(members: string[]): string[] {
 function entityValue(row: Record<string, unknown>, member: string): string {
   const value = row[member];
   if (typeof value !== "string" && typeof value !== "number") {
-    throw new Error("人员明细结果缺少有效的实体键");
+    throw new Error("明细记录结果缺少有效的实体键");
   }
   return String(value);
 }
@@ -159,7 +159,7 @@ async function executeRecordProjection(input: {
   );
   const membershipKeys = membership.data.map((row) => entityValue(row, entityKey));
   if (new Set(membershipKeys).size !== membershipKeys.length) {
-    throw new Error("人员明细实体分页键不唯一");
+    throw new Error("明细记录实体分页键不唯一");
   }
   const entityKeys = membershipKeys.slice(0, pageSize);
   const moreRowsExist = membershipKeys.length > entityKeys.length;
@@ -197,7 +197,7 @@ async function executeRecordProjection(input: {
   }
   const page = entityKeys.map((key) => {
     const row = representative.get(key);
-    if (!row) throw new Error("人员明细结果与指标成员不一致");
+    if (!row) throw new Error("明细记录结果与指标成员不一致");
     return row;
   });
   return { displayFields, resolved, page, moreRowsExist };
@@ -288,8 +288,8 @@ export function createRecordProjectionService(deps: {
     if (!selected) {
       throw new RecordProjectionRequestError(
         options.metricId
-          ? "指定指标不属于当前分析或不提供人员明细"
-          : "当前分析包含多个可查看名单的指标，请明确指定需要展开的指标",
+          ? "指定指标不属于当前分析或不提供构成记录"
+          : "当前分析包含多个可查看构成记录的指标，请明确指定需要展开的指标",
       );
     }
     return {
@@ -380,7 +380,7 @@ export function createRecordProjectionService(deps: {
         Object.values(binding?.dimensions ?? {}).map((dimension) => dimension.dimension_id),
       );
       if (!allowedMetrics.has(input.metric_id)) {
-        throw new RecordProjectionRequestError("当前指标不提供人员明细");
+        throw new RecordProjectionRequestError("当前指标不提供构成记录");
       }
       const coordinateIds = input.coordinates.map((coordinate) => coordinate.dimension_id);
       if (
@@ -393,7 +393,7 @@ export function createRecordProjectionService(deps: {
 
       const compilerCatalog = planned.access.compiler;
       const source = planMetricRecordProjection(compilerCatalog, semanticView, input.metric_id);
-      if (!source) throw new RecordProjectionRequestError("当前指标没有可用的人员明细来源");
+      if (!source) throw new RecordProjectionRequestError("当前指标没有可用的构成记录来源");
       const metric = catalogMember(compilerCatalog, input.metric_id, "measure");
       const metricBinding = metric?.available_in.find((item) => item.view === source.view);
       if (!metric || !metricBinding) {
@@ -404,7 +404,7 @@ export function createRecordProjectionService(deps: {
       const sourceView = authViews.find((view) => view.name === source.view);
       if (!sourceView) throw new RecordProjectionRequestError("当前身份无权查看该指标的明细");
       const target = resolveRecordProjectionTarget(sourceView, metricBinding.member);
-      if (!target) throw new Error("当前指标的人员明细契约不可用");
+      if (!target) throw new Error("当前指标的构成记录契约不可用");
       const coordinateFilters: CubeFilter[] = input.coordinates.map((coordinate) => {
         const dimension = catalogMember(compilerCatalog, coordinate.dimension_id, "dimension");
         const physical = dimension?.available_in.find((item) => item.view === source.view)?.member;

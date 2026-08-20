@@ -1,16 +1,16 @@
 /**
  * 维度值核实（翻值）：catalog 的查前核实能力——"这个维度在数据里都有哪些值"。
- * 供 Agent 在过滤组织、公司、院校等名录值前确认标准全名，代替瞎猜简称；
+ * 供 Agent 在过滤分类名录值前确认标准全名，代替猜测简称；
  * 只读不改写，查询本身仍是查什么给什么。
  *
  * 公开字符串维度天然可翻；数值/时间维度只有显式声明 dimension_kind: categorical 才可翻。
- * individual（姓名/工号）恒拒绝，internal 成员在进入本模块前已从公开目录剥离。
+ * 受控记录字段属于 internal 成员，在进入本模块前已从公开目录剥离。
  * 成员权限由 Cube /meta 的 access_policy 裁剪结果承担（无权维度不可见即不可翻）；
- * 行权限由 /load 的同一 access_policy 执行（受限账号只能翻到有权组织内出现的值）。
+ * 行权限由 /load 的同一 access_policy 执行（受限账号只能翻到授权范围内出现的值）。
  */
 import type { CubeMember, CubeQuery, CubeView } from "../ports/cube_gateway.js";
 import { memberDisplayTitle } from "./member_presentation.js";
-import { isIndividualDimension, isSearchableDimension } from "./model_contract.js";
+import { isSearchableDimension } from "./model_contract.js";
 
 /** 单次翻值返回的值数上限；超出提示用 contains 缩小范围 */
 export const DIMENSION_VALUES_CAP = 200;
@@ -28,11 +28,6 @@ export function findSearchableDimension(
     const d = v.dimensions.find((x) => x.name === member);
     if (!d) continue;
     const displayTitle = memberDisplayTitle(views, member, d.title);
-    if (isIndividualDimension(d)) {
-      throw new Error(
-        `「${displayTitle}」为个体粒度维度，不提供值清单；如需人员明细，请先查询一个 records_available: true 的聚合指标，再用 show_records 打开受控名单`,
-      );
-    }
     if (!isSearchableDimension(d)) {
       throw new Error(`「${displayTitle}」不是可搜索的分类维度；数值和时间维度不提供候选值清单`);
     }

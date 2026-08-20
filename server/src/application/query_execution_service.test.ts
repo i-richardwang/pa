@@ -10,7 +10,7 @@ import { createQueryExecutionService } from "./query_execution_service.js";
 const principal: Principal = {
   email: "viewer@example.com",
   roles: ["user"],
-  orgScope: ["研发"],
+  accessScope: { kind: "limited", values: ["研发"] },
 };
 const TABLE_PRESENTATION: PresentationSpec = {
   type: "table",
@@ -23,7 +23,7 @@ const publicView: CubeView = {
   title: "人员总览",
   meta: {
     time_source: "workforce",
-    default_population_scope: "测试人群口径。",
+    observation_scope: "测试人群口径。",
   },
   measures: [
     {
@@ -84,7 +84,7 @@ const publicView: CubeView = {
       name: "test_people_metrics.employee_name",
       title: "姓名",
       type: "string",
-      meta: { internal: true, dimension_kind: "individual" },
+      meta: { internal: true },
     },
   ],
 };
@@ -249,6 +249,12 @@ test("交付边界把执行成员一次性投影为语义列与语义口径引�
   });
   const noteMembers = result.payload.view.query_notes.map((note) => note.member);
   expect(noteMembers).toEqual(expect.arrayContaining([METRIC, DIMENSION]));
+  expect(result.payload.view.query_notes).toContainEqual(
+    expect.objectContaining({
+      title: "组织",
+      text: expect.stringContaining("授权范围"),
+    }),
+  );
   expect(
     noteMembers.every(
       (member) =>
@@ -881,7 +887,7 @@ test("派生结果不创建导出能力或资源", async () => {
   expect(result.payload.view.summary).toEqual({
     kind: "grand_total",
     label: "总体",
-    scope: "filtered_population",
+    scope: "filtered_set",
     rows: [[null, 3]],
   });
   expect(result.payload.capabilities).toBeUndefined();

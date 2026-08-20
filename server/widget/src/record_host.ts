@@ -19,7 +19,7 @@ export type RecordHostState = {
   canFullscreen: boolean;
 };
 
-export const RECORDS_WAITING_STATUS = "正在加载人员名单…";
+export const RECORDS_WAITING_STATUS = "正在加载构成记录…";
 
 let state: RecordHostState = {
   viewId: null,
@@ -119,7 +119,7 @@ export async function connectRecordHost(): Promise<void> {
     const result = params as ToolResult;
     if (result.isError) {
       setState({
-        status: firstText(result.content) ?? "无法打开人员名单。",
+        status: firstText(result.content) ?? "无法打开构成记录。",
         loading: false,
       });
       return;

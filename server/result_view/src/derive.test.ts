@@ -36,7 +36,7 @@ function answer(v: ViewBlock, title?: string): QueryPayload {
   return {
     ...(title ? { title } : {}),
     view: v,
-    default_population_scope: "",
+    observation_scopes: [""],
     data_as_of: "2026-05",
     time_context: [],
   };

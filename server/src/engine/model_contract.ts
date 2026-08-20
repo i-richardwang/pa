@@ -1,7 +1,7 @@
 import { memberShortName } from "../semantic_core/member_name.js";
 import type { CubeMember } from "../ports/cube_gateway.js";
 
-export const DIMENSION_KINDS = ["categorical", "overlapping", "individual"] as const;
+export const DIMENSION_KINDS = ["categorical", "overlapping"] as const;
 export type DimensionKind = (typeof DIMENSION_KINDS)[number];
 
 const DIMENSION_KIND_SET = new Set<string>(DIMENSION_KINDS);
@@ -22,16 +22,12 @@ function explicitDimensionKind(member: CubeMember): DimensionKind | undefined {
 
 /**
  * 字符串维度天然是分类维度；数值和时间只有显式声明后才进入候选值查询。
- * individual 永不开放，overlapping 仍是可搜索分类，只额外改变结果解释。
+ * overlapping 仍是可搜索分类，只额外改变结果解释。
  */
 export function dimensionKind(member: CubeMember): DimensionKind | undefined {
   const explicit = explicitDimensionKind(member);
   if (explicit) return explicit;
   return member.type === "string" ? "categorical" : undefined;
-}
-
-export function isIndividualDimension(member: CubeMember | undefined): boolean {
-  return member ? dimensionKind(member) === "individual" : false;
 }
 
 export function isSearchableDimension(member: CubeMember): boolean {

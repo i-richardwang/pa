@@ -17,7 +17,6 @@ import {
   dashboardTestDependencies,
   dashboardRoutes,
   freshPath,
-  scopeWrites,
   seedUsage as seed,
 } from "../test_support/dashboard.js";
 import type { DashboardDependencies } from "./types.js";
@@ -46,14 +45,19 @@ describe("dashboard app routes and access control", () => {
       email: "u@x.com",
       name: "u",
       role: "user",
-      org_scope: "Aurora Labs",
+      access_scope: '{"scope_id":"organization","kind":"limited","values":["Aurora Labs"]}',
     });
     const me = await app.request("/api/me");
     expect(me.status).toBe(200);
     expect(ME_PAYLOAD_SCHEMA.parse(await me.json())).toMatchObject({
       email: "u@x.com",
       is_admin: false,
-      org_scope: "Aurora Labs",
+      access_scope: {
+        id: "organization",
+        kind: "limited",
+        values: ["Aurora Labs"],
+        title: "组织",
+      },
     });
     expect((await app.request("/api/usage/mine")).status).toBe(200);
     expect((await app.request("/api/usage/overview")).status).toBe(403);
@@ -61,12 +65,28 @@ describe("dashboard app routes and access control", () => {
     expect((await app.request("/api/usage/unanswered")).status).toBe(403);
     expect((await app.request("/api/admin/data-capability-map")).status).toBe(403);
     // 行权限配置是 admin 专属
-    const denied = await app.request("/api/users/scope", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: "x", org_scope: "*" }),
-    });
+    const denied = await app.request("/api/users");
     expect(denied.status).toBe(403);
+  });
+
+  test("会话按语义包标题呈现非 HR 授权范围", async () => {
+    const app = dashboardApp(
+      {
+        email: "regional@x.com",
+        name: "regional",
+        role: "user",
+        access_scope: '{"scope_id":"region","kind":"limited","values":["North"]}',
+      },
+      { accessScopeDefinition: { id: "region", title: "Region" } },
+    );
+    const response = await app.request("/api/me");
+    expect(response.status).toBe(200);
+    expect(ME_PAYLOAD_SCHEMA.parse(await response.json()).access_scope).toEqual({
+      id: "region",
+      kind: "limited",
+      values: ["North"],
+      title: "Region",
+    });
   });
 
   test("指标字典：PA 用户按同一 Principal 读取公共投影，真实值按需透传行权限", async () => {
@@ -76,14 +96,16 @@ describe("dashboard app routes and access control", () => {
         email: "h@x.com",
         name: "h",
         role: "user",
-        org_scope: "Aurora Labs,Harbor Works",
+        access_scope:
+          '{"scope_id":"organization","kind":"limited","values":["Aurora Labs","Harbor Works"]}',
       },
       {
         catalog: {
           publicDocument: async (context) => {
             contexts.push(context);
             return {
-              default_population_scope: "统计范围",
+              access_scope: { id: "organization", title: "组织" },
+              observation_scopes: ["统计范围"],
               data_as_of: "2026-07",
               time_context: [],
               metric_domains: [
@@ -126,7 +148,7 @@ describe("dashboard app routes and access control", () => {
     expect(catalog.status).toBe(200);
     const payload = CATALOG_PAYLOAD_SCHEMA.parse(await catalog.json());
     expect(payload).toMatchObject({
-      default_population_scope: "统计范围",
+      observation_scopes: ["统计范围"],
       metric_domains: [
         {
           title: "人员流动",
@@ -152,12 +174,12 @@ describe("dashboard app routes and access control", () => {
       {
         email: "h@x.com",
         roles: ["user"],
-        orgScope: ["Aurora Labs", "Harbor Works"],
+        accessScope: { kind: "limited", values: ["Aurora Labs", "Harbor Works"] },
       },
       {
         email: "h@x.com",
         roles: ["user"],
-        orgScope: ["Aurora Labs", "Harbor Works"],
+        accessScope: { kind: "limited", values: ["Aurora Labs", "Harbor Works"] },
       },
     ]);
   });
@@ -167,7 +189,12 @@ describe("dashboard app routes and access control", () => {
 
     const wired = (role: string) =>
       dashboardApp(
-        { email: `${role}@x`, name: role, role, org_scope: "*" },
+        {
+          email: `${role}@x`,
+          name: role,
+          role,
+          access_scope: '{"scope_id":"organization","kind":"all"}',
+        },
         {
           catalog: {
             publicDocument: async (principal) => {
@@ -199,16 +226,47 @@ describe("dashboard app routes and access control", () => {
     expect(await loaded.json()).toEqual(capabilityMap);
   });
 
-  test("管理员：设置某用户行权限（org_scope）经过应用服务写入", async () => {
-    scopeWrites.length = 0;
-    const app = buildApp({ email: "a@x.com", name: "a", role: "admin" });
-    const res = await app.request("/api/users/scope", {
-      method: "POST",
+  test("管理员：角色与行权限通过同一个结构化用户管理用例更新", async () => {
+    const updates: unknown[] = [];
+    const app = dashboardApp(
+      { email: "a@x.com", name: "a", role: "admin" },
+      {
+        userAdministration: () => ({
+          list: async () => ({ users: [] }),
+          create: async () => {
+            throw new Error("不应创建");
+          },
+          updateAuthorization: async (principal, userId, input) => {
+            updates.push({ principal, userId, input });
+            return {
+              id: userId,
+              email: "u@x.com",
+              name: "u",
+              role: input.role,
+              access_scope: input.access_scope,
+              banned: false,
+            };
+          },
+          resetPassword: async () => undefined,
+        }),
+      },
+    );
+    const res = await app.request("/api/users/u1/authorization", {
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: "u1", org_scope: " Aurora Labs " }),
+      body: JSON.stringify({
+        role: "user",
+        access_scope: { kind: "limited", values: [" Aurora Labs "] },
+      }),
     });
     expect(res.status).toBe(200);
-    expect(scopeWrites).toEqual([{ userId: "u1", orgScope: "Aurora Labs" }]);
+    expect(updates).toEqual([
+      {
+        principal: { email: "a@x.com", roles: ["admin"], accessScope: { kind: "all" } },
+        userId: "u1",
+        input: { role: "user", access_scope: { kind: "limited", values: ["Aurora Labs"] } },
+      },
+    ]);
   });
 
   test("全局错误边界覆盖未做局部捕获的 Dashboard 端点", async () => {
@@ -358,7 +416,8 @@ describe("dashboard app routes and access control", () => {
     };
     const catalog = {
       publicDocument: async () => ({
-        default_population_scope: "统计范围",
+        access_scope: { id: "organization", title: "组织" },
+        observation_scopes: ["统计范围"],
         data_as_of: "2026-07",
         time_context: [],
         metric_domains: [],

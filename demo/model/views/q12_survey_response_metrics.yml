@@ -5,7 +5,7 @@ views:
     meta:
       query_surface: metric_source
       time_source: survey
-      default_population_scope: 统计范围：公开虚构数据中完成最近一期Q12答卷的员工。
+      observation_scope: 统计范围：公开虚构数据中完成最近一期Q12答卷的员工。
     access_policy:
       - groups: [pa_full, pa_service]
         member_level:
@@ -16,7 +16,7 @@ views:
         member_level: { includes: *members }
         row_level:
           filters:
-            - { member: organization_name, operator: equals, values: securityContext.org_scope }
+            - { member: organization_name, operator: equals, values: securityContext.data_scope.values }
     cubes:
       - join_path: q12_survey_response_fact
         includes: *members

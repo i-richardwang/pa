@@ -35,7 +35,6 @@ import type { AuthorizedAnalysisPlan } from "../application/semantic_planning_se
 import type { CubeView, TimeContext } from "../ports/cube_gateway.js";
 import { cubeSecurityContext } from "../engine/cube_security.js";
 import type { ExecutionPlan } from "../semantic_core/execution_plan.js";
-import { createUserScopeService } from "../application/user_scope_service.js";
 
 export {
   CatalogInputError,
@@ -135,10 +134,8 @@ export type StubUser = {
   email: string;
   name: string;
   role?: string | null;
-  org_scope?: string | null;
+  access_scope?: string | null;
 };
-
-export const scopeWrites: { userId: string; orgScope: string }[] = [];
 
 export function semanticAccessStub(principal: Principal): AuthorizedSemanticContext {
   return {
@@ -146,7 +143,8 @@ export function semanticAccessStub(principal: Principal): AuthorizedSemanticCont
     cubeContext: cubeSecurityContext(principal),
     views: [],
     compiler: {
-      default_population_scope: "测试口径",
+      access_scope: { id: "organization", title: "组织" },
+      observation_scopes: ["测试口径"],
       views: [],
       metric_domains: [],
       measures: [],
@@ -330,18 +328,19 @@ export function dashboardTestDependencies(
   overrides: Partial<DashboardDependencies> = {},
 ): DashboardDependencies {
   const db = createTestAppDatabase(dbPath);
-  const sessionUser = user ? { role: "user", org_scope: "*", ...user } : null;
+  const sessionUser = user
+    ? {
+        role: "user",
+        access_scope: '{"scope_id":"organization","kind":"all"}',
+        ...user,
+      }
+    : null;
   return {
     auth: { api: { getSession: async () => (sessionUser ? { user: sessionUser } : null) } },
+    accessScopeDefinition: { id: "organization", title: "组织" },
     usage: createTestUsage(db),
     html: async () => "<!doctype html><title>console</title>",
-    userScope: createUserScopeService({
-      writer: {
-        setOrgScope: async (userId, orgScope) => {
-          scopeWrites.push({ userId, orgScope });
-        },
-      },
-    }),
+    userAdministration: () => unavailableService("user administration"),
     analyses: unavailableService("analysis"),
     reportService: unavailableService("report"),
     presentation: createPresentationService(),

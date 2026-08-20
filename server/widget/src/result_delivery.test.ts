@@ -8,7 +8,7 @@ const ANALYSIS_ID = "22222222-2222-4222-8222-222222222222";
 
 const payload: QueryPayload = {
   view_id: ANALYSIS_ID,
-  default_population_scope: "统计范围",
+  observation_scopes: ["统计范围"],
   data_as_of: "2026-07",
   time_context: [],
   view: {
@@ -114,6 +114,6 @@ describe("result delivery", () => {
       deliverRecordProjection({
         structuredContent: { view_id: ANALYSIS_ID, ...records },
       }),
-    ).toEqual({ ok: false, error: "人员名单缺少有效的受控记录载荷。" });
+    ).toEqual({ ok: false, error: "构成记录缺少有效的受控记录载荷。" });
   });
 });

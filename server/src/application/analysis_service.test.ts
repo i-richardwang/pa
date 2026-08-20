@@ -19,7 +19,7 @@ import { createAnalysisService } from "./analysis_service.js";
 import type { QueryRunResult } from "./query_pipeline.js";
 import type { ViewPreferences } from "../presentation_core/view_preferences.js";
 
-const principal: Principal = { email: "alice@x", roles: ["user"], orgScope: "*" };
+const principal: Principal = { email: "alice@x", roles: ["user"], accessScope: { kind: "all" } };
 const definition: AnalysisDefinition = semanticAnalysisOf(STRUCTURE_ARGS).analysis;
 const barIntent: SemanticViewIntent = {
   type: "bar",
@@ -98,7 +98,7 @@ function resultOf(rows: ViewBlock["rows"]): QueryRunResult {
   };
   return {
     payload: {
-      default_population_scope: "统计范围",
+      observation_scopes: ["统计范围"],
       data_as_of: "2026-07",
       time_context: [],
       view,
@@ -154,7 +154,7 @@ function pivotResultOf(rows: ViewBlock["rows"]): QueryRunResult {
   };
   return {
     payload: {
-      default_population_scope: "统计范围",
+      observation_scopes: ["统计范围"],
       data_as_of: "2026-07",
       time_context: [],
       view,

@@ -46,9 +46,7 @@ try {
     "统计范围：公开虚构数据中的Q12调研受邀员工。",
     "统计范围：公开虚构数据中完成最近一期Q12答卷的员工。",
   ];
-  if (
-    !expectedPopulationScopes.every((scope) => catalog.default_population_scope.includes(scope))
-  ) {
+  if (!expectedPopulationScopes.every((scope) => catalog.observation_scopes.includes(scope))) {
     throw new Error("公开 Demo 默认统计范围未从模型透传");
   }
   const member = (title: string, kind: "measure" | "dimension") => {

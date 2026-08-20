@@ -12,6 +12,7 @@ import type { MetricDomainId } from "./metric_domain_id.js";
 import type { MetricTimeContract } from "./metric_time_contract.js";
 import type { ReportCalculationKind } from "./report_calculation.js";
 import type { TimeComparisonPolicy } from "./time_source.js";
+import type { AccessScopeDefinition } from "./access_scope_definition.js";
 
 /** 率指标公式行的分子分母，已解析为中文标题（人读公式不读成员名）。 */
 export type CompilerCatalogFormula = {
@@ -42,7 +43,7 @@ export type CompilerCatalogMember = {
   format?: string;
   ai_context?: string;
   sensitivity?: string;
-  dimension_kind?: "categorical" | "overlapping" | "individual";
+  dimension_kind?: "categorical" | "overlapping";
   dimension_group?: { id: string; title: string };
   /** 引擎私有的时间聚合合同；对外 Catalog 不暴露。 */
   time_contract?: MetricTimeContract;
@@ -65,7 +66,7 @@ export type CompilerCatalogView = {
   time_source?: string;
   /** 该时钟允许的相对比较形态。 */
   comparison_policy: TimeComparisonPolicy;
-  /** 组织层级链，已解析为维度语义 id。 */
+  /** 业务层级链，已解析为维度语义 id。 */
   hierarchies?: string[][];
 };
 
@@ -79,7 +80,8 @@ export type CompilerCatalogMetricDomain = {
 };
 
 export type CompilerCatalog = {
-  default_population_scope: string;
+  access_scope: AccessScopeDefinition;
+  observation_scopes: string[];
   views: CompilerCatalogView[];
   metric_domains: CompilerCatalogMetricDomain[];
   measures: CompilerCatalogMember[];

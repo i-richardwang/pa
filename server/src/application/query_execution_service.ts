@@ -66,6 +66,18 @@ function appendNote(note: { text: string }, value: string): void {
   note.text = note.text ? `${note.text}（${value}）` : value;
 }
 
+function hierarchyAdditionTitles(
+  views: CubeView[],
+  addition: { member: string; children: string[] },
+): { upperTitle: string; lowerTitles: string[] } {
+  return {
+    upperTitle: memberDisplayTitle(views, addition.member, memberShortName(addition.member)),
+    lowerTitles: addition.children.map((child) =>
+      memberDisplayTitle(views, child, memberShortName(child)),
+    ),
+  };
+}
+
 type OrderInput = { member: string; direction: "asc" | "desc" }[] | undefined;
 function toOrderTuples(order: OrderInput): CubeQuery["order"] {
   return order?.map(({ member, direction }): [string, "asc" | "desc"] => [member, direction]);
@@ -132,7 +144,7 @@ function buildSourceSemantics(
 
 /**
  * 执行单个查询视图：授权、层级补全、时间规划、Cube 投影、序数归位与列式编码。
- * 个体字段不属于公开查询面，只能经受控 Record Projection 端点投影。
+ * 受控记录字段不属于公开查询面，只能经 Record Projection 端点投影。
  */
 async function executeView(
   deps: QueryExecutionDependencies,
@@ -145,6 +157,7 @@ async function executeView(
   context: TimeContext,
   includeSummary: boolean,
   includeTotals: boolean,
+  accessScopeTitle: string,
 ): Promise<ExecutedViewResult> {
   const { principal, cubeContext } = ctx;
   const inputQuery: CubeQuery = {
@@ -341,34 +354,45 @@ async function executeView(
       text: "本次结果包含敏感级数据，请注意使用与流转场景。",
     });
   }
-  const addedHierarchyNames = new Set(hierarchyDimensions.map(memberShortName));
+  const hierarchyAdditions = new Map(
+    hierarchyDimensions.map((addition) => [memberShortName(addition.member), addition]),
+  );
   for (const note of notes) {
-    if (addedHierarchyNames.has(memberShortName(note.member))) {
-      appendNote(note, "本列为自动带出的上级组织：同名下级可能挂在不同上级，结果按上级拆分");
+    const addition = hierarchyAdditions.get(memberShortName(note.member));
+    if (addition) {
+      const relation = hierarchyAdditionTitles(authViews, addition);
+      const lowerTitles = relation.lowerTitles.map((title) => `「${title}」`).join("、");
+      appendNote(
+        note,
+        `「${relation.upperTitle}」由系统自动带出，用于区分可能重名但属于不同上级的${lowerTitles}`,
+      );
     }
   }
-  for (const member of hierarchyDimensions) {
-    const source = notes.find((note) => memberShortName(note.member) === memberShortName(member));
+  for (const addition of hierarchyDimensions) {
+    const source = notes.find(
+      (note) => memberShortName(note.member) === memberShortName(addition.member),
+    );
     if (source) {
+      const relation = hierarchyAdditionTitles(authViews, addition);
+      const lowerTitles = relation.lowerTitles.map((title) => `「${title}」`).join("、");
       displayNotes.push({
-        member,
+        member: addition.member,
         title: memberDisplayTitle(authViews, source.member, source.title),
-        text: "为区分可能重名的下级组织，结果已按上级组织拆分。",
+        text: `为区分可能重名的${lowerTitles}，结果已按「${relation.upperTitle}」拆分。`,
       });
     }
   }
-  if (principal.orgScope !== "*") {
+  if (principal.accessScope.kind === "limited") {
+    const values = principal.accessScope.values.join("、") || "无可用值";
     notes.push({
-      member: "org_scope",
-      title: "数据范围",
-      text: `本账号仅有权查询以下组织，结果已自动限定在此范围内：${principal.orgScope.join(
-        "、",
-      )}——不代表全公司或全集团，作答时勿把此范围称作全公司或据此推断整体。`,
+      member: "access_scope",
+      title: accessScopeTitle,
+      text: `本账号的「${accessScopeTitle}」已自动限定为：${values}。回答时应明确这是授权范围，不应据此推断范围外的整体情况。`,
     });
     displayNotes.push({
-      member: "org_scope",
-      title: "数据范围",
-      text: `本次结果仅包含你有权查看的组织：${principal.orgScope.join("、")}。`,
+      member: "access_scope",
+      title: accessScopeTitle,
+      text: `本次结果仅包含你有权查看的「${accessScopeTitle}」：${values}。`,
     });
   }
 
@@ -463,7 +487,7 @@ async function executeView(
           summary: {
             kind: "grand_total" as const,
             label: selection ? "所选分组总体" : "总体",
-            scope: selection ? ("selected_groups" as const) : ("filtered_population" as const),
+            scope: selection ? ("selected_groups" as const) : ("filtered_set" as const),
             rows: summaryRows,
           },
         }

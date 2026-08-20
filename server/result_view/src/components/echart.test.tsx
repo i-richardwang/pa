@@ -59,7 +59,7 @@ const CHART_VIEW = {
 const PAYLOAD = {
   title: "各组织在职人数",
   view: CHART_VIEW,
-  default_population_scope: "口径：在职含试用期",
+  observation_scopes: ["口径：在职含试用期"],
   data_as_of: "2026-06-30",
   time_context: [],
 } as unknown as Parameters<typeof ViewRenderer>[0]["payload"];

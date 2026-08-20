@@ -28,6 +28,7 @@ import {
 import { metricTimeCapabilities } from "../semantic_core/time_contract.js";
 import { resolveMetricTime } from "./metric_time.js";
 import type { ReportCalculationKind } from "../semantic_core/report_calculation.js";
+import type { AccessScopeDefinition } from "../contracts/access_scope.js";
 
 export type CatalogComponents = { numerator: string; denominator: string };
 
@@ -107,7 +108,8 @@ export type CatalogMetricDomainDocument = {
 };
 
 export type CatalogDocument = {
-  default_population_scope: string;
+  access_scope: AccessScopeDefinition;
+  observation_scopes: string[];
   views: CatalogViewDocument[];
   metric_domains: CatalogMetricDomainDocument[];
 };
@@ -128,22 +130,23 @@ export type CatalogQueryResult = {
   unmatched_terms: string[];
 };
 
-export function defaultPopulationScope(views: CubeView[]): string {
+export function observationScopes(views: CubeView[]): string[] {
   if (!views.length) {
     throw new Error(
-      "当前账号在 Cube 中没有可见数据视图；查询参数无需修改，请停止重试并让管理员检查账号角色、组织范围与 access_policy",
+      "当前账号在 Cube 中没有可见数据视图；查询参数无需修改，请停止重试并让管理员检查账号角色、数据范围与 access_policy",
     );
   }
-  // 不同视图的默认人群口径不能静默合并。
   const scopes: string[] = [];
   for (const view of views) {
-    const value = view.meta?.default_population_scope;
+    const value = view.meta?.observation_scope;
     if (typeof value !== "string" || !value.trim()) {
-      throw new Error(`公开视图 ${view.name} 的 meta.default_population_scope 必须存在且非空`);
+      throw new Error(`公开视图 ${view.name} 的 meta.observation_scope 必须存在且非空`);
     }
-    if (!scopes.includes(value)) scopes.push(value);
+    const trimmed = value.trim();
+    const normalized = /[。.!?！？]$/.test(trimmed) ? trimmed : `${trimmed}。`;
+    if (!scopes.includes(normalized)) scopes.push(normalized);
   }
-  return scopes.map((scope) => (scope.endsWith("。") ? scope : `${scope}。`)).join("");
+  return scopes;
 }
 
 function memberDocument(
@@ -254,6 +257,7 @@ export function buildCatalogDocument(
   views: CubeView[],
   taxonomy: SemanticTaxonomy,
   timeSources: TimeSourceRegistry,
+  accessScope: AccessScopeDefinition,
 ): CatalogDocument {
   assertDeclaredWindowMatchesResolution(views);
   const modelViews: CatalogViewDocument[] = [...views]
@@ -309,7 +313,8 @@ export function buildCatalogDocument(
       .flatMap((view) => view.measures.flatMap((measure) => measure.metric_domain_id ?? [])),
   );
   return {
-    default_population_scope: defaultPopulationScope(views),
+    access_scope: accessScope,
+    observation_scopes: observationScopes(views),
     views: modelViews,
     metric_domains: taxonomy.metric_domains
       .filter((domain) => visibleDomainIds.has(domain.id))
@@ -627,7 +632,8 @@ export function toCompilerCatalog(document: CatalogDocument): CompilerCatalog {
   const catalog = canonicalCatalog(document);
   const maps = projectionMaps(document, catalog);
   return {
-    default_population_scope: document.default_population_scope,
+    access_scope: document.access_scope,
+    observation_scopes: document.observation_scopes,
     views: document.views.filter(isMetricSource).map((view) => ({
       name: view.name,
       title: view.title,
@@ -674,7 +680,8 @@ export function toSemanticCatalog(
     ]),
   );
   return {
-    default_population_scope: compiler.default_population_scope,
+    access_scope: compiler.access_scope,
+    observation_scopes: compiler.observation_scopes,
     ...time,
     metric_domains: compiler.metric_domains.map((domain) => ({
       id: domain.id,

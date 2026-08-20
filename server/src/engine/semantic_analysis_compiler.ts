@@ -588,7 +588,7 @@ function percentOfTotalCalculation(
   if (!category) {
     throw new AnalysisDefinitionError(`catalog 中不存在构成维度 ${calculation.category_dimension}`);
   }
-  if (category.dimension_kind === "individual" || category.dimension_kind === "overlapping") {
+  if (category.dimension_kind === "overlapping") {
     throw new AnalysisDefinitionError(
       `维度「${category.title}」不是互斥分类，不能计算合计为 100% 的构成占比`,
     );

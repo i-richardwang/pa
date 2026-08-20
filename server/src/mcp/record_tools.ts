@@ -31,7 +31,7 @@ const recordSummary = (viewId: string, payload: RecordProjectionPayload) => ({
 const result = (viewId: string, payload: RecordProjectionPayload) => {
   const summary = recordSummary(viewId, payload);
   return {
-    content: [{ type: "text" as const, text: "人员名单已打开。" }],
+    content: [{ type: "text" as const, text: "构成记录已打开。" }],
     structuredContent: summary,
     _meta: { [RECORD_PROJECTION_META_KEY]: payload },
   };
@@ -50,7 +50,7 @@ export function registerRecordTools(
     server,
     "show_records",
     {
-      title: "展示人员名单",
+      title: "展示构成记录",
       description: TOOL_DESCRIPTIONS.show_records,
       inputSchema: {
         view_id: z.string().uuid().describe("run_analysis 返回的 view_id"),
@@ -65,8 +65,8 @@ export function registerRecordTools(
         securitySchemes: OAUTH_SECURITY_SCHEMES,
         ui: { resourceUri: RECORDS_UI_RESOURCE_URI, visibility: ["model"] },
         "openai/outputTemplate": RECORDS_UI_RESOURCE_URI,
-        "openai/toolInvocation/invoking": "正在加载人员名单…",
-        "openai/toolInvocation/invoked": "人员名单已就绪",
+        "openai/toolInvocation/invoking": "正在加载构成记录…",
+        "openai/toolInvocation/invoked": "构成记录已就绪",
       },
     },
     safeMcpHandler(

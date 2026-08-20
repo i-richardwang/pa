@@ -3,6 +3,10 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { z } from "zod";
+import {
+  ACCESS_SCOPE_DEFINITION_SCHEMA,
+  type AccessScopeDefinition,
+} from "../semantic_core/access_scope_definition.js";
 import { semanticCatalogFormalMetrics, type FormalMetricDefinition } from "./metric_model.js";
 import {
   METRIC_DOMAIN_ID_PATTERN,
@@ -113,6 +117,7 @@ const manifestSchema = z
     schema_version: z.literal(2),
     id: memberName,
     model_path: z.string().trim().min(1),
+    access_scope: ACCESS_SCOPE_DEFINITION_SCHEMA,
     time_sources: z
       .array(
         z
@@ -142,6 +147,7 @@ export type SemanticPackage = {
   id: string;
   root: string;
   model_root: string;
+  access_scope: AccessScopeDefinition;
   time_sources: TimeSourceRegistry;
   taxonomy: SemanticTaxonomy;
   formal_metrics: readonly FormalMetricDefinition[];
@@ -219,6 +225,7 @@ export async function loadSemanticPackage(root: string): Promise<SemanticPackage
     id: parsed.data.id,
     root: packageRoot,
     model_root: modelRoot,
+    access_scope: parsed.data.access_scope,
     time_sources: timeSources,
     taxonomy,
     formal_metrics: parsed.data.formal_metrics as FormalMetricDefinition[],

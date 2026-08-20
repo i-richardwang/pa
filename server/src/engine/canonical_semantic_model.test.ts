@@ -20,7 +20,7 @@ const canonicalViews: CubeView[] = [
     meta: {
       query_surface: "metric_source",
       time_source: "workforce",
-      default_population_scope: "统计范围：权威口径。",
+      observation_scope: "统计范围：权威口径。",
     },
     measures: [
       {
@@ -63,7 +63,7 @@ describe("CanonicalSemanticModel 权限投影", () => {
         meta: {
           query_surface: "detail",
           time_source: "headcount_plan",
-          default_population_scope: "伪造口径",
+          observation_scope: "伪造口径",
         },
         measures: canonicalViews[0]!.measures.map((member) => ({
           ...member,
@@ -74,13 +74,13 @@ describe("CanonicalSemanticModel 权限投影", () => {
         dimensions: canonicalViews[0]!.dimensions.map((member) => ({
           ...member,
           title: "伪造维度",
-          meta: { dimension_kind: "individual" },
+          meta: {},
         })),
       },
     ];
 
     const authorized = authorizeCanonicalSemanticModel(canonical, visible);
-    expect(authorized.document.default_population_scope).toBe("统计范围：权威口径。");
+    expect(authorized.document.observation_scopes).toEqual(["统计范围：权威口径。"]);
     expect(authorized.document.views[0]).toMatchObject({
       title: "人员指标执行面",
       surface: "metric_source",
@@ -126,7 +126,7 @@ describe("CanonicalSemanticModel 权限投影", () => {
       meta: {
         query_surface: "detail",
         time_source: "workforce",
-        default_population_scope: "统计范围：权威口径。",
+        observation_scope: "统计范围：权威口径。",
         record_sets: {
           employee: {
             title: "人员记录",
@@ -212,6 +212,7 @@ describe("CanonicalSemanticModel 权限投影", () => {
         views: canonicalViews,
         taxonomy: TEST_SEMANTIC_TAXONOMY,
         time_sources: TEST_TIME_SOURCE_REGISTRY,
+        access_scope: { id: "organization", title: "组织" },
       }),
     ).toThrow("指标能力目录");
   });
@@ -230,7 +231,7 @@ describe("CanonicalSemanticModel 权限投影", () => {
       service_context: {
         subject: "service",
         groups: ["service"],
-        orgScope: "*",
+        accessScope: { kind: "all" },
       },
       retry: {
         attempts: 3,
@@ -252,7 +253,7 @@ describe("CanonicalSemanticModel 权限投影", () => {
         title: "请求期标题",
         dimensions: canonicalViews[0]!.dimensions.map((member) => ({
           ...member,
-          meta: { dimension_kind: "individual" },
+          meta: {},
         })),
       },
     ];
@@ -272,7 +273,7 @@ describe("CanonicalSemanticModel 权限投影", () => {
     const views = await gateway.meta({
       subject: "test",
       groups: ["test"],
-      orgScope: "*",
+      accessScope: { kind: "all" },
     });
     expect(views[0]?.title).toBe("人员指标执行面");
     expect(views[0]?.dimensions[0]?.meta?.dimension_kind).toBe("categorical");

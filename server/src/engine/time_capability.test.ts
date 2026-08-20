@@ -29,7 +29,10 @@ import {
 import { planMetricQuery } from "./metric_planner.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
-  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY);
+  buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY, {
+    id: "test_scope",
+    title: "测试数据范围",
+  });
 
 const LATEST = "2026-07";
 
@@ -45,7 +48,7 @@ const views: CubeView[] = [
   {
     name: "flow",
     title: "人员流动",
-    meta: { time_source: "workforce", default_population_scope: "统计范围：测试" },
+    meta: { time_source: "workforce", observation_scope: "统计范围：测试" },
     dimensions: [{ name: "flow.organization_name", title: "组织", type: "string" }],
     measures: [
       measure("active_employee_count", "在职人数", {

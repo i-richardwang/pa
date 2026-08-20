@@ -3,7 +3,8 @@ import { CATALOG_OUTPUT_SCHEMA, RECORDS_OUTPUT_SCHEMA, RUN_OUTPUT_SCHEMA } from 
 
 test("公共 MCP 响应 schema 递归 strict，物理字段不能被静默剥离", () => {
   const catalog = {
-    default_population_scope: "测试人群口径。",
+    access_scope: { id: "organization", title: "组织" },
+    observation_scopes: ["测试人群口径。"],
     data_as_of: "2026-07",
     time_context: [],
     metric_domains: [
@@ -46,7 +47,7 @@ test("公共 MCP 响应 schema 递归 strict，物理字段不能被静默剥离
   const run = {
     analysis_id: "018f5da8-7a4c-7d4d-9f3a-8a3c7f4b4c01",
     view_id: "118f5da8-7a4c-7d4d-9f3a-8a3c7f4b4c01",
-    default_population_scope: "测试人群口径。",
+    observation_scopes: ["测试人群口径。"],
     data_as_of: "2026-07",
     time_context: [],
     view: {

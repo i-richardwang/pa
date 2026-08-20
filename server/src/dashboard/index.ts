@@ -9,14 +9,19 @@ import type { DashboardDependencies, DashboardEnv, SessionUser } from "./types.j
 import { registerUsageRoutes } from "./usage.js";
 import type { MePayload } from "../contracts/session_contract.js";
 import { dashboardError } from "./errors.js";
+import { registerUserRoutes } from "./users.js";
 
-function toMe(user: SessionUser, principal: Principal): MePayload {
+function toMe(
+  user: SessionUser,
+  principal: Principal,
+  accessScopeDefinition: DashboardDependencies["accessScopeDefinition"],
+): MePayload {
   return {
     email: user.email,
     name: user.name,
     role: user.role || "user",
     is_admin: principal.roles.includes("admin"),
-    org_scope: user.org_scope ?? "",
+    access_scope: { ...principal.accessScope, ...accessScopeDefinition },
   };
 }
 
@@ -36,8 +41,8 @@ export function dashboardRoutes(deps: DashboardDependencies) {
   dashboard.use("/api/*", async (c, next) => {
     const session = await deps.auth.api.getSession({ headers: c.req.raw.headers });
     if (!session) return c.json({ error: "未登录" }, 401);
-    const principal = principalFromAttributes(session.user);
-    c.set("me", toMe(session.user, principal));
+    const principal = principalFromAttributes(session.user, deps.accessScopeDefinition);
+    c.set("me", toMe(session.user, principal, deps.accessScopeDefinition));
     c.set("principal", principal);
     return next();
   });
@@ -53,6 +58,7 @@ export function dashboardRoutes(deps: DashboardDependencies) {
   registerReportRoutes(dashboard, deps);
   registerBoardRoutes(dashboard, deps);
   registerUsageRoutes(dashboard, deps, requireAdmin);
+  registerUserRoutes(dashboard, deps, requireAdmin);
 
   return dashboard;
 }

@@ -10,8 +10,8 @@ import {
 import { ReportNotFoundError } from "../ports/report_repository.js";
 import type { Principal } from "../contracts/principal.js";
 
-const alice: Principal = { email: "alice@x", roles: ["user"], orgScope: "*" };
-const bob: Principal = { email: "bob@x", roles: ["user"], orgScope: "*" };
+const alice: Principal = { email: "alice@x", roles: ["user"], accessScope: { kind: "all" } };
+const bob: Principal = { email: "bob@x", roles: ["user"], accessScope: { kind: "all" } };
 
 const report = {
   id: "33333333-3333-4333-8333-333333333333",
