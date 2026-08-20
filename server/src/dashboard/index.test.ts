@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { BusinessTermInputError } from "../application/business_term_service.js";
+import { BusinessTermInputError } from "../application/business_term_registry.js";
 import { createFeedbackService } from "../application/feedback_service.js";
 import { cubeSecurityContext } from "../engine/cube_security.js";
 import {
@@ -199,7 +199,7 @@ describe("dashboard app routes and access control", () => {
     expect(await loaded.json()).toEqual(capabilityMap);
   });
 
-  test("管理员：设置某用户行权限（org_scope）即时落到直写回调", async () => {
+  test("管理员：设置某用户行权限（org_scope）经过应用服务写入", async () => {
     scopeWrites.length = 0;
     const app = buildApp({ email: "a@x.com", name: "a", role: "admin" });
     const res = await app.request("/api/users/scope", {
@@ -375,30 +375,32 @@ describe("dashboard app routes and access control", () => {
         {
           catalog,
           businessTerms: {
-            listPublic: async () => ({ rows: [publicRow] }).rows,
+            listPublic: async (principal) => {
+              expect(principal.email).toBe(`${role}@x`);
+              return [publicRow];
+            },
             listAdmin: async () => {
               if (listError) throw listError;
               return [publicRow];
             },
-            resolve: async () => [],
-            create: async (input, _members, actor) => {
+            create: async (principal, input) => {
               if (input.canonical_term === "重复")
                 throw new BusinessTermInputError("术语叫法已存在");
               writes.push({ action: "create", input });
               logged.push({ tool: "business_term_admin", title: "新建业务术语：「Band C+」" });
-              expect(actor).toBe("admin@x");
+              expect(principal.email).toBe("admin@x");
               return publicRow;
             },
-            update: async (termId, input, _members, actor) => {
+            update: async (principal, termId, input) => {
               writes.push({ action: "update", termId, input });
               logged.push({ tool: "business_term_admin", title: "更新业务术语：「Band C+」" });
-              expect(actor).toBe("admin@x");
+              expect(principal.email).toBe("admin@x");
               return { ...publicRow, ...input };
             },
-            remove: async (termId, actor) => {
+            remove: async (principal, termId) => {
               writes.push({ action: "delete", termId });
               logged.push({ tool: "business_term_admin", title: "删除业务术语：「Band C+」" });
-              expect(actor).toBe("admin@x");
+              expect(principal.email).toBe("admin@x");
               return publicRow;
             },
           },

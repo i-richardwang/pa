@@ -11,7 +11,7 @@ import type {
   AnalysisRepository,
   OwnedAnalysisView,
 } from "../ports/analysis_repository.js";
-import type { UsageLog } from "../ports/usage_log.js";
+import type { UsageService } from "./usage_service.js";
 import type { RecordProjectionBindings } from "../contracts/record_projection_contract.js";
 import {
   EMPTY_VIEW_PREFERENCES,
@@ -50,11 +50,16 @@ export type ExecutedAnalysis = QueryRunResult & {
   record_projection_bindings: RecordProjectionBindings;
 };
 
+type IdentityStrategy =
+  | { kind: "create_analysis" }
+  | { kind: "create_view"; analysis: AnalysisRecord }
+  | { kind: "reuse"; identity: OwnedAnalysisView };
+
 export function createAnalysisService(deps: {
   repository: AnalysisRepository;
   execute: ExecuteAnalysis;
   plan: PlanAnalysisView;
-  usage: Pick<UsageLog, "log">;
+  usage: Pick<UsageService, "log">;
 }) {
   async function executeAndLog(input: {
     principal: Principal;
@@ -63,9 +68,7 @@ export function createAnalysisService(deps: {
     preferences: ViewPreferences;
     planned: AuthorizedAnalysisPlan;
     tool: "run_analysis" | "rerun_analysis" | "report_replay" | "replay";
-    analysis?: AnalysisRecord;
-    identity?: OwnedAnalysisView;
-    createIdentity: "analysis" | "view" | "none";
+    identity: IdentityStrategy;
     usage: {
       query_fingerprint?: string;
       derived_formulas?: string[];
@@ -76,22 +79,21 @@ export function createAnalysisService(deps: {
     try {
       const result = await deps.execute(input.planned);
       const identity =
-        input.createIdentity === "analysis"
+        input.identity.kind === "create_analysis"
           ? await deps.repository.create(
               input.principal.email,
               input.definition,
               input.intent,
               input.preferences,
             )
-          : input.createIdentity === "view"
+          : input.identity.kind === "create_view"
             ? await deps.repository.createView(
                 input.principal.email,
-                input.analysis?.id ?? input.identity?.analysis.id ?? "",
+                input.identity.analysis.id,
                 input.intent,
                 input.preferences,
               )
-            : input.identity;
-      if (!identity) throw new Error("执行结果缺少分析视图身份");
+            : input.identity.identity;
       const payload = {
         ...result.payload,
         analysis_id: identity.analysis.id,
@@ -129,12 +131,14 @@ export function createAnalysisService(deps: {
         outcome: "error",
         error: error instanceof Error ? error.message : String(error),
         duration_ms: performance.now() - started,
-        ...(input.identity || input.analysis
-          ? {
-              analysis_id: input.analysis?.id ?? input.identity!.analysis.id,
-              ...(input.identity ? { view_id: input.identity.view.id } : {}),
-            }
-          : {}),
+        ...(input.identity.kind === "create_view"
+          ? { analysis_id: input.identity.analysis.id }
+          : input.identity.kind === "reuse"
+            ? {
+                analysis_id: input.identity.identity.analysis.id,
+                view_id: input.identity.identity.view.id,
+              }
+            : {}),
       });
       throw error;
     }
@@ -156,7 +160,7 @@ export function createAnalysisService(deps: {
       preferences,
       planned,
       tool: "run_analysis",
-      createIdentity: "analysis",
+      identity: { kind: "create_analysis" },
       usage: {
         query_fingerprint: queryFingerprint(definition),
         derived_formulas: derivedFormulaSummaries(definition),
@@ -180,8 +184,7 @@ export function createAnalysisService(deps: {
       preferences,
       planned,
       tool: "rerun_analysis",
-      analysis,
-      createIdentity: "view",
+      identity: { kind: "create_view", analysis },
       usage: {},
     });
   }
@@ -227,7 +230,7 @@ export function createAnalysisService(deps: {
       preferences,
       planned,
       tool: "run_analysis",
-      createIdentity: "analysis",
+      identity: { kind: "create_analysis" },
       usage: {
         query_fingerprint: queryFingerprint(definition),
         derived_formulas: derivedFormulaSummaries(definition),
@@ -250,14 +253,20 @@ export function createAnalysisService(deps: {
       preferences: identity.view.preferences,
       planned,
       tool: "replay",
-      identity,
-      createIdentity: "none",
+      identity: { kind: "reuse", identity },
       usage: {},
     });
   }
 
+  async function resolveOwnedView(
+    principal: Principal,
+    viewId: string,
+  ): Promise<OwnedAnalysisView> {
+    return deps.repository.resolveOwnedView(viewId, principal.email);
+  }
+
   async function ensureOwned(principal: Principal, viewId: string): Promise<void> {
-    await deps.repository.resolveOwnedView(viewId, principal.email);
+    await resolveOwnedView(principal, viewId);
   }
 
   async function executeReferenced(
@@ -272,8 +281,7 @@ export function createAnalysisService(deps: {
       preferences: identity.view.preferences,
       planned,
       tool: "report_replay",
-      identity,
-      createIdentity: "none",
+      identity: { kind: "reuse", identity },
       usage: {},
     });
   }
@@ -285,6 +293,7 @@ export function createAnalysisService(deps: {
     preview,
     replay,
     ensureOwned,
+    resolveOwnedView,
     executeReferenced,
   };
 }

@@ -1,45 +1,23 @@
 import { randomUUID } from "node:crypto";
-import { normalizeBusinessTerm } from "../engine/business_term_matcher.js";
 import {
   BusinessTermNotFoundError,
-  type BusinessTermContent,
   type BusinessTermRepository,
+  type NormalizedBusinessTermContent,
   type StoredBusinessTerm,
 } from "../ports/business_term_repository.js";
 import type { SqliteDatabase } from "../sqlite.js";
-
-export {
-  BusinessTermNotFoundError,
-  type BusinessTermContent,
-  type BusinessTermRepository,
-  type StoredBusinessTerm,
-} from "../ports/business_term_repository.js";
 
 type TermRow = Omit<StoredBusinessTerm, "aliases" | "related_member_ids"> & {
   aliases: string;
   related_member_ids: string;
 };
 
-const distinctValues = (values: string[], canonical?: string): string[] => {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  const normalizedCanonical = canonical ? normalizeBusinessTerm(canonical) : undefined;
-  for (const raw of values) {
-    const value = raw.trim();
-    const normalized = normalizeBusinessTerm(value);
-    if (!normalized || normalized === normalizedCanonical || seen.has(normalized)) continue;
-    seen.add(normalized);
-    out.push(value);
-  }
-  return out;
-};
-
-const storedContent = (input: BusinessTermContent) => ({
-  canonical_term: input.canonical_term.trim(),
-  definition: input.definition.trim(),
-  context: input.context?.trim() || null,
-  aliases: distinctValues(input.aliases, input.canonical_term),
-  related_member_ids: distinctValues(input.related_member_ids),
+const storedContent = (input: NormalizedBusinessTermContent) => ({
+  canonical_term: input.canonical_term,
+  definition: input.definition,
+  context: input.context ?? null,
+  aliases: input.aliases,
+  related_member_ids: input.related_member_ids,
 });
 
 const parseStringList = (value: string, field: string): string[] => {
@@ -72,7 +50,7 @@ export function createBusinessTermRepository(db: SqliteDatabase): BusinessTermRe
     return row ? toStored(row) : null;
   }
 
-  async function create(input: BusinessTermContent): Promise<StoredBusinessTerm> {
+  async function create(input: NormalizedBusinessTermContent): Promise<StoredBusinessTerm> {
     const term: StoredBusinessTerm = { id: randomUUID(), ...storedContent(input) };
     db.prepare(
       `INSERT INTO business_term
@@ -89,7 +67,10 @@ export function createBusinessTermRepository(db: SqliteDatabase): BusinessTermRe
     return term;
   }
 
-  async function replace(id: string, input: BusinessTermContent): Promise<StoredBusinessTerm> {
+  async function replace(
+    id: string,
+    input: NormalizedBusinessTermContent,
+  ): Promise<StoredBusinessTerm> {
     const next: StoredBusinessTerm = { id, ...storedContent(input) };
     const result = db
       .prepare(

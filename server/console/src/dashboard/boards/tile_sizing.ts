@@ -1,5 +1,4 @@
 import type { BoardTile } from "@contracts/board_contract";
-import type { RenderShape } from "@shape";
 import type { ReportRow } from "@contracts/report_contract";
 
 export const GRID_MARGIN: [number, number] = [16, 16];
@@ -12,7 +11,7 @@ export const MIN_ROW_HEIGHT = 40;
 /** 格子宽高比：行高由列宽和此比例推导，使格子近似方形。 */
 export const CELL_ASPECT = 10 / 9;
 
-export type TileShape = RenderShape | "text";
+export type TileShape = NonNullable<ReportRow["render_shape"]> | "text";
 
 export type TileSize = { w: number; h: number; minW: number; minH: number };
 
@@ -33,7 +32,9 @@ export function mobileTileHeight(shape: TileShape, desktopH: number): number {
   return 6;
 }
 
-export function coarseTileShape(chartType: ReportRow["presentation_type"]): RenderShape {
+export function coarseTileShape(
+  chartType: ReportRow["presentation_type"],
+): NonNullable<ReportRow["render_shape"]> {
   switch (chartType) {
     case "line":
       return "line";

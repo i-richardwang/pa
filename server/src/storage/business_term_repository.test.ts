@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createTestAppDatabase } from "../test_support/app_database.js";
-import {
-  BusinessTermNotFoundError,
-  createBusinessTermRepository,
-} from "./business_term_repository.js";
+import { createBusinessTermRepository } from "./business_term_repository.js";
+import { BusinessTermNotFoundError } from "../ports/business_term_repository.js";
 
 describe("business term repository", () => {
   test("定义、别名与可选成员作为一个术语聚合保存并立即可读", async () => {
@@ -12,18 +10,18 @@ describe("business term repository", () => {
     const created = await repository.create({
       canonical_term: "Band C+",
       definition: "Band C及以上的示例职级范围。",
-      aliases: ["Ｂａｎｄ Ｃ+", "Band C及以上"],
+      aliases: ["C+ Band", "Band C及以上"],
       related_member_ids: ["dimension:job_level_band"],
     });
 
-    expect(created.aliases).toEqual(["Band C及以上"]);
+    expect(created.aliases).toEqual(["C+ Band", "Band C及以上"]);
     expect(await repository.list()).toEqual([
       {
         id: created.id,
         canonical_term: "Band C+",
         definition: "Band C及以上的示例职级范围。",
         context: null,
-        aliases: ["Band C及以上"],
+        aliases: ["C+ Band", "Band C及以上"],
         related_member_ids: ["dimension:job_level_band"],
       },
     ]);

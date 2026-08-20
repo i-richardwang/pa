@@ -1,4 +1,4 @@
-import type { Context, Hono, MiddlewareHandler } from "hono";
+import type { Hono, MiddlewareHandler } from "hono";
 import type { DashboardDependencies, DashboardEnv } from "./types.js";
 import {
   CREATE_BUSINESS_TERM_BODY,
@@ -11,11 +11,6 @@ export function registerCatalogRoutes(
   requireAdmin: MiddlewareHandler<DashboardEnv>,
 ): void {
   const { catalog, businessTerms, capabilityMap } = deps;
-
-  const members = async (c: Context<DashboardEnv>) => {
-    const document = await catalog.publicDocument(c.get("principal"));
-    return [...document.measures, ...document.dimensions];
-  };
 
   dashboard.get("/api/catalog", async (c) => {
     return c.json(await catalog.publicDocument(c.get("principal")));
@@ -37,11 +32,11 @@ export function registerCatalogRoutes(
   });
 
   dashboard.get("/api/catalog/terms", async (c) => {
-    return c.json({ rows: await businessTerms.listPublic(await members(c)) });
+    return c.json({ rows: await businessTerms.listPublic(c.get("principal")) });
   });
 
   dashboard.get("/api/admin/business_terms", requireAdmin, async (c) => {
-    return c.json({ rows: await businessTerms.listAdmin(await members(c)) });
+    return c.json({ rows: await businessTerms.listAdmin(c.get("principal")) });
   });
 
   dashboard.post("/api/admin/business_terms", requireAdmin, async (c) => {
@@ -49,7 +44,7 @@ export function registerCatalogRoutes(
     if (!parsed.success) {
       return c.json({ error: parsed.error.issues[0]?.message ?? "需要规范术语与定义" }, 400);
     }
-    const row = await businessTerms.create(parsed.data, await members(c), c.get("me").email);
+    const row = await businessTerms.create(c.get("principal"), parsed.data);
     return c.json(row);
   });
 
@@ -58,17 +53,12 @@ export function registerCatalogRoutes(
     if (!parsed.success) {
       return c.json({ error: parsed.error.issues[0]?.message ?? "业务术语输入无效" }, 400);
     }
-    const row = await businessTerms.update(
-      c.req.param("id"),
-      parsed.data,
-      await members(c),
-      c.get("me").email,
-    );
+    const row = await businessTerms.update(c.get("principal"), c.req.param("id"), parsed.data);
     return c.json(row);
   });
 
   dashboard.delete("/api/admin/business_terms/:id", requireAdmin, async (c) => {
-    await businessTerms.remove(c.req.param("id"), c.get("me").email);
+    await businessTerms.remove(c.get("principal"), c.req.param("id"));
     return c.json({ ok: true });
   });
 }

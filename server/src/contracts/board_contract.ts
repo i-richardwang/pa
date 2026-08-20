@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { REPORT_ID_SCHEMA, type ReportRow } from "./report_contract.js";
+import type { ReportRow } from "./report_contract.js";
+import { REPORT_ID_SCHEMA } from "./report_identity.js";
 import { RENDER_SHAPE_SCHEMA } from "../presentation_core/render_shape.js";
 import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
 

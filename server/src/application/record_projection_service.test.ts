@@ -14,6 +14,7 @@ import { TEST_SEMANTIC_TAXONOMY } from "../test_support/semantic_taxonomy.js";
 import { cubeSecurityContext } from "../engine/cube_security.js";
 import type { CompiledAnalysisView } from "../engine/semantic_analysis_compiler.js";
 import type { AuthorizedAnalysisPlan } from "./semantic_planning_service.js";
+import { NotFoundError } from "./errors.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
   buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY);
@@ -199,7 +200,11 @@ const authorizedPlan = (
     },
   },
 });
-const noBoards = { get: async () => null } as never;
+const noBoards = {
+  get: async () => {
+    throw new NotFoundError("看板不存在");
+  },
+} as never;
 const currentMonth = (anchor: string) => ({
   window: { kind: "current_month" as const, month: anchor },
 });
@@ -210,7 +215,7 @@ type AnalysisViewFixture = {
 };
 
 const STORED_VIEW_ID = "stored_view";
-function analysisRepositoryOf(
+function analysisServiceOf(
   fixture: AnalysisViewFixture,
   analysisId = "analysis_1",
   viewId = STORED_VIEW_ID,
@@ -229,9 +234,16 @@ function analysisRepositoryOf(
     created_at: "2026-07-01T00:00:00.000Z",
   };
   return {
-    getAnalysis: async () => analysis,
-    getView: async () => view,
     resolveOwnedView: async () => ({ analysis, view }),
+  } as never;
+}
+
+function reportDocumentOf(fixture: AnalysisViewFixture, revision: number) {
+  return {
+    revision,
+    definition: fixture.analysis,
+    intent: fixture.view,
+    view_preferences: {},
   } as never;
 }
 
@@ -326,14 +338,16 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
   const compiledDefinitions: AnalysisDefinition[] = [];
   const service = createRecordProjectionService({
     reports: {
-      resolveOwned: async () => ({ revision: 3, view_id: STORED_VIEW_ID }),
-      get: async () => ({ revision: 3, view_id: STORED_VIEW_ID }),
+      resolveOwned: async () => reportDocumentOf(spec, 3),
+      get: async () => reportDocumentOf(spec, 3),
     } as never,
     boards: {
       get: async (id: string) =>
-        id === "board_1" ? { tiles: [{ kind: "report", report_id: "report_1" }] } : null,
+        id === "board_1"
+          ? { tiles: [{ kind: "report", report_id: "report_1" }] }
+          : Promise.reject(new NotFoundError("看板不存在")),
     } as never,
-    analyses: analysisRepositoryOf(spec),
+    analyses: analysisServiceOf(spec),
     semanticPlanning: {
       plan: async (_principal: Principal, effectiveDefinition: AnalysisDefinition) => {
         compiledDefinitions.push(effectiveDefinition);
@@ -443,10 +457,10 @@ test("报告修订漂移时 fail-closed，记录失败审计且不执行查询",
   const audit: unknown[] = [];
   const service = createRecordProjectionService({
     reports: {
-      resolveOwned: async () => ({ revision: 4, view_id: STORED_VIEW_ID }),
+      resolveOwned: async () => reportDocumentOf(spec, 4),
     } as never,
     boards: noBoards,
-    analyses: analysisRepositoryOf(spec),
+    analyses: analysisServiceOf(spec),
     semanticPlanning: {
       plan: async () => Promise.reject(new Error("不应规划")),
     } as never,
@@ -513,10 +527,10 @@ test("率指标只投影分子名单，YTD 时间仍由指标口径解释", asyn
   } as unknown as CubeGateway;
   const service = createRecordProjectionService({
     reports: {
-      resolveOwned: async () => ({ revision: 1, view_id: STORED_VIEW_ID }),
+      resolveOwned: async () => reportDocumentOf(rateSpec, 1),
     } as never,
     boards: noBoards,
-    analyses: analysisRepositoryOf(rateSpec, "analysis_rate"),
+    analyses: analysisServiceOf(rateSpec, "analysis_rate"),
     semanticPlanning: { plan: async () => authorizedPlan(compiled, document) } as never,
     cube,
     audit: { log: async () => undefined },
@@ -662,10 +676,10 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
   } as unknown as CubeGateway;
   const service = createRecordProjectionService({
     reports: {
-      resolveOwned: async () => ({ revision: 1, view_id: STORED_VIEW_ID }),
+      resolveOwned: async () => reportDocumentOf(entitySpec, 1),
     } as never,
     boards: noBoards,
-    analyses: analysisRepositoryOf(entitySpec, "analysis_entities"),
+    analyses: analysisServiceOf(entitySpec, "analysis_entities"),
     semanticPlanning: { plan: async () => authorizedPlan(compiled, document) } as never,
     cube,
     audit: { log: async () => undefined },
@@ -762,10 +776,10 @@ test("分组坐标缺失时不能把单个格子扩大成整份名单", async ()
   let loads = 0;
   const service = createRecordProjectionService({
     reports: {
-      resolveOwned: async () => ({ revision: 3, view_id: STORED_VIEW_ID }),
+      resolveOwned: async () => reportDocumentOf(spec, 3),
     } as never,
     boards: noBoards,
-    analyses: analysisRepositoryOf(spec),
+    analyses: analysisServiceOf(spec),
     semanticPlanning: { plan: async () => authorizedPlan(compiled, document) } as never,
     cube: {
       load: async () => {
@@ -832,10 +846,10 @@ test("隐藏 source 不是交付结果，不能通过手写 result_view_id 投�
   const audit: unknown[] = [];
   const service = createRecordProjectionService({
     reports: {
-      resolveOwned: async () => ({ revision: 1, view_id: STORED_VIEW_ID }),
+      resolveOwned: async () => reportDocumentOf(derivedSpec, 1),
     } as never,
     boards: noBoards,
-    analyses: analysisRepositoryOf(derivedSpec, "analysis_derived"),
+    analyses: analysisServiceOf(derivedSpec, "analysis_derived"),
     semanticPlanning: {
       plan: async () => {
         compiles += 1;
@@ -898,14 +912,14 @@ test("Agent 名单从单一聚合结果格投影记录，分类条件保留在�
     boards: noBoards,
     analyses: {
       resolveOwnedView: async () => {
-        const repository = analysisRepositoryOf(
+        const analysis = analysisServiceOf(
           storedSpec,
           "analysis_list",
           "22222222-2222-4222-8222-222222222222",
         ) as unknown as {
           resolveOwnedView: () => Promise<unknown>;
         };
-        return repository.resolveOwnedView();
+        return analysis.resolveOwnedView();
       },
     } as never,
     semanticPlanning: {

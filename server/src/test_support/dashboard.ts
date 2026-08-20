@@ -34,6 +34,7 @@ import type { AuthorizedAnalysisPlan } from "../application/semantic_planning_se
 import type { CubeView, TimeContext } from "../ports/cube_gateway.js";
 import { cubeSecurityContext } from "../engine/cube_security.js";
 import type { ExecutionPlan } from "../semantic_core/execution_plan.js";
+import { createUserScopeService } from "../application/user_scope_service.js";
 
 export {
   CatalogInputError,
@@ -332,9 +333,13 @@ export function dashboardTestDependencies(
     auth: { api: { getSession: async () => (sessionUser ? { user: sessionUser } : null) } },
     usage: createTestUsage(db),
     html: async () => "<!doctype html><title>console</title>",
-    setOrgScope: async (userId, orgScope) => {
-      scopeWrites.push({ userId, orgScope });
-    },
+    userScope: createUserScopeService({
+      writer: {
+        setOrgScope: async (userId, orgScope) => {
+          scopeWrites.push({ userId, orgScope });
+        },
+      },
+    }),
     analyses: unavailableService("analysis"),
     reportService: unavailableService("report"),
     presentation: createPresentationService(),

@@ -101,8 +101,6 @@ export type CatalogMetricDomainDocument = {
   synonyms: string[];
 };
 
-export type AgentCatalogMember = PublicCatalogMember;
-
 export type CatalogDocument = {
   default_population_scope: string;
   views: CatalogViewDocument[];
@@ -119,8 +117,8 @@ export type CatalogMetricDomainRow = {
 
 export type CatalogQueryResult = {
   metric_domains: CatalogMetricDomainRow[];
-  measures: AgentCatalogMember[];
-  dimensions: AgentCatalogMember[];
+  measures: PublicCatalogMember[];
+  dimensions: PublicCatalogMember[];
   matched_terms: string[];
   unmatched_terms: string[];
 };

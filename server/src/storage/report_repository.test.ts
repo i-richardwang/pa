@@ -11,10 +11,12 @@ import { semanticAnalysisOf } from "../test_support/report.js";
 import type { AnalysisSpec } from "../semantic_core/analysis_spec.js";
 import { planExecution } from "../semantic_core/execution_plan.js";
 import { createAnalysisRepository } from "./analysis_repository.js";
-import { ReportConflictError, createReportRepository } from "./report_repository.js";
+import { createReportRepository } from "./report_repository.js";
+import { ReportConflictError } from "../ports/report_repository.js";
 import type { AnalysisRepository } from "../ports/analysis_repository.js";
 import type { AnalysisDefinition, SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
 import { semanticAccessStub } from "../test_support/dashboard.js";
+import { InvalidRequestError } from "../application/errors.js";
 
 const path = () => join(tmpdir(), `pa_repository_${randomUUID()}.db`);
 const spec = (id = "result") => ({
@@ -107,6 +109,13 @@ describe("report aggregate", () => {
     const identity = await createOwned(analyses, "alice@x", spec());
     await expect(
       service.save({
+        principal: principal("alice@x"),
+        viewId: identity.view.id,
+        name: " ",
+      }),
+    ).rejects.toBeInstanceOf(InvalidRequestError);
+    await expect(
+      service.save({
         principal: principal("bob@x"),
         viewId: identity.view.id,
         name: "越权",
@@ -116,15 +125,17 @@ describe("report aggregate", () => {
     const saved = await service.save({
       principal: principal("alice@x"),
       viewId: identity.view.id,
-      name: "组织报告",
+      name: " 组织报告 ",
     });
+    expect(saved.name).toBe("组织报告");
     expect(saved.revision).toBe(1);
     const renamed = await service.update(
       principal("alice@x"),
       saved.id,
-      { type: "rename", name: "组织人数报告" },
+      { type: "rename", name: " 组织人数报告 " },
       1,
     );
+    expect(renamed.name).toBe("组织人数报告");
     expect(renamed.revision).toBe(2);
     await expect(
       service.update(principal("alice@x"), saved.id, { type: "rename", name: "冲突" }, 1),

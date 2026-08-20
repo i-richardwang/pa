@@ -13,8 +13,6 @@ import { EXPORT_TICKET_TTL_MS } from "../contracts/export_contract.js";
 
 const TICKET_PATTERN = /^e_[A-Za-z0-9_-]{32}$/;
 
-export type { ExportTicketClaims } from "../ports/export_ticket_repository.js";
-
 type TicketRow = {
   query: string;
   caller: string;

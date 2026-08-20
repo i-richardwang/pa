@@ -1,5 +1,5 @@
 import type { Principal } from "../contracts/principal.js";
-import { REPORT_ID_SCHEMA } from "../contracts/report_contract.js";
+import { REPORT_ID_SCHEMA } from "../contracts/report_identity.js";
 import type {
   BoardPayload,
   BoardRow,
@@ -23,19 +23,12 @@ import {
 import type { ReportService } from "./report_service.js";
 import { ConflictError, ForbiddenError, InvalidRequestError, NotFoundError } from "./errors.js";
 import { ReportNotFoundError } from "../ports/report_repository.js";
+import type { UsageService } from "./usage_service.js";
 
 export class BoardRequestError extends InvalidRequestError {}
 export class BoardNotFoundError extends NotFoundError {}
 export class BoardForbiddenError extends ForbiddenError {}
 export class BoardRevisionConflictError extends ConflictError {}
-
-type BoardUsageEvent = {
-  caller: string;
-  tool: "board";
-  title: string;
-  outcome: "ok";
-  duration_ms: number;
-};
 
 type BoardReportService = Pick<ReportService, "get" | "ensureOwned" | "summary" | "runShared">;
 
@@ -43,7 +36,7 @@ type BoardReportService = Pick<ReportService, "get" | "ensureOwned" | "summary" 
 export function createBoardService(deps: {
   boards: BoardRepository;
   reports: BoardReportService;
-  usage: { log(event: BoardUsageEvent): Promise<void> };
+  usage: Pick<UsageService, "log">;
   newId: () => string;
 }) {
   async function document(record: BoardRecord): Promise<BoardPayload> {
@@ -89,14 +82,14 @@ export function createBoardService(deps: {
 
   async function storedTiles(
     tiles: readonly BoardMutationTile[],
-    owner: string,
+    principal: Principal,
   ): Promise<StoredTile[]> {
     const reportIds = [
       ...new Set(tiles.flatMap((tile) => (tile.kind === "report" ? [tile.report_id] : []))),
     ];
     for (const reportId of reportIds) {
       try {
-        await deps.reports.ensureOwned(reportId, owner);
+        await deps.reports.ensureOwned(principal, reportId);
       } catch (error) {
         if (error instanceof ReportNotFoundError) {
           throw new BoardRequestError(`报告不存在或无权访问：${reportId}`);
@@ -116,11 +109,11 @@ export function createBoardService(deps: {
     );
   }
 
-  async function owned(id: string, owner: string): Promise<BoardRecord> {
+  async function owned(id: string, principal: Principal): Promise<BoardRecord> {
     assertId(id);
     const board = await deps.boards.get(id);
     if (!board) throw new BoardNotFoundError("看板不存在");
-    if (board.created_by !== owner) {
+    if (board.created_by !== principal.email) {
       throw new BoardForbiddenError("只有创建者可以修改这个看板");
     }
     return board;
@@ -168,41 +161,41 @@ export function createBoardService(deps: {
     return document(board);
   }
 
-  async function create(name: string, owner: string): Promise<BoardPayload> {
-    const board = await deps.boards.create(boardName(name), owner);
-    await log(owner, `新建看板：${board.name}`);
+  async function create(principal: Principal, name: string): Promise<BoardPayload> {
+    const board = await deps.boards.create(boardName(name), principal.email);
+    await log(principal.email, `新建看板：${board.name}`);
     return document(board);
   }
 
   async function update(
+    principal: Principal,
     id: string,
-    owner: string,
     patch: Pick<UpdateBoardBody, "name" | "tiles">,
     ifRevision: number,
   ): Promise<BoardPayload> {
     assertRevision(ifRevision);
-    const current = await owned(id, owner);
+    const current = await owned(id, principal);
     const updated = await persistUpdate(
       current.id,
       {
         ...(patch.name !== undefined ? { name: boardName(patch.name) } : {}),
-        ...(patch.tiles !== undefined ? { tiles: await storedTiles(patch.tiles, owner) } : {}),
+        ...(patch.tiles !== undefined ? { tiles: await storedTiles(patch.tiles, principal) } : {}),
       },
       ifRevision,
     );
     if (!updated) throw new BoardNotFoundError("看板不存在");
-    await log(owner, `修改看板：${updated.name}`);
+    await log(principal.email, `修改看板：${updated.name}`);
     return document(updated);
   }
 
   async function addReport(input: {
+    principal: Principal;
     id: string;
-    owner: string;
     reportId: string;
     ifRevision: number;
   }): Promise<{ added: boolean; board: BoardPayload }> {
     assertRevision(input.ifRevision);
-    const board = await owned(input.id, input.owner);
+    const board = await owned(input.id, input.principal);
     const reportId = input.reportId.trim();
     if (!REPORT_ID_SCHEMA.safeParse(reportId).success) {
       throw new BoardRequestError("报告标识无效");
@@ -211,7 +204,7 @@ export function createBoardService(deps: {
       return { added: false, board: await document(board) };
     }
     try {
-      await deps.reports.ensureOwned(reportId, input.owner);
+      await deps.reports.ensureOwned(input.principal, reportId);
     } catch (error) {
       if (error instanceof ReportNotFoundError) {
         throw new BoardRequestError(`报告不存在或无权访问：${reportId}`);
@@ -231,14 +224,14 @@ export function createBoardService(deps: {
       input.ifRevision,
     );
     if (!updated) throw new BoardNotFoundError("看板不存在");
-    await log(input.owner, `加入看板：${updated.name}`);
+    await log(input.principal.email, `加入看板：${updated.name}`);
     return { added: true, board: await document(updated) };
   }
 
-  async function remove(id: string, owner: string): Promise<void> {
-    const board = await owned(id, owner);
+  async function remove(principal: Principal, id: string): Promise<void> {
+    const board = await owned(id, principal);
     await deps.boards.remove(board.id);
-    await log(owner, `删除看板：${board.name}`);
+    await log(principal.email, `删除看板：${board.name}`);
   }
 
   async function runReport(

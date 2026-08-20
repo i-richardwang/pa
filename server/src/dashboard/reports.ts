@@ -35,7 +35,7 @@ export function registerReportRoutes(
   };
 
   dashboard.get("/api/reports", async (c) => {
-    const rows = (await reportService.listOwned(c.get("me").email, c.req.query("query"))).map(
+    const rows = (await reportService.listOwned(c.get("principal"), c.req.query("query"))).map(
       reportRow,
     );
     return c.json({ rows, total: rows.length });
@@ -43,12 +43,12 @@ export function registerReportRoutes(
 
   dashboard.get("/api/reports/:id", async (c) => {
     return c.json(
-      reportDetail(await reportService.resolveOwned(c.req.param("id"), c.get("me").email)),
+      reportDetail(await reportService.resolveOwned(c.get("principal"), c.req.param("id"))),
     );
   });
 
   dashboard.get("/api/reports/:id/revisions", async (c) => {
-    const revisions = await reportService.listRevisions(c.req.param("id"), c.get("me").email);
+    const revisions = await reportService.listRevisions(c.get("principal"), c.req.param("id"));
     const payload: ReportRevisionsPayload = {
       rows: revisions.map((revision) => ({
         revision: revision.revision,

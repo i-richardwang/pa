@@ -20,7 +20,6 @@ import {
   type TimeOutputGrain,
 } from "../semantic_core/time_contract.js";
 
-export type { TimeOutputGrain } from "../semantic_core/time_contract.js";
 export type TimeWindow = { from: string; to: string };
 
 export type ResolvedTimeCoordinate = {

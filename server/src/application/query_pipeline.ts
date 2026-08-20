@@ -46,7 +46,6 @@ export type QueryRunResult = {
 type ExecuteView = (
   context: {
     principal: Principal;
-    caller: string;
     cubeContext: CubeSecurityContext;
   },
   spec: QueryViewSpec,
@@ -192,7 +191,7 @@ export async function runQueryPipeline(
   const queryResults = await Promise.all(
     queryEntries.map(({ spec }) =>
       deps.executeView(
-        { principal, caller, cubeContext },
+        { principal, cubeContext },
         spec,
         authViews,
         context,

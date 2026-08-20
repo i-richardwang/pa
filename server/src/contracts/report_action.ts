@@ -1,14 +1,15 @@
 import { z } from "zod";
+import { REPORT_NAME_SCHEMA } from "./report_identity.js";
 
 export const RENAME_REPORT_ACTION = z
-  .object({ type: z.literal("rename"), name: z.string().trim().min(1).max(100) })
+  .object({ type: z.literal("rename"), name: REPORT_NAME_SCHEMA })
   .strict();
 
 export const REPLACE_REPORT_VIEW_ACTION = z
   .object({
     type: z.literal("replace_view"),
     view_id: z.string().uuid(),
-    name: z.string().trim().min(1).max(100).optional(),
+    name: REPORT_NAME_SCHEMA.optional(),
   })
   .strict();
 

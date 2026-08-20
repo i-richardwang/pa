@@ -8,6 +8,10 @@ import {
   createBoardService,
 } from "./board_service.js";
 import { ReportNotFoundError } from "../ports/report_repository.js";
+import type { Principal } from "../contracts/principal.js";
+
+const alice: Principal = { email: "alice@x", roles: ["user"], orgScope: "*" };
+const bob: Principal = { email: "bob@x", roles: ["user"], orgScope: "*" };
 
 const report = {
   id: "33333333-3333-4333-8333-333333333333",
@@ -71,9 +75,9 @@ function harness(initialTiles: BoardRecord["tiles"] = [], reportAccessError?: Er
   const runCalls: string[] = [];
   const reports = {
     get: async (id: string) => (id === report.id ? report : null),
-    ensureOwned: async (id: string, owner: string) => {
+    ensureOwned: async (principal: Principal, id: string) => {
       if (reportAccessError) throw reportAccessError;
-      if (id !== report.id || owner !== report.owner) {
+      if (id !== report.id || principal.email !== report.owner) {
         throw new ReportNotFoundError("报告不存在或无权访问");
       }
     },
@@ -118,8 +122,8 @@ describe("board application service", () => {
   test("重复加入幂等；首次加入以调用方 revision 原子写入并记录业务事件", async () => {
     const { service, updates, logs } = harness();
     const input = {
+      principal: alice,
       id: "11111111-1111-4111-8111-111111111111",
-      owner: "alice@x",
       reportId: report.id,
       ifRevision: 1,
     };
@@ -147,14 +151,10 @@ describe("board application service", () => {
   test("写动作集中执行属主校验，共享重放集中执行成员关系校验", async () => {
     const { service, runCalls } = harness();
     await expect(
-      service.update("11111111-1111-4111-8111-111111111111", "bob@x", { name: "越权" }, 1),
+      service.update(bob, "11111111-1111-4111-8111-111111111111", { name: "越权" }, 1),
     ).rejects.toBeInstanceOf(BoardForbiddenError);
     await expect(
-      service.runReport(
-        { email: "bob@x", roles: ["user"], orgScope: "*" },
-        "11111111-1111-4111-8111-111111111111",
-        report.id,
-      ),
+      service.runReport(bob, "11111111-1111-4111-8111-111111111111", report.id),
     ).rejects.toBeInstanceOf(BoardNotFoundError);
     expect(runCalls).toEqual([]);
   });
@@ -167,19 +167,14 @@ describe("board application service", () => {
       place: { x: 0, y: 0, w: 24, h: 6 },
     };
     await expect(
-      harness().service.update(
-        "11111111-1111-4111-8111-111111111111",
-        "alice@x",
-        { tiles: [tile] },
-        1,
-      ),
+      harness().service.update(alice, "11111111-1111-4111-8111-111111111111", { tiles: [tile] }, 1),
     ).rejects.toBeInstanceOf(BoardRequestError);
 
     const storageError = new Error("SQLITE_BUSY");
     await expect(
       harness([], storageError).service.addReport({
+        principal: alice,
         id: "11111111-1111-4111-8111-111111111111",
-        owner: "alice@x",
         reportId: report.id,
         ifRevision: 1,
       }),

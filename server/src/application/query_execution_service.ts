@@ -138,7 +138,6 @@ async function executeView(
   deps: QueryExecutionDependencies,
   ctx: {
     principal: Principal;
-    caller: string;
     cubeContext: CubeSecurityContext;
   },
   spec: QueryViewSpec,

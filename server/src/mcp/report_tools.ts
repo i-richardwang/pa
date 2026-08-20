@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MCP_REPORT_UPDATE_ACTION, type ReportUpdateAction } from "../contracts/report_action.js";
-import { REPORT_ID_SCHEMA, REPORT_NAME_SCHEMA } from "../contracts/report_contract.js";
+import { REPORT_ID_SCHEMA, REPORT_NAME_SCHEMA } from "../contracts/report_identity.js";
 import type { McpRegistrationContext } from "./context.js";
 import type { ReportService } from "../application/report_service.js";
 import type { UsageService } from "../application/usage_service.js";
@@ -124,7 +124,7 @@ export function registerReportTools(
     safeMcpHandler(
       "find_report",
       usage.wrap({ tool: "find_report", caller }, async (input: { query?: string }) => {
-        const found = (await reports.listOwned(caller, input.query)).map((report) => ({
+        const found = (await reports.listOwned(principal, input.query)).map((report) => ({
           ...reports.summary(report),
           url: `${baseUrl}/dashboard#/report/${report.id}`,
         }));

@@ -36,15 +36,14 @@ import {
   type SemanticViewIntent,
 } from "../semantic_core/semantic_analysis.js";
 import type { TimeIntent } from "../semantic_core/time_contract.js";
-import type { BoardRepository } from "../ports/board_repository.js";
-import type { ReportRepository } from "../ports/report_repository.js";
-import type { AnalysisRepository } from "../ports/analysis_repository.js";
-import { ReportConflictError, ReportNotFoundError } from "../ports/report_repository.js";
 import type { SemanticPlanningService } from "./semantic_planning_service.js";
 import { applyBoardTimeOverride } from "./board_time_override.js";
 import type { ViewPreferences } from "../presentation_core/view_preferences.js";
 import type { AuthorizedAnalysisPlan } from "./semantic_planning_service.js";
-import { InvalidRequestError } from "./errors.js";
+import { ConflictError, InvalidRequestError, NotFoundError } from "./errors.js";
+import type { ReportDocument, ReportService } from "./report_service.js";
+import type { BoardService } from "./board_service.js";
+import type { AnalysisService } from "./analysis_service.js";
 
 /** 可安全原样返回浏览器的业务请求错误；引擎与模型异常由路由统一收口。 */
 export class RecordProjectionRequestError extends InvalidRequestError {
@@ -205,9 +204,9 @@ async function executeRecordProjection(input: {
 }
 
 export function createRecordProjectionService(deps: {
-  reports: ReportRepository;
-  boards: Pick<BoardRepository, "get">;
-  analyses: AnalysisRepository;
+  reports: Pick<ReportService, "get" | "resolveOwned">;
+  boards: Pick<BoardService, "get">;
+  analyses: Pick<AnalysisService, "resolveOwnedView">;
   semanticPlanning: SemanticPlanningService;
   cube: CubeGateway;
   audit: RecordProjectionAudit;
@@ -223,24 +222,17 @@ export function createRecordProjectionService(deps: {
     data_as_of?: string;
   };
 
-  async function analysisContext(report: {
-    revision: number;
-    view_id: string;
-  }): Promise<ProjectionContext> {
-    const view = await deps.analyses.getView(report.view_id);
-    if (!view) throw new Error(`报告引用的视图不存在：${report.view_id}`);
-    const analysis = await deps.analyses.getAnalysis(view.analysis_id);
-    if (!analysis) throw new Error(`报告引用的分析不存在：${view.analysis_id}`);
+  function reportContext(report: ReportDocument): ProjectionContext {
     return {
       revision: report.revision,
-      definition: analysis.definition,
-      intent: view.intent,
-      preferences: view.preferences,
+      definition: report.definition,
+      intent: report.intent,
+      preferences: report.view_preferences,
     };
   }
 
   async function ownedContext(principal: Principal, reportId: string): Promise<ProjectionContext> {
-    return analysisContext(await deps.reports.resolveOwned(reportId, principal.email));
+    return reportContext(await deps.reports.resolveOwned(principal, reportId));
   }
 
   async function boardContext(
@@ -248,13 +240,19 @@ export function createRecordProjectionService(deps: {
     reportId: string,
     timeOverride?: TimeIntent,
   ): Promise<ProjectionContext> {
-    const board = await deps.boards.get(boardId);
-    if (!board?.tiles.some((tile) => tile.kind === "report" && tile.report_id === reportId)) {
-      throw new ReportNotFoundError("看板或报告不存在");
+    let board: Awaited<ReturnType<typeof deps.boards.get>>;
+    try {
+      board = await deps.boards.get(boardId);
+    } catch (error) {
+      if (error instanceof NotFoundError) throw new NotFoundError("看板或报告不存在");
+      throw error;
+    }
+    if (!board.tiles.some((tile) => tile.kind === "report" && tile.report_id === reportId)) {
+      throw new NotFoundError("看板或报告不存在");
     }
     const report = await deps.reports.get(reportId);
-    if (!report) throw new ReportNotFoundError("看板或报告不存在");
-    const context = await analysisContext(report);
+    if (!report) throw new NotFoundError("看板或报告不存在");
+    const context = reportContext(report);
     return timeOverride
       ? {
           ...context,
@@ -355,7 +353,7 @@ export function createRecordProjectionService(deps: {
       const prepared = await resolve();
       const access = prepared.access;
       if (access.revision !== input.revision) {
-        throw new ReportConflictError("报告已更新，请刷新后重新查看明细");
+        throw new ConflictError("报告已更新，请刷新后重新查看明细");
       }
       if (input.result_view_id !== semanticResultViewId(access.definition)) {
         throw new RecordProjectionRequestError("当前结果列没有可追溯的基础指标");
@@ -536,7 +534,7 @@ export function createRecordProjectionService(deps: {
       dataAsOf?: string;
     } = {},
   ): Promise<RecordProjectionPayload> {
-    const current = await deps.analyses.resolveOwnedView(viewId, principal.email);
+    const current = await deps.analyses.resolveOwnedView(principal, viewId);
     const access = {
       revision: 1,
       definition: current.analysis.definition,

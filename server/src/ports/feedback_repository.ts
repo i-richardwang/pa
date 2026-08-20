@@ -3,7 +3,7 @@ import type {
   FeedbackListPayload,
   FeedbackStatus,
 } from "../contracts/feedback_contract.js";
-import type { FeedbackInput, NormalizedFeedbackInput } from "../contracts/feedback_input.js";
+import type { NormalizedFeedbackInput } from "../contracts/feedback_input.js";
 
 export type FeedbackRecord = NormalizedFeedbackInput & {
   id: number;
@@ -17,8 +17,8 @@ export type FeedbackRecord = NormalizedFeedbackInput & {
 };
 
 export type FeedbackRepository = {
-  create(input: FeedbackInput, caller: string): Promise<FeedbackRecord>;
-  list(limit?: number, offset?: number): Promise<FeedbackListPayload>;
+  create(input: NormalizedFeedbackInput, caller: string): Promise<FeedbackRecord>;
+  list(limit: number, offset: number): Promise<FeedbackListPayload>;
   resolve(
     topicKey: string,
     status: Exclude<FeedbackStatus, "open">,

@@ -3,9 +3,7 @@ import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCubeGateway } from "../src/adapters/cube_gateway.js";
-import { createCatalogService } from "../src/application/catalog_service.js";
-import { createRecordProjectionService } from "../src/application/record_projection_service.js";
-import { createSemanticPlanningService } from "../src/application/semantic_planning_service.js";
+import { createApplication } from "../src/composition/application.js";
 import { SERVICE_CUBE_CONTEXT } from "../src/engine/cube_security.js";
 import type { Principal } from "../src/contracts/principal.js";
 import { withFormalMetricModel } from "../src/engine/formal_metric_gateway.js";
@@ -19,10 +17,6 @@ import {
   loadSemanticPackage,
 } from "../src/engine/semantic_package.js";
 import { openAppDatabase } from "../src/storage/app_database.js";
-import { createAnalysisRepository } from "../src/storage/analysis_repository.js";
-import { createBoardRepository } from "../src/storage/board_repository.js";
-import { createRecordProjectionAudit } from "../src/storage/record_projection_audit.js";
-import { createReportRepository } from "../src/storage/report_repository.js";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -46,57 +40,46 @@ const canonical = await loadCanonicalSemanticModel({
   service_context: SERVICE_CUBE_CONTEXT,
 });
 const cube = withCanonicalSemanticModel(visibilityCube, canonical);
-const catalog = createCatalogService({ cube: visibilityCube, canonical });
-const planning = createSemanticPlanningService({ catalog });
 const principal: Principal = {
   email: "records-demo@example.com",
   roles: ["user"],
   orgScope: ["Aurora Labs"],
 };
-const semanticContext = await catalog.context(principal);
-const context = semanticContext.timeContext;
-const compiler = semanticContext.compiler;
-const active = compiler.measures.find((metric) => metric.title === "在职人数");
-const organization = compiler.dimensions.find((dimension) => dimension.title === "组织");
-assert(active?.records_available === true && organization, "在职人数或组织明细合同缺失");
-
-const definition: AnalysisDefinition = {
-  title: "公开 Demo 人员明细",
-  views: [
-    {
-      id: "organization_summary",
-      measures: [active.id],
-      dimensions: [organization.id],
-      time: { window: { kind: "current_month", month: context.dataAsOf } },
-    },
-  ],
-};
-const view = { type: "table" as const };
-const compiled = await planning.plan(principal, definition, view);
-assert(compiled.routes[0]?.status === "direct", "聚合查询未形成正式指标计划");
-const binding = compiled.record_projection_bindings.views[0];
-assert(binding, "分析没有生成记录投影绑定");
-
 const appDb = await openAppDatabase(join(tmpdir(), `pa_demo_records_${randomUUID()}.db`));
 try {
-  const reports = createReportRepository(appDb);
-  const analyses = createAnalysisRepository(appDb);
-  const boards = createBoardRepository(appDb);
-  const analysis = await analyses.create(principal.email, definition, view);
-  const report = await reports.create({
-    owner: principal.email,
-    name: "公开 Demo 人员明细",
-    viewId: analysis.view.id,
-  });
-  const records = createRecordProjectionService({
-    reports,
-    boards,
-    analyses,
-    semanticPlanning: planning,
+  const application = createApplication({
+    db: appDb,
     cube,
-    audit: createRecordProjectionAudit(appDb),
+    visibilityCube,
+    canonical,
+    baseUrl: "http://127.0.0.1",
   });
-  const payload = await records.runReport(principal, report.id, {
+  const semanticContext = await application.catalog.context(principal);
+  const context = semanticContext.timeContext;
+  const compiler = semanticContext.compiler;
+  const active = compiler.measures.find((metric) => metric.title === "在职人数");
+  const organization = compiler.dimensions.find((dimension) => dimension.title === "组织");
+  assert(active?.records_available === true && organization, "在职人数或组织明细合同缺失");
+
+  const definition: AnalysisDefinition = {
+    title: "公开 Demo 人员明细",
+    views: [
+      {
+        id: "organization_summary",
+        measures: [active.id],
+        dimensions: [organization.id],
+        time: { window: { kind: "current_month", month: context.dataAsOf } },
+      },
+    ],
+  };
+  const executed = await application.analysis.run(principal, definition, { type: "table" });
+  assert(executed.record_projection_bindings.views[0], "分析没有生成记录投影绑定");
+  const report = await application.report.save({
+    principal,
+    name: "公开 Demo 人员明细",
+    viewId: executed.view_id,
+  });
+  const payload = await application.recordProjection.runReport(principal, report.id, {
     revision: report.revision,
     result_view_id: "organization_summary",
     metric_id: active.id,

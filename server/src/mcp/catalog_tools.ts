@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { CATALOG_INPUT, type CatalogToolInput } from "../engine/catalog_spec.js";
+import { CATALOG_TERMS_INPUT, type CatalogQueryInput } from "../contracts/catalog_query.js";
 import type { McpRegistrationContext } from "./context.js";
 import type { CatalogService } from "../application/catalog_service.js";
 import type { UsageService } from "../application/usage_service.js";
+import { projectAgentCatalog } from "./catalog_result.js";
 import { safeMcpHandler } from "./errors.js";
 import {
   CATALOG_OUTPUT,
@@ -26,7 +27,7 @@ export function registerCatalogTools(
     {
       title: "查找可用指标",
       description: TOOL_DESCRIPTIONS.catalog,
-      inputSchema: { terms: CATALOG_INPUT.terms },
+      inputSchema: { terms: CATALOG_TERMS_INPUT },
       outputSchema: CATALOG_OUTPUT,
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
@@ -45,8 +46,8 @@ export function registerCatalogTools(
               : {}),
           }),
         },
-        async (input: CatalogToolInput) => {
-          const payload = await catalog.query(principal, input);
+        async (input: CatalogQueryInput) => {
+          const payload = projectAgentCatalog(await catalog.query(principal, input));
           return {
             content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
             structuredContent: payload,

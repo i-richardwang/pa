@@ -12,7 +12,7 @@ import { prepareMetricQueryExecution } from "../engine/metric_executor.js";
 import type { MetricQueryPlan } from "../engine/metric_planner.js";
 import { exportableOutput } from "../semantic_core/execution_plan.js";
 import type { AnalysisRepository } from "../ports/analysis_repository.js";
-import type { UsageLog } from "../ports/usage_log.js";
+import type { UsageService } from "./usage_service.js";
 import type { SemanticPlanningService } from "./semantic_planning_service.js";
 import { EXPORT_RESOURCE_MIME_TYPE, exportResourceUri } from "../contracts/export_contract.js";
 import type { ExportLink, ExportResourceLink } from "../semantic_core/query_payload.js";
@@ -38,7 +38,7 @@ type ExportDelivery = {
 export function createExportService(deps: {
   analyses: Pick<AnalysisRepository, "resolveOwnedView">;
   semanticPlanning: Pick<SemanticPlanningService, "plan">;
-  usage: Pick<UsageLog, "log">;
+  usage: Pick<UsageService, "log">;
   cube: CubeGateway;
   tickets: ExportTicketRepository<MetricQueryPlan>;
   baseUrl: string;

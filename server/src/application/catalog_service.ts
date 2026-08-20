@@ -11,7 +11,7 @@ import {
   type CanonicalSemanticModel,
 } from "../engine/canonical_semantic_model.js";
 import { catalogMember } from "../semantic_core/query_intent.js";
-import { normalizeCatalogInput, type CatalogToolInput } from "../engine/catalog_spec.js";
+import { normalizeCatalogQuery, type CatalogQueryInput } from "../contracts/catalog_query.js";
 import type { CubeGateway } from "../ports/cube_gateway.js";
 import { cubeSecurityContext } from "../engine/cube_security.js";
 import type { Principal } from "../contracts/principal.js";
@@ -30,7 +30,7 @@ import type {
   PublicBusinessTerm,
 } from "../contracts/business_term_contract.js";
 import { publicTimeContext } from "./time_context.js";
-import type { BusinessTermService } from "./business_term_service.js";
+import type { BusinessTermRegistry } from "./business_term_registry.js";
 import type { CubeSecurityContext, TimeContext } from "../ports/cube_gateway.js";
 import { InvalidRequestError, UnavailableError } from "./errors.js";
 
@@ -63,7 +63,7 @@ export type AuthorizedSemanticContext = Pick<AuthorizedSemanticModel, "views" | 
 };
 
 export type CatalogService = {
-  query(principal: Principal, input: CatalogToolInput): Promise<CatalogQueryPayload>;
+  query(principal: Principal, input: CatalogQueryInput): Promise<CatalogQueryPayload>;
   context(principal: Principal): Promise<AuthorizedSemanticContext>;
   publicDocument(principal: Principal): Promise<PublicCatalogDocument>;
   dimensionValues(
@@ -80,7 +80,7 @@ export type CatalogService = {
 export function createCatalogService(deps: {
   cube: Pick<CubeGateway, "meta" | "load" | "timeContext">;
   canonical: CanonicalSemanticModel;
-  businessTerms?: Pick<BusinessTermService, "resolve">;
+  businessTerms: Pick<BusinessTermRegistry, "resolve">;
 }): CatalogService {
   const model = async (principal: Principal) => {
     // 授权错误本身是可行动的用户信息，不属于模型故障，须在诊断遮罩之外抛出。
@@ -115,7 +115,7 @@ export function createCatalogService(deps: {
 
   return {
     async query(principal, rawInput) {
-      const input = normalizeCatalogInput(rawInput);
+      const input = normalizeCatalogQuery(rawInput);
       const catalog = await document(principal);
       const context = await deps.cube.timeContext().catch(() => null);
       const shared = {
@@ -127,26 +127,20 @@ export function createCatalogService(deps: {
         return {
           ...shared,
           ...browseCatalogDocument(catalog),
-          term_knowledge_status: deps.businessTerms
-            ? ("available" as const)
-            : ("unavailable" as const),
+          term_knowledge_status: "available" as const,
           term_resolutions: [],
           ambiguous_terms: [],
         };
       }
       const visible = toSemanticCatalog(catalog);
       const members = [...visible.measures, ...visible.dimensions];
-      let termKnowledgeStatus: "available" | "unavailable" = deps.businessTerms
-        ? "available"
-        : "unavailable";
+      let termKnowledgeStatus: "available" | "unavailable" = "available";
       let resolutions: BusinessTermResolution[] = [];
-      if (deps.businessTerms) {
-        try {
-          resolutions = await deps.businessTerms.resolve(input.terms, members);
-        } catch (error) {
-          termKnowledgeStatus = "unavailable";
-          console.error("[pa] 业务术语读取失败，本次目录不带术语解释:", error);
-        }
+      try {
+        resolutions = await deps.businessTerms.resolve(input.terms, members);
+      } catch (error) {
+        termKnowledgeStatus = "unavailable";
+        console.error("[pa] 业务术语读取失败，本次目录不带术语解释:", error);
       }
       const relatedIds = new Set(
         resolutions.flatMap(({ matches }) =>

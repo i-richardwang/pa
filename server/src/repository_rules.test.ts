@@ -75,6 +75,22 @@ test("应用库只有 composition root 与 app_database 可以打开连接", asy
   ]);
 });
 
+test("Better Auth 用户元数据写入只存在于 UserScope adapter", async () => {
+  const marker = "internalAdapter.updateUser(";
+  expect(`context.${marker}`).toContain(marker);
+  const files = (
+    await Promise.all([
+      sourceFiles(join(rootPath, "server", "src")),
+      sourceFiles(join(rootPath, "server", "scripts")),
+    ])
+  ).flat();
+  const callers: string[] = [];
+  for (const path of files) {
+    if ((await readFile(path, "utf8")).includes(marker)) callers.push(relative(rootPath, path));
+  }
+  expect(callers).toEqual(["server/src/adapters/better_auth_user_scope.ts"]);
+});
+
 test("报告更新动作只有一个领域定义，各呈现面只引用共享子集", async () => {
   const canonical = await readFile(new URL("server/src/contracts/report_action.ts", root), "utf8");
   expect(
@@ -103,9 +119,19 @@ test("报告更新动作只有一个领域定义，各呈现面只引用共享�
     "utf8",
   );
   const mcpTools = await readFile(new URL("server/src/mcp/report_tools.ts", root), "utf8");
+  const identity = await readFile(new URL("server/src/contracts/report_identity.ts", root), "utf8");
   expect(service).toContain('from "../contracts/report_action.js"');
   expect(webReportContract).toContain("WEB_REPORT_UPDATE_ACTION");
   expect(mcpTools).toContain("MCP_REPORT_UPDATE_ACTION");
+  expect(identity).toContain("export const REPORT_NAME_SCHEMA");
+
+  const nameSchemaDefinitions: string[] = [];
+  for (const path of productionFiles) {
+    if ((await readFile(path, "utf8")).includes("export const REPORT_NAME_SCHEMA")) {
+      nameSchemaDefinitions.push(relative(rootPath, path));
+    }
+  }
+  expect(nameSchemaDefinitions).toEqual(["server/src/contracts/report_identity.ts"]);
 });
 
 test("pa-analytics skill has a single editable fact source in the plugin", async () => {

@@ -5,8 +5,6 @@
 import type { SqliteDatabase } from "../sqlite.js";
 import type { ExportAudit, ExportAuditEvent } from "../ports/export_audit.js";
 
-export type { ExportAudit, ExportAuditEvent } from "../ports/export_audit.js";
-
 export function createExportAudit(db: SqliteDatabase): ExportAudit {
   async function log(event: ExportAuditEvent): Promise<void> {
     db.prepare(

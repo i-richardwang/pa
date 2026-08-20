@@ -7,7 +7,7 @@ export type StoredBusinessTerm = {
   related_member_ids: string[];
 };
 
-export type BusinessTermContent = {
+export type NormalizedBusinessTermContent = {
   canonical_term: string;
   definition: string;
   context?: string;
@@ -20,7 +20,7 @@ export class BusinessTermNotFoundError extends Error {}
 export type BusinessTermRepository = {
   list(): Promise<StoredBusinessTerm[]>;
   get(id: string): Promise<StoredBusinessTerm | null>;
-  create(input: BusinessTermContent): Promise<StoredBusinessTerm>;
-  replace(id: string, input: BusinessTermContent): Promise<StoredBusinessTerm>;
+  create(input: NormalizedBusinessTermContent): Promise<StoredBusinessTerm>;
+  replace(id: string, input: NormalizedBusinessTermContent): Promise<StoredBusinessTerm>;
   remove(id: string): Promise<StoredBusinessTerm>;
 };

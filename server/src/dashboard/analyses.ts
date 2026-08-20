@@ -25,7 +25,7 @@ export function registerAnalysisRoutes(
     return c.json(
       projectReplayPayload(presentation, executed, {
         at: new Date().toISOString(),
-        caller: c.get("me").email,
+        caller: c.get("principal").email,
       }),
     );
   });
@@ -54,7 +54,7 @@ export function registerAnalysisRoutes(
     return c.json(
       projectReplayPayload(presentation, executed, {
         at: new Date().toISOString(),
-        caller: c.get("me").email,
+        caller: c.get("principal").email,
       }),
     );
   });

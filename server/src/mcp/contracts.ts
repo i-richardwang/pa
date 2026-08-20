@@ -145,6 +145,7 @@ export const CATALOG_OUTPUT = {
     .describe("业务术语的自含定义、歧义状态与当前调用者可见的相关语义成员"),
 };
 export const CATALOG_OUTPUT_SCHEMA = z.object(CATALOG_OUTPUT).strict();
+export type AgentCatalogPayload = z.infer<typeof CATALOG_OUTPUT_SCHEMA>;
 
 export const VALUES_OUTPUT = {
   dimension: z.string(),

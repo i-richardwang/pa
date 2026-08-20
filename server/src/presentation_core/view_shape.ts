@@ -24,8 +24,6 @@ import {
 import type { RenderShape } from "./render_shape.js";
 import type { ChartDecl, ChartRenderDecl, TableAxis, TableLayoutDecl } from "./chart_decl.js";
 
-export type { RenderShape } from "./render_shape.js";
-
 /** 感知极限：折线超出此系列数缠绕不可读，声明的折线编译失败并退回表格 */
 export const MAX_LINE_SERIES = 5;
 

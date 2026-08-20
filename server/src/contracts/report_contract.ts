@@ -11,13 +11,11 @@ import {
   type SemanticViewIntent,
 } from "../semantic_core/semantic_analysis.js";
 import { WEB_REPORT_UPDATE_ACTION } from "./report_action.js";
+import { REPORT_ID_SCHEMA, REPORT_NAME_SCHEMA } from "./report_identity.js";
 import {
   VIEW_PREFERENCES_INPUT,
   type ViewPreferences,
 } from "../presentation_core/view_preferences.js";
-
-export const REPORT_ID_SCHEMA = z.string().uuid();
-export const REPORT_NAME_SCHEMA = z.string().trim().min(1).max(100);
 
 export type ReportRow = {
   id: string;

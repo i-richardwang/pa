@@ -1,7 +1,7 @@
 /**
  * catalog 检索单测：购物单契约——terms 逐项命中、覆盖度排序、零命中剔除；
  * 成员命中分层——title 是主检索键，description 与 ai_context 只对全局零命中词做兜底召回。
- * 视图级回退（命中视图且无成员命中时给全量）的裁决在 server handler，这里守匹配原语。
+ * 视图级回退（命中视图且无成员命中时给全量）的裁决在 catalog_document，这里守匹配原语。
  */
 import { describe, expect, test } from "bun:test";
 import { memberFallbackTokens, memberHit, rankMembers } from "./catalog_search.js";

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createTestAppDatabase } from "../test_support/app_database.js";
 import { semanticAnalysisOf } from "../test_support/report.js";
-import { ANALYSIS_RETENTION_DAYS, createAnalysisRepository } from "./analysis_repository.js";
+import { createAnalysisRepository } from "./analysis_repository.js";
+import { ANALYSIS_RETENTION_DAYS } from "../ports/analysis_repository.js";
 import { createReportRepository } from "./report_repository.js";
 
 const spec = (id = "result") => ({

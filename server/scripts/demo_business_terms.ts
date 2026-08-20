@@ -1,4 +1,4 @@
-import type { BusinessTermService } from "../src/application/business_term_service.js";
+import type { BusinessTermRegistry } from "../src/application/business_term_registry.js";
 import { normalizeBusinessTerm } from "../src/engine/business_term_matcher.js";
 import {
   BUSINESS_TERM_CONTENT_INPUT,
@@ -32,7 +32,7 @@ export const DEMO_BUSINESS_TERMS = [
 ] satisfies BusinessTermContentInput[];
 
 type Seed_dependencies = {
-  service: BusinessTermService;
+  registry: BusinessTermRegistry;
   members: PublicCatalogMember[];
 };
 
@@ -45,9 +45,9 @@ const labels_of = (term: Pick<PublicBusinessTerm, "canonical_term" | "aliases">)
  * Demo 术语是全局内容：空库创建，同规范词已有内容时保留管理员版本。
  * 新内容若会占用其他术语的既有标签则拒绝，避免播种把明确叫法变成歧义。
  */
-export async function seed_demo_business_terms({ service, members }: Seed_dependencies) {
+export async function seed_demo_business_terms({ registry, members }: Seed_dependencies) {
   const inputs = DEMO_BUSINESS_TERMS.map((term) => BUSINESS_TERM_CONTENT_INPUT.parse(term));
-  const existing = await service.listAdmin(members);
+  const existing = await registry.listAdmin(members);
   const visible_member_ids = new Set(members.map((member) => member.id));
   const existing_by_canonical = new Map<string, PublicBusinessTerm[]>();
   const existing_by_label = new Map<string, PublicBusinessTerm[]>();
@@ -104,7 +104,7 @@ export async function seed_demo_business_terms({ service, members }: Seed_depend
 
   const created: PublicBusinessTerm[] = [];
   for (const input of to_create) {
-    created.push(await service.create(input, members, "seed_demo"));
+    created.push(await registry.create(input, members));
   }
   return { created, preserved };
 }

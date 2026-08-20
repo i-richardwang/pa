@@ -62,8 +62,15 @@ const views: CubeView[] = [
   },
 ];
 const canonical = canonicalModelFixture(views, TEST_SEMANTIC_TAXONOMY);
+const noBusinessTerms = { resolve: async () => [] };
+type CatalogServiceDependencies = Parameters<typeof createCatalogService>[0];
+const createService = (
+  deps: Omit<CatalogServiceDependencies, "businessTerms"> & {
+    businessTerms?: CatalogServiceDependencies["businessTerms"];
+  },
+) => createCatalogService({ businessTerms: noBusinessTerms, ...deps });
 
-// 翻值现按语义 id 入参；从编译器目录取稳定 id（服务端再解析成物理绑定翻值）。
+// 翻值以语义 id 入参；从编译器目录取稳定 id（服务端再解析成物理绑定翻值）。
 const catalogDimensions = toCompilerCatalog(buildCatalogDocument(views)).dimensions;
 const dimId = (title: string) => {
   const found = catalogDimensions.find((dimension) => dimension.title === title);
@@ -74,7 +81,7 @@ const dimId = (title: string) => {
 describe("CatalogService", () => {
   test("授权上下文只用调用者身份读取 /meta", async () => {
     const seen: CubeSecurityContext[] = [];
-    const service = createCatalogService({
+    const service = createService({
       canonical,
       cube: {
         meta: async (received) => {
@@ -95,7 +102,7 @@ describe("CatalogService", () => {
   });
 
   test("publicDocument 同时交付权限裁剪目录与权威数据截至月", async () => {
-    const service = createCatalogService({
+    const service = createService({
       canonical,
       cube: {
         meta: async () => views,
@@ -130,7 +137,7 @@ describe("CatalogService", () => {
       },
       timeContext: async () => ({ dataAsOf: "2026-07", sources: {} }),
     };
-    const broken = createCatalogService({
+    const broken = createService({
       canonical,
       cube,
       businessTerms: {
@@ -143,7 +150,7 @@ describe("CatalogService", () => {
     expect(degraded.term_knowledge_status).toBe("unavailable");
     expect(degraded.term_resolutions).toEqual([]);
     expect(degraded.dimensions.map((member) => member.title)).toContain("组织");
-    const healthy = createCatalogService({
+    const healthy = createService({
       canonical,
       cube,
       businessTerms: {
@@ -189,7 +196,7 @@ describe("CatalogService", () => {
       { "test_people_metrics.organization_name": null },
       { "test_people_metrics.organization_name": "" },
     ];
-    const service = createCatalogService({
+    const service = createService({
       canonical,
       cube: {
         meta: async () => views,
@@ -234,7 +241,7 @@ describe("CatalogService", () => {
       { "test_people_metrics.organization_name": null },
       { "test_people_metrics.organization_name": "" },
     ];
-    const service = createCatalogService({
+    const service = createService({
       canonical,
       cube: {
         meta: async () => views,
@@ -251,7 +258,7 @@ describe("CatalogService", () => {
   });
 
   test("不可翻维度转成可识别的输入错误", async () => {
-    const service = createCatalogService({
+    const service = createService({
       canonical,
       cube: {
         meta: async () => views,
@@ -271,7 +278,7 @@ describe("CatalogService", () => {
       "执行 View test_people_metrics 的指标 active_employee_count 缺少 meta.metric_domain_id",
     );
     const logged = spyOn(console, "error").mockImplementation(() => undefined);
-    const service = createCatalogService({
+    const service = createService({
       canonical,
       cube: {
         meta: async () => {

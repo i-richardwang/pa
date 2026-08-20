@@ -173,8 +173,8 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     { Client },
     { InMemoryTransport },
     { createApplication },
+    { buildServer },
     {
-      buildServer,
       SERVER_INSTRUCTIONS,
       TOOL_DESCRIPTIONS,
       OPENAI_WIDGET_CSP,
@@ -187,6 +187,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     import("@modelcontextprotocol/sdk/inMemory.js"),
     import("./composition/application.js"),
     import("./server.js"),
+    import("./mcp/contracts.js"),
   ]);
   const client = new Client({
     name: "pa-tool-metadata-test",
@@ -390,6 +391,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     };
   };
   const server = buildServer({
+    principal: { email: "test@x", roles: ["admin"], orgScope: "*" },
     dependencies: {
       analysis: {
         run: async (_principal, definition, intent) => {

@@ -10,7 +10,8 @@ import { join } from "node:path";
 import { createTestAppDatabase } from "../test_support/app_database.js";
 import { createUsageService } from "../application/usage_service.js";
 import { createUsageStats } from "./usage_stats.js";
-import { createUsageLog, USAGE_LOG_RETENTION_DAYS } from "./usage_log.js";
+import { createUsageLog } from "./usage_log.js";
+import { USAGE_LOG_RETENTION_DAYS } from "../ports/usage_log.js";
 
 let seq = 0;
 const runId = randomUUID();

@@ -11,17 +11,8 @@ import type {
   FeedbackStatus,
 } from "../contracts/feedback_contract.js";
 import type { FeedbackRecord, FeedbackRepository } from "../ports/feedback_repository.js";
-import {
-  normalizeFeedbackInput,
-  normalizeFeedbackNote,
-  type FeedbackInput,
-  type NormalizedFeedbackInput,
-} from "../contracts/feedback_input.js";
+import type { NormalizedFeedbackInput } from "../contracts/feedback_input.js";
 import type { SqliteDatabase } from "../sqlite.js";
-
-export type { FeedbackRecord, FeedbackRepository } from "../ports/feedback_repository.js";
-export type { FeedbackInput, NormalizedFeedbackInput } from "../contracts/feedback_input.js";
-export { normalizeFeedbackInput } from "../contracts/feedback_input.js";
 
 /** 同一缺口的聚合身份：按缺口解释归一，问题原话每次仍逐行保留。 */
 export function feedbackTopicKey(input: NormalizedFeedbackInput): string {
@@ -33,14 +24,13 @@ export function feedbackTopicKey(input: NormalizedFeedbackInput): string {
 }
 
 export function createFeedbackStore(db: SqliteDatabase): FeedbackRepository {
-  async function create(input: FeedbackInput, caller: string): Promise<FeedbackRecord> {
-    const clean = normalizeFeedbackInput(input);
-    const topicKey = feedbackTopicKey(clean);
+  async function create(input: NormalizedFeedbackInput, caller: string): Promise<FeedbackRecord> {
+    const topicKey = feedbackTopicKey(input);
     const at = new Date().toISOString();
     db.prepare(
       `INSERT INTO feedback (at, caller, ask, detail, status, topic_key)
          VALUES (?, ?, ?, ?, 'open', ?)`,
-    ).run(at, caller, clean.ask, clean.detail, topicKey);
+    ).run(at, caller, input.ask, input.detail, topicKey);
     const row = db
       .prepare("SELECT * FROM feedback WHERE id = last_insert_rowid()")
       .get() as FeedbackRecord;
@@ -70,9 +60,7 @@ export function createFeedbackStore(db: SqliteDatabase): FeedbackRepository {
     };
   }
 
-  async function list(limit = 20, offset = 0): Promise<FeedbackListPayload> {
-    const safeLimit = Math.min(Math.max(Math.trunc(limit) || 20, 1), 200);
-    const safeOffset = Math.max(Math.trunc(offset) || 0, 0);
+  async function list(limit: number, offset: number): Promise<FeedbackListPayload> {
     const total = (
       db.prepare("SELECT COUNT(DISTINCT topic_key) AS n FROM feedback").get() as { n: number }
     ).n;
@@ -97,7 +85,7 @@ export function createFeedbackStore(db: SqliteDatabase): FeedbackRepository {
                   last_at DESC
          LIMIT ? OFFSET ?`,
       )
-      .all(safeLimit, safeOffset) as Array<
+      .all(limit, offset) as Array<
       FeedbackRecord & {
         occurrences: number;
         first_at: string;
@@ -146,11 +134,6 @@ export function createFeedbackStore(db: SqliteDatabase): FeedbackRepository {
     note: string,
     resolvedBy: string,
   ): Promise<FeedbackGroup | null> {
-    if (!/^[0-9a-f]{20}$/.test(topicKey)) throw new Error("无效的反馈主题编号");
-    if (status !== "accepted" && status !== "rejected") {
-      throw new Error("状态须为 accepted 或 rejected");
-    }
-    const cleanNote = normalizeFeedbackNote(note);
     const exists = db.prepare("SELECT 1 FROM feedback WHERE topic_key = ? LIMIT 1").get(topicKey);
     if (!exists) return null;
     const at = new Date().toISOString();
@@ -158,7 +141,7 @@ export function createFeedbackStore(db: SqliteDatabase): FeedbackRepository {
       `UPDATE feedback
          SET status = ?, note = ?, resolved_by = ?, resolved_at = ?
          WHERE topic_key = ?`,
-    ).run(status, cleanNote, resolvedBy, at, topicKey);
+    ).run(status, note, resolvedBy, at, topicKey);
     return group(topicKey);
   }
 

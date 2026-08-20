@@ -4,12 +4,6 @@ import type {
   RecordProjectionAuditEvent,
 } from "../ports/record_projection_audit.js";
 
-export type {
-  RecordProjectionAudit,
-  RecordProjectionAuditEvent,
-  RecordProjectionAuditSource,
-} from "../ports/record_projection_audit.js";
-
 export function createRecordProjectionAudit(db: SqliteDatabase): RecordProjectionAudit {
   async function log(event: RecordProjectionAuditEvent): Promise<void> {
     db.prepare(

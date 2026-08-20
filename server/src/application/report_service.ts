@@ -2,7 +2,7 @@ import type { Principal } from "../contracts/principal.js";
 import type { AnalysisService } from "./analysis_service.js";
 import type { PresentationService } from "./presentation_service.js";
 import type { AnalysisRepository, OwnedAnalysisView } from "../ports/analysis_repository.js";
-import type { UsageLog } from "../ports/usage_log.js";
+import type { UsageService } from "./usage_service.js";
 import type { RenderShape } from "../presentation_core/render_shape.js";
 import {
   semanticResultViewId,
@@ -11,7 +11,8 @@ import {
 } from "../semantic_core/semantic_analysis.js";
 import type { TimeIntent } from "../semantic_core/time_contract.js";
 import type { SemanticPlanningService } from "./semantic_planning_service.js";
-import type { ReportUpdateAction } from "../contracts/report_action.js";
+import { REPORT_UPDATE_ACTION, type ReportUpdateAction } from "../contracts/report_action.js";
+import { REPORT_NAME_SCHEMA } from "../contracts/report_identity.js";
 import {
   ReportNotFoundError,
   type ReportRecord,
@@ -20,6 +21,7 @@ import {
 } from "../ports/report_repository.js";
 import { applyBoardTimeOverride, type BoardTimeOverrideStatus } from "./board_time_override.js";
 import type { ViewPreferences } from "../presentation_core/view_preferences.js";
+import { InvalidRequestError } from "./errors.js";
 
 /** Report 元数据与当前 View 的读取投影；定义与视图只物化在各自事实表。 */
 export type ReportDocument = ReportRecord & {
@@ -40,8 +42,14 @@ export function createReportService(deps: {
   execution: Pick<AnalysisService, "executeReferenced">;
   presentation: Pick<PresentationService, "renderShape">;
   semanticPlanning: SemanticPlanningService;
-  usage: Pick<UsageLog, "log">;
+  usage: Pick<UsageService, "log">;
 }) {
+  function reportName(value: string): string {
+    const parsed = REPORT_NAME_SCHEMA.safeParse(value);
+    if (!parsed.success) throw new InvalidRequestError("报告名称不能为空且最长 100 个字符");
+    return parsed.data;
+  }
+
   async function identity(report: ReportRecord): Promise<OwnedAnalysisView> {
     const view = await deps.analyses.getView(report.view_id);
     if (!view) throw new Error(`报告引用的视图不存在：${report.view_id}`);
@@ -70,28 +78,28 @@ export function createReportService(deps: {
     return report ? (await resolve(report)).report : null;
   }
 
-  async function resolveOwned(id: string, owner: string): Promise<ReportDocument> {
-    return (await resolve(await deps.reports.resolveOwned(id, owner))).report;
+  async function resolveOwned(principal: Principal, id: string): Promise<ReportDocument> {
+    return (await resolve(await deps.reports.resolveOwned(id, principal.email))).report;
   }
 
-  async function ensureOwned(id: string, owner: string): Promise<void> {
-    await deps.reports.resolveOwned(id, owner);
+  async function ensureOwned(principal: Principal, id: string): Promise<void> {
+    await deps.reports.resolveOwned(id, principal.email);
   }
 
   async function listOwned(
-    owner: string,
+    principal: Principal,
     query?: string,
     includeArchived = false,
   ): Promise<ReportDocument[]> {
     return Promise.all(
-      (await deps.reports.listOwned(owner, query, includeArchived)).map(
+      (await deps.reports.listOwned(principal.email, query, includeArchived)).map(
         async (report) => (await resolve(report)).report,
       ),
     );
   }
 
-  async function listRevisions(id: string, owner: string): Promise<ReportRevision[]> {
-    return deps.reports.listRevisions(id, owner);
+  async function listRevisions(principal: Principal, id: string): Promise<ReportRevision[]> {
+    return deps.reports.listRevisions(id, principal.email);
   }
 
   const summary = (report: ReportDocument) => ({
@@ -115,7 +123,7 @@ export function createReportService(deps: {
     const report = document(
       await deps.reports.create({
         owner: input.principal.email,
-        name: input.name,
+        name: reportName(input.name),
         viewId: input.viewId,
       }),
       current,
@@ -139,32 +147,42 @@ export function createReportService(deps: {
     ifRevision?: number,
   ): Promise<ReportDocument> {
     const started = performance.now();
+    const parsedAction = REPORT_UPDATE_ACTION.safeParse(action);
+    if (!parsedAction.success) throw new InvalidRequestError("报告修改动作无效");
+    const normalizedAction = parsedAction.data;
     let report: ReportDocument;
-    if (action.type === "rename") {
+    if (normalizedAction.type === "rename") {
       report = (
         await resolve(
-          await deps.reports.update(id, principal.email, { name: action.name }, ifRevision),
+          await deps.reports.update(
+            id,
+            principal.email,
+            { name: normalizedAction.name },
+            ifRevision,
+          ),
         )
       ).report;
-    } else if (action.type === "replace_view") {
+    } else if (normalizedAction.type === "replace_view") {
       await deps.reports.resolveOwned(id, principal.email);
-      await deps.analyses.resolveOwnedView(action.view_id, principal.email);
+      await deps.analyses.resolveOwnedView(normalizedAction.view_id, principal.email);
       report = (
         await resolve(
           await deps.reports.update(
             id,
             principal.email,
             {
-              viewId: action.view_id,
-              ...(action.name !== undefined ? { name: action.name } : {}),
+              viewId: normalizedAction.view_id,
+              ...(normalizedAction.name !== undefined ? { name: normalizedAction.name } : {}),
             },
             ifRevision,
           ),
         )
       ).report;
-    } else if (action.type === "restore") {
+    } else if (normalizedAction.type === "restore") {
       report = (
-        await resolve(await deps.reports.restore(id, principal.email, action.revision, ifRevision))
+        await resolve(
+          await deps.reports.restore(id, principal.email, normalizedAction.revision, ifRevision),
+        )
       ).report;
     } else {
       report = (

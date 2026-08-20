@@ -1,6 +1,6 @@
 /** 为公开虚构数据播种可执行报告、看板与通用业务术语。 */
 import { randomUUID } from "node:crypto";
-import { createBusinessTermService } from "../src/application/business_term_service.js";
+import { createBusinessTermRegistry } from "../src/application/business_term_registry.js";
 import { createCatalogService } from "../src/application/catalog_service.js";
 import { createQueryExecutionService } from "../src/application/query_execution_service.js";
 import { createSemanticPlanningService } from "../src/application/semantic_planning_service.js";
@@ -26,7 +26,6 @@ import type { Place } from "../src/contracts/board_contract.js";
 import { createBoardRepository } from "../src/storage/board_repository.js";
 import { createBusinessTermRepository } from "../src/storage/business_term_repository.js";
 import { createReportRepository } from "../src/storage/report_repository.js";
-import { createUsageLog } from "../src/storage/usage_log.js";
 import { seed_demo_business_terms } from "./demo_business_terms.js";
 
 const apiSecret = process.env.CUBEJS_API_SECRET;
@@ -52,101 +51,105 @@ const canonical = await loadCanonicalSemanticModel({
   service_context: SERVICE_CUBE_CONTEXT,
 });
 const cube = withCanonicalSemanticModel(visibilityCube, canonical);
-const catalog = createCatalogService({ cube: visibilityCube, canonical });
-const planning = createSemanticPlanningService({ catalog });
-const execution = createQueryExecutionService({
-  cube,
-  exports: {
-    createDelivery: async () => {
-      throw new Error("Demo 播种不创建导出");
-    },
-  },
-});
-const principal: Principal = { email: owner, roles: ["admin"], orgScope: "*" };
-const document = await catalog.publicDocument(principal);
-const timeContext = await cube.timeContext();
-const asOf = timeContext.dataAsOf;
-
-const measure = (title: string): string => {
-  const member = document.measures.find((candidate) => candidate.title === title);
-  if (!member) throw new Error(`公开 Demo 目录缺少指标：${title}`);
-  return member.id;
-};
-const dimension = (title: string): string => {
-  const member = document.dimensions.find((candidate) => candidate.title === title);
-  if (!member) throw new Error(`公开 Demo 目录缺少维度：${title}`);
-  return member.id;
-};
-
-const active = measure("在职人数");
-const averageAge = measure("平均年龄");
-const hireRate = measure("本月入职率");
-const turnoverRate = measure("本月离职率");
-const planned = measure("编制目标");
-const fulfillment = measure("当月编制完成率");
-const organization = dimension("组织");
-
-type DemoReport = {
-  name: string;
-  analysis: AnalysisDefinition;
-  view: SemanticViewIntent;
-};
-const demos: DemoReport[] = [
-  {
-    name: "组织人员规模",
-    analysis: {
-      title: "按组织查看月末在职人数与平均年龄",
-      views: [
-        {
-          id: "workforce",
-          measures: [active, averageAge],
-          dimensions: [organization],
-          time: { window: { kind: "current_month", month: asOf } },
-          group_sort: { dimension: organization, by: active, direction: "desc" },
-        },
-      ],
-    },
-    view: { type: "table" },
-  },
-  {
-    name: "入离职率趋势",
-    analysis: {
-      title: "本年逐月入职率与离职率趋势",
-      views: [
-        {
-          id: "movement",
-          measures: [hireRate, turnoverRate],
-          time: { window: { kind: "year_to_date" }, display: "month" },
-        },
-      ],
-    },
-    view: { type: "line", series: [hireRate, turnoverRate] },
-  },
-  {
-    name: "组织编制完成率",
-    analysis: {
-      title: "按组织查看月末人数、编制目标与完成率",
-      views: [
-        {
-          id: "staffing",
-          measures: [active, planned, fulfillment],
-          dimensions: [organization],
-          time: { window: { kind: "current_month", month: asOf } },
-          group_sort: { dimension: organization, by: fulfillment, direction: "desc" },
-        },
-      ],
-    },
-    view: { type: "bar", category: organization, series: [fulfillment] },
-  },
-];
-
 const appDb = await openAppDatabase(dbPath);
 try {
+  const businessTermRegistry = createBusinessTermRegistry({
+    repository: createBusinessTermRepository(appDb),
+  });
+  const catalog = createCatalogService({
+    cube: visibilityCube,
+    canonical,
+    businessTerms: businessTermRegistry,
+  });
+  const planning = createSemanticPlanningService({ catalog });
+  const execution = createQueryExecutionService({
+    cube,
+    exports: {
+      createDelivery: async () => {
+        throw new Error("Demo 播种不创建导出");
+      },
+    },
+  });
+  const principal: Principal = { email: owner, roles: ["admin"], orgScope: "*" };
+  const document = await catalog.publicDocument(principal);
+  const timeContext = await cube.timeContext();
+  const asOf = timeContext.dataAsOf;
+
+  const measure = (title: string): string => {
+    const member = document.measures.find((candidate) => candidate.title === title);
+    if (!member) throw new Error(`公开 Demo 目录缺少指标：${title}`);
+    return member.id;
+  };
+  const dimension = (title: string): string => {
+    const member = document.dimensions.find((candidate) => candidate.title === title);
+    if (!member) throw new Error(`公开 Demo 目录缺少维度：${title}`);
+    return member.id;
+  };
+
+  const active = measure("在职人数");
+  const averageAge = measure("平均年龄");
+  const hireRate = measure("本月入职率");
+  const turnoverRate = measure("本月离职率");
+  const planned = measure("编制目标");
+  const fulfillment = measure("当月编制完成率");
+  const organization = dimension("组织");
+
+  type DemoReport = {
+    name: string;
+    analysis: AnalysisDefinition;
+    view: SemanticViewIntent;
+  };
+  const demos: DemoReport[] = [
+    {
+      name: "组织人员规模",
+      analysis: {
+        title: "按组织查看月末在职人数与平均年龄",
+        views: [
+          {
+            id: "workforce",
+            measures: [active, averageAge],
+            dimensions: [organization],
+            time: { window: { kind: "current_month", month: asOf } },
+            group_sort: { dimension: organization, by: active, direction: "desc" },
+          },
+        ],
+      },
+      view: { type: "table" },
+    },
+    {
+      name: "入离职率趋势",
+      analysis: {
+        title: "本年逐月入职率与离职率趋势",
+        views: [
+          {
+            id: "movement",
+            measures: [hireRate, turnoverRate],
+            time: { window: { kind: "year_to_date" }, display: "month" },
+          },
+        ],
+      },
+      view: { type: "line", series: [hireRate, turnoverRate] },
+    },
+    {
+      name: "组织编制完成率",
+      analysis: {
+        title: "按组织查看月末人数、编制目标与完成率",
+        views: [
+          {
+            id: "staffing",
+            measures: [active, planned, fulfillment],
+            dimensions: [organization],
+            time: { window: { kind: "current_month", month: asOf } },
+            group_sort: { dimension: organization, by: fulfillment, direction: "desc" },
+          },
+        ],
+      },
+      view: { type: "bar", category: organization, series: [fulfillment] },
+    },
+  ];
+
   const terms = await seed_demo_business_terms({
-    service: createBusinessTermService({
-      repository: createBusinessTermRepository(appDb),
-      usage: createUsageLog(appDb),
-    }),
+    registry: businessTermRegistry,
     members: [...document.measures, ...document.dimensions],
   });
   const analyses = createAnalysisRepository(appDb);

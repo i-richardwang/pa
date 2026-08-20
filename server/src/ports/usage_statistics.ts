@@ -7,7 +7,7 @@ import type {
 
 export type UsageStatistics = {
   overview(days: number): Promise<UsageOverviewPayload>;
-  titles(days: number, limit?: number, offset?: number): Promise<UsageTitlesPayload>;
-  mine(caller: string, days: number, limit?: number, offset?: number): Promise<MyAnalysesPayload>;
+  titles(days: number, limit: number, offset: number): Promise<UsageTitlesPayload>;
+  mine(caller: string, days: number, limit: number, offset: number): Promise<MyAnalysesPayload>;
   unanswered(days: number): Promise<UnansweredPayload>;
 };

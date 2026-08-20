@@ -12,12 +12,13 @@
  * --with-key 开通后签发一枚绑定该用户的 API key；明文只打印一次。
  *
  * 经 admin 插件的 createUser 与 apiKey 插件的 createApiKey 端点（服务端直调不经 HTTP、
- * 无会话要求）；org_scope 经 internalAdapter 直写（input:false 字段,非自助）。密码散列（scrypt）
+ * 无会话要求）；org_scope 经 Better Auth 用户范围适配器写入（input:false 字段）。密码散列（scrypt）
  * 与 key 散列（SHA-256）均不依赖 PA_AUTH_SECRET。
  * 注意：容器内服务持有长连接，跨 Docker 挂载边界的新写入对其不可见（virtiofs 缓存），
  * 开通后须 docker compose restart server 生效。
  */
 import { buildAuth, initializeAuthSchema } from "../src/auth.js";
+import { createBetterAuthUserScopeWriter } from "../src/adapters/better_auth_user_scope.js";
 import { openSqlite } from "../src/sqlite.js";
 
 const argv = process.argv.slice(2);
@@ -57,9 +58,7 @@ const auth = buildAuth(cfg, authDb);
 const res = await auth.api.createUser({
   body: { email, password, name: name ?? email.split("@")[0], role },
 });
-// org_scope 是 input:false 字段,createUser 不透传,开通后经 internalAdapter 直写
-const ctx = await auth.$context;
-await ctx.internalAdapter.updateUser(res.user.id, { org_scope: orgScope });
+await createBetterAuthUserScopeWriter(auth).setOrgScope(res.user.id, orgScope);
 console.log(
   `已开通：${res.user.email}（id=${res.user.id}，角色=${role}，` +
     `组织权限=${orgScope || "（空:无行权限,待授组织）"}）`,

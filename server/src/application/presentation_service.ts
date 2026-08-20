@@ -4,7 +4,8 @@ import {
 } from "../presentation_core/chart_config.js";
 import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
 import type { QueryRunResult } from "./query_pipeline.js";
-import { renderShapeOfView, type RenderShape } from "../presentation_core/view_shape.js";
+import type { RenderShape } from "../presentation_core/render_shape.js";
+import { renderShapeOfView } from "../presentation_core/view_shape.js";
 
 export function createPresentationService() {
   function compile(result: QueryRunResult) {

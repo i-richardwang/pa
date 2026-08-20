@@ -9,6 +9,7 @@ import { buildAuth, initializeAuthSchema, type Auth } from "./auth.js";
 import { createApplication } from "./composition/application.js";
 import { config } from "./config.js";
 import { createCubeGateway } from "./adapters/cube_gateway.js";
+import { createBetterAuthUserScopeWriter } from "./adapters/better_auth_user_scope.js";
 import { SERVICE_CUBE_CONTEXT } from "./engine/cube_security.js";
 import { withFormalMetricModel } from "./engine/formal_metric_gateway.js";
 import { dashboardRoutes } from "./dashboard/index.js";
@@ -25,6 +26,7 @@ import {
   loadCanonicalSemanticModel,
   withCanonicalSemanticModel,
 } from "./engine/canonical_semantic_model.js";
+import { createUserScopeService } from "./application/user_scope_service.js";
 
 // 鉴权 fail-closed：基座未配置即拒绝启动；PA_ALLOW_OPEN=1 是部署者对当前监听范围的显式放行。
 if (!config.authSecret && !config.allowOpen) {
@@ -113,6 +115,9 @@ if (config.authSecret) {
   await initializeAuthSchema(authCfg, authDb);
   auth = buildAuth(authCfg, authDb);
   const enabledAuth = auth;
+  const userScope = createUserScopeService({
+    writer: createBetterAuthUserScopeWriter(enabledAuth),
+  });
 
   app.on(["GET", "POST"], "/api/auth/*", (c) => enabledAuth.handler(c.req.raw));
   // 根路径发现端点：部分客户端不解析 WWW-Authenticate，直接探测 /.well-known（MCP 规范要求）
@@ -149,10 +154,7 @@ if (config.authSecret) {
       auth: enabledAuth,
       usage: application.usage,
       html: pageLoader("dashboard.html"),
-      setOrgScope: async (userId, orgScope) => {
-        const ctx = await enabledAuth.$context;
-        await ctx.internalAdapter.updateUser(userId, { org_scope: orgScope });
-      },
+      userScope,
       analyses: application.analysis,
       reportService: application.report,
       presentation: application.presentation,

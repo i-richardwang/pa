@@ -13,8 +13,6 @@ import { CHART_SERIES } from "./design_tokens.js";
 import type { ShadingPaletteName, TableShadingPreferences } from "./view_preferences.js";
 import { toNumber } from "./view_format.js";
 
-export type { TableShadingPreferences } from "./view_preferences.js";
-
 export type ShadingScale = { min: number; mid: number; max: number };
 
 /** 编译后随表格模型下发：刻度已定，渲染端只做值→色。 */

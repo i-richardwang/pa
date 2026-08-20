@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createBusinessTermService } from "../src/application/business_term_service.js";
+import { createBusinessTermRegistry } from "../src/application/business_term_registry.js";
 import { createBusinessTermRepository } from "../src/storage/business_term_repository.js";
 import { createTestAppDatabase } from "../src/test_support/app_database.js";
 import { seed_demo_business_terms } from "./demo_business_terms.js";
@@ -30,15 +30,13 @@ const members = [
     description: "月末人数除以同月编制目标。",
   },
 ];
-const usage = { log: async () => {} };
-
 describe("demo business term seed", () => {
   test("空库创建全局术语，重复执行保持幂等", async () => {
     const db = createTestAppDatabase();
     const repository = createBusinessTermRepository(db);
-    const service = createBusinessTermService({ repository, usage });
+    const registry = createBusinessTermRegistry({ repository });
 
-    const first = await seed_demo_business_terms({ service, members });
+    const first = await seed_demo_business_terms({ registry, members });
     expect(first.created.map((term) => term.canonical_term)).toEqual([
       "组织",
       "主动离职",
@@ -46,7 +44,7 @@ describe("demo business term seed", () => {
     ]);
     expect(first.preserved).toEqual([]);
 
-    const second = await seed_demo_business_terms({ service, members });
+    const second = await seed_demo_business_terms({ registry, members });
     expect(second.created).toEqual([]);
     expect(second.preserved.map((term) => term.canonical_term)).toEqual([
       "组织",
@@ -60,8 +58,8 @@ describe("demo business term seed", () => {
   test("同规范词保留管理员内容，只补齐缺失术语", async () => {
     const db = createTestAppDatabase();
     const repository = createBusinessTermRepository(db);
-    const service = createBusinessTermService({ repository, usage });
-    await service.create(
+    const registry = createBusinessTermRegistry({ repository });
+    await registry.create(
       {
         canonical_term: "主动离职",
         definition: "管理员确认后的本地定义。",
@@ -69,10 +67,9 @@ describe("demo business term seed", () => {
         related_member_ids: [],
       },
       members,
-      "seed_demo",
     );
 
-    const result = await seed_demo_business_terms({ service, members });
+    const result = await seed_demo_business_terms({ registry, members });
     expect(result.created.map((term) => term.canonical_term)).toEqual(["组织", "编制完成率"]);
     expect(result.preserved[0]?.definition).toBe("管理员确认后的本地定义。");
     expect(
@@ -84,8 +81,8 @@ describe("demo business term seed", () => {
   test("既有其他术语占用 Demo 叫法时先失败且不写入", async () => {
     const db = createTestAppDatabase();
     const repository = createBusinessTermRepository(db);
-    const service = createBusinessTermService({ repository, usage });
-    await service.create(
+    const registry = createBusinessTermRegistry({ repository });
+    await registry.create(
       {
         canonical_term: "公司一级部门",
         definition: "已有的本地业务定义。",
@@ -93,10 +90,9 @@ describe("demo business term seed", () => {
         related_member_ids: [],
       },
       members,
-      "seed_demo",
     );
 
-    await expect(seed_demo_business_terms({ service, members })).rejects.toThrow(
+    await expect(seed_demo_business_terms({ registry, members })).rejects.toThrow(
       "叫法“一级组织”已属于“公司一级部门”",
     );
     expect((await repository.list()).map((term) => term.canonical_term)).toEqual(["公司一级部门"]);

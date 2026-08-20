@@ -7,6 +7,7 @@ import type { BoardService } from "../application/board_service.js";
 import type { BusinessTermService } from "../application/business_term_service.js";
 import type { FeedbackService } from "../application/feedback_service.js";
 import type { UsageService } from "../application/usage_service.js";
+import type { UserScopeService } from "../application/user_scope_service.js";
 import type { Principal } from "../contracts/principal.js";
 import type { MePayload } from "../contracts/session_contract.js";
 import type { DataCapabilityMapData } from "../presentation_core/data_capability_map.js";
@@ -32,7 +33,7 @@ export type DashboardDependencies = {
   auth: SessionProvider;
   usage: UsageService;
   html: () => Promise<string>;
-  setOrgScope: (userId: string, orgScope: string) => Promise<void>;
+  userScope: UserScopeService;
   analyses: AnalysisService;
   reportService: ReportService;
   presentation: PresentationService;

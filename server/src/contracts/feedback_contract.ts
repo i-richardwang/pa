@@ -8,6 +8,7 @@ export const FEEDBACK_LIMITS = {
 
 const FEEDBACK_STATUSES = ["open", "accepted", "rejected"] as const;
 export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
+export const FEEDBACK_TOPIC_KEY_SCHEMA = z.string().regex(/^[0-9a-f]{20}$/);
 
 export type FeedbackGroup = {
   topic_key: string;
@@ -34,7 +35,7 @@ export const RESOLVE_FEEDBACK_BODY = z
 
 const FEEDBACK_GROUP_SCHEMA: z.ZodType<FeedbackGroup> = z
   .object({
-    topic_key: z.string(),
+    topic_key: FEEDBACK_TOPIC_KEY_SCHEMA,
     ask: z.string(),
     detail: z.string(),
     status: z.enum(FEEDBACK_STATUSES),

@@ -10,21 +10,6 @@ import {
   type ReportRevision,
 } from "../ports/report_repository.js";
 
-export {
-  ReportConflictError,
-  ReportNotFoundError,
-  type ReportRecord,
-  type ReportRepository,
-  type ReportRevision,
-} from "../ports/report_repository.js";
-
-const normalizeName = (name: string): string => {
-  const clean = name.trim();
-  if (!clean) throw new Error("报告名称不能为空");
-  if (clean.length > 100) throw new Error("报告名称不能超过 100 个字符");
-  return clean;
-};
-
 const renderShape = (value: string | null): RenderShape | null => {
   const parsed = RENDER_SHAPE_SCHEMA.safeParse(value);
   return parsed.success ? parsed.data : null;
@@ -47,7 +32,7 @@ export function createReportRepository(db: SqliteDatabase): ReportRepository {
     const raw: RawReport = {
       id: randomUUID(),
       owner: input.owner.trim(),
-      name: normalizeName(input.name),
+      name: input.name,
       view_id: input.viewId,
       render_shape: null,
       archived_at: null,
@@ -155,7 +140,7 @@ export function createReportRepository(db: SqliteDatabase): ReportRepository {
              WHERE id = ? AND revision = ?`,
           )
           .run(
-            patch.name === undefined ? current.name : normalizeName(patch.name),
+            patch.name === undefined ? current.name : patch.name,
             nextViewId,
             nextRenderShape,
             patch.archivedAt === undefined ? current.archived_at : patch.archivedAt,

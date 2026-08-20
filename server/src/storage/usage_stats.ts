@@ -6,7 +6,6 @@
 import type { SqliteDatabase } from "../sqlite.js";
 import { ANALYSIS_RETENTION_DAYS } from "../ports/analysis_repository.js";
 import type { UsageStatistics } from "../ports/usage_statistics.js";
-import { USAGE_LOG_RETENTION_DAYS } from "../ports/usage_log.js";
 import type {
   ErrorRow,
   UnansweredPayload,
@@ -15,31 +14,13 @@ import type {
   ZeroHitRow,
 } from "../contracts/usage_contract.js";
 import type { MyAnalysesPayload } from "../contracts/analysis_contract.js";
-import { DASHBOARD_PAGE_SIZE } from "../contracts/pagination_contract.js";
 import { USAGE_ERROR_GROUP_TEXT_LIMIT } from "../contracts/usage_contract.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** 限制单次日志读取规模，避免客户端请求无界数据。 */
-const MAX_PAGE_SIZE = 200;
-
-export type { UsageStatistics } from "../ports/usage_statistics.js";
-
 export function createUsageStats(db: SqliteDatabase): UsageStatistics {
-  function clampDays(days: number): number {
-    return Math.min(Math.max(Math.trunc(days) || 30, 1), USAGE_LOG_RETENTION_DAYS);
-  }
-
-  function since(clampedDays: number): string {
-    return new Date(Date.now() - clampedDays * DAY_MS).toISOString();
-  }
-
-  function clampLimit(limit: number): number {
-    return Math.min(Math.max(Math.trunc(limit) || DASHBOARD_PAGE_SIZE, 1), MAX_PAGE_SIZE);
-  }
-
-  function clampOffset(offset: number): number {
-    return Math.max(Math.trunc(offset) || 0, 0);
+  function since(days: number): string {
+    return new Date(Date.now() - days * DAY_MS).toISOString();
   }
 
   function count(conn: SqliteDatabase, where: string, params: unknown[]): number {
@@ -51,30 +32,24 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
   }
 
   async function overview(days: number): Promise<UsageOverviewPayload> {
-    const d = clampDays(days);
     const cells = db
       .prepare(
         `SELECT tool, outcome, COUNT(*) AS n,
                 SUM(COALESCE(has_more, 0)) AS truncated
          FROM usage_log WHERE at >= ? GROUP BY tool, outcome ORDER BY tool, outcome`,
       )
-      .all(since(d)) as UsageOverviewPayload["cells"];
+      .all(since(days)) as UsageOverviewPayload["cells"];
     const callers = db
       .prepare(
         `SELECT caller, COUNT(*) AS n, MAX(at) AS last_at
          FROM usage_log WHERE at >= ? GROUP BY caller ORDER BY n DESC`,
       )
-      .all(since(d)) as UsageOverviewPayload["callers"];
-    return { days: d, cells, callers };
+      .all(since(days)) as UsageOverviewPayload["callers"];
+    return { days, cells, callers };
   }
 
   /** 分析清单只计创建 Analysis/View 身份的执行；重放消费既有身份，不算新的业务提问。 */
-  async function titles(
-    days: number,
-    limit = DASHBOARD_PAGE_SIZE,
-    offset = 0,
-  ): Promise<UsageTitlesPayload> {
-    const d = clampDays(days);
+  async function titles(days: number, limit: number, offset: number): Promise<UsageTitlesPayload> {
     const where = `at >= ? AND tool IN ('run_analysis', 'rerun_analysis') AND outcome = 'ok' AND title IS NOT NULL`;
     const rows = db
       .prepare(
@@ -83,7 +58,7 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
          WHERE ${where}
          ORDER BY at DESC LIMIT ? OFFSET ?`,
       )
-      .all(since(d), clampLimit(limit), clampOffset(offset)) as Array<{
+      .all(since(days), limit, offset) as Array<{
       id: number;
       at: string;
       caller: string;
@@ -91,23 +66,22 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
       row_count: number | null;
     }>;
     return {
-      days: d,
-      total: count(db, where, [since(d)]),
+      days,
+      total: count(db, where, [since(days)]),
       rows,
     };
   }
 
   /**
    * 本人分析记录：按 caller 精确匹配锁定到单个身份，只取成功且带 title 的分析执行（口径同 titles）。
-   * caller 由路由层从会话取（绝不接客户端入参），故此处按等值过滤即纵向可见、不泄他人。
+   * caller 已由 Application 从 Principal 派生，故此处按等值过滤即纵向可见、不泄他人。
    */
   async function mine(
     caller: string,
     days: number,
-    limit = DASHBOARD_PAGE_SIZE,
-    offset = 0,
+    limit: number,
+    offset: number,
   ): Promise<MyAnalysesPayload> {
-    const d = clampDays(days);
     const where = `u.at >= ? AND u.caller = ? AND u.tool IN ('run_analysis', 'rerun_analysis') AND u.outcome = 'ok' AND u.title IS NOT NULL`;
     const rows = db
       .prepare(
@@ -130,13 +104,7 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
          WHERE ${where}
          ORDER BY u.at DESC LIMIT ? OFFSET ?`,
       )
-      .all(
-        since(ANALYSIS_RETENTION_DAYS),
-        since(d),
-        caller,
-        clampLimit(limit),
-        clampOffset(offset),
-      ) as Array<{
+      .all(since(ANALYSIS_RETENTION_DAYS), since(days), caller, limit, offset) as Array<{
       id: number;
       analysis_id: string | null;
       view_id: string | null;
@@ -145,11 +113,11 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
       row_count: number | null;
     }>;
     return {
-      days: d,
+      days,
       total: (
         db
           .prepare(`SELECT COUNT(*) AS n FROM usage_log AS u WHERE ${where}`)
-          .get(since(d), caller) as {
+          .get(since(days), caller) as {
           n: number;
         }
       ).n,
@@ -158,7 +126,6 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
   }
 
   async function unanswered(days: number): Promise<UnansweredPayload> {
-    const d = clampDays(days);
     const zeroHits = db
       .prepare(
         `SELECT CAST(j.value AS TEXT) AS term, COUNT(*) AS n, MAX(u.at) AS last_at
@@ -166,7 +133,7 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
          WHERE u.at >= ? AND u.tool = 'catalog' AND u.unmatched_terms IS NOT NULL
          GROUP BY term ORDER BY n DESC, last_at DESC LIMIT 100`,
       )
-      .all(since(d)) as ZeroHitRow[];
+      .all(since(days)) as ZeroHitRow[];
     const errors = db
       .prepare(
         `WITH scoped AS (
@@ -182,8 +149,8 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
                  ORDER BY s.at DESC, s.id DESC LIMIT 1) AS example_title
          FROM grouped AS g ORDER BY n DESC, last_at DESC LIMIT 100`,
       )
-      .all(since(d)) as ErrorRow[];
-    return { days: d, zero_hits: zeroHits, errors };
+      .all(since(days)) as ErrorRow[];
+    return { days, zero_hits: zeroHits, errors };
   }
 
   return { overview, titles, mine, unanswered };

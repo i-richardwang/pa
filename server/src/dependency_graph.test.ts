@@ -89,6 +89,17 @@ function moduleSpecifiers(file: string): string[] {
   return specifiers;
 }
 
+function reExportSpecifiers(sourceText: string, file = "source.ts"): string[] {
+  const source = ts.createSourceFile(file, sourceText, ts.ScriptTarget.Latest, true);
+  return source.statements.flatMap((statement) =>
+    ts.isExportDeclaration(statement) &&
+    statement.moduleSpecifier &&
+    ts.isStringLiteral(statement.moduleSpecifier)
+      ? [statement.moduleSpecifier.text]
+      : [],
+  );
+}
+
 function dependencies(file: string): string[] {
   const { options } = rootFor(file);
   return moduleSpecifiers(file).flatMap((specifier) => {
@@ -243,10 +254,44 @@ test("application services 与 transports 不依赖存储实现", () => {
   expect(violations).toEqual([]);
 });
 
+test("HTTP 与 MCP transports 不越过 Application 依赖 engine", () => {
+  const engineRoot = join(SERVER, "src", "engine");
+  const transportRoots = [join(SERVER, "src", "dashboard"), join(SERVER, "src", "mcp")];
+  const violations = files
+    .filter((file) => transportRoots.some((root) => file.startsWith(`${root}${sep}`)))
+    .flatMap((file) =>
+      (graph.get(file) ?? [])
+        .filter((dependency) => dependency.startsWith(`${engineRoot}${sep}`))
+        .map((dependency) => `${display(file)} -> ${display(dependency)}`),
+    );
+  expect(violations).toEqual([]);
+});
+
+test("storage adapters 不反向重导出 ports 或 contracts", () => {
+  expect(reExportSpecifiers('export { Port } from "../ports/example.js"')).toEqual([
+    "../ports/example.js",
+  ]);
+  expect(reExportSpecifiers('import type { Port } from "../ports/example.js"')).toEqual([]);
+
+  const storageRoot = join(SERVER, "src", "storage");
+  const violations = files
+    .filter((file) => file.startsWith(`${storageRoot}${sep}`))
+    .flatMap((file) =>
+      reExportSpecifiers(ts.sys.readFile(file) ?? "", file)
+        .filter((specifier) =>
+          ["../ports/", "../contracts/"].some((prefix) => specifier.startsWith(prefix)),
+        )
+        .map((specifier) => `${display(file)} -> ${specifier}`),
+    );
+  expect(violations).toEqual([]);
+});
+
 test("Agent MCP 投影只引用可公开领域合同，不引用作者偏好或执行工件", () => {
   const subjects = [
     "analysis_tools.ts",
     "analysis_result.ts",
+    "catalog_tools.ts",
+    "catalog_result.ts",
     "contracts.ts",
     "export_tools.ts",
     "report_tools.ts",

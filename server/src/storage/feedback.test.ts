@@ -3,12 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  createFeedbackStore,
-  type FeedbackInput,
-  feedbackTopicKey,
-  normalizeFeedbackInput,
-} from "./feedback.js";
+import { createFeedbackStore, feedbackTopicKey } from "./feedback.js";
+import { normalizeFeedbackInput, type FeedbackInput } from "../contracts/feedback_input.js";
 import { createTestAppDatabase } from "../test_support/app_database.js";
 
 let seq = 0;
@@ -44,11 +40,14 @@ describe("feedback store", () => {
   test("每次原话逐行保留，列表按 topic 聚合", async () => {
     const store = createFeedbackStore(createTestAppDatabase(freshPath()));
     const input = { ask: "能看工时吗", detail: "缺工时指标" };
-    const first = await store.create(input, "alice@x");
-    const second = await store.create({ ...input, ask: "想看团队工时" }, "bob@x");
+    const first = await store.create(normalizeFeedbackInput(input), "alice@x");
+    const second = await store.create(
+      normalizeFeedbackInput({ ...input, ask: "想看团队工时" }),
+      "bob@x",
+    );
     expect(second.topic_key).toBe(first.topic_key);
 
-    const page = await store.list();
+    const page = await store.list(20, 0);
     expect(page.total).toBe(1);
     expect(page.rows[0]).toMatchObject({
       ask: "想看团队工时",
@@ -62,8 +61,8 @@ describe("feedback store", () => {
   test("审核按 topic 更新全部历史行；新一次同主题提报会重新打开", async () => {
     const store = createFeedbackStore(createTestAppDatabase(freshPath()));
     const input = { ask: "能看工时吗", detail: "缺工时指标" };
-    const created = await store.create(input, "alice@x");
-    await store.create({ ...input, ask: "想看团队工时" }, "bob@x");
+    const created = await store.create(normalizeFeedbackInput(input), "alice@x");
+    await store.create(normalizeFeedbackInput({ ...input, ask: "想看团队工时" }), "bob@x");
     const resolved = await store.resolve(
       created.topic_key,
       "accepted",
@@ -76,8 +75,8 @@ describe("feedback store", () => {
       resolved_by: "admin@x",
       occurrences: 2,
     });
-    await store.create(input, "carol@x");
-    expect((await store.list()).rows[0]).toMatchObject({ status: "open", occurrences: 3 });
+    await store.create(normalizeFeedbackInput(input), "carol@x");
+    expect((await store.list(20, 0)).rows[0]).toMatchObject({ status: "open", occurrences: 3 });
     expect(
       await store.resolve("00000000000000000000", "rejected", "不在范围", "admin@x"),
     ).toBeNull();

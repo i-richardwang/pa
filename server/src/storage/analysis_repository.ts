@@ -22,16 +22,6 @@ import {
   type ViewPreferences,
 } from "../presentation_core/view_preferences.js";
 
-export {
-  ANALYSIS_RETENTION_DAYS,
-  AnalysisNotFoundError,
-  AnalysisViewNotFoundError,
-  type AnalysisRecord,
-  type AnalysisRepository,
-  type AnalysisViewRecord,
-  type OwnedAnalysisView,
-} from "../ports/analysis_repository.js";
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function createAnalysisRepository(

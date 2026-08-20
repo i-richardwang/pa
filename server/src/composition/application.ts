@@ -3,6 +3,7 @@ import { createAnalysisService } from "../application/analysis_service.js";
 import { createBoardService } from "../application/board_service.js";
 import { createCatalogService } from "../application/catalog_service.js";
 import { createBusinessTermService } from "../application/business_term_service.js";
+import { createBusinessTermRegistry } from "../application/business_term_registry.js";
 import { createFeedbackService } from "../application/feedback_service.js";
 import { createUsageService } from "../application/usage_service.js";
 import { createExportService } from "../application/export_service.js";
@@ -38,14 +39,18 @@ export function createApplication(input: {
     log: createUsageLog(input.db),
     statistics: createUsageStats(input.db),
   });
-  const businessTerms = createBusinessTermService({
+  const businessTermRegistry = createBusinessTermRegistry({
     repository: createBusinessTermRepository(input.db),
-    usage,
   });
   const catalog = createCatalogService({
     cube: input.visibilityCube,
     canonical: input.canonical,
-    businessTerms,
+    businessTerms: businessTermRegistry,
+  });
+  const businessTerms = createBusinessTermService({
+    registry: businessTermRegistry,
+    catalog,
+    usage,
   });
   const feedback = createFeedbackService({
     repository: createFeedbackStore(input.db),
@@ -91,9 +96,9 @@ export function createApplication(input: {
     newId: randomUUID,
   });
   const recordProjection = createRecordProjectionService({
-    reports,
-    boards,
-    analyses,
+    reports: report,
+    boards: board,
+    analyses: analysis,
     semanticPlanning,
     cube: input.cube,
     audit: createRecordProjectionAudit(input.db),

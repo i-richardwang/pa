@@ -8,7 +8,7 @@
  * 业务同义词由全局指标域分类表达，不靠物理成员名兼容。
  *
  * 命中成员精确返回；指标域命中（业务标题/说明/同义词）且无任何成员命中时才回退全量成员
- * （目录页浏览语义）——回退裁决在 server.ts catalog handler，本模块只提供匹配原语。
+ * （目录页浏览语义）——回退裁决在 catalog_document.ts，本模块只提供匹配原语。
  */
 import type { CubeMember } from "../ports/cube_gateway.js";
 

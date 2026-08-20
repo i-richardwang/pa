@@ -35,7 +35,7 @@ export function registerBoardRoutes(
   dashboard.post("/api/boards", async (c) => {
     const parsed = CREATE_BOARD_BODY.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "看板请求无效" }, 400);
-    return c.json(await boardService.create(parsed.data.name, c.get("me").email));
+    return c.json(await boardService.create(c.get("principal"), parsed.data.name));
   });
 
   dashboard.get("/api/boards/:id", async (c) => {
@@ -47,8 +47,8 @@ export function registerBoardRoutes(
     if (!parsed.success) return c.json({ error: "看板修改请求无效" }, 400);
     return c.json(
       await boardService.update(
+        c.get("principal"),
         c.req.param("id"),
-        c.get("me").email,
         { name: parsed.data.name, tiles: parsed.data.tiles },
         parsed.data.if_revision,
       ),
@@ -60,8 +60,8 @@ export function registerBoardRoutes(
     if (!parsed.success) return c.json({ error: "加入看板请求无效" }, 400);
     return c.json(
       await boardService.addReport({
+        principal: c.get("principal"),
         id: c.req.param("id"),
-        owner: c.get("me").email,
         reportId: parsed.data.report_id,
         ifRevision: parsed.data.if_revision,
       }),
@@ -69,7 +69,7 @@ export function registerBoardRoutes(
   });
 
   dashboard.delete("/api/boards/:id", async (c) => {
-    await boardService.remove(c.req.param("id"), c.get("me").email);
+    await boardService.remove(c.get("principal"), c.req.param("id"));
     return c.json({ ok: true });
   });
 

@@ -53,6 +53,7 @@ CAS 冲突直接拒绝。保存、替换、恢复、Report 重放与 Board 重�
 
 - 直接访问 Analysis 或 View 时校验 Analysis owner。
 - 按 Report 访问时先校验 Report owner；按 Board 访问时校验看板包含该 Report，再以当前查看者身份执行。
+- Record Projection 通过 Analysis、Report 与 Board Application Service 取得由各聚合完成鉴权和装配的上下文。
 - View、Report 与 Board 重放都读取当前数据、重新鉴权、重新编译和执行，不持久化 Run 产物。
 - 即席 View、Report 与 Board 共用 Record Projection Service。即席名单只接受无分组、单业务时间桶的聚合结果；Report 与 Board 格点入口校验服务端签发的指标、维度和时间坐标。
 - 展示、受控记录投影与导出都使用 `view_id` 定位完整定义；`analysis_id` 只标识可被多个 View 复用的数据问题。
@@ -93,3 +94,4 @@ business_term
 - 规范叫法和其他叫法统一归一后参与匹配与重复校验，但保留原文展示。
 - 成员关联只用于 Catalog 导航，不保存物理字段、数据值、过滤器或查询配方。
 - Catalog 查询时现读全部术语，不把术语写入编译器目录。
+- HTTP 只传入当前 Principal 与术语动作；Application Service 完成管理员授权并从该 Principal 的公共目录取得可见成员，Registry 才执行校验、匹配与投影。

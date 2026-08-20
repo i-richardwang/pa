@@ -1,11 +1,15 @@
 /** 数据能力缺口的校验与入队用例。 */
 import type { Principal } from "../contracts/principal.js";
 import type { FeedbackRepository } from "../ports/feedback_repository.js";
-import type { UsageLog } from "../ports/usage_log.js";
-import type { FeedbackStatus } from "../contracts/feedback_contract.js";
-import { normalizeFeedbackInput, type FeedbackInput } from "../contracts/feedback_input.js";
-
-export type { FeedbackInput } from "../contracts/feedback_input.js";
+import type { UsageService } from "./usage_service.js";
+import { FEEDBACK_TOPIC_KEY_SCHEMA, type FeedbackStatus } from "../contracts/feedback_contract.js";
+import {
+  normalizeFeedbackInput,
+  normalizeFeedbackNote,
+  type FeedbackInput,
+} from "../contracts/feedback_input.js";
+import { normalizePagination } from "../contracts/pagination_contract.js";
+import { ForbiddenError, InvalidRequestError } from "./errors.js";
 
 export type FeedbackSubmission = {
   id: number;
@@ -18,11 +22,14 @@ export type FeedbackService = ReturnType<typeof createFeedbackService>;
 
 export function createFeedbackService(deps: {
   repository: FeedbackRepository;
-  usage: Pick<UsageLog, "log">;
+  usage: Pick<UsageService, "log">;
 }) {
+  const assertAdmin = (principal: Principal) => {
+    if (!principal.roles.includes("admin")) throw new ForbiddenError("需要管理员权限");
+  };
+
   async function submit(principal: Principal, input: FeedbackInput): Promise<FeedbackSubmission> {
-    normalizeFeedbackInput(input);
-    const record = await deps.repository.create(input, principal.email);
+    const record = await deps.repository.create(normalizeFeedbackInput(input), principal.email);
     return {
       id: record.id,
       topic_key: record.topic_key,
@@ -31,20 +38,30 @@ export function createFeedbackService(deps: {
     };
   }
 
-  async function list(limit?: number, offset?: number) {
-    return deps.repository.list(limit, offset);
+  async function list(principal: Principal, limit?: number, offset?: number) {
+    assertAdmin(principal);
+    const page = normalizePagination(limit, offset);
+    return deps.repository.list(page.limit, page.offset);
   }
 
   async function resolve(
+    principal: Principal,
     topicKey: string,
     status: Exclude<FeedbackStatus, "open">,
     note: string,
-    resolvedBy: string,
   ) {
-    const result = await deps.repository.resolve(topicKey, status, note, resolvedBy);
+    assertAdmin(principal);
+    const parsedKey = FEEDBACK_TOPIC_KEY_SCHEMA.safeParse(topicKey);
+    if (!parsedKey.success) throw new InvalidRequestError("无效的反馈主题编号");
+    const result = await deps.repository.resolve(
+      parsedKey.data,
+      status,
+      normalizeFeedbackNote(note),
+      principal.email,
+    );
     if (!result) return null;
     await deps.usage.log({
-      caller: resolvedBy,
+      caller: principal.email,
       tool: "feedback",
       title: `${status === "accepted" ? "接受" : "拒绝"}反馈：${result.ask}`,
       outcome: "ok",

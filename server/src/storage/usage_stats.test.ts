@@ -74,7 +74,7 @@ describe("usage_stats", () => {
   test("空应用库返回空结果", async () => {
     const stats = createUsageStats(createTestAppDatabase());
     expect((await stats.overview(30)).cells).toEqual([]);
-    expect((await stats.titles(30)).rows).toEqual([]);
+    expect((await stats.titles(30, 20, 0)).rows).toEqual([]);
     expect((await stats.unanswered(30)).zero_hits).toEqual([]);
   });
 
@@ -100,7 +100,7 @@ describe("usage_stats", () => {
   test("titles：只取成功且带 title 的分析执行（含换呈现重跑），时间倒序", async () => {
     const path = freshPath();
     await seed(path);
-    const { rows } = await createUsageStats(createTestAppDatabase(path)).titles(30);
+    const { rows } = await createUsageStats(createTestAppDatabase(path)).titles(30, 20, 0);
     expect(rows.map((r) => r.title)).toEqual(["研发部在职人数趋势", "全公司各职级人员结构"]);
     expect(rows[1].row_count).toBe(7);
   });
@@ -109,10 +109,10 @@ describe("usage_stats", () => {
     const path = freshPath();
     await seed(path);
     const stats = createUsageStats(createTestAppDatabase(path));
-    const alice = await stats.mine("alice", 30);
+    const alice = await stats.mine("alice", 30, 20, 0);
     expect(alice.rows.map((r) => r.title)).toEqual(["研发部在职人数趋势", "全公司各职级人员结构"]);
     // bob 只有 catalog 与一条 run_analysis 报错（无 title），本人记录为空
-    expect((await stats.mine("bob", 30)).rows).toEqual([]);
+    expect((await stats.mine("bob", 30, 20, 0)).rows).toEqual([]);
   });
 
   test("mine：使用记录独立保留，缺少有效 View 身份时不提供重放入口", async () => {
@@ -139,9 +139,9 @@ describe("usage_stats", () => {
       view_id: identity.view.id,
     });
     const stats = createUsageStats(db);
-    expect((await stats.mine("alice", 30)).rows[0]?.view_id).toBe(identity.view.id);
+    expect((await stats.mine("alice", 30, 20, 0)).rows[0]?.view_id).toBe(identity.view.id);
     new Database(path).prepare("DELETE FROM analysis WHERE id = ?").run(identity.analysis.id);
-    expect((await stats.mine("alice", 30)).rows[0]?.analysis_id).toBeNull();
+    expect((await stats.mine("alice", 30, 20, 0)).rows[0]?.analysis_id).toBeNull();
   });
 
   test("unanswered：部分命中的购物单仍逐项聚合缺口与报错", async () => {
@@ -185,8 +185,8 @@ describe("usage_stats", () => {
     const { cells } = await stats.overview(30);
     expect(cells.every((c) => c.tool === "run_analysis" || c.tool === "rerun_analysis")).toBe(true);
     expect((await stats.unanswered(30)).zero_hits).toEqual([]);
-    const clamped = await stats.unanswered(366);
-    expect(clamped.days).toBe(90);
-    expect(clamped.zero_hits).toEqual([]);
+    const explicit = await stats.unanswered(366);
+    expect(explicit.days).toBe(366);
+    expect(explicit.zero_hits).toEqual([expect.objectContaining({ term: "加班时长" })]);
   });
 });
