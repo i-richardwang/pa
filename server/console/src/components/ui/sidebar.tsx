@@ -18,7 +18,8 @@ import {
 } from "@/components/ui/sheet";
 import { PanelLeftIcon, SearchIcon } from "lucide-react";
 
-const SIDEBAR_WIDTH = "13.75rem";
+/** 导航侧栏的宽；弹层里的分节栏同取这一档。 */
+export const SIDEBAR_WIDTH = "13.75rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 
 const SIDEBAR_EDGE = "0.375rem";

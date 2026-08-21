@@ -3,10 +3,7 @@ import type {
   PublicCatalogMember as CatalogMemberPayload,
   PublicMetricDomain as MetricDomainPayload,
 } from "@contracts/catalog_contract";
-import { TIME_INTENT_INPUT, compileTimeIntent, resolveTimeOutputGrain } from "@time";
-import { parseAnalysisSpec } from "../../../../src/semantic_core/analysis_spec";
 import { groupMembers, metricDomainTitles, pickableMembers } from "./member_picker";
-import { defaultTimeForWindow, withCurrent } from "./time_editor";
 
 const measure: CatalogMemberPayload = {
   id: "measure:period_end_target_count",
@@ -23,7 +20,7 @@ const dimension: CatalogMemberPayload = {
   dimension_group: { id: "organization", title: "组织与部门" },
 };
 
-describe("report editor member and time controls", () => {
+describe("report editor member picker", () => {
   test("候选本地灰化只据纯语义信号：互斥维度与被封锁维度，双向置灰", () => {
     // 指标声明与某维度互斥：该维度被选中时指标置灰
     expect(pickableMembers([measure], ["dimension:department_name"], [])[0]).toMatchObject({
@@ -129,63 +126,5 @@ describe("report editor member and time controls", () => {
       ["组织与部门", ["dimension:department_name"]],
       ["其他", ["measure:orphan"]],
     ]);
-  });
-
-  test("三个窗口默认态产生的业务坐标都能组成权威 AnalysisSpec", () => {
-    for (const kind of ["current", "monthly", "yearly"] as const) {
-      expect(() =>
-        parseAnalysisSpec({
-          views: [
-            {
-              id: "result",
-              measures: ["test_people_metrics.active_employee_count"],
-              time: compileTimeIntent(defaultTimeForWindow(kind)),
-            },
-          ],
-        }),
-      ).not.toThrow();
-    }
-  });
-
-  // 编辑器只该产出契约合法、结果桶互不重叠的时间坐标。三个窗口默认态覆盖 GUI 的全部出口，
-  // 逐个跑契约校验与唯一编译点的结果粒度解析，锁死「不生产会撞桶/非法坐标」这条不变量。
-  test("三个窗口默认态都通过契约校验并解析出预期结果粒度", () => {
-    const current = defaultTimeForWindow("current");
-    const monthly = defaultTimeForWindow("monthly");
-    const yearly = defaultTimeForWindow("yearly");
-    for (const time of [current, monthly, yearly])
-      expect(() => TIME_INTENT_INPUT.parse(time)).not.toThrow();
-    expect(resolveTimeOutputGrain(compileTimeIntent(current), "2026-07")).toBe("total");
-    expect(resolveTimeOutputGrain(compileTimeIntent(monthly), "2026-07")).toBe("month");
-    expect(resolveTimeOutputGrain(compileTimeIntent(yearly), "2026-07")).toBe("year");
-  });
-
-  test("off-menu 的近 N 值注入档位列表，触发器不留空白且档位内不重复", () => {
-    // agent 写的 last:{months:9}/years:7 不在预设档位，须补进列表头供触发器匹配显示。
-    expect(withCurrent([6, 12, 24, 36], 9)).toEqual([9, 6, 12, 24, 36]);
-    expect(withCurrent([2, 3, 4, 5, 6], 7)).toEqual([7, 2, 3, 4, 5, 6]);
-    // 档位内的值不重复注入。
-    expect(withCurrent([6, 12, 24, 36], 12)).toEqual([6, 12, 24, 36]);
-  });
-
-  test("默认态一律省略锚点走相对窗口，随数据滚动而非冻结在编辑月", () => {
-    // 月度趋势与历年默认都是相对窗口 last（无绝对 range），保存后不冻结。
-    expect(defaultTimeForWindow("monthly")).toEqual({
-      window: { kind: "trailing", count: 12, unit: "month" },
-    });
-    expect(defaultTimeForWindow("yearly")).toEqual({
-      window: { kind: "trailing", count: 3, unit: "year" },
-    });
-    expect(defaultTimeForWindow("current")).toEqual({
-      window: { kind: "current_month" },
-    });
-    // 同期口径与主窗口整体错开一年，随 actual_through 滚动。
-    const aligned = {
-      window: { kind: "year_to_date" as const },
-      display: "year" as const,
-      comparison: { kind: "previous_year" as const },
-    };
-    expect(() => TIME_INTENT_INPUT.parse(aligned)).not.toThrow();
-    expect(resolveTimeOutputGrain(compileTimeIntent(aligned), "2026-07")).toBe("year");
   });
 });

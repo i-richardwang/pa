@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import type * as React from "react";
-import { ChevronRightIcon, InfoIcon } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Hint } from "@/components/ui/hint";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
+import { BlockedHint, Hint } from "@/components/ui/hint";
+import { SECTION_TITLE_TEXT } from "@/components/ui/surface";
 
 /** 两档密度由 InspectorBody 定在栏上，段与行各自认领（两面的判据见 ui_spec「侧栏系统」）。 */
 export const INSPECTOR_SECTION_CLASS =
@@ -23,27 +23,8 @@ const INSPECTOR_SECTION_RULE_CLASS =
   "mx-2 hidden border-pa-line border-b-[0.5px] pt-4 " +
   "group-data-[density=reading]/inspector:group-[&:not(:last-child)]/section:block";
 
-/** 无图标的行缩到与带图标那行的名字同起点（图标 16 + 间距 10）；触屏一档间距更宽。 */
-export const INSPECTOR_ROW_INDENT_CLASS = "ml-[30px] md:ml-[26px]";
-
-export function BlockedHint({ reason }: { reason: React.ReactNode }): React.ReactElement {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            className="pa-focus flex shrink-0 cursor-help items-center text-pa-faint"
-            data-slot="inspector-blocked"
-            type="button"
-          />
-        }
-      >
-        <InfoIcon className="size-4" />
-      </TooltipTrigger>
-      <TooltipPopup>{reason}</TooltipPopup>
-    </Tooltip>
-  );
-}
+/** 行里图标槽的宽：图标 4 格加与名字之间的 2.5 格。无图标的行缩这一段，名字与带图标的行同起点。 */
+export const INSPECTOR_ROW_INDENT_CLASS = "ml-6.5";
 
 export function InspectorSection({
   title,
@@ -82,12 +63,7 @@ export function InspectorSection({
       ) : null}
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1">
-          <h3
-            className={cn(
-              "truncate font-semibold text-sm leading-5",
-              blocked ? "text-pa-faint" : "text-pa-ink",
-            )}
-          >
+          <h3 className={cn("truncate", SECTION_TITLE_TEXT, blocked && "text-pa-faint")}>
             {title}
           </h3>
           {blocked ? <BlockedHint reason={blocked} /> : null}
@@ -214,48 +190,6 @@ export function InspectorProfileCard({
 }
 
 /**
- * 复合输入：外面一圈边框与聚焦环把它读成一个控件，里面各行是它的字段。
- *
- * 各行**共用一张网格**：label 列按 `auto` 一起量，于是所有字段的分界恒落在同一条竖线上，
- * 且这条线由最长的那个 label 定，不由手挑的百分比定。
- */
-export function InspectorFieldGroup({
-  children,
-}: {
-  children: React.ReactNode;
-}): React.ReactElement {
-  return (
-    <div
-      className={cn(
-        "grid grid-cols-[auto_minmax(0,1fr)] divide-y divide-pa-line overflow-hidden rounded-lg border border-pa-line-subtle bg-pa-bg px-3",
-        "pa-focus-within",
-      )}
-      data-slot="inspector-field-group"
-    >
-      {children}
-    </div>
-  );
-}
-
-export function InspectorFieldRow({
-  label,
-  children,
-}: {
-  label: React.ReactNode;
-  children: React.ReactNode;
-}): React.ReactElement {
-  return (
-    <div
-      className="col-span-2 grid grid-cols-subgrid items-center gap-2 py-1"
-      data-slot="inspector-field-row"
-    >
-      <span className="truncate text-sm leading-5 text-pa-muted">{label}</span>
-      <div className="flex min-h-7 min-w-0 items-center">{children}</div>
-    </div>
-  );
-}
-
-/**
  * 栏里唯一的一种行：清单行、设置行、事实行都是它，变的只是右槽里放什么。
  * `children` 即右槽——给字符串按「值」排版，给节点照放。行高触屏 44、桌面 32。
  */
@@ -268,8 +202,10 @@ export function InspectorRow({
   onClick,
   children,
 }: {
+  /** 名字前的记号；记号槽也可以放一枚勾选框，勾的就是这一行。 */
   icon?: React.ReactNode;
   label: React.ReactNode;
+  /** 无记号的行让出记号槽的宽，名字与带记号的行同起点。 */
   indent?: boolean;
   blocked?: React.ReactNode;
   actions?: React.ReactNode;
@@ -285,7 +221,6 @@ export function InspectorRow({
     <span className="flex min-w-0 grow items-center gap-2.5">
       {icon ? (
         <span
-          aria-hidden="true"
           className="flex shrink-0 items-center text-pa-faint [&_svg]:size-4"
           data-slot="inspector-row-icon"
         >

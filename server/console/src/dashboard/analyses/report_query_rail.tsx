@@ -1,9 +1,13 @@
-import { useEffect, useState, type ReactNode } from "react";
+/**
+ * 查询栏：筛选、指标、分组三节。栏内只有一条编辑规则——选择类控件（下拉、分段、行选）
+ * 一改即落草稿；文本框在失焦或回车时落，落的是此刻框里的值，故文本框不受控、
+ * 以外部值为 `key` 重挂。
+ */
+import type { ReactNode } from "react";
 import {
   ArrowDownWideNarrowIcon,
   ArrowUpDownIcon,
   ArrowUpNarrowWideIcon,
-  ChevronsUpDownIcon,
   TagIcon,
   ListFilterIcon,
   MinusIcon,
@@ -36,8 +40,6 @@ import {
   SelectItem,
   SelectPopup,
   SelectTrigger,
-  selectTriggerIconClassName,
-  selectTriggerVariants,
   SelectValue,
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -54,24 +56,21 @@ import {
 import { FilterEditor } from "./filter_editor";
 import { MemberPopover, type PickableMember } from "./member_picker";
 
-/**
- * 成员行自带左缩（与题名同起点），故内容盒的横内缩清零，否则同一道内缩量两遍。
- * 行与题行贴合无空档：中间留一道缝会让节题读着松脱。
- */
+/** 成员行自带记号槽宽的左缩，内容盒不加横内缩；行与题行贴合无空档。 */
 const MEMBER_CONTENT_CLASS = "px-0 pt-0 md:px-0";
 
 /**
  * 分组各行**共用一张网格**，不是各排各的行盒：维度选择器吃剩余宽（`1fr`），范围触发件
  * 与移除钮按内容定宽（`auto`）——而 `auto` 是**整列一起量**的，于是每行两枚触发件的分界
- * 恒落在同一条竖线上。各行自排时这条线会随本行标签长短漂（`前 15` 与 `全部` 差 4px），
- * 一列药丸读着就是歪的。
- *
- * 行间的缝走 `gap-y`，不写在行上：行已经不是一个盒子了。
+ * 恒落在同一条竖线上。行间的缝走 `gap-y`，不写在行上：行已经不是一个盒子了。
  */
 const BREAKDOWN_CONTENT_CLASS = cn(
   INSPECTOR_ROW_INDENT_CLASS,
   "grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-y-1.5 px-0 pl-2 md:px-0 md:pl-2",
 );
+
+/** 最大项数的上限：排名只看头部。 */
+const MAX_ITEMS_LIMIT = 20;
 
 /**
  * 题行右端的添加入口：全栏同一枚幽灵 `+`，位置不随内容多少上下漂。
@@ -119,6 +118,11 @@ function RowAction({
     </Tooltip>
   );
 }
+
+/** 文本框的落值时机：失焦，或回车（回车即失焦，落值只走一条路）。 */
+const commitOnEnter = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  if (event.key === "Enter") event.currentTarget.blur();
+};
 
 function calculationId(measure: string, dimension: string): string {
   const token = `${measure}_${dimension}`
@@ -197,8 +201,6 @@ function CalculationRow({
   onChange: (next: SemanticPercentOfTotalCalculation) => void;
   onRemove: () => void;
 }) {
-  const [title, setTitle] = useState(calculation.title);
-  useEffect(() => setTitle(calculation.title), [calculation.title]);
   const dimensionTitle = titleOf(calculation.category_dimension);
   const measureTitle = titleOf(calculation.measure);
   const conclusion = `按${dimensionTitle}`;
@@ -222,17 +224,16 @@ function CalculationRow({
       <Popover>
         <PopoverTrigger
           render={
-            <button
+            <SelectButton
               aria-label={`${calculation.title}怎么算：${measureTitle}按${dimensionTitle}的占比`}
-              className={cn(selectTriggerVariants({ size: "sm" }), "w-auto min-w-0 text-pa-muted")}
-              type="button"
-            />
+              className="w-auto min-w-0 text-pa-muted"
+              icon={<PercentIcon />}
+              size="sm"
+            >
+              {conclusion}
+            </SelectButton>
           }
-        >
-          <PercentIcon className="size-4 shrink-0 text-pa-faint" />
-          <span className="truncate">{conclusion}</span>
-          <ChevronsUpDownIcon className={selectTriggerIconClassName} />
-        </PopoverTrigger>
+        />
         <PopoverPopup
           align="end"
           className="p-1.5"
@@ -292,18 +293,19 @@ function CalculationRow({
             <div className="px-2 pb-0.5">
               <Input
                 aria-label={`${calculation.title}的名称`}
+                defaultValue={calculation.title}
+                key={calculation.title}
                 maxLength={30}
-                onBlur={() => {
-                  const trimmed = title.trim();
+                onBlur={(event) => {
+                  const trimmed = event.currentTarget.value.trim();
                   if (!trimmed) {
-                    setTitle(calculation.title);
+                    event.currentTarget.value = calculation.title;
                     return;
                   }
                   if (trimmed !== calculation.title) commit({ title: trimmed });
                 }}
-                onChange={(event) => setTitle(event.target.value)}
+                onKeyDown={commitOnEnter}
                 size="sm"
-                value={title}
               />
             </div>
           </PopupSection>
@@ -346,11 +348,6 @@ function BreakdownField({
   const by = active?.by ?? measures[0] ?? "name";
   const byName = by === "name";
   const direction = active?.direction ?? (byName ? "asc" : "desc");
-  const [maxItems, setMaxItems] = useState(active?.max_items?.toString() ?? "");
-
-  useEffect(() => {
-    setMaxItems(active?.max_items?.toString() ?? "");
-  }, [active?.max_items]);
 
   const commit = (next: Partial<GroupSort>) => {
     onChange({
@@ -411,21 +408,17 @@ function BreakdownField({
       <Popover>
         <PopoverTrigger
           render={
-            <button
+            <SelectButton
               aria-label={`${label}分组范围：${rangeLabel}`}
               // 宽随内容，右外边距留在格内，与移除钮之间保留缝隙。
-              className={cn(
-                selectTriggerVariants({ size: "sm" }),
-                "mr-0.5 w-auto min-w-0 text-pa-muted",
-              )}
-              type="button"
-            />
+              className="mr-0.5 w-auto min-w-0 text-pa-muted"
+              icon={<RangeIcon />}
+              size="sm"
+            >
+              {rangeLabel}
+            </SelectButton>
           }
-        >
-          <RangeIcon className="size-4 shrink-0 text-pa-faint" />
-          <span className="truncate">{rangeLabel}</span>
-          <ChevronsUpDownIcon className={selectTriggerIconClassName} />
-        </PopoverTrigger>
+        />
 
         <PopoverPopup align="end" className="p-1.5" data-slot="breakdown-range" width="settings">
           <PopupTitle>排序依据</PopupTitle>
@@ -493,35 +486,26 @@ function BreakdownField({
             <div className="px-2 pb-0.5">
               <Input
                 aria-label={`${label}最大项数`}
+                defaultValue={active?.max_items?.toString() ?? ""}
                 disabled={!measures.length}
                 inputMode="numeric"
-                onBlur={() => {
-                  if (!maxItems) return;
-                  const count = Number(maxItems);
-                  if (!Number.isInteger(count) || count < 1) {
-                    setMaxItems("");
-                    if (active) commit({ max_items: undefined });
-                  } else if (count > 20) {
-                    setMaxItems("20");
-                    commit({ max_items: 20 });
+                key={active?.max_items ?? "all"}
+                onBlur={(event) => {
+                  // 空或非正整数即不限项；超过上限压到上限。框里回写落下的那个值。
+                  const count = Number(event.currentTarget.value.replace(/[^\d]/g, ""));
+                  const next =
+                    Number.isInteger(count) && count >= 1
+                      ? Math.min(count, MAX_ITEMS_LIMIT)
+                      : undefined;
+                  event.currentTarget.value = next?.toString() ?? "";
+                  if (next !== active?.max_items && (next || active)) {
+                    commit({ max_items: next });
                   }
                 }}
-                onChange={(event) => {
-                  const value = event.target.value.replace(/[^\d]/g, "");
-                  setMaxItems(value);
-                  if (!value) {
-                    if (active) commit({ max_items: undefined });
-                    return;
-                  }
-                  const count = Number(value);
-                  if (Number.isInteger(count) && count >= 1 && count <= 20) {
-                    commit({ max_items: count });
-                  }
-                }}
+                onKeyDown={commitOnEnter}
                 placeholder="全部"
                 size="sm"
                 type="text"
-                value={maxItems}
               />
             </div>
           </PopupSection>
@@ -566,11 +550,7 @@ export function ReportQueryRail({
 
   if (!queryView || !catalog) {
     return (
-      <div
-        className="flex h-full min-h-0 flex-col"
-        data-slot="report-editor-inspector"
-        data-testid="report-query-rail"
-      >
+      <div className="flex h-full min-h-0 flex-col" data-slot="report-query-rail">
         <InspectorBody>
           {leading}
           <section className={INSPECTOR_SECTION_CLASS}>
@@ -614,168 +594,156 @@ export function ReportQueryRail({
   const calculationDimensions = catalog.dimensions.filter(
     (member) => dimensions.includes(member.id) && member.dimension_kind !== "overlapping",
   );
-
-  const steps: React.ReactNode[] = [];
-
-  steps.push(
-    <InspectorSection
-      actions={
-        <MemberPopover
-          members={catalog.dimensions}
-          onPick={(member) =>
-            updateIntent({
-              ...intent,
-              filters: [
-                ...filters,
-                { member: member.canonical_name, relation: "one_of", values: [] },
-              ],
-            })
-          }
-          selected={filters.map((filter) => filter.member)}
-          selectedDimensions={dimensions}
-          trigger={addButton("添加筛选条件")}
-        />
-      }
-      icon={<ListFilterIcon />}
-      key="filter"
-      title="筛选"
-    >
-      {filters.length ? (
-        <FilterEditor
-          catalogDimensions={catalog.dimensions}
-          filters={filters}
-          onChange={(next) =>
-            updateIntent({
-              ...intent,
-              filters: next.length ? next : undefined,
-            })
-          }
-        />
-      ) : undefined}
-    </InspectorSection>,
-  );
-
   const calculation = calculations[0];
   const calculationPick = percentOfTotalPick({
     measures: calculationMeasures,
     dimensions: calculationDimensions,
     chosen: Boolean(calculation),
   });
-  steps.push(
-    <InspectorSection
-      actions={
-        <MemberPopover
-          extras={{ label: "用已选指标再算", items: [calculationPick] }}
-          members={catalog.measures}
-          metricDomains={catalog.metric_domains}
-          onPick={(member) => {
-            if (member.id === PERCENT_OF_TOTAL_PICK_ID) {
-              const [measure] = calculationMeasures;
-              const [dimension] = calculationDimensions;
-              if (!measure || !dimension) return;
-              updateIntent({
-                ...intent,
-                calculations: [defaultPercentOfTotal(measure, dimension)],
-                summary: undefined,
-              });
-              return;
-            }
-            updateIntent({ ...intent, measures: [...measures, member.canonical_name] });
-          }}
-          selected={[...measures, ...(calculation ? [PERCENT_OF_TOTAL_PICK_ID] : [])]}
-          selectedDimensions={dimensions}
-          trigger={addButton("选择指标")}
-        />
-      }
-      contentClassName={MEMBER_CONTENT_CLASS}
-      icon={<SigmaIcon />}
-      key="measures"
-      title="指标"
-    >
-      {measures.length || calculation ? (
-        <>
-          {measures.map((member) => (
-            <InspectorRow
-              indent
-              actions={
-                <RowAction
-                  icon={<MinusIcon />}
-                  label={`移除 ${titleOf(member)}`}
-                  onClick={() => updateIntent(removeSemanticQueryMember(intent, member, "measure"))}
-                  tip="移除该指标"
-                />
-              }
-              key={member}
-              label={titleOf(member)}
-            />
-          ))}
-          {calculation ? (
-            <CalculationRow
-              calculation={calculation}
-              dimensions={calculationDimensions}
-              key={calculation.id}
-              measures={calculationMeasures}
-              onChange={(next) => updateIntent({ ...intent, calculations: [next] })}
-              onRemove={() => updateIntent({ ...intent, calculations: undefined })}
-              titleOf={titleOf}
-            />
-          ) : null}
-        </>
-      ) : undefined}
-    </InspectorSection>,
-  );
-
-  steps.push(
-    <InspectorSection
-      actions={
-        <MemberPopover
-          blockedDimensions={incompatibleDimensions}
-          members={catalog.dimensions}
-          onPick={(member) =>
-            updateIntent({ ...intent, dimensions: [...dimensions, member.canonical_name] })
-          }
-          selected={dimensions}
-          selectedDimensions={dimensions}
-          trigger={addButton("选择分组维度")}
-        />
-      }
-      contentClassName={BREAKDOWN_CONTENT_CLASS}
-      icon={<TagIcon />}
-      key="dimensions"
-      title="分组"
-    >
-      {dimensions.length
-        ? dimensions.map((member) => (
-            <BreakdownField
-              blockedDimensions={incompatibleDimensions}
-              dimensionMembers={catalog.dimensions}
-              key={member}
-              label={titleOf(member)}
-              measures={measures}
-              member={member}
-              onChange={(groupSort) => updateIntent({ ...intent, group_sort: groupSort })}
-              onRemove={() => updateIntent(removeSemanticQueryMember(intent, member, "dimension"))}
-              onReplace={(next) =>
-                updateIntent(replaceSemanticQueryDimension(intent, member, next))
-              }
-              selectedDimensions={dimensions}
-              sort={intent.group_sort}
-              titleOf={titleOf}
-            />
-          ))
-        : undefined}
-    </InspectorSection>,
-  );
 
   return (
-    <div
-      className="flex h-full min-h-0 flex-col"
-      data-slot="report-editor-inspector"
-      data-testid="report-query-rail"
-    >
+    <div className="flex h-full min-h-0 flex-col" data-slot="report-query-rail">
       <InspectorBody>
         {leading}
-        {steps}
+        <InspectorSection
+          actions={
+            <MemberPopover
+              members={catalog.dimensions}
+              onPick={(member) =>
+                updateIntent({
+                  ...intent,
+                  filters: [
+                    ...filters,
+                    { member: member.canonical_name, relation: "one_of", values: [] },
+                  ],
+                })
+              }
+              selected={filters.map((filter) => filter.member)}
+              selectedDimensions={dimensions}
+              trigger={addButton("添加筛选条件")}
+            />
+          }
+          contentClassName={MEMBER_CONTENT_CLASS}
+          icon={<ListFilterIcon />}
+          title="筛选"
+        >
+          {filters.length ? (
+            <FilterEditor
+              catalogDimensions={catalog.dimensions}
+              filters={filters}
+              onChange={(next) =>
+                updateIntent({
+                  ...intent,
+                  filters: next.length ? next : undefined,
+                })
+              }
+            />
+          ) : undefined}
+        </InspectorSection>
+
+        <InspectorSection
+          actions={
+            <MemberPopover
+              extras={{ label: "用已选指标再算", items: [calculationPick] }}
+              members={catalog.measures}
+              metricDomains={catalog.metric_domains}
+              onPick={(member) => {
+                if (member.id === PERCENT_OF_TOTAL_PICK_ID) {
+                  const [measure] = calculationMeasures;
+                  const [dimension] = calculationDimensions;
+                  if (!measure || !dimension) return;
+                  updateIntent({
+                    ...intent,
+                    calculations: [defaultPercentOfTotal(measure, dimension)],
+                    summary: undefined,
+                  });
+                  return;
+                }
+                updateIntent({ ...intent, measures: [...measures, member.canonical_name] });
+              }}
+              selected={[...measures, ...(calculation ? [PERCENT_OF_TOTAL_PICK_ID] : [])]}
+              selectedDimensions={dimensions}
+              trigger={addButton("选择指标")}
+            />
+          }
+          contentClassName={MEMBER_CONTENT_CLASS}
+          icon={<SigmaIcon />}
+          title="指标"
+        >
+          {measures.length || calculation ? (
+            <>
+              {measures.map((member) => (
+                <InspectorRow
+                  indent
+                  actions={
+                    <RowAction
+                      icon={<MinusIcon />}
+                      label={`移除 ${titleOf(member)}`}
+                      onClick={() =>
+                        updateIntent(removeSemanticQueryMember(intent, member, "measure"))
+                      }
+                      tip="移除该指标"
+                    />
+                  }
+                  key={member}
+                  label={titleOf(member)}
+                />
+              ))}
+              {calculation ? (
+                <CalculationRow
+                  calculation={calculation}
+                  dimensions={calculationDimensions}
+                  key={calculation.id}
+                  measures={calculationMeasures}
+                  onChange={(next) => updateIntent({ ...intent, calculations: [next] })}
+                  onRemove={() => updateIntent({ ...intent, calculations: undefined })}
+                  titleOf={titleOf}
+                />
+              ) : null}
+            </>
+          ) : undefined}
+        </InspectorSection>
+
+        <InspectorSection
+          actions={
+            <MemberPopover
+              blockedDimensions={incompatibleDimensions}
+              members={catalog.dimensions}
+              onPick={(member) =>
+                updateIntent({ ...intent, dimensions: [...dimensions, member.canonical_name] })
+              }
+              selected={dimensions}
+              selectedDimensions={dimensions}
+              trigger={addButton("选择分组维度")}
+            />
+          }
+          contentClassName={BREAKDOWN_CONTENT_CLASS}
+          icon={<TagIcon />}
+          title="分组"
+        >
+          {dimensions.length
+            ? dimensions.map((member) => (
+                <BreakdownField
+                  blockedDimensions={incompatibleDimensions}
+                  dimensionMembers={catalog.dimensions}
+                  key={member}
+                  label={titleOf(member)}
+                  measures={measures}
+                  member={member}
+                  onChange={(groupSort) => updateIntent({ ...intent, group_sort: groupSort })}
+                  onRemove={() =>
+                    updateIntent(removeSemanticQueryMember(intent, member, "dimension"))
+                  }
+                  onReplace={(next) =>
+                    updateIntent(replaceSemanticQueryDimension(intent, member, next))
+                  }
+                  selectedDimensions={dimensions}
+                  sort={intent.group_sort}
+                  titleOf={titleOf}
+                />
+              ))
+            : undefined}
+        </InspectorSection>
         {children}
       </InspectorBody>
 

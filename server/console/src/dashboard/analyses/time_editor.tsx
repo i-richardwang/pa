@@ -4,7 +4,6 @@ import {
   MonthRangePickerDialog,
   type MonthRange,
 } from "@/components/ui/month-picker";
-import { NotebookCellItem } from "@/components/ui/notebook";
 import { Popover, PopoverPopup, PopoverTrigger } from "@/components/ui/popover";
 import { popoverListCheck, PopoverListPanel, PopoverListRow } from "@/components/ui/popover-list";
 import { PopupSection } from "@/components/ui/surface";
@@ -17,17 +16,16 @@ import {
   expandTimeWindow,
   parseTimeIntent,
   primaryTimeRange,
-  requiresMonthlyDisplay,
   resolvedTimeDisplay,
   timeDisplayIssues,
   type TimeCapabilities,
   type TimeIntent,
   type TimeDisplayChoice,
 } from "@time";
-import { CalendarIcon, CheckIcon, GitCompareArrowsIcon } from "lucide-react";
+import { CalendarIcon, GitCompareArrowsIcon } from "lucide-react";
 import { useState } from "react";
+import { DEFAULT_TIME_WINDOW } from "./analysis_draft";
 
-type DefaultWindowKind = "current" | "monthly" | "yearly";
 type WindowChoice =
   | "current_month"
   | "year_to_date"
@@ -45,8 +43,6 @@ type CustomComparisonWindow = Extract<
 /** 常备档只留最常用的几个；其余长度走「自定义范围」，长列表比多一次点击更贵。 */
 const MONTH_CHOICES = [12, 24] as const;
 const YEAR_CHOICES = [2, 3, 5] as const;
-const DEFAULT_MONTHS = 12;
-const DEFAULT_YEARS = 3;
 const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 const monthIndex = (month: string) => {
@@ -60,16 +56,9 @@ const monthAt = (index: number) => {
 const validMonth = (value: string | undefined): value is string =>
   !!value && YEAR_MONTH.test(value);
 
+/** 当前取值不在常备档里时排到最前，触发件与行列表才对得上。 */
 export const withCurrent = (choices: readonly number[], current: number): number[] =>
   choices.includes(current) ? [...choices] : [current, ...choices];
-
-export function defaultTimeForWindow(kind: DefaultWindowKind): TimeIntent {
-  if (kind === "current") return { window: { kind: "current_month" } };
-  if (kind === "monthly") {
-    return { window: { kind: "trailing", count: DEFAULT_MONTHS, unit: "month" } };
-  }
-  return { window: { kind: "trailing", count: DEFAULT_YEARS, unit: "year" } };
-}
 
 const formatMonth = (month: string) =>
   `${Number(month.slice(0, 4))}年${Number(month.slice(5, 7))}月`;
@@ -92,9 +81,7 @@ export function windowSummary(time: TimeIntent): string {
 }
 
 function comparisonChoice(time: TimeIntent): ComparisonChoice {
-  const comparison = time.comparison;
-  if (!comparison) return "none";
-  return comparison.kind;
+  return time.comparison?.kind ?? "none";
 }
 
 export function previousPeriodLabel(window: TimeIntent["window"]): string {
@@ -157,9 +144,9 @@ export function adjustTimeWindow(
 export function setTimeComparison(
   time: TimeIntent,
   comparison?: TimeIntent["comparison"],
-): { time: TimeIntent; adjustment?: string } {
+): TimeIntent {
   const { comparison: _comparison, ...base } = time;
-  return { time: { ...base, ...(comparison ? { comparison } : {}) } };
+  return { ...base, ...(comparison ? { comparison } : {}) };
 }
 
 /**
@@ -175,28 +162,14 @@ function presetWindow(
     return { kind: "current_month", ...(fixedEndpoint ? { month: fixedEndpoint } : {}) };
   }
   if (choice === "year_to_date") return { kind: "year_to_date" };
-  if (choice === "trailing_months") {
-    return { kind: "trailing", count: DEFAULT_MONTHS, unit: "month" };
-  }
-  if (choice === "trailing_years") {
-    return { kind: "trailing", count: DEFAULT_YEARS, unit: "year" };
-  }
+  if (choice === "trailing_months") return DEFAULT_TIME_WINDOW.trailing_months;
+  if (choice === "trailing_years") return DEFAULT_TIME_WINDOW.trailing_years;
   const to = fixedEndpoint ?? latest;
   return {
     kind: "range",
-    from: monthAt(monthIndex(to) - (DEFAULT_MONTHS - 1)),
+    from: monthAt(monthIndex(to) - (DEFAULT_TIME_WINDOW.trailing_months.count - 1)),
     to,
   };
-}
-
-function displaySummary(
-  time: TimeIntent,
-  latest: string,
-  capabilities: TimeCapabilities,
-  grouped: boolean,
-): string {
-  const display = resolvedTimeDisplay(time, latest, capabilities, grouped);
-  return display === "total" ? "单个结果" : display === "month" ? "按月显示" : "按年显示";
 }
 
 function coordinateRanges(time: TimeIntent, latest: string) {
@@ -275,10 +248,9 @@ export function WindowPopup({
 }) {
   const window = time.window;
   const month = window.kind === "current_month" ? window.month : undefined;
-  const changeWindow = (next: TimeIntent["window"], directAdjustment?: string) => {
+  const changeWindow = (next: TimeIntent["window"]) => {
     const normalized = adjustTimeWindow(time, next);
-    const adjustment = [directAdjustment, normalized.adjustment].filter(Boolean).join(" ");
-    return onChange(normalized.time, adjustment || undefined);
+    return onChange(normalized.time, normalized.adjustment);
   };
   // 端点只在绝对表达式之间传递：从冻结窗口换到另一种冻结窗口时保留观察终点。
   const endpoint =
@@ -451,8 +423,7 @@ function activeDisplayChoice(
 }
 
 /**
- * 显示粒度分段（安静文字段）：popover 与常驻时间栏共用的唯一实现。
- * 禁用钮不派发指针事件，Tooltip 挂在外层 span 上（同图型选择器的做法）。
+ * 显示粒度分段：一击直达。禁用钮不派发指针事件，Tooltip 挂在外层 span 上。
  */
 function DisplaySegments({
   time,
@@ -500,69 +471,6 @@ function DisplaySegments({
   );
 }
 
-/**
- * 显示方式浮层：与期间浮层同一副面孔——一列行、选中出勾。禁用档不派发点击，
- * 理由随行走 Tooltip（禁用永不静默）。条上的一击直达仍是分段控件（`DisplaySegments`）：
- * 浮层与分段是同一份取档知识的两种投影，不是两套规则。
- */
-function DisplayPopup({
-  time,
-  latest,
-  capabilities,
-  grouped,
-  onChange,
-}: {
-  time: TimeIntent;
-  latest: string;
-  capabilities: TimeCapabilities;
-  grouped: boolean;
-  onChange: ApplyTimeChange;
-}) {
-  const issues = displayChoiceIssues(time, latest, capabilities, grouped);
-  const active = activeDisplayChoice(time, latest, capabilities, grouped);
-  return (
-    <>
-      <PopoverListPanel>
-        {DISPLAY_CHOICES.map((choice) => {
-          const reason = issues[choice.value];
-          const selected = active === choice.value;
-          const row = (
-            <PopoverListRow
-              unavailable={!!reason}
-              onClick={() => {
-                const next = toggleDisplayChoice(time, choice.value, active);
-                if (next) onChange(next);
-              }}
-              selected={selected}
-              trailing={popoverListCheck(selected)}
-            >
-              {choice.label}
-            </PopoverListRow>
-          );
-          if (!reason) return <div key={choice.value}>{row}</div>;
-          return (
-            <Tooltip disableHoverablePopup key={choice.value}>
-              <TooltipTrigger render={<div />}>{row}</TooltipTrigger>
-              <TooltipPopup side="left">{reason}</TooltipPopup>
-            </Tooltip>
-          );
-        })}
-      </PopoverListPanel>
-      <div className="border-pa-line border-t px-3 py-2 text-pa-muted text-xs">
-        {requiresMonthlyDisplay(time, capabilities, latest)
-          ? "所选指标按月定义；跨月范围按月返回。"
-          : time.display
-            ? "已指定显示方式；再点一次即恢复随观察时间自动选择。"
-            : `随观察时间自动选择，当前为${displaySummary(time, latest, capabilities, grouped)}。`}
-      </div>
-    </>
-  );
-}
-
-export function previousYearComparison(): NonNullable<TimeIntent["comparison"]> {
-  return { kind: "previous_year" };
-}
-
 export function defaultCustomComparisonWindow(
   time: TimeIntent,
   latest: string,
@@ -598,10 +506,8 @@ export function ComparisonPopup({
 }) {
   const choice = comparisonChoice(time);
   const custom = time.comparison?.kind === "custom" ? time.comparison.window : undefined;
-  const setComparison = (comparison?: TimeIntent["comparison"]) => {
-    const next = setTimeComparison(time, comparison);
-    return onChange(next.time, next.adjustment);
-  };
+  const setComparison = (comparison?: TimeIntent["comparison"]) =>
+    onChange(setTimeComparison(time, comparison));
   // 与显示方式同一原则：会被落值闸拒绝的档点击前就灰，理由随行；不留「点了才弹」。
   const row = (
     value: ComparisonChoice,
@@ -612,7 +518,7 @@ export function ComparisonPopup({
     const selected = choice === value;
     const reason = selected
       ? undefined
-      : timeChangeIssue(setTimeComparison(time, candidate).time, latest, capabilities, grouped);
+      : timeChangeIssue(setTimeComparison(time, candidate), latest, capabilities, grouped);
     const item = (
       <PopoverListRow
         onClick={onSelect}
@@ -645,8 +551,8 @@ export function ComparisonPopup({
             () => setComparison({ kind: "previous_period" }),
           )
         : null}
-      {row("previous_year", previousYearLabel(time.window), previousYearComparison(), () =>
-        setComparison(previousYearComparison()),
+      {row("previous_year", previousYearLabel(time.window), { kind: "previous_year" }, () =>
+        setComparison({ kind: "previous_year" }),
       )}
       <PopupSection>
         {row(
@@ -673,7 +579,7 @@ function customComparisonSummary(window: CustomComparisonWindow): string {
 /** 哪一处在等月份选择：三处各自的默认值与落值口径不同，不能共用一个开关。 */
 type PickerKind = "window_range" | "window_month" | "comparison";
 
-/** 月份弹层：期间、观察月与对照期间共用这一处出口，落值仍走同一道校验闸（`applyChange`）。 */
+/** 月份弹层：期间、观察月与对照期间共用这一处出口，落值仍走同一道校验闸。 */
 function TimeMonthPickers({
   kind,
   onClose,
@@ -692,10 +598,8 @@ function TimeMonthPickers({
   const close = (open: boolean) => {
     if (!open) onClose();
   };
-  const applyComparison = (next: CustomComparisonWindow) => {
-    const result = setTimeComparison(time, { kind: "custom", window: next });
-    onChange(result.time, result.adjustment);
-  };
+  const applyComparison = (next: CustomComparisonWindow) =>
+    onChange(setTimeComparison(time, { kind: "custom", window: next }));
   const fallback: MonthRange = { from: latest, to: latest };
 
   if (kind === "window_range") {
@@ -756,140 +660,10 @@ function TimeMonthPickers({
   return null;
 }
 
-export function TimeEditor({
-  time,
-  onChange,
-  dataAsOf,
-  capabilities = {},
-  grouped = false,
-}: {
-  time: TimeIntent;
-  onChange: (time: TimeIntent) => void;
-  dataAsOf: string;
-  capabilities?: TimeCapabilities;
-  /** 结果已有业务分组：时间因此不占轴，自动档解析为整段单桶（与服务端同解）。 */
-  grouped?: boolean;
-}) {
-  const [adjustment, setAdjustment] = useState<string>();
-  const [picker, setPicker] = useState<PickerKind>();
-  const timeIntent = parseTimeIntent(time);
-  if (!validMonth(dataAsOf)) {
-    return (
-      <p className="text-pa-danger-fg text-xs" role="alert">
-        数据最新月份暂不可用，无法编辑时间范围。
-      </p>
-    );
-  }
-  const latest = dataAsOf;
-  const applyChange: ApplyTimeChange = (next, message) => {
-    const issue = timeChangeIssue(next, latest, capabilities, grouped);
-    if (issue) {
-      setAdjustment(`未应用本次修改：${issue}`);
-      return false;
-    }
-    setAdjustment(message);
-    onChange(next);
-    return true;
-  };
-  return (
-    <div className="flex min-w-0 flex-1 flex-col gap-2">
-      <div className="grid grid-cols-2 gap-1.5">
-        <Popover>
-          <NotebookCellItem
-            aria-label="观察时间"
-            className="col-span-2 min-w-0 w-full border-pa-line-strong bg-pa-bg"
-            render={<PopoverTrigger />}
-          >
-            {windowSummary(timeIntent)}
-          </NotebookCellItem>
-          <PopoverPopup width="list">
-            <WindowPopup
-              latest={latest}
-              onChange={applyChange}
-              onPick={setPicker}
-              time={timeIntent}
-            />
-          </PopoverPopup>
-        </Popover>
-
-        <Popover>
-          <NotebookCellItem aria-label="显示方式" className="w-full" render={<PopoverTrigger />}>
-            {displaySummary(timeIntent, latest, capabilities, grouped)}
-          </NotebookCellItem>
-          <PopoverPopup width="list">
-            <DisplayPopup
-              capabilities={capabilities}
-              grouped={grouped}
-              latest={latest}
-              onChange={applyChange}
-              time={timeIntent}
-            />
-          </PopoverPopup>
-        </Popover>
-
-        <Popover>
-          {timeIntent.comparison ? (
-            <NotebookCellItem
-              aria-label="时间对比"
-              className="w-full"
-              icon={<CheckIcon className="size-3.5" />}
-              render={<PopoverTrigger />}
-            >
-              {comparisonSummary(timeIntent)}
-            </NotebookCellItem>
-          ) : (
-            <NotebookCellItem
-              guide
-              icon={<GitCompareArrowsIcon className="size-3.5" />}
-              aria-label="添加对比"
-              className="w-full"
-              render={<PopoverTrigger />}
-            >
-              添加对比
-            </NotebookCellItem>
-          )}
-          <PopoverPopup width="list">
-            <ComparisonPopup
-              capabilities={capabilities}
-              grouped={grouped}
-              latest={latest}
-              onChange={applyChange}
-              onPick={setPicker}
-              time={timeIntent}
-            />
-          </PopoverPopup>
-        </Popover>
-      </div>
-      <TimeMonthPickers
-        kind={picker}
-        latest={latest}
-        onChange={applyChange}
-        onClose={() => setPicker(undefined)}
-        time={timeIntent}
-      />
-      <p className="px-0.5 text-pa-muted text-xs leading-5" data-testid="resolved-time-summary">
-        {summarizeResolvedTime(timeIntent, latest, capabilities, grouped)} · 数据截至{" "}
-        {formatMonth(latest)}
-      </p>
-      {adjustment ? (
-        <p
-          aria-live="polite"
-          className="px-0.5 text-pa-muted text-xs leading-5"
-          data-testid="time-adjustment"
-          role="status"
-        >
-          {adjustment}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
 /**
- * 常驻时间栏（舞台页脚左段）：期间与对比收在 popover 药丸里，
- * 显示粒度一击直达。校验闸与 TimeEditor 同一道（`timeChangeIssue`），仅投影不同；
- * 页脚没有消息行，联动与拒绝提示走 toast——静默调整不许有。
- * 解析后的主期/对照与数据截止收进期间药丸的 Tooltip，题头副行继续陈述意图摘要。
+ * 时间栏：期间与对比各收在一枚浮层钮里，显示粒度一击直达；工作台底栏与看板时间覆盖
+ * 同用这一条。每次落值都过 `timeChangeIssue` 这道闸，联动调整与拒绝都以 toast 回执——
+ * 静默调整不许有。解析后的主期、对照与数据截止收进期间钮的 Tooltip。
  */
 export function TimeBar({
   time,

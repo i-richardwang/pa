@@ -131,7 +131,7 @@ function withFilter(
   };
 }
 
-// 筛选卡就地取维度取值（TanStack Query），故整栏与运行时一样活在 QueryClient 里。
+// 筛选行就地取维度取值（TanStack Query），故整栏与运行时一样活在 QueryClient 里。
 const render = (draft: AnalysisEditState) =>
   renderToStaticMarkup(
     <QueryClientProvider client={new QueryClient()}>
@@ -186,17 +186,16 @@ test("已选成员成行不成片：胶囊只留给筛选取值", () => {
   expect(out.match(/data-slot="inspector-row"/g)).toHaveLength(1);
   expect(out.match(/data-slot="breakdown-field"/g)).toHaveLength(1);
   expect(out).toContain('aria-label="组织分组范围：全部"');
-  expect(out).not.toContain('data-slot="inspector-field-group"');
   expect(out).not.toContain('data-slot="notebook-cell-item"');
   expect(render(withFilter(withMembers(blankDraft()), "one_of"))).toContain(
     'data-slot="notebook-cell-item"',
   );
 });
 
-test("筛选条件就地成卡：维度、取值关系与已选值都在栏内直接可读", () => {
+test("筛选条件就地成行：维度、取值关系与已选值都在栏内直接可读", () => {
   const out = render(withFilter(withMembers(blankDraft()), "one_of"));
-  // 卡不是浮层：题行、关系与取值片必须出现在这一次静态渲染里（浮层只会渲染触发件）。
-  expect(out).toContain('data-slot="filter-card"');
+  // 行不是浮层：维度、关系与取值片必须出现在这一次静态渲染里（浮层只会渲染触发件）。
+  expect(out).toContain('data-slot="filter-row"');
   expect(out).toContain("是其中之一");
   // 已有取值 ⇒ 收起态：改的控件收起，读的取值仍印在卡上。
   expect(out).toContain("示例组织甲");

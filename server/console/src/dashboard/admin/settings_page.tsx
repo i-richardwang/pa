@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   CheckIcon,
   CircleAlertIcon,
@@ -41,6 +41,7 @@ import {
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Form } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { InspectorBody, InspectorRow } from "@/components/ui/inspector";
 import { MenuItem } from "@/components/ui/menu";
 import {
   Select,
@@ -49,6 +50,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  SIDEBAR_WIDTH,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
 import { toastManager } from "@/components/ui/toast";
 import {
   Table,
@@ -72,6 +81,9 @@ import {
 } from "../dashboard_queries";
 
 export type SettingsTab = "account" | "api" | "users";
+
+/** 表单类分节居中一栏读；清单类分节（成员表）铺满。 */
+const FORM_COLUMN_CLASS = "md:mx-auto md:max-w-2xl";
 
 export function SettingsDialog({
   me,
@@ -107,11 +119,12 @@ export function SettingsDialog({
                   <XIcon aria-hidden="true" />
                 </DialogClose>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-auto">
+              {/* 设置页是拿来读的：事实行按档案密度排。 */}
+              <InspectorBody className="overscroll-auto" density="reading">
                 <div
                   className={cn(
                     "px-6 py-6 md:w-full md:px-8 md:py-12",
-                    tab === "users" ? "md:max-w-none" : "md:mx-auto md:max-w-[704px]",
+                    tab === "users" ? "md:max-w-none" : FORM_COLUMN_CLASS,
                   )}
                 >
                   {tab === "account" ? (
@@ -122,7 +135,7 @@ export function SettingsDialog({
                     <KeysPage />
                   )}
                 </div>
-              </div>
+              </InspectorBody>
             </section>
           </div>
         </SettingsChromeContext.Provider>
@@ -141,55 +154,47 @@ function SettingsAside({
   onSelect: (tab: SettingsTab) => void;
 }) {
   const initial = (me.name.trim().charAt(0) || me.email.charAt(0) || "?").toUpperCase();
+  const item = (key: SettingsTab, icon: ReactNode, label: string) => (
+    <SidebarMenuItem>
+      <SidebarMenuButton isActive={tab === key} onClick={() => onSelect(key)}>
+        <span className="mr-0.5 flex size-8 shrink-0 items-center justify-center">{icon}</span>
+        <span>{label}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
   return (
-    <aside className="relative left-0 flex h-auto w-full shrink-0 flex-col border-b border-pa-line md:h-full md:w-[200px] md:border-r-[0.5px] md:border-b-0">
-      <Titlebar as="div" className="h-16 px-3.5 md:h-(--pa-titlebar) md:pr-3 md:pl-2.5">
-        <div className="flex-1 truncate px-2 pb-0.5 text-lg font-medium md:text-sm">设置</div>
+    <aside
+      className="relative flex h-auto w-full shrink-0 flex-col border-b border-pa-line md:h-full md:w-(--sidebar-width) md:border-r-[0.5px] md:border-b-0"
+      style={{ "--sidebar-width": SIDEBAR_WIDTH } as CSSProperties}
+    >
+      <Titlebar as="div">
+        <div className="flex-1 truncate px-2 font-medium text-sm">设置</div>
       </Titlebar>
-      <div className="flex flex-1 flex-col gap-1 overflow-y-auto p-3.5">
-        <div className="mb-2">
-          <div className="group relative flex items-center py-2 pr-1.5 pl-1 text-sm font-medium tracking-[0.0125em] text-pa-faint">
-            账户
-          </div>
-          <NavItem
-            active={tab === "account"}
-            icon={<UserIcon aria-hidden="true" className="size-4" />}
-            label="账号"
-            onClick={() => onSelect("account")}
-          />
-          <NavItem
-            active={tab === "api"}
-            icon={<KeyRoundIcon aria-hidden="true" className="size-4" />}
-            label="API Key"
-            onClick={() => onSelect("api")}
-          />
-        </div>
-        {me.is_admin && (
-          <div className="mb-2">
-            <div className="group relative flex items-center py-2 pr-1.5 pl-1 text-sm font-medium tracking-[0.0125em] text-pa-faint">
-              工作区
-            </div>
-            <NavItem
-              active={tab === "users"}
-              icon={<UsersIcon aria-hidden="true" className="size-4" />}
-              label="成员"
-              onClick={() => onSelect("users")}
-            />
-          </div>
-        )}
+      <div className="flex flex-1 flex-col overflow-y-auto px-3.5 pb-3.5">
+        <SidebarGroup>
+          <SidebarGroupLabel>账户</SidebarGroupLabel>
+          <SidebarMenu>
+            {item("account", <UserIcon aria-hidden="true" />, "账号")}
+            {item("api", <KeyRoundIcon aria-hidden="true" />, "API Key")}
+          </SidebarMenu>
+        </SidebarGroup>
+        {me.is_admin ? (
+          <SidebarGroup>
+            <SidebarGroupLabel>工作区</SidebarGroupLabel>
+            <SidebarMenu>{item("users", <UsersIcon aria-hidden="true" />, "成员")}</SidebarMenu>
+          </SidebarGroup>
+        ) : null}
       </div>
-      <div className="border-t border-pa-line px-[18px] pt-4 pb-5">
-        <div className="flex items-center">
-          <Avatar className="mr-2.5" size="sm" tone="accent">
-            {initial}
-          </Avatar>
-          <div className="mr-1 min-w-0">
-            <div className="min-w-0 truncate text-sm font-medium md:text-xs" title={me.name}>
-              {me.name}
-            </div>
-            <div className="min-w-0 truncate text-xs leading-none text-pa-faint" title={me.email}>
-              {me.email}
-            </div>
+      <div className="flex items-center border-t border-pa-line px-4.5 pt-4 pb-5">
+        <Avatar className="mr-2.5" size="sm" tone="accent">
+          {initial}
+        </Avatar>
+        <div className="mr-1 min-w-0">
+          <div className="min-w-0 truncate font-medium text-sm md:text-xs" title={me.name}>
+            {me.name}
+          </div>
+          <div className="min-w-0 truncate text-pa-faint text-xs leading-none" title={me.email}>
+            {me.email}
           </div>
         </div>
       </div>
@@ -197,66 +202,13 @@ function SettingsAside({
   );
 }
 
-function NavItem({
-  active,
-  icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={cn(
-        "group flex h-8 w-full cursor-pointer items-center rounded-md pr-2 pl-0.5 text-left",
-        active ? "bg-pa-surface text-pa-fg" : "text-pa-fg-soft hover:text-pa-fg",
-      )}
-      onClick={onClick}
-      type="button"
-    >
-      <span className="mr-0.5 flex w-8 shrink-0 items-center justify-center">{icon}</span>
-      <span className="truncate pb-px text-sm font-normal">{label}</span>
-    </button>
-  );
-}
-
-/** 字段行：左标签与说明，右控件。 */
-function SettingsRow({
-  label,
-  description,
-  children,
-}: {
-  label: string;
-  description?: string;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-4 border-b border-pa-line pb-5 not-last:mb-3 last:border-b-0 last:pb-0 md:flex-row md:items-center md:gap-8">
-      <div className="grow">
-        <h3 className="mb-1 text-lg/6 font-medium md:mb-0 md:text-md/6">{label}</h3>
-        {description ? (
-          <p className="text-base/5 text-pa-muted md:text-sm/4.5">{description}</p>
-        ) : null}
-      </div>
-      {children != null ? (
-        <div className="flex shrink-0 grow md:items-center md:justify-end">
-          <div className="min-w-0 text-sm font-normal text-pa-fg md:text-right">{children}</div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function SettingsCard({ children }: { children: ReactNode }) {
-  return <div className="rounded-2xl bg-pa-wash-solid px-5 pt-4.5 pb-5">{children}</div>;
+  return <div className="rounded-xl bg-pa-canvas p-3">{children}</div>;
 }
 
 function SettingsGroupTitle({ children }: { children: ReactNode }) {
   return (
-    <h3 className="mt-10 mb-4 flex items-center gap-2 text-lg font-semibold md:mb-3 md:text-md">
+    <h3 className="mt-10 mb-4 flex items-center gap-2 font-semibold text-lg md:mb-3 md:text-md">
       {children}
     </h3>
   );
@@ -286,34 +238,32 @@ function scopeLabel(accessScope: PresentedAccessScope): string {
   return accessScope.values.join("、");
 }
 
+/** 账号页：身份与权限是几行事实，能做什么是一张清单。 */
 function AccountPage({ me }: { me: MePayload }) {
   return (
     <>
       <div className="mb-10 flex flex-col gap-2.5 md:mt-5 md:px-1">
-        <h2 className="text-3xl font-semibold md:text-xl">账号</h2>
-        <p className="text-sm/4.5 text-pa-muted">
+        <h2 className="font-semibold text-3xl md:text-xl">账号</h2>
+        <p className="text-pa-muted text-sm/4.5">
           当前登录身份与控制台权限。数据查询走 MCP，不在控制台内发起。
         </p>
       </div>
       <SettingsCard>
-        <SettingsRow label="姓名">{me.name}</SettingsRow>
-        <SettingsRow label="邮箱">{me.email}</SettingsRow>
-        <SettingsRow description="决定可见字段集合。" label="角色（可见字段）">
-          <span className="inline-flex items-center gap-2">
+        <InspectorRow label="姓名">{me.name}</InspectorRow>
+        <InspectorRow label="邮箱">{me.email}</InspectorRow>
+        <InspectorRow label="角色（可见字段）">
+          <span className="inline-flex items-center gap-2 text-sm">
             {roleLabel(me.role)}
             <Badge>{me.is_admin ? "管理员" : "成员"}</Badge>
           </span>
-        </SettingsRow>
-        <SettingsRow
-          description={`行权限：能查哪些${me.access_scope.title}的数据。`}
-          label={`数据权限（可查${me.access_scope.title}）`}
-        >
+        </InspectorRow>
+        <InspectorRow label={`数据权限（可查${me.access_scope.title}）`}>
           {scopeLabel(me.access_scope)}
-        </SettingsRow>
+        </InspectorRow>
       </SettingsCard>
       <SettingsGroupTitle>当前权限</SettingsGroupTitle>
       <SettingsCard>
-        <ul className="space-y-2 text-sm">
+        <ul className="space-y-2 px-2 py-1 text-sm">
           {capabilities(me.is_admin).map((cap) => (
             <li key={cap} className="flex items-start gap-2">
               <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-pa-muted" />

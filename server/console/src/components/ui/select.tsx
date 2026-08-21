@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 export const Select: typeof SelectPrimitive.Root = SelectPrimitive.Root;
 
-export const selectTriggerVariants = cva(
+const selectTriggerVariants = cva(
   "pa-focus relative inline-flex w-full min-w-0 cursor-pointer select-none items-center justify-start rounded-lg border text-left text-sm text-pa-fg transition duration-200 ease-in-out pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 focus-visible:border-transparent aria-invalid:border-pa-danger data-disabled:pointer-events-none data-disabled:text-pa-disabled-fg data-disabled:[&_svg]:text-pa-disabled-fg [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     defaultVariants: {
@@ -33,17 +33,24 @@ export const selectTriggerVariants = cva(
   },
 );
 
-export const selectTriggerIconClassName = "size-3 shrink-0 text-pa-faint";
+const selectTriggerIconClassName = "size-3 shrink-0 text-pa-faint";
 
 export interface SelectButtonProps extends useRender.ComponentProps<"button"> {
   size?: VariantProps<typeof selectTriggerVariants>["size"];
   variant?: VariantProps<typeof selectTriggerVariants>["variant"];
+  /** 取值前的记号，与取值同行；记号是取值的一部分（例如排序方向），不是装饰。 */
+  icon?: React.ReactNode;
 }
 
+/**
+ * 选择器形的触发件：闭合态印当前取值，尾随开合记号。下拉之外「点开一张面选一个值」的
+ * 触发件（浮层、成员选择面）都用它，形与 `SelectTrigger` 同一份。
+ */
 export function SelectButton({
   className,
   size,
   variant,
+  icon,
   render,
   children,
   ...props
@@ -55,6 +62,14 @@ export function SelectButton({
   const defaultProps = {
     children: (
       <>
+        {icon ? (
+          <span
+            aria-hidden="true"
+            className="flex shrink-0 items-center text-pa-faint [&_svg]:size-4"
+          >
+            {icon}
+          </span>
+        ) : null}
         <span className="mx-0.5 min-w-0 flex-1 truncate in-data-placeholder:text-pa-muted">
           {children}
         </span>

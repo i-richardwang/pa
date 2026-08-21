@@ -10,7 +10,7 @@ import type { ReplayPayload } from "@contracts/replay_contract";
 import type { AnalysisDefinition } from "@semantic-analysis";
 import { compileTimeIntent } from "@time";
 import { beginAnalysisEdit } from "./analysis_draft";
-import { ChartSettingsPanel } from "./chart_settings_panel";
+import { ChartOptionsPanel } from "./chart_settings_panel";
 
 const MEASURE = "measure:active_employee_count";
 const MONTHLY_TIME = { window: { kind: "range" as const, from: "2026-01", to: "2026-06" } };
@@ -91,13 +91,7 @@ test("纯月度无分类结果：面板默认行列与服务端 defaultTableLayo
   const draft = beginAnalysisEdit({ name: "月度在职", analysis, view: { type: "table" } }, true);
   const html = textOf(
     renderToStaticMarkup(
-      <ChartSettingsPanel
-        catalog={catalog}
-        draft={draft}
-        onChange={() => {}}
-        replay={replay}
-        section="options"
-      />,
+      <ChartOptionsPanel catalog={catalog} draft={draft} onChange={() => {}} replay={replay} />,
     ),
   );
   expect(html).toContain("|月份|");

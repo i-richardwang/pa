@@ -1,29 +1,32 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { resolvedTimeDisplay, type TimeCapabilities, type TimeIntent } from "@time";
+import {
+  TIME_INTENT_INPUT,
+  compileTimeIntent,
+  resolvedTimeDisplay,
+  resolveTimeOutputGrain,
+  type TimeCapabilities,
+  type TimeIntent,
+} from "@time";
+import { parseAnalysisSpec } from "../../../../src/semantic_core/analysis_spec";
+import { DEFAULT_TIME_WINDOW } from "./analysis_draft";
 import {
   adjustTimeWindow,
   ComparisonPopup,
   defaultCustomComparisonWindow,
   previousPeriodLabel,
-  previousYearComparison,
   previousYearLabel,
   setTimeComparison,
   summarizeResolvedTime,
   timeChangeIssue,
   TimeBar,
-  TimeEditor,
   toggleDisplayChoice,
   WindowPopup,
+  withCurrent,
 } from "./time_editor";
 
 const MONTHLY: TimeCapabilities = { multi_month_display: "month" };
 const YEAR_SCOPED: TimeCapabilities = { year_scoped: true };
-
-const render = (time: TimeIntent, dataAsOf = "2026-07", capabilities: TimeCapabilities = {}) =>
-  renderToStaticMarkup(
-    <TimeEditor capabilities={capabilities} dataAsOf={dataAsOf} onChange={() => {}} time={time} />,
-  );
 
 const renderBar = (time: TimeIntent, dataAsOf = "2026-07", capabilities: TimeCapabilities = {}) =>
   renderToStaticMarkup(
@@ -43,15 +46,15 @@ const segmentLabels = (html: string) =>
     (match) => match[1] ?? "",
   );
 
-test("默认只突出主时间窗，显示方式次级，对比保持可选", () => {
-  const out = render({ window: { kind: "current_month" } });
+test("时间栏三件齐备：观察时间、显示方式、对比，单月窗口解析为一个结果", () => {
+  const out = renderBar({ window: { kind: "current_month" } });
   expect(out).toContain('aria-label="观察时间"');
-  expect(out).toContain("col-span-2");
   expect(out).toContain('aria-label="显示方式"');
   expect(out).toContain('aria-label="添加对比"');
   expect(out).toContain("最新月份");
-  expect(out).toContain("单个结果");
-  expect(out).toContain("主期 2026年7月 · 一个结果 · 随数据更新");
+  expect(summarizeResolvedTime({ window: { kind: "current_month" } }, "2026-07")).toBe(
+    "主期 2026年7月 · 一个结果 · 随数据更新",
+  );
 });
 
 test("解析摘要忠实回显主期、对比期与是否随数据滚动", () => {
@@ -78,13 +81,9 @@ test("按月定义的指标在跨月自动模式下由服务端约束解析为�
     window: { kind: "range", from: "2026-01", to: "2026-07" },
   };
   expect(resolvedTimeDisplay(time, "2026-07", MONTHLY)).toBe("month");
-  expect(render(time, "2026-07", MONTHLY)).toContain("按月显示");
-});
-
-test("数据截至月不可用时不以浏览器本地月份猜测", () => {
-  const out = render({ window: { kind: "current_month" } }, "未知");
-  expect(out).toContain("数据最新月份暂不可用");
-  expect(out).not.toContain("主期");
+  expect(segmentAttrs(renderBar(time, "2026-07", MONTHLY), "按月")).toContain(
+    'aria-pressed="true"',
+  );
 });
 
 test("切换主窗口时显式说明被调整的对比选择", () => {
@@ -117,24 +116,23 @@ test("对比只换对比：显示方式是序列粒度，不受对照期影响",
     { window: { kind: "current_month" }, display: "month" },
     { kind: "previous_period" },
   );
-  expect(next.time).toEqual({
+  expect(next).toEqual({
     window: { kind: "current_month" },
     display: "month",
     comparison: { kind: "previous_period" },
   });
-  expect(next.adjustment).toBeUndefined();
+  expect(setTimeComparison(next)).toEqual({ window: { kind: "current_month" }, display: "month" });
 });
 
-test("常规同比只表达去年同期，界面文案随主窗口说人话", () => {
-  expect(previousYearComparison()).toEqual({ kind: "previous_year" });
+test("对比文案随主窗口说人话", () => {
   expect(previousPeriodLabel({ kind: "current_month" })).toBe("上月");
   expect(previousYearLabel({ kind: "current_month" })).toBe("去年同月");
   expect(previousPeriodLabel({ kind: "trailing", count: 6, unit: "month" })).toBe("上一等长期间");
   expect(previousYearLabel({ kind: "year_to_date" })).toBe("去年同期");
 
-  const out = render({
+  const out = renderBar({
     window: { kind: "year_to_date" },
-    comparison: previousYearComparison(),
+    comparison: { kind: "previous_year" },
   });
   expect(out).toContain("与去年同期比较");
 });
@@ -306,7 +304,7 @@ test("能力卡不成立的显示方式在写入草稿前被拦下，与服务�
   expect(timeChangeIssue(crossMonthYear, "2026-08")).toBeUndefined();
 });
 
-test("时间栏对不可用的数据截止月同样拒绝编辑", () => {
+test("数据截至月不可用时拒绝编辑，不以浏览器本地月份猜测", () => {
   const out = renderBar({ window: { kind: "current_month" } }, "未知");
   expect(out).toContain("数据最新月份暂不可用");
   expect(out).not.toContain('aria-label="观察时间"');
@@ -336,4 +334,63 @@ test("会产生重叠结果桶的对比在写入草稿前被拦截", () => {
   expect(issue).toContain("结果无法区分");
   expect(issue).toContain("请选择互不重叠的主时间或对照时间");
   expect(issue).not.toContain("改为按月");
+});
+
+test("三种默认窗口产生的业务坐标都能组成权威 AnalysisSpec", () => {
+  for (const window of Object.values(DEFAULT_TIME_WINDOW)) {
+    expect(() =>
+      parseAnalysisSpec({
+        views: [
+          {
+            id: "result",
+            measures: ["test_people_metrics.active_employee_count"],
+            time: compileTimeIntent({ window }),
+          },
+        ],
+      }),
+    ).not.toThrow();
+  }
+});
+
+// 编辑器只该产出契约合法、结果桶互不重叠的时间坐标。三种默认窗口覆盖 GUI 的全部出口，
+// 逐个跑契约校验与唯一编译点的结果粒度解析，锁死「不生产会撞桶/非法坐标」这条不变量。
+test("三种默认窗口都通过契约校验并解析出预期结果粒度", () => {
+  const current = { window: DEFAULT_TIME_WINDOW.current_month };
+  const monthly = { window: DEFAULT_TIME_WINDOW.trailing_months };
+  const yearly = { window: DEFAULT_TIME_WINDOW.trailing_years };
+  for (const time of [current, monthly, yearly])
+    expect(() => TIME_INTENT_INPUT.parse(time)).not.toThrow();
+  expect(resolveTimeOutputGrain(compileTimeIntent(current), "2026-07")).toBe("total");
+  expect(resolveTimeOutputGrain(compileTimeIntent(monthly), "2026-07")).toBe("month");
+  expect(resolveTimeOutputGrain(compileTimeIntent(yearly), "2026-07")).toBe("year");
+});
+
+test("off-menu 的近 N 值注入档位列表，触发器不留空白且档位内不重复", () => {
+  // agent 写的 last:{months:9}/years:7 不在预设档位，须补进列表头供触发器匹配显示。
+  expect(withCurrent([6, 12, 24, 36], 9)).toEqual([9, 6, 12, 24, 36]);
+  expect(withCurrent([2, 3, 4, 5, 6], 7)).toEqual([7, 2, 3, 4, 5, 6]);
+  // 档位内的值不重复注入。
+  expect(withCurrent([6, 12, 24, 36], 12)).toEqual([6, 12, 24, 36]);
+});
+
+test("默认窗口一律省略锚点走相对窗口，随数据滚动而非冻结在编辑月", () => {
+  expect(DEFAULT_TIME_WINDOW.trailing_months).toEqual({
+    kind: "trailing",
+    count: 12,
+    unit: "month",
+  });
+  expect(DEFAULT_TIME_WINDOW.trailing_years).toEqual({
+    kind: "trailing",
+    count: 3,
+    unit: "year",
+  });
+  expect(DEFAULT_TIME_WINDOW.current_month).toEqual({ kind: "current_month" });
+  // 同期口径与主窗口整体错开一年，随 actual_through 滚动。
+  const aligned = {
+    window: { kind: "year_to_date" as const },
+    display: "year" as const,
+    comparison: { kind: "previous_year" as const },
+  };
+  expect(() => TIME_INTENT_INPUT.parse(aligned)).not.toThrow();
+  expect(resolveTimeOutputGrain(compileTimeIntent(aligned), "2026-07")).toBe("year");
 });

@@ -1,5 +1,5 @@
 import type * as React from "react";
-import { BlockedHint } from "@/components/ui/inspector";
+import { BlockedHint } from "@/components/ui/hint";
 import { cn } from "@/lib/utils";
 
 export const GLASS_POPUP_SURFACE = "pa-popup-surface";
@@ -22,7 +22,10 @@ export type PopupWidth = keyof typeof POPUP_WIDTH;
 
 export const POPUP_ROW = "min-h-8 gap-2.5 rounded-md py-2 pr-2.5 pl-3 text-sm leading-4";
 
-export const POPUP_TITLE = "truncate px-3 py-2 font-semibold text-md text-pa-ink leading-4";
+/** 组题的排印：浮层里的组题与右栏里的段题同取这一档。 */
+export const SECTION_TITLE_TEXT = "font-semibold text-md text-pa-ink leading-4";
+
+export const POPUP_TITLE = cn("truncate px-3 py-2", SECTION_TITLE_TEXT);
 
 /**
  * 浮层里的组题：取值清单的分组、设置面的小节都用它。`blocked` 是这一组此刻不可用的原因，

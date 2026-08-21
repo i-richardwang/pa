@@ -5,7 +5,13 @@
  */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { InspectorBody, InspectorProfileCard, InspectorRow, InspectorSection } from "./inspector";
+import {
+  INSPECTOR_ROW_INDENT_CLASS,
+  InspectorBody,
+  InspectorProfileCard,
+  InspectorRow,
+  InspectorSection,
+} from "./inspector";
 
 const READING = "group-data-[density=reading]/inspector:";
 const SETTINGS = "group-data-[density=settings]/inspector:";
@@ -28,7 +34,7 @@ test("头卡把名字、口径与事实行收在同一张卡里", () => {
   );
 });
 
-test("值给字符串就按值排版，给节点就照放", () => {
+test("值给字符串就按值排版，给节点就照放；记号槽可放勾选框", () => {
   const text = renderToStaticMarkup(<InspectorRow label="格式">百分比</InspectorRow>);
   // 字符串是一个值：次一档、单行截断，调用处不必也不该自己写这套。
   expect(text).toMatch(/truncate text-pa-muted text-xs">百分比/);
@@ -42,6 +48,15 @@ test("值给字符串就按值排版，给节点就照放", () => {
   );
   expect(node).toContain('<button type="button">3 个</button>');
   expect(node).not.toContain("text-pa-muted text-xs");
+
+  const control = renderToStaticMarkup(
+    <InspectorRow icon={<input type="checkbox" />} label="在职人数" />,
+  );
+  // 记号槽里的控件是可达的：槽不遮蔽它。
+  expect(control).toMatch(/data-slot="inspector-row-icon"><input type="checkbox"/);
+  expect(control).not.toContain(
+    'aria-hidden="true" class="flex shrink-0 items-center text-pa-faint',
+  );
 });
 
 test("行外的动作不占右槽，名字只在配置面让位", () => {
@@ -50,7 +65,11 @@ test("行外的动作不占右槽，名字只在配置面让位", () => {
   );
   // 动作在行盒之外：它是对这一行做什么，不是这一行的内容。
   expect(markup.indexOf('data-slot="inspector-row-box"')).toBeLessThan(markup.indexOf("移除"));
-  expect(markup).toContain("ml-[30px] md:ml-[26px]");
+  // 无记号的行让出记号槽：与带记号那行的名字同起点。
+  expect(markup).toContain(INSPECTOR_ROW_INDENT_CLASS);
+  expect(renderToStaticMarkup(<InspectorRow label="入职人数" />)).not.toContain(
+    INSPECTOR_ROW_INDENT_CLASS,
+  );
   // 触屏一档够手指点，桌面收回 32。
   expect(markup).toContain("min-h-11");
   expect(markup).toContain("md:min-h-8");

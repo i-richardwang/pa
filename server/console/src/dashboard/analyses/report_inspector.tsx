@@ -3,7 +3,7 @@ import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog
 import { HeaderIconButton } from "../layout/view_chrome";
 import { Titlebar } from "@/components/ui/titlebar";
 import { ReportQueryRail } from "./report_query_rail";
-import { ChartSettingsPanel } from "./chart_settings_panel";
+import { ChartOptionsPanel, ChartTypeBar } from "./chart_settings_panel";
 import type { AnalysisEditSession } from "./use_analysis_edit_session";
 
 export function ReportInspector({
@@ -16,6 +16,10 @@ export function ReportInspector({
   onCollapse: () => void;
 }) {
   const draft = session.draft;
+  const panel =
+    draft && session.activeReplay && catalog
+      ? { catalog, draft, onChange: session.setDraft, replay: session.activeReplay }
+      : null;
 
   // 分界线归容器不归本件：作为右栏时那条线是「列与列之间」，作为底部 Sheet 时是 Sheet 自己的
   // 上缘，两种身份都不是配置栏的属性。本件只管自己那一栏的内容。
@@ -39,31 +43,13 @@ export function ReportInspector({
           <ReportQueryRail
             catalog={catalog}
             draft={draft}
-            leading={
-              session.activeReplay && catalog ? (
-                <ChartSettingsPanel
-                  catalog={catalog}
-                  draft={draft}
-                  onChange={session.setDraft}
-                  replay={session.activeReplay}
-                  section="type"
-                />
-              ) : null
-            }
+            leading={panel ? <ChartTypeBar {...panel} /> : null}
             onChange={session.setDraft}
             onRunPreview={() => void session.runPreview()}
             previewing={session.previewing}
             replay={session.activeReplay}
           >
-            {session.activeReplay && catalog && (
-              <ChartSettingsPanel
-                catalog={catalog}
-                draft={draft}
-                onChange={session.setDraft}
-                replay={session.activeReplay}
-                section="options"
-              />
-            )}
+            {panel ? <ChartOptionsPanel {...panel} /> : null}
           </ReportQueryRail>
         )}
       </div>

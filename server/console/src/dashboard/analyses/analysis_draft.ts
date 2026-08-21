@@ -34,6 +34,16 @@ export type AnalysisEditState = {
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 /**
+ * 各种窗口的默认取值：空白分析、换窗口种类、看板时间覆盖都从这里取。
+ * 相对窗口不带端点，随数据滚动。
+ */
+export const DEFAULT_TIME_WINDOW = {
+  current_month: { kind: "current_month" },
+  trailing_months: { kind: "trailing", count: 12, unit: "month" },
+  trailing_years: { kind: "trailing", count: 3, unit: "year" },
+} as const satisfies Record<string, TimeIntent["window"]>;
+
+/**
  * 空白起点：从零建分析就是「种子为空的 create」，同样进统一编辑器、
  * 同样经预览铸不可变快照。空查询本身不可执行（无成员），
  * 由 isAnalysisRunnable 把住预览与保存两个出口，编译合法性仍归服务端裁定。
@@ -41,7 +51,22 @@ const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 export function blankAnalysisDefinition(title: string): AnalysisDefinition {
   return {
     title,
-    views: [{ id: "result", time: { window: { kind: "current_month" } } }],
+    views: [{ id: "result", time: { window: DEFAULT_TIME_WINDOW.current_month } }],
+  };
+}
+
+/** 空白分析的编辑种子：空查询配一张表格，还没有任何落定结果。 */
+export function blankAnalysisSeed(name: string): {
+  name: string;
+  analysis: AnalysisDefinition;
+  view: SemanticViewIntent;
+  hasSavedResult: false;
+} {
+  return {
+    name,
+    analysis: blankAnalysisDefinition(name),
+    view: { type: "table" },
+    hasSavedResult: false,
   };
 }
 
