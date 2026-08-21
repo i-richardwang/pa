@@ -1021,12 +1021,12 @@ function pieOption(spec: PieSpec): ViewChart {
           label: { show: false },
           labelLine: { show: false },
           itemStyle: { borderColor: CHART_SURFACE, borderWidth: 2 },
-          emphasis: { scaleSize: 4 },
+          // 扇形的角度就是值：鼠标碰哪一片都不许它改样子
+          emphasis: { disabled: true },
           data: spec.rows.map((r, i) => ({
             name: r.label,
             value: r.value,
             itemStyle: { color: seriesColorAt(i) },
-            emphasis: { itemStyle: { color: seriesColorAt(i) } },
           })),
         },
       ],

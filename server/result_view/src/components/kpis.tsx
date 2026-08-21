@@ -1,4 +1,3 @@
-
 import { formatCell, formatSignedDelta } from "../../../src/presentation_core/view_format.js";
 import type { TotalBand, TotalBandMetric } from "../../../src/presentation_core/view_shape.js";
 
@@ -38,9 +37,7 @@ export function Kpis({
   const showLabels = metrics.length > 1;
 
   return (
-    <div
-      className={`flex w-full items-center gap-4 ${fill ? "h-full min-h-0 flex-1" : "py-8"}`}
-    >
+    <div className={`flex w-full items-center gap-4 ${fill ? "h-full min-h-0 flex-1" : "py-8"}`}>
       {metrics.map((metric) => {
         const text = formatCell(metric.value, metric.column, metric.format, metric.decimals);
         return (

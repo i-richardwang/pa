@@ -34,7 +34,11 @@ function stubHost() {
 function watching(within: { contains(node: Node): boolean } | null) {
   const stub = stubHost();
   let dismissed = 0;
-  const release = watchDismiss(stub.host, () => within, () => dismissed++);
+  const release = watchDismiss(
+    stub.host,
+    () => within,
+    () => dismissed++,
+  );
   return { ...stub, release, count: () => dismissed };
 }
 

@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, ChevronUpIcon, EllipsisIcon } from "lucide-react";
 import { compareCells, formatCell } from "../../../src/presentation_core/view_format.js";
@@ -210,12 +209,6 @@ export function DataTable({
         sort?.column === i ? "bg-pa-surface text-pa-fg" : "bg-transparent"
       } ${col.numeric ? "flex-row-reverse" : ""}`}
       onClick={() => toggleSort(i)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          toggleSort(i);
-        }
-      }}
     >
       <span className="truncate">{col.label}</span>
       {sort?.column === i &&
@@ -256,8 +249,7 @@ export function DataTable({
     value: string | number | null,
   ) => {
     // 数值列不设截断上限——数字撑不到需要截断的宽度
-    const text =
-      value === null ? null : formatCell(value, col.formatKey, col.format, col.decimals);
+    const text = value === null ? null : formatCell(value, col.formatKey, col.format, col.decimals);
     if (text === null) return EMPTY_CELL;
     if (col.numeric) {
       const cellSource = sourceOf(rows[ri].source, i);

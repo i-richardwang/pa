@@ -9,7 +9,11 @@ import { useState } from "react";
 import { Check, Download, ExternalLink, Link2, Maximize2 } from "lucide-react";
 import { INLINE_ROWS } from "./data_table.js";
 import type { CardActions } from "./view_actions.js";
-import type { ExportLink, ExportResourceLink, ViewBlock } from "../../../src/semantic_core/query_payload.js";
+import type {
+  ExportLink,
+  ExportResourceLink,
+  ViewBlock,
+} from "../../../src/semantic_core/query_payload.js";
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (

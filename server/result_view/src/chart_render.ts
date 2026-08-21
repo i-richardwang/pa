@@ -111,8 +111,7 @@ export function applyValueLabelDensity(
     const label = record.label as Record<string, unknown> | undefined;
     const kind = record.type;
     // 按「配了标签形制」认领而非按此刻是否印：焦点能现出档位没选中的那条，格式化器得先在
-    if ((kind !== "line" && kind !== "bar") || !label || !Array.isArray(record.data))
-      return {};
+    if ((kind !== "line" && kind !== "bar") || !label || !Array.isArray(record.data)) return {};
     touched = true;
     const count = (record.data as unknown[]).length;
     const per = count > 0 ? width / count : width;

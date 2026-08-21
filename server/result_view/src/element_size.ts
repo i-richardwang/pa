@@ -1,4 +1,3 @@
-
 import { useCallback, useRef, useState } from "react";
 
 export type ElementSize = { width: number; height: number };

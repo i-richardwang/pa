@@ -12,6 +12,7 @@ import {
   applyPin,
   raiseSeries,
   readoutPosition,
+  subscribeReadout,
   ViewChartCanvas,
 } from "./echart.js";
 import { plotRect } from "../chart_render.js";
@@ -77,12 +78,7 @@ const CHART = CHART_PRESENTATION.chart;
 
 test("渲染器忠实呈现声明的图或表", () => {
   const chart = renderToStaticMarkup(
-    <ViewRenderer
-      actions={{}}
-      payload={PAYLOAD}
-      presentation={CHART_PRESENTATION}
-      scene="page"
-    />,
+    <ViewRenderer actions={{}} payload={PAYLOAD} presentation={CHART_PRESENTATION} scene="page" />,
   );
   expect(chart).toContain(chartMarkerClass());
   expect(chart).not.toContain("<tbody");
@@ -192,9 +188,7 @@ const padX = (className: string) =>
 
 /** 读数条那一行的类名（`flex shrink-0 flex-wrap` 是它的版式签名） */
 function legendClass(plot: "compact" | "tile" | "page"): string {
-  const html = renderToStaticMarkup(
-    <ViewChartCanvas chart={CHART!} plot={plot} />,
-  );
+  const html = renderToStaticMarkup(<ViewChartCanvas chart={CHART!} plot={plot} />);
   return html.match(/<div class="(flex shrink-0 flex-wrap[^"]*)"/)?.[1] ?? "";
 }
 
@@ -467,4 +461,50 @@ test("值轴档数随绘图区尺度走，不是编译期那个定数", () => {
     height: 700,
   });
   expect(patches, "饼图也去改值轴，白改一次 option").toEqual([]);
+});
+
+/** 拆卸时实例已 dispose：`getZr()` 改口返回 null，回头再要手柄就是在清理里抛错。 */
+function disposableSource() {
+  const events: string[] = [];
+  const zr = {
+    on: (event: string) => events.push(`zr.on:${event}`),
+    off: (event: string) => events.push(`zr.off:${event}`),
+  };
+  let alive = true;
+  return {
+    events,
+    dispose: () => {
+      alive = false;
+    },
+    source: {
+      on: (event: string) => events.push(`on:${event}`),
+      off: (event: string) => events.push(`off:${event}`),
+      getZr: () => {
+        if (!alive) throw new Error("getZr after dispose");
+        return zr;
+      },
+    },
+  };
+}
+
+test("读数订阅的清理只碰订阅时那两个手柄，实例散场后照样退得干净", () => {
+  const pie = disposableSource();
+  const release = subscribeReadout(pie.source, { form: "pie" }, () => {});
+  expect(pie.events).toEqual(["on:mouseover", "on:mouseout", "zr.on:globalout"]);
+  // 实例先散场（建实例那道 effect 的清理声明在前，拆卸时先跑）
+  pie.dispose();
+  release?.();
+  expect(pie.events.slice(3)).toEqual([
+    "off:mouseover",
+    "off:mouseout",
+    "off:updateAxisPointer",
+    "zr.off:globalout",
+  ]);
+
+  // 整列触发的图订的是另一件事，退订同样不回头要手柄
+  const axis = disposableSource();
+  const releaseAxis = subscribeReadout(axis.source, { form: "bar" }, () => {});
+  expect(axis.events).toEqual(["on:updateAxisPointer", "zr.on:globalout"]);
+  axis.dispose();
+  expect(() => releaseAxis?.()).not.toThrow();
 });

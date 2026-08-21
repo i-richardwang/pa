@@ -22,7 +22,11 @@ import { Notices, noticesVisible } from "./notices.js";
 import { ViewChartCanvas } from "./echart.js";
 import type { CardActions } from "./view_actions.js";
 import { cardTitle, headerSubtitle, makeTitleOf } from "../derive.js";
-import type { PLOT_PADDING, PresentationBlock, ViewChart } from "../../../src/presentation_core/chart_config.js";
+import type {
+  PLOT_PADDING,
+  PresentationBlock,
+  ViewChart,
+} from "../../../src/presentation_core/chart_config.js";
 import {
   freshnessLabel,
   type ExportResourceLink,
@@ -74,7 +78,6 @@ export type ViewRendererProps = {
 export type ViewScene = "card" | "tile" | "page";
 
 type SceneTraits = {
-
   inset: string;
   /** 空态纵向呼吸 */
   emptyPad: string;
@@ -107,7 +110,6 @@ export const VIEW_SCENES: Record<ViewScene, SceneTraits> = {
     plot: "compact",
   },
   tile: {
-
     inset: "px-0",
     emptyPad: "py-4",
     fill: true,
@@ -210,7 +212,6 @@ function ViewBody({
     );
   }
   if (presentation.type === "kpi" && presentation.totals) {
-
     return (
       <div className={`flex flex-col ${fill ? "min-h-0 flex-1" : ""}`}>
         <Kpis
@@ -258,13 +259,10 @@ function ViewBody({
             fill={fill}
             plot={traits.plot}
             suspendResize={interacting && view.rows.length >= LIVE_RESIZE_MAX_ROWS}
+            canOpenPoint={({ column }) => records?.canOpen(view.id, column) ?? false}
             onPointClick={
               records
-                ? ({ row, column }) => {
-                    if (records.canOpen(view.id, column)) {
-                      records.open({ viewId: view.id, column, row });
-                    }
-                  }
+                ? ({ row, column }) => records.open({ viewId: view.id, column, row })
                 : undefined
             }
           />
@@ -377,7 +375,6 @@ export function ViewRenderer({
 
   return (
     <>
-
       {traits.title ? (
         <div className="px-4 pt-3 pb-1.5">
           <div className="flex min-w-0 items-center gap-2">

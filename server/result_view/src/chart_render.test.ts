@@ -168,15 +168,24 @@ test("刻度与值标签都按列声明的小数位报数：整数百分比就�
   const option = prepareOption(chart, false);
   const yAxis = option.yAxis as { axisLabel: { formatter: (value: number) => string } };
   expect(yAxis.axisLabel.formatter(0.225)).toBe("23%");
-  const series = (option.series as { label: { formatter: (p: { value: unknown }) => string } }[])[0];
+  const series = (
+    option.series as { label: { formatter: (p: { value: unknown }) => string } }[]
+  )[0];
   expect(series.label.formatter({ value: 0.2349 })).toBe("23%");
 
   // 没声明位数就走默认一位
   const plain = prepareOption(
-    { ...chart, option: { ...chart.option, pa: { ...pa, decimals: undefined, axis_decimals: undefined } } },
+    {
+      ...chart,
+      option: { ...chart.option, pa: { ...pa, decimals: undefined, axis_decimals: undefined } },
+    },
     false,
   );
-  expect((plain.yAxis as { axisLabel: { formatter: (value: number) => string } }).axisLabel.formatter(0.225)).toBe("22.5%");
+  expect(
+    (plain.yAxis as { axisLabel: { formatter: (value: number) => string } }).axisLabel.formatter(
+      0.225,
+    ),
+  ).toBe("22.5%");
 });
 
 test("焦点现出的那条也带格式化器：此刻不印数的系列同样配齐格式与步距", () => {
@@ -232,7 +241,11 @@ test("值标签密度守卫：局促时按步距挑桶印数且恒印末点，�
   type Formatter = (params: { value?: unknown; dataIndex?: number }) => string;
   const run = (width: number) => {
     let patch: { series?: { label?: { formatter?: Formatter } }[] } = {};
-    applyValueLabelDensity({ setOption: (option) => (patch = option as typeof patch) }, chart, width);
+    applyValueLabelDensity(
+      { setOption: (option) => (patch = option as typeof patch) },
+      chart,
+      width,
+    );
     return patch.series?.[0]?.label?.formatter;
   };
   // 3 点：120px 充裕（每点 40 > 37.33，逐点）；90px 局促（每点 30，步距 ceil(50/30)=2 → 0、末点）

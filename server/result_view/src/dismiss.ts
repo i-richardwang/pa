@@ -18,10 +18,7 @@ export type DismissHost = {
 };
 
 /** 落在这一块之内的按下不算「按在外面」；块还没挂上时，按哪儿都算外面。 */
-function dismisses(
-  event: DismissEvent,
-  within: { contains(node: Node): boolean } | null,
-): boolean {
+function dismisses(event: DismissEvent, within: { contains(node: Node): boolean } | null): boolean {
   if (event.type === "keydown") return event.key === "Escape";
   return !within || !within.contains(event.target as Node);
 }
@@ -56,6 +53,10 @@ export function useDismiss(
   latest.current = onDismiss;
   useEffect(() => {
     if (!active) return;
-    return watchDismiss(document, () => within.current, () => latest.current());
+    return watchDismiss(
+      document,
+      () => within.current,
+      () => latest.current(),
+    );
   }, [active, within]);
 }

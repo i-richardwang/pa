@@ -7,18 +7,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": [
-      "src/**/*.ts",
-      "src/**/*.tsx",
-      "widget/src/**/*.ts",
-      "widget/src/**/*.tsx",
-      "widget/vite.config.ts",
-      "console/src/**/*.ts",
-      "console/src/**/*.tsx",
-      "console/vite.config.ts",
-      "scripts/**/*.ts",
-      "scripts/**/*.tsx"
-    ]
+    "includes": ["**/*.ts", "**/*.tsx"]
   },
   "formatter": {
     "enabled": true,
@@ -39,7 +28,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "complexity": {
         "useOptionalChain": "off"
       },

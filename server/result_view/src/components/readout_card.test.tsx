@@ -96,3 +96,16 @@ test("没有下钻投影的行不画成可点的样子", () => {
   );
   expect(html).not.toContain("cursor-pointer");
 });
+
+test("宿主说这一格开不出明细，行就不画成可点的样子", () => {
+  const model: ReadoutModel = {
+    header: "2026-07",
+    rows: [
+      { series: 0, name: "敬业度得分", value: "4.0", point: { row: 3, column: "survey.q12" } },
+    ],
+  };
+  const props = { pinned: true, onRowClick: () => {} };
+  expect(card(model, { ...props, canOpenRow: () => true })).toContain("cursor-pointer");
+  // 画成可点却点不开，比不给这一下更难读
+  expect(card(model, { ...props, canOpenRow: () => false })).not.toContain("cursor-pointer");
+});

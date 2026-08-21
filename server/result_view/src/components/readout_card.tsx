@@ -21,7 +21,12 @@ const COLUMN_TIERS = [
   "min-w-[800px] max-w-[900px]",
 ] as const;
 const ROWS_PER_COLUMN = 17;
-const COLUMN_GRID = ["", "grid grid-cols-2 gap-x-4", "grid grid-cols-3 gap-x-4", "grid grid-cols-4 gap-x-4"];
+const COLUMN_GRID = [
+  "",
+  "grid grid-cols-2 gap-x-4",
+  "grid grid-cols-3 gap-x-4",
+  "grid grid-cols-4 gap-x-4",
+];
 
 function columnCount(rows: number): number {
   return Math.min(COLUMN_TIERS.length, Math.max(1, Math.ceil(rows / ROWS_PER_COLUMN)));
@@ -88,6 +93,7 @@ export function ReadoutCard({
   onClose,
   onRowHover,
   onRowClick,
+  canOpenRow,
 }: {
   model: ReadoutModel;
   dark: boolean;
@@ -96,6 +102,8 @@ export function ReadoutCard({
   onClose?: () => void;
   onRowHover?: (series: number | null) => void;
   onRowClick?: (point: { row: number; column: string }) => void;
+  /** 该行能不能开明细：不能开就不画成可点的样子，缺省即有投影就能开。 */
+  canOpenRow?: (point: { row: number; column: string }) => boolean;
 }) {
   const columns = columnCount(model.rows.length);
   const sole = model.rows.length === 1;
@@ -120,19 +128,31 @@ export function ReadoutCard({
       )}
       <div className={`px-4 py-2 ${COLUMN_GRID[columns - 1]}`.trim()}>
         {rows.map((row, index) => {
+          const body = sole ? <SoleRow row={row} /> : <SeriesRow row={row} />;
+          // 未钉住时整张卡不可命中：行既不接管悬停，也不画成可点的样子
+          if (!pinned) {
+            return <div key={`${row.name}-${index}`}>{body}</div>;
+          }
+          // 钉住后行是真按钮：有投影的点开明细，没有的只把它那条系列提到前面来——
+          // 后者对键盘同样成立（聚焦即提亮），故不降格成静态元素再补 role
           const point = row.point;
-          // 未钉住时整张卡不可命中，行也就不该画成可点的样子
-          const open = pinned && point && onRowClick ? () => onRowClick(point) : undefined;
+          const openable = point && onRowClick && (canOpenRow?.(point) ?? true);
+          const open = openable && point ? () => onRowClick?.(point) : undefined;
           return (
-            <div
+            <button
+              className={`block w-full rounded-md border-0 bg-transparent p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pa-accent ${
+                open ? "cursor-pointer hover:bg-pa-wash" : ""
+              }`.trim()}
               key={`${row.name}-${index}`}
-              className={open ? "cursor-pointer rounded-md hover:bg-pa-wash" : undefined}
+              onBlur={() => onRowHover?.(null)}
+              onClick={open}
+              onFocus={() => onRowHover?.(row.series ?? null)}
               onMouseEnter={() => onRowHover?.(row.series ?? null)}
               onMouseLeave={() => onRowHover?.(null)}
-              onClick={open}
+              type="button"
             >
-              {sole ? <SoleRow row={row} /> : <SeriesRow row={row} />}
-            </div>
+              {body}
+            </button>
           );
         })}
       </div>

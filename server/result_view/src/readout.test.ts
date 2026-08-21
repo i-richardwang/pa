@@ -113,15 +113,33 @@ test("同期叠加按声明的对照关系读差值：量作差仍是量，率�
         { type: "line", name: "2025 年", data: values[1] },
       ],
     );
-  const counts = readoutModel(overlay("number", [[1200, 45], [1000, 60]]), 0);
+  const counts = readoutModel(
+    overlay("number", [
+      [1200, 45],
+      [1000, 60],
+    ]),
+    0,
+  );
   // 主期没有对照，不带差值；对照期读的是「它自己 − 主期」
   expect(counts?.rows[0].delta).toBeUndefined();
   expect(counts?.rows[1].delta).toBe("-200");
 
-  const rates = readoutModel(overlay("percent", [[0.12, 0.2], [0.095, 0.2]]), 0);
+  const rates = readoutModel(
+    overlay("percent", [
+      [0.12, 0.2],
+      [0.095, 0.2],
+    ]),
+    0,
+  );
   expect(rates?.rows[1].delta).toBe("-2.5 pp");
   // 涨也只陈述方向：显式带 +，不换颜色，模型层没有指标方向声明
-  const up = readoutModel(overlay("number", [[1000, 45], [1200, 60]]), 0);
+  const up = readoutModel(
+    overlay("number", [
+      [1000, 45],
+      [1200, 60],
+    ]),
+    0,
+  );
   expect(up?.rows[1].delta).toBe("+200");
 });
 

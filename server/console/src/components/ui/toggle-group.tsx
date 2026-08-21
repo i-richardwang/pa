@@ -2,7 +2,7 @@
 
 import { Toggle as TogglePrimitive } from "@base-ui/react/toggle";
 import { ToggleGroup as ToggleGroupPrimitive } from "@base-ui/react/toggle-group";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from "react";
+import { useLayoutEffect, useRef, useState, type ReactElement } from "react";
 import { cn } from "@/lib/utils";
 
 export function ToggleGroup({
@@ -13,9 +13,8 @@ export function ToggleGroup({
   ...props
 }: ToggleGroupPrimitive.Props & { columns: number; bordered?: boolean }): ReactElement {
   const track = useRef<HTMLDivElement>(null);
-  const [slider, setSlider] = useState<{ width: number; offset: number }>();
-
-  const [sliding, setSliding] = useState(false);
+  /** 滑块的落点量出来才知道；`animate` 记的是量之前它在不在——首次现身不该从别处滑过来。 */
+  const [slider, setSlider] = useState<{ width: number; offset: number; animate: boolean }>();
 
   useLayoutEffect(() => {
     const element = track.current;
@@ -27,7 +26,11 @@ export function ToggleGroup({
       if (!pressed) return setSlider(undefined);
       const box = pressed.getBoundingClientRect();
       const base = element.getBoundingClientRect();
-      setSlider({ offset: box.x - base.x, width: box.width });
+      setSlider((previous) => ({
+        animate: previous !== undefined,
+        offset: box.x - base.x,
+        width: box.width,
+      }));
     };
     measure();
 
@@ -40,10 +43,6 @@ export function ToggleGroup({
       size.disconnect();
     };
   }, []);
-
-  useEffect(() => {
-    if (slider) setSliding(true);
-  }, [slider]);
 
   return (
     <ToggleGroupPrimitive
@@ -66,7 +65,7 @@ export function ToggleGroup({
             "pointer-events-none absolute left-0 bg-pa-selected",
 
             bordered ? "top-0.5 bottom-0.5 rounded-sm" : "top-0 bottom-0 rounded-md",
-            sliding && "transition-transform duration-250 ease-in-out",
+            slider.animate && "transition-transform duration-250 ease-in-out",
           )}
           data-slot="toggle-group-slider"
           style={{ transform: `translateX(${slider.offset}px)`, width: slider.width }}

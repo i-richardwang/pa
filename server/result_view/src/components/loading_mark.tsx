@@ -1,4 +1,3 @@
-
 import type { CSSProperties } from "react";
 
 export type LoadingMarkSize = "default" | "small";
@@ -40,35 +39,42 @@ export function LoadingMark({
   className,
 }: LoadingMarkProps) {
   const bar = BAR[size];
-  return (
+  const shell = ["flex h-full w-full items-center justify-center", className]
+    .filter(Boolean)
+    .join(" ");
+  const bars = (
     <div
-      aria-hidden={decorative || undefined}
-      aria-label={decorative ? undefined : label}
-      className={["flex h-full w-full items-center justify-center", className]
-        .filter(Boolean)
-        .join(" ")}
-      data-slot="loading-mark"
-      role={decorative ? undefined : "status"}
+      className="flex items-end"
+      style={{ color: decorative ? "currentColor" : INK, gap: bar.gap, height: bar.height }}
     >
-      <div
-        className="flex items-end"
-        style={{ color: decorative ? "currentColor" : INK, gap: bar.gap, height: bar.height }}
-      >
-        {DELAYS.map((delay) => (
-          <span
-            className="pa-loader-bar"
-            key={delay}
-            style={
-              {
-                animationDelay: delay,
-                borderRadius: bar.radius,
-                height: bar.height,
-                width: bar.width,
-              } satisfies CSSProperties
-            }
-          />
-        ))}
+      {DELAYS.map((delay) => (
+        <span
+          className="pa-loader-bar"
+          key={delay}
+          style={
+            {
+              animationDelay: delay,
+              borderRadius: bar.radius,
+              height: bar.height,
+              width: bar.width,
+            } satisfies CSSProperties
+          }
+        />
+      ))}
+    </div>
+  );
+
+  // 装饰档与状态档是两种语义，各自写全一套：读屏器读到的是元素身份，不是一组条件属性。
+  if (decorative) {
+    return (
+      <div aria-hidden="true" className={shell} data-slot="loading-mark">
+        {bars}
       </div>
+    );
+  }
+  return (
+    <div aria-label={label} className={shell} data-slot="loading-mark" role="status">
+      {bars}
     </div>
   );
 }

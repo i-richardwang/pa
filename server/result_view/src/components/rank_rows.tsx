@@ -1,4 +1,3 @@
-
 import {
   CHART_DARK_COLORS,
   RANK_ROW,
@@ -26,10 +25,13 @@ export function RankRows({
   chart,
   dark,
   onPointClick,
+  canOpenPoint,
 }: {
   chart: ViewChart;
   dark: boolean;
   onPointClick?: (point: { row: number; column: string }) => void;
+  /** 该格能不能开明细：不能开就不画成可点的样子，缺省即有投影就能开。 */
+  canOpenPoint?: (point: { row: number; column: string }) => boolean;
 }) {
   const pa = chart.option.pa as PaChartExtension | undefined;
   const rows = rankRows(chart);
@@ -46,7 +48,8 @@ export function RankRows({
     <div className="h-full overflow-y-auto px-4">
       {rows.map((row, i) => {
         const point = points[i];
-        const clickable = Boolean(onPointClick && point);
+        const openable = point && onPointClick && (canOpenPoint?.(point) ?? true);
+        const value = row.value === null ? "—" : formatSeriesValue(row.value, format, decimals);
         return (
           <div
             className="flex items-center border-pa-line border-t first:border-t-0"
@@ -60,7 +63,7 @@ export function RankRows({
             >
               {row.label}
             </span>
-            {/* 条本身：整格可点时由外层的按钮语义承担，条只是形 */}
+            {/* 条只是形：可点的是值那一格，条不认领语义 */}
             <span className="min-w-0 flex-1">
               <span
                 aria-hidden="true"
@@ -73,24 +76,24 @@ export function RankRows({
                 }}
               />
             </span>
-            <span
-              className={`shrink-0 pl-3 text-right text-sm tabular-nums ${
-                clickable ? "cursor-pointer text-pa-fg underline-offset-2 hover:underline" : "text-pa-muted"
-              }`}
-              onClick={clickable && point ? () => onPointClick?.(point) : undefined}
-              onKeyDown={
-                clickable && point
-                  ? (event) => {
-                      if (event.key === "Enter" || event.key === " ") onPointClick?.(point);
-                    }
-                  : undefined
-              }
-              role={clickable ? "button" : undefined}
-              style={{ width: RANK_ROW.valueColumn }}
-              tabIndex={clickable ? 0 : undefined}
-            >
-              {row.value === null ? "—" : formatSeriesValue(row.value, format, decimals)}
-            </span>
+            {/* 值那一格：可下钻时它本身就是一个按钮，不用 role/tabIndex/keydown 手搭一个出来 */}
+            {openable && point ? (
+              <button
+                className="shrink-0 cursor-pointer rounded-sm border-0 bg-transparent pl-3 text-right text-pa-fg text-sm tabular-nums underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pa-accent"
+                onClick={() => onPointClick?.(point)}
+                style={{ width: RANK_ROW.valueColumn }}
+                type="button"
+              >
+                {value}
+              </button>
+            ) : (
+              <span
+                className="shrink-0 pl-3 text-right text-pa-muted text-sm tabular-nums"
+                style={{ width: RANK_ROW.valueColumn }}
+              >
+                {value}
+              </span>
+            )}
             {pa?.share ? (
               <span
                 className="shrink-0 pl-2 text-right text-sm text-pa-faint tabular-nums"

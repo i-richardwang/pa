@@ -1,7 +1,10 @@
-
 import { isTimeColumn } from "../../src/presentation_core/view_format.js";
 import { memberShortName } from "../../src/semantic_core/member_name.js";
-import { detectRoles, makeTitleOf, primaryMeasureIndices } from "../../src/presentation_core/view_shape.js";
+import {
+  detectRoles,
+  makeTitleOf,
+  primaryMeasureIndices,
+} from "../../src/presentation_core/view_shape.js";
 import type { QueryPayload, ViewBlock } from "../../src/semantic_core/query_payload.js";
 
 export { makeTitleOf };

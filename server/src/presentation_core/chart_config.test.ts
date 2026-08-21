@@ -1029,7 +1029,7 @@ describe("服务端物理呈现声明", () => {
     expect(buildViewChart(trendView, { type: "table", y: [] })).toBeNull();
   });
 
-  test("声明 pie：环形图不出外标和引线，身份进 pa.legend，环比 48/80", () => {
+  test("声明 pie：环形图不出外标和引线、不设悬停态，身份进 pa.legend，环比 48/80", () => {
     const chart = buildViewChart(
       view(
         ["organization_name", "active_employee_count"],
@@ -1065,6 +1065,10 @@ describe("服务端物理呈现声明", () => {
     ]);
     // 绘图底只属直角坐标系：饼图无 grid，不铺底也不出发丝框
     expect(chart.option.grid).toBeUndefined();
+    // 扇形的角度就是值：悬停态整个关掉，切片上也就没有第二份交互样式
+    const states = chart.option.series as { emphasis: unknown; data: Record<string, unknown>[] }[];
+    expect(states[0].emphasis).toEqual({ disabled: true });
+    for (const slice of states[0].data) expect(slice).not.toHaveProperty("emphasis");
   });
 
   test("数据守卫：率不做饼图切片，图退空（表忠实呈现）", () => {
