@@ -180,6 +180,7 @@ test("every source directory that emits class names is registered with both host
 const BROWSER_ALIASES: Record<string, string[]> = {
   console: [
     "@",
+    "@chart-spec",
     "@charts",
     "@contracts",
     "@data-capability-map",

@@ -3,9 +3,9 @@
  * 「报告 / 查询记录」进控制条分面片（hash 分面）；「新建分析」挂 titlebar。
  */
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArchiveIcon, ChartBarIcon, CircleAlertIcon, PlusIcon } from "lucide-react";
-import { REPORT_DETAIL_SCHEMA, type ReportRow } from "@contracts/report_contract";
+import type { ReportRow, ReportsPayload } from "@contracts/report_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import {
@@ -24,9 +24,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { toastManager } from "@/components/ui/toast";
-import { ApiError, formatAt, patchJson } from "../api";
+import { formatAt } from "../api";
 import { dashboardKeys, errorText, useReportsList } from "../dashboard_queries";
+import { useArchiveReport } from "../editor_queries";
+import { performUndoable } from "../kit/undo";
 import {
   ListCategoryPill,
   ListControlBar,
@@ -144,31 +145,19 @@ function ReportsList({ query }: { query: string }) {
   }, [data?.rows, query]);
   const { rows, sort, toggle } = useTableSort(filtered, REPORT_SORT);
 
-  const archiveReport = useMutation({
-    mutationFn: (row: ReportRow) =>
-      patchJson(
-        `/dashboard/api/reports/${encodeURIComponent(row.id)}`,
-        { action: { type: "archive" }, if_revision: row.revision },
-        REPORT_DETAIL_SCHEMA,
-      ),
-    onSuccess: (_updated, row) => {
-      void queryClient.invalidateQueries({ queryKey: dashboardKeys.reports });
-      toastManager.add({ type: "success", title: `已归档「${row.name}」` });
-    },
-    onError: (reason) => {
-      if (reason instanceof ApiError && reason.status === 401) return;
-      const conflict = reason instanceof ApiError && reason.status === 409;
-      toastManager.add({
-        type: "error",
-        title: conflict ? "报告已被其他操作更新" : "归档失败",
-        description: conflict
-          ? "请刷新后再归档。"
-          : reason instanceof Error
-            ? reason.message
-            : String(reason),
-      });
-    },
-  });
+  const archiveReport = useArchiveReport();
+
+  function archive(row: ReportRow) {
+    queryClient.setQueryData<ReportsPayload>(dashboardKeys.reports, (current) =>
+      current ? { ...current, rows: current.rows.filter((r) => r.id !== row.id) } : current,
+    );
+    performUndoable({
+      title: `已归档「${row.name}」`,
+      failureTitle: "归档失败",
+      revert: () => void queryClient.invalidateQueries({ queryKey: dashboardKeys.reports }),
+      commit: () => archiveReport.mutateAsync({ id: row.id, ifRevision: row.revision }),
+    });
+  }
 
   if (error) {
     return (
@@ -252,10 +241,7 @@ function ReportsList({ query }: { query: string }) {
               </TableCell>
               <TableCell className="relative p-2 text-right">
                 <RowMenu label="报告操作">
-                  <MenuItem
-                    disabled={archiveReport.isPending}
-                    onClick={() => archiveReport.mutate(row)}
-                  >
+                  <MenuItem onClick={() => archive(row)}>
                     <ArchiveIcon aria-hidden="true" />
                     归档
                   </MenuItem>

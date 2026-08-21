@@ -16,12 +16,7 @@ import type {
   PublicCatalogDocument as CatalogPayload,
 } from "@contracts/catalog_contract";
 import type { ReplayPayload } from "@contracts/replay_contract";
-import {
-  isSemanticDerivedView,
-  semanticAnalysisSink,
-  type SemanticPercentOfTotalCalculation,
-  type SemanticQueryView,
-} from "@semantic-analysis";
+import type { SemanticPercentOfTotalCalculation, SemanticQueryView } from "@semantic-analysis";
 import { makeTitleOf } from "@shape";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/hint";
@@ -57,6 +52,7 @@ import {
   isAnalysisRunnable,
   removeSemanticQueryMember,
   replaceSemanticQueryDimension,
+  semanticSinkQueryView,
   setSemanticQueryView,
   type AnalysisEditState,
 } from "./analysis_draft";
@@ -84,10 +80,7 @@ const BREAKDOWN_CONTENT_CLASS = cn(
 
 /**
  * 题行右端的添加入口：全栏同一枚幽灵 `+`，位置不随内容多少上下漂。
- *
- * **写成返回元素的函数，不是组件**：它多半要交给 `PopoverTrigger render={...}`，
- * 开合的处理器与 ref 是从外面合并进这枚元素的。包成组件后那些 props 落在组件上，
- * 不透传就成了一枚点不开的按钮——套一层反而多一处能悄悄断掉的地方。
+ * 返回元素而非组件：它交给 `PopoverTrigger render={...}`，开合处理器与 ref 直接合并到这枚元素上。
  */
 const addButton = (label: string) => (
   <Button aria-label={label} className="text-pa-muted" size="icon-sm" variant="subtle">
@@ -397,7 +390,7 @@ function BreakdownField({
       : ArrowUpNarrowWideIcon;
 
   return (
-    // 一起定，包成行就只剩本行内部可协商，宽度随本行标签长短漂。
+    // 维度与范围两格直接进父网格：列宽由整栏的网格统一定，各行对齐。
     <>
       <div className="mr-2.5 min-w-0" data-slot="breakdown-field">
         <MemberPopover
@@ -422,7 +415,7 @@ function BreakdownField({
           render={
             <button
               aria-label={`${label}分组范围：${rangeLabel}`}
-              // 写死 100% 会让右外边距溢出格外，与移除钮之间那道缝就没了。
+              // 宽随内容，右外边距留在格内，与移除钮之间保留缝隙。
               className={cn(
                 selectTriggerVariants({ size: "sm" }),
                 "mr-0.5 w-auto min-w-0 text-pa-muted",
@@ -573,14 +566,9 @@ export function ReportQueryRail({
   /** 其他能力分区，例如图表呈现设置，按同一滚动面板继续渲染。 */
   children?: ReactNode;
 }) {
-  // 被编辑的视图取自草稿规格的收敛点，而非上一次结果的载荷——空白起点没有结果可反查，
-  // 且草稿才是编辑对象的真相（结果只是它上一次运行的产物）。
+  // 被编辑的视图取自草稿规格的收敛点：草稿是编辑对象的真相，结果只是它上一次运行的产物。
   const resultTitleOf = replay ? makeTitleOf(replay.payload.view) : (member: string) => member;
-  const hasDerivedView = draft.analysis.views.some(isSemanticDerivedView);
-  const sinkId = semanticAnalysisSink(draft.analysis.views);
-  const selected = draft.analysis.views.find((view) => view.id === sinkId);
-  const queryView =
-    !hasDerivedView && selected && !isSemanticDerivedView(selected) ? selected : null;
+  const queryView = semanticSinkQueryView(draft.analysis);
 
   if (!queryView || !catalog) {
     return (

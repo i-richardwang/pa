@@ -4,10 +4,10 @@
  * 各瓦片独立成败，权限或规格错误不影响整板。
  * chrome 走 TileShell（与文本瓦片同一份）：单行标题头、正文填满且不套滚动容器。
  * 拖拽和缩放由外层画布管理，编辑态整卡可拖；按钮/表单等交互元素经
- * draggableCancel 豁免，见 board_page 的 GridCanvas。
+ * 拖拽取消选择器豁免，见 board_page 的 DRAG_CANCEL。
  * 瓦片菜单与整板「编辑看板」分立：查看「打开报告」/「调整并另存」，整板编辑里「编辑报告」。
  */
-import { useQuery } from "@tanstack/react-query";
+import { type UseQueryOptions, useQuery } from "@tanstack/react-query";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -18,7 +18,7 @@ import {
   PencilIcon,
   Trash2Icon,
 } from "lucide-react";
-import { REPLAY_PAYLOAD_SCHEMA } from "@contracts/replay_contract";
+import type { ReplayPayload } from "@contracts/replay_contract";
 import type { TimeIntent } from "@time";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { LoadingMark, ViewRenderer } from "pa-result-view";
@@ -33,8 +33,8 @@ import {
   MenuTrigger,
 } from "@/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
-import { getJson } from "../api";
-import { dashboardKeys, errorText } from "../dashboard_queries";
+import { boardReportReplayQueryOptions, errorText } from "../dashboard_queries";
+import { reportReplayQueryOptions } from "../editor_queries";
 import type { RecordProjectionDialogRequest } from "../reports/record_projection_dialog";
 import { useRecordProjection } from "../reports/use_record_projection";
 import { TileShell, tileEditMenuTriggerClass } from "./tile_shell";
@@ -85,25 +85,12 @@ export function BoardTile({
 }) {
   const override = !editing && timeOverride ? timeOverride : null;
   // 编辑期草稿新加的瓦片尚未落库，board-scoped 端点（校验瓦片在持久化看板内）会 404；
-  // 编辑仅创建者可达、瓦片引用的都是本人报告，故编辑期走 owner 端点实时预览，查看期走成员端点。
-  const replayQuery = useQuery({
-    queryKey: editing
-      ? dashboardKeys.boardTilePreview(reportId)
-      : dashboardKeys.boardReportReplay(boardId, reportId, override),
-    queryFn: () => {
-      if (editing) {
-        return getJson(
-          `/dashboard/api/reports/${encodeURIComponent(reportId)}/replay`,
-          REPLAY_PAYLOAD_SCHEMA,
-        );
-      }
-      const params = override ? `?time=${encodeURIComponent(JSON.stringify(override))}` : "";
-      return getJson(
-        `/dashboard/api/boards/${encodeURIComponent(boardId)}/items/${encodeURIComponent(reportId)}/replay${params}`,
-        REPLAY_PAYLOAD_SCHEMA,
-      );
-    },
-  });
+  // 编辑仅创建者可达、瓦片引用的都是本人报告，故编辑期走所有者重放，查看期走成员端点。
+  const replayOptions: UseQueryOptions<ReplayPayload, Error, ReplayPayload, readonly unknown[]> =
+    editing
+      ? reportReplayQueryOptions(reportId)
+      : boardReportReplayQueryOptions(boardId, reportId, override);
+  const replayQuery = useQuery(replayOptions);
   const data = replayQuery.data ?? null;
   const error = errorText(replayQuery.error);
   const ownScope = data?.time_override === "unsupported";

@@ -7,18 +7,12 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { CircleAlertIcon, KeyRoundIcon, PlusIcon, ShieldIcon } from "lucide-react";
-import { OK_PAYLOAD_SCHEMA } from "@contracts/response_contract";
 import type { AccessScope } from "@contracts/access_scope";
 import type { MePayload } from "@contracts/session_contract";
 import {
   ACCESS_ROLE_SCHEMA,
-  ADMIN_USERS_PAYLOAD_SCHEMA,
-  ADMIN_USER_SCHEMA,
   type AccessRole,
   type AdminUser,
-  type CreateAdminUserBody,
-  type ResetUserPasswordBody,
-  type UpdateUserAuthorizationBody,
 } from "@contracts/user_administration_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
@@ -39,7 +33,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { MenuItem } from "@/components/ui/menu";
 import { toastManager } from "@/components/ui/toast";
-import { getJson, postJson, putJson } from "../api";
+import {
+  errorText,
+  useCreateUser,
+  useResetUserPassword,
+  useUpdateUserAuthorization,
+  useUsers,
+} from "../dashboard_queries";
 import {
   Select,
   SelectItem,
@@ -110,8 +110,9 @@ function initialOf(user: AdminUser): string {
 }
 
 export function UsersPage({ me }: { me: MePayload }) {
-  const [users, setUsers] = useState<AdminUser[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const usersQuery = useUsers();
+  const users = usersQuery.data?.users ?? null;
+  const error = errorText(usersQuery.error);
   const [showCreate, setShowCreate] = useState(false);
   const [grantTarget, setGrantTarget] = useState<AdminUser | null>(null);
   const [resetTarget, setResetTarget] = useState<AdminUser | null>(null);
@@ -127,16 +128,6 @@ export function UsersPage({ me }: { me: MePayload }) {
   }, [users, roleFacet, query]);
   const { rows, sort, toggle } = useTableSort(users ? matched : undefined, USER_SORT);
 
-  async function load() {
-    setError(null);
-    try {
-      const payload = await getJson("/dashboard/api/users", ADMIN_USERS_PAYLOAD_SCHEMA);
-      setUsers(payload.users);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
-    }
-  }
-
   useSetSettingsActions(
     () => (
       <HeaderTextAction onClick={() => setShowCreate(true)}>
@@ -146,10 +137,6 @@ export function UsersPage({ me }: { me: MePayload }) {
     ),
     [],
   );
-
-  useEffect(() => {
-    void load();
-  }, []);
 
   return (
     <>
@@ -252,20 +239,12 @@ export function UsersPage({ me }: { me: MePayload }) {
         open={showCreate}
         accessScopeTitle={me.access_scope.title}
         onClose={() => setShowCreate(false)}
-        onCreated={async () => {
-          setShowCreate(false);
-          await load();
-        }}
       />
       <GrantDialog
         user={grantTarget}
         meEmail={me.email}
         accessScopeTitle={me.access_scope.title}
         onClose={() => setGrantTarget(null)}
-        onSaved={async () => {
-          setGrantTarget(null);
-          await load();
-        }}
       />
       <ResetPasswordDialog user={resetTarget} onClose={() => setResetTarget(null)} />
     </>
@@ -278,50 +257,34 @@ function GrantDialog({
   meEmail,
   accessScopeTitle,
   onClose,
-  onSaved,
 }: {
   /** 配权目标；null = 关闭 */
   user: AdminUser | null;
   meEmail: string;
   accessScopeTitle: string;
   onClose: () => void;
-  onSaved: () => void | Promise<void>;
 }) {
   const [role, setRole] = useState<AccessRole>("user");
   const [scope, setScope] = useState("");
-  const [pending, setPending] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const update = useUpdateUserAuthorization();
+  const { reset: resetUpdate } = update;
+  const formError = errorText(update.error);
   const self = user?.email === meEmail;
 
   useEffect(() => {
     if (!user) return;
     setRole(user.role);
     setScope(scopeInput(user.access_scope));
-    setFormError(null);
-  }, [user]);
+    resetUpdate();
+  }, [user, resetUpdate]);
 
-  async function onSubmit(e: React.FormEvent) {
+  function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
-    setPending(true);
-    setFormError(null);
-    const payload: UpdateUserAuthorizationBody = {
-      role,
-      access_scope: scopeFromInput(scope),
-    };
-    try {
-      await putJson(
-        `/dashboard/api/users/${encodeURIComponent(user.id)}/authorization`,
-        payload,
-        ADMIN_USER_SCHEMA,
-      );
-    } catch (saveError) {
-      setPending(false);
-      setFormError(saveError instanceof Error ? saveError.message : String(saveError));
-      return;
-    }
-    setPending(false);
-    await onSaved();
+    update.mutate(
+      { id: user.id, body: { role, access_scope: scopeFromInput(scope) } },
+      { onSuccess: onClose },
+    );
   }
 
   return (
@@ -374,7 +337,7 @@ function GrantDialog({
           </DialogPanel>
           <DialogFooter>
             <DialogClose render={<Button variant="subtle" />}>取消</DialogClose>
-            <Button variant="filled" type="submit" loading={pending}>
+            <Button variant="filled" type="submit" loading={update.isPending}>
               保存
             </Button>
           </DialogFooter>
@@ -394,35 +357,31 @@ function ResetPasswordDialog({
   onClose: () => void;
 }) {
   const [password, setPassword] = useState("");
-  const [pending, setPending] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const resetPassword = useResetUserPassword();
+  const { reset: resetMutation } = resetPassword;
+  const formError = errorText(resetPassword.error);
 
   useEffect(() => {
     if (!user) return;
     setPassword("");
-    setFormError(null);
-  }, [user]);
+    resetMutation();
+  }, [user, resetMutation]);
 
-  async function onSubmit(e: React.FormEvent) {
+  function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
-    setPending(true);
-    setFormError(null);
-    const payload: ResetUserPasswordBody = { password };
-    try {
-      await postJson(
-        `/dashboard/api/users/${encodeURIComponent(user.id)}/password`,
-        payload,
-        OK_PAYLOAD_SCHEMA,
-      );
-    } catch (resetError) {
-      setPending(false);
-      setFormError(resetError instanceof Error ? resetError.message : String(resetError));
-      return;
-    }
-    setPending(false);
-    toastManager.add({ type: "success", title: `已重置「${user.name || user.email}」的密码` });
-    onClose();
+    resetPassword.mutate(
+      { id: user.id, body: { password } },
+      {
+        onSuccess: () => {
+          toastManager.add({
+            type: "success",
+            title: `已重置「${user.name || user.email}」的密码`,
+          });
+          onClose();
+        },
+      },
+    );
   }
 
   return (
@@ -454,7 +413,12 @@ function ResetPasswordDialog({
           </DialogPanel>
           <DialogFooter>
             <DialogClose render={<Button variant="subtle" />}>取消</DialogClose>
-            <Button variant="filled" type="submit" loading={pending} disabled={password.length < 8}>
+            <Button
+              variant="filled"
+              type="submit"
+              loading={resetPassword.isPending}
+              disabled={password.length < 8}
+            >
               确认重置
             </Button>
           </DialogFooter>
@@ -468,46 +432,45 @@ function CreateUserDialog({
   open,
   accessScopeTitle,
   onClose,
-  onCreated,
 }: {
   open: boolean;
   accessScopeTitle: string;
   onClose: () => void;
-  onCreated: () => void | Promise<void>;
 }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<AccessRole>("user");
   const [accessScope, setAccessScope] = useState("");
-  const [pending, setPending] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const create = useCreateUser();
+  const { reset: resetCreate } = create;
+  const formError = errorText(create.error);
 
-  async function onSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    if (open) resetCreate();
+  }, [open, resetCreate]);
+
+  function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setPending(true);
-    setFormError(null);
-    const payload: CreateAdminUserBody = {
-      email,
-      password,
-      ...(name.trim() ? { name } : {}),
-      role,
-      access_scope: scopeFromInput(accessScope),
-    };
-    try {
-      await postJson("/dashboard/api/users", payload, ADMIN_USER_SCHEMA);
-    } catch (createError) {
-      setPending(false);
-      setFormError(createError instanceof Error ? createError.message : String(createError));
-      return;
-    }
-    setPending(false);
-    setEmail("");
-    setName("");
-    setPassword("");
-    setRole("user");
-    setAccessScope("");
-    await onCreated();
+    create.mutate(
+      {
+        email,
+        password,
+        ...(name.trim() ? { name } : {}),
+        role,
+        access_scope: scopeFromInput(accessScope),
+      },
+      {
+        onSuccess: () => {
+          setEmail("");
+          setName("");
+          setPassword("");
+          setRole("user");
+          setAccessScope("");
+          onClose();
+        },
+      },
+    );
   }
 
   return (
@@ -585,7 +548,12 @@ function CreateUserDialog({
           </DialogPanel>
           <DialogFooter>
             <DialogClose render={<Button variant="subtle" />}>取消</DialogClose>
-            <Button variant="filled" type="submit" loading={pending} disabled={password.length < 8}>
+            <Button
+              variant="filled"
+              type="submit"
+              loading={create.isPending}
+              disabled={password.length < 8}
+            >
               创建用户
             </Button>
           </DialogFooter>

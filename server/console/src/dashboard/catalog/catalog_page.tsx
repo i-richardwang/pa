@@ -5,20 +5,15 @@ import type {
   PublicCatalogDocument as CatalogPayload,
   PublicMetricDomain as MetricDomainPayload,
 } from "@contracts/catalog_contract";
-import type { PublicBusinessTerm } from "@contracts/business_term_contract";
-import { BUSINESS_TERM_LIMITS } from "@contracts/business_term_contract";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  BUSINESS_TERM_LIMITS,
+  type BusinessTermsPayload,
+  type PublicBusinessTerm,
+} from "@contracts/business_term_contract";
 import { isSearchableCatalogDimension } from "@contracts/catalog_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogClose,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogPopup,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -54,6 +49,7 @@ import {
 import { toastManager } from "@/components/ui/toast";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  dashboardKeys,
   errorText,
   useAdminBusinessTerms,
   useBusinessTerms,
@@ -64,6 +60,7 @@ import {
   useUpdateBusinessTerm,
 } from "../dashboard_queries";
 import { CatalogValuesDialog, type ValuesTarget } from "./catalog_values_dialog";
+import { performUndoable } from "../kit/undo";
 import { CATALOG_PREFILL_KEY } from "../layout/command_palette";
 import {
   ListCategoryPill,
@@ -122,11 +119,29 @@ export function CatalogPage() {
   const [valuesTarget, setValuesTarget] = useState<ValuesTarget | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [editing, setEditing] = useState<PublicBusinessTerm | "new" | null>(null);
-  const [deleting, setDeleting] = useState<PublicBusinessTerm | null>(null);
+  const queryClient = useQueryClient();
+  const removeTerm = useDeleteBusinessTerm();
 
   const terms: TermRow[] = isAdmin
     ? (adminTermsQuery.data?.rows ?? [])
     : (termsQuery.data?.rows ?? []);
+
+  /** 术语先从两份清单缓存撤下，回执关闭才提交删除；撤销重取清单即还原。 */
+  function deleteTerm(term: PublicBusinessTerm) {
+    const withoutTerm = (current: BusinessTermsPayload | undefined) =>
+      current ? { ...current, rows: current.rows.filter((row) => row.id !== term.id) } : current;
+    queryClient.setQueryData<BusinessTermsPayload>(dashboardKeys.adminBusinessTerms, withoutTerm);
+    queryClient.setQueryData<BusinessTermsPayload>(dashboardKeys.businessTerms, withoutTerm);
+    performUndoable({
+      title: `已删除「${term.canonical_term}」`,
+      failureTitle: "删除失败",
+      revert: () => {
+        void queryClient.invalidateQueries({ queryKey: dashboardKeys.businessTerms });
+        void queryClient.invalidateQueries({ queryKey: dashboardKeys.adminBusinessTerms });
+      },
+      commit: () => removeTerm.mutateAsync(term.id),
+    });
+  }
   const found = useMemo(() => filterCatalog(data, terms, keyword), [data, terms, keyword]);
   // 管理员恒见词典区（空词典也要有登记入口），故其空态不计入「什么都没搜到」。
   const nothing =
@@ -251,7 +266,7 @@ export function CatalogPage() {
                     terms={found.terms}
                     filtered={Boolean(keyword.trim())}
                     onEdit={isAdmin ? setEditing : undefined}
-                    onDelete={isAdmin ? setDeleting : undefined}
+                    onDelete={isAdmin ? deleteTerm : undefined}
                   />
                 )}
                 {nothing && !isAdmin && (
@@ -274,7 +289,6 @@ export function CatalogPage() {
         onClose={() => setEditing(null)}
         target={editing}
       />
-      <BusinessTermDeleteDialog onClose={() => setDeleting(null)} target={deleting} />
     </>
   );
 }
@@ -804,50 +818,6 @@ function BusinessTermEditorDialog({
         </DialogFooter>
       </DialogPopup>
     </Dialog>
-  );
-}
-
-function BusinessTermDeleteDialog({
-  target,
-  onClose,
-}: {
-  target: PublicBusinessTerm | null;
-  onClose: () => void;
-}) {
-  const remove = useDeleteBusinessTerm();
-
-  async function confirm() {
-    if (!target) return;
-    try {
-      await remove.mutateAsync(target.id);
-      toastManager.add({ type: "success", title: `已删除「${target.canonical_term}」` });
-      onClose();
-    } catch (error) {
-      toastManager.add({
-        type: "error",
-        title: "删除失败",
-        description: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  return (
-    <AlertDialog open={target != null} onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogPopup>
-        <AlertDialogHeader>
-          <AlertDialogTitle>删除「{target?.canonical_term}」？</AlertDialogTitle>
-          <AlertDialogDescription>
-            删除后 Agent 将不再获得该术语的定义，此操作不可撤销。
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogClose render={<Button variant="subtle" />}>取消</AlertDialogClose>
-          <Button loading={remove.isPending} onClick={() => void confirm()} variant="danger">
-            确认删除
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogPopup>
-    </AlertDialog>
   );
 }
 

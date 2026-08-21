@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleAlertIcon, PackageIcon } from "lucide-react";
-import { Responsive, type Layout } from "react-grid-layout/legacy";
-import "react-grid-layout/css/styles.css";
 import {
-  BOARD_GRID_COLUMNS,
-  BOARD_PAYLOAD_SCHEMA,
-  type BoardTile as BoardTileData,
-} from "@contracts/board_contract";
+  type Layout,
+  Responsive,
+  type ResponsiveLayouts,
+  verticalCompactor,
+} from "react-grid-layout";
+import "react-grid-layout/css/styles.css";
+import { BOARD_GRID_COLUMNS, type BoardTile as BoardTileData } from "@contracts/board_contract";
 import type { MePayload } from "@contracts/session_contract";
 import type { MyAnalysisRow } from "@contracts/analysis_contract";
 import type { ReportRow } from "@contracts/report_contract";
@@ -49,8 +49,8 @@ import { AddFromAnalysisDialog } from "./add_from_analysis_dialog";
 import { BoardTimeOverride } from "./board_time_override";
 import { BoardTile } from "./board_tile";
 import { TextTile } from "./text_tile";
-import { ApiError, getJson, patchJson } from "../api";
-import { dashboardKeys, errorText, useCatalogQuery } from "../dashboard_queries";
+import { ApiError } from "../api";
+import { errorText, useBoard, useCatalogQuery, useSaveBoard } from "../dashboard_queries";
 import {
   addBoardReport,
   applyBoardLayout,
@@ -89,13 +89,19 @@ import {
   tileShape,
 } from "./tile_sizing";
 
-const GridCanvas = Responsive;
+type GridBreakpoint = "lg" | "sm";
 
 // lg 是唯一可写入持久化的布局；sm 由 lg 派生为单列且不回写，避免多个桌面断点竞争坐标。
-const GRID_COLS = { lg: BOARD_GRID_COLUMNS, sm: 1 };
+const GRID_COLS: Record<GridBreakpoint, number> = { lg: BOARD_GRID_COLUMNS, sm: 1 };
 // 断点与间距：≤752 单列；间距取自 tile_sizing 的单源常量，横纵与桌面移动端同值
-const GRID_BREAKPOINTS = { lg: MOBILE_BREAKPOINT + 1, sm: 0 };
-const GRID_MARGINS = { lg: GRID_MARGIN, sm: MOBILE_GRID_MARGIN };
+const GRID_BREAKPOINTS: Record<GridBreakpoint, number> = { lg: MOBILE_BREAKPOINT + 1, sm: 0 };
+const GRID_MARGINS: Record<GridBreakpoint, readonly [number, number]> = {
+  lg: GRID_MARGIN,
+  sm: MOBILE_GRID_MARGIN,
+};
+const GRID_CONTAINER_PADDING: readonly [number, number] = [0, 0];
+// 编辑态整卡可拖；交互元素（浮出操作面板与一切控件）豁免。
+const DRAG_CANCEL = "[data-dontdrag], button, a, input, textarea, select";
 
 function deriveRowHeight(canvasWidth: number | undefined): number {
   if (!canvasWidth) return MIN_ROW_HEIGHT;
@@ -109,7 +115,7 @@ function tileMin(tile: BoardTileData): { minW: number; minH: number } {
   return { minW, minH };
 }
 
-function buildLayouts(tiles: BoardTileData[]): { lg: Layout; sm: Layout } {
+function buildLayouts(tiles: BoardTileData[]): Required<ResponsiveLayouts<GridBreakpoint>> {
   const lg: Layout = tiles.map((t) => ({ i: t.tile_id, ...t.place, ...tileMin(t) }));
   const stacked = [...tiles].sort((a, b) => a.place.y - b.place.y);
   let cursor = 0;
@@ -154,28 +160,18 @@ export function BoardPage({
   const { ref: canvasRef, size: canvasSize } = useElementSize<HTMLDivElement>();
   const rowHeight = deriveRowHeight(canvasSize?.width);
 
-  const queryClient = useQueryClient();
-  const boardQuery = useQuery({
-    queryKey: dashboardKeys.board(id),
-    queryFn: () => getJson(`/dashboard/api/boards/${encodeURIComponent(id)}`, BOARD_PAYLOAD_SCHEMA),
-  });
+  const boardQuery = useBoard(id);
   const data = boardQuery.data ?? null;
   const catalogQuery = useCatalogQuery();
   const dataAsOf = catalogQuery.data?.data_as_of ?? "未知";
   const error = errorText(boardQuery.error);
-
-  // 保存看板：写回详情缓存并失效看板列表（名称/瓦片数变化随之刷新）。
-  const saveBoard = useMutation({
-    mutationFn: (body: {
-      if_revision: number;
-      name: string;
-      tiles: ReturnType<typeof boardMutationTiles>;
-    }) => patchJson(`/dashboard/api/boards/${encodeURIComponent(id)}`, body, BOARD_PAYLOAD_SCHEMA),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(dashboardKeys.board(id), updated);
-      void queryClient.invalidateQueries({ queryKey: dashboardKeys.boards });
+  const saveBoard = useSaveBoard(id);
+  const setTime = useCallback(
+    (next: TimeIntent | null) => {
+      window.location.hash = boardHash(id, next).slice(1);
     },
-  });
+    [id],
+  );
 
   // 切换看板即弃草稿；详情随 id 键位自动重取。
   useEffect(() => {
@@ -276,9 +272,6 @@ export function BoardPage({
    * 板级时间设置入口亦在 hero。
    */
   useSetDetailChromeActions(() => {
-    const setTime = (next: TimeIntent | null) => {
-      window.location.hash = boardHash(id, next).slice(1);
-    };
     if (editing) {
       return (
         <>
@@ -316,14 +309,14 @@ export function BoardPage({
     timeOverride,
     isCreator,
     enterEdit,
-    id,
+    setTime,
     saveBoard.isPending,
     cancelEdit,
     finishEdit,
   ]);
 
-  /** RGL 布局变更回写草稿：只认桌面（lg）坐标，移动端单列堆叠不落库；无实变化则跳过避免自激。 */
-  function applyLayout(_current: Layout, all: Partial<Record<string, Layout>>) {
+  /** 布局变更回写草稿：只认桌面（lg）坐标，移动端单列堆叠不落库；无实变化则跳过避免自激。 */
+  function applyLayout(_current: Layout, all: ResponsiveLayouts<GridBreakpoint>) {
     const lg = all.lg;
     if (!lg) return;
     setDraft((current) => (current ? applyBoardLayout(current, lg) : current));
@@ -371,10 +364,6 @@ export function BoardPage({
   const layouts = buildLayouts(tiles);
   const boardTitle = (editing ? draft?.name : data?.name) || "看板";
 
-  const setTime = (next: TimeIntent | null) => {
-    window.location.hash = boardHash(id, next).slice(1);
-  };
-
   return (
     <>
       <div className="min-h-full flex-1 px-6 py-12 md:px-[60px]">
@@ -409,7 +398,7 @@ export function BoardPage({
                       />
                     </div>
                   ) : null}
-                  {/* 编辑态标题也是只读字；改名入口在 hero，不回题条 */}
+                  {/* 标题恒为只读字，改名走旁边的入口 */}
                   <div className="flex min-w-0 items-end gap-3">
                     <h1 className="min-w-0 flex-1 truncate text-xl font-semibold text-pa-fg">
                       {boardTitle}
@@ -444,19 +433,17 @@ export function BoardPage({
                     </EmptyHeader>
                   </Empty>
                 ) : canvasSize === null ? null : (
-                  <GridCanvas
+                  <Responsive<GridBreakpoint>
                     width={canvasSize.width}
                     layouts={layouts}
                     breakpoints={GRID_BREAKPOINTS}
                     cols={GRID_COLS}
                     rowHeight={rowHeight}
                     margin={GRID_MARGINS}
-                    containerPadding={[0, 0]}
-                    isDraggable={editing}
-                    isResizable={editing}
-                    // 编辑态整卡可拖；交互元素（浮出操作面板与一切控件）豁免。
-                    draggableCancel="[data-dontdrag], button, a, input, textarea, select"
-                    compactType="vertical"
+                    containerPadding={GRID_CONTAINER_PADDING}
+                    dragConfig={{ enabled: editing, cancel: DRAG_CANCEL }}
+                    resizeConfig={{ enabled: editing }}
+                    compactor={verticalCompactor}
                     onLayoutChange={editing ? applyLayout : undefined}
                   >
                     {tiles.map((tile) => {
@@ -496,7 +483,7 @@ export function BoardPage({
                         </div>
                       );
                     })}
-                  </GridCanvas>
+                  </Responsive>
                 )}
 
                 {editing ? (

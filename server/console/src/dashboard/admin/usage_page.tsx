@@ -3,16 +3,11 @@
  * KPI 展示全窗口概况；分面（业务问题 / 调用统计 / 未答信号）与时间窗同走清单控制条。
  */
 import { type ReactNode, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { CircleAlertIcon } from "lucide-react";
-import { DASHBOARD_PAGE_SIZE } from "@contracts/pagination_contract";
-import {
-  UNANSWERED_PAYLOAD_SCHEMA,
-  USAGE_OVERVIEW_PAYLOAD_SCHEMA,
-  USAGE_TITLES_PAYLOAD_SCHEMA,
-  type UnansweredPayload,
-  type UsageOverviewPayload,
-  type UsageTitlesPayload,
+import type {
+  UnansweredPayload,
+  UsageOverviewPayload,
+  UsageTitlesPayload,
 } from "@contracts/usage_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
@@ -27,8 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatAt, getJson } from "../api";
-import { errorText } from "../dashboard_queries";
+import { formatAt } from "../api";
+import { errorText, useUsage } from "../dashboard_queries";
 import {
   ListControlBar,
   ListPageBody,
@@ -62,21 +57,7 @@ export function UsagePage() {
   const [offset, setOffset] = useState(0);
   const [tab, setTab] = useState<UsageTab>("titles");
 
-  const usageQuery = useQuery({
-    queryKey: ["usage", days, offset],
-    placeholderData: keepPreviousData,
-    queryFn: async () => {
-      const [overview, titles, unanswered] = await Promise.all([
-        getJson(`/dashboard/api/usage/overview?days=${days}`, USAGE_OVERVIEW_PAYLOAD_SCHEMA),
-        getJson(
-          `/dashboard/api/usage/titles?days=${days}&limit=${DASHBOARD_PAGE_SIZE}&offset=${offset}`,
-          USAGE_TITLES_PAYLOAD_SCHEMA,
-        ),
-        getJson(`/dashboard/api/usage/unanswered?days=${days}`, UNANSWERED_PAYLOAD_SCHEMA),
-      ]);
-      return { overview, titles, unanswered };
-    },
-  });
+  const usageQuery = useUsage(days, offset);
   const data = usageQuery.data ?? null;
   const loading = usageQuery.isFetching;
   const error = errorText(usageQuery.error);

@@ -26,7 +26,6 @@ export function DashboardApp() {
   const error = errorText(meQuery.error);
   const [route, navigate] = useHashRoute();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // 成员迁进设置弹层后，`#/users` 这条老深链继续可用——它开的是弹层的成员节。
   const settingsTab = route.page === "users" ? "users" : "account";
 
   async function signOut() {

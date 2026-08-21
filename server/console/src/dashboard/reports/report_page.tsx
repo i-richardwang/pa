@@ -1,26 +1,18 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArchiveIcon, HistoryIcon } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogClose,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogPopup,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
+import type { ReportsPayload } from "@contracts/report_contract";
 import { MenuItem } from "@/components/ui/menu";
 import { toastManager } from "@/components/ui/toast";
 import { AnalysisWorkbench } from "../analyses/analysis_workbench";
-import { ApiError } from "../api";
-import { useCatalogQuery } from "../dashboard_queries";
+import { dashboardKeys, useCatalogQuery } from "../dashboard_queries";
+import { performUndoable } from "../kit/undo";
 import {
   RecordProjectionDialog,
   type RecordProjectionDialogRequest,
 } from "./record_projection_dialog";
 import { ReportHistoryDialog } from "./report_history_dialog";
-import { useReportResource, useUpdateReport } from "../editor_queries";
+import { useArchiveReport, useReportResource } from "../editor_queries";
 import { useAnalysisEditSession } from "../analyses/use_analysis_edit_session";
 import { HeaderMenu } from "../layout/view_chrome";
 import { AddToBoardAction } from "./add_to_board_picker";
@@ -28,11 +20,11 @@ import { useRecordProjection } from "./use_record_projection";
 
 export function ReportPage({ id }: { id: string }) {
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [archiveOpen, setArchiveOpen] = useState(false);
   const [recordProjectionRequest, setRecordProjectionRequest] =
     useState<RecordProjectionDialogRequest | null>(null);
   const { report, savedReplay, reportError, replayError } = useReportResource(id);
-  const archiveReport = useUpdateReport(id);
+  const queryClient = useQueryClient();
+  const archiveReport = useArchiveReport();
   const catalog = useCatalogQuery().data ?? null;
 
   const seed = report
@@ -61,29 +53,20 @@ export function ReportPage({ id }: { id: string }) {
   });
   useEffect(() => setRecordProjectionRequest(null), [id]);
 
-  async function archive() {
+  /** 归档回到清单：清单先撤下这一行，回执关闭才提交；撤销把它放回清单。 */
+  function archive() {
     if (!report) return;
-    try {
-      await archiveReport.mutateAsync({
-        action: { type: "archive" },
-        if_revision: report.revision,
-      });
-      setArchiveOpen(false);
-      window.location.hash = "/reports";
-      toastManager.add({ type: "success", title: `已归档「${report.name}」` });
-    } catch (reason) {
-      if (reason instanceof ApiError && reason.status === 401) return;
-      const conflict = reason instanceof ApiError && reason.status === 409;
-      toastManager.add({
-        type: "error",
-        title: conflict ? "报告已被其他操作更新" : "归档失败",
-        description: conflict
-          ? "请刷新后再归档，当前操作没有覆盖服务器上的新版本。"
-          : reason instanceof Error
-            ? reason.message
-            : String(reason),
-      });
-    }
+    const { id: reportId, name, revision } = report;
+    queryClient.setQueryData<ReportsPayload>(dashboardKeys.reports, (current) =>
+      current ? { ...current, rows: current.rows.filter((row) => row.id !== reportId) } : current,
+    );
+    window.location.hash = "/reports";
+    performUndoable({
+      title: `已归档「${name}」`,
+      failureTitle: "归档失败",
+      revert: () => void queryClient.invalidateQueries({ queryKey: dashboardKeys.reports }),
+      commit: () => archiveReport.mutateAsync({ id: reportId, ifRevision: revision }),
+    });
   }
 
   return (
@@ -105,7 +88,7 @@ export function ReportPage({ id }: { id: string }) {
                   <HistoryIcon aria-hidden="true" />
                   版本历史…
                 </MenuItem>
-                <MenuItem disabled={archiveReport.isPending} onClick={() => setArchiveOpen(true)}>
+                <MenuItem onClick={archive}>
                   <ArchiveIcon aria-hidden="true" />
                   归档报告
                 </MenuItem>
@@ -127,26 +110,6 @@ export function ReportPage({ id }: { id: string }) {
         request={recordProjectionRequest}
         onClose={() => setRecordProjectionRequest(null)}
       />
-      <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
-        <AlertDialogPopup>
-          <AlertDialogHeader>
-            <AlertDialogTitle>归档「{report?.name}」？</AlertDialogTitle>
-            <AlertDialogDescription>
-              归档后将从「我的报告」移除；已有看板引用与版本历史仍会保留。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="subtle" />}>取消</AlertDialogClose>
-            <Button
-              loading={archiveReport.isPending}
-              variant="danger"
-              onClick={() => void archive()}
-            >
-              确认归档
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogPopup>
-      </AlertDialog>
     </>
   );
 }

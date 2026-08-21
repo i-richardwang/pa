@@ -26,3 +26,8 @@ test("两次取数跨版本时对账失败，触发拉回最新详情", () => {
 test("临时预览无 revision，不参与报告版本对账", () => {
   expect(revisionsConsistent(report(4), replay(undefined))).toBe(true);
 });
+
+test("预览结果按会话键位存放：换会话即换键，同会话两次预览共用一键", () => {
+  expect(reportKeys.draftPreview("report:r1")).toEqual(["draft_preview", "report:r1"]);
+  expect(reportKeys.draftPreview("report:r1")).not.toEqual(reportKeys.draftPreview("analysis:a1"));
+});

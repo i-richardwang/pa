@@ -29,7 +29,7 @@ export type ReportRow = {
   updated_at: string;
 };
 
-type ReportsPayload = { rows: ReportRow[]; total: number };
+export type ReportsPayload = { rows: ReportRow[]; total: number };
 
 export const CREATE_REPORT_BODY = z
   .object({

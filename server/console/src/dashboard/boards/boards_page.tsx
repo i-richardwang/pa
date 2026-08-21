@@ -39,7 +39,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { toastManager } from "@/components/ui/toast";
 import {
   ListControlBar,
   ListControlSearch,
@@ -111,20 +110,9 @@ export function BoardsPage({ me }: { me: MePayload }) {
     );
     performUndoable({
       title: `已删除「${row.name}」`,
+      failureTitle: "删除失败",
       revert: reloadBoards,
-      commit: async () => {
-        try {
-          await deleteBoard.mutateAsync(row.id);
-        } catch (e) {
-          if (e instanceof ApiError && e.status === 401) return;
-          toastManager.add({
-            type: "error",
-            title: "删除失败",
-            description: e instanceof Error ? e.message : String(e),
-          });
-          reloadBoards();
-        }
-      },
+      commit: () => deleteBoard.mutateAsync(row.id),
     });
   }
 

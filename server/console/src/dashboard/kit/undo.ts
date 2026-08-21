@@ -1,20 +1,23 @@
 /**
- * 分级 Undo：删除类操作先更新界面，toast 关闭时才提交后端，
- * 「撤销」取消提交并由调用方还原界面。悬停 toast 会顺延倒计时（Base UI 悬停暂停）。
- * 仅安全敏感操作（API Key 吊销）与放弃未保存编辑仍走 AlertDialog 确认。
- * 倒计时内整页卸载会丢提交，属乐观界面的既定取舍。
+ * 移除资产的统一回执：界面先撤下，toast 关闭时才提交后端，「撤销」取消提交并由调用方还原界面。
+ * 看板删除、报告归档、术语删除都走这一条；AlertDialog 只留给安全敏感操作（API Key 吊销）
+ * 与放弃未保存的编辑。提交失败时印错误回执并还原界面；倒计时内整页卸载会丢提交，
+ * 属乐观界面的既定取舍。悬停 toast 会顺延倒计时（Base UI 悬停暂停）。
  */
 import { toastManager } from "@/components/ui/toast";
+import { ApiError } from "../api";
 
 const UNDO_TIMEOUT_MS = 5000;
 
 export function performUndoable({
   title,
+  failureTitle,
   commit,
   revert,
 }: {
   title: string;
-  commit: () => void | Promise<void>;
+  failureTitle: string;
+  commit: () => Promise<unknown>;
   revert: () => void;
 }): void {
   let undone = false;
@@ -30,7 +33,16 @@ export function performUndoable({
       },
     },
     onClose: () => {
-      if (!undone) void commit();
+      if (undone) return;
+      void commit().catch((reason: unknown) => {
+        revert();
+        if (reason instanceof ApiError && reason.status === 401) return;
+        toastManager.add({
+          type: "error",
+          title: failureTitle,
+          description: reason instanceof Error ? reason.message : String(reason),
+        });
+      });
     },
   });
 }

@@ -8,8 +8,14 @@
 import { z } from "zod";
 import { memberShortName } from "../semantic_core/member_name.js";
 import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
-import { resolveTimeOutputGrain, type TimeInput } from "../semantic_core/time_contract.js";
+import {
+  resolveTimeOutputGrain,
+  type TimeInput,
+  type TimeOutputGrain,
+} from "../semantic_core/time_contract.js";
 import type { ChartDecl, TableAxis, TableLayoutDecl } from "./chart_decl.js";
+
+export type { TableAxis, TableLayoutDecl } from "./chart_decl.js";
 import { TABLE_SHADING_PREFERENCES_INPUT } from "./view_preferences.js";
 
 export const CHART_INPUT = z
@@ -105,12 +111,18 @@ const tableFieldAxis = (member: string): TableAxis => ({
   column: memberShortName(member),
 });
 
-function defaultTableLayout(spec: ChartSpecContext): TableLayoutDecl {
+/** 表格布局所依据的输出时间粒度：分组结果不默认按月展开。 */
+export function tableLayoutGrain(spec: ChartSpecContext): TimeOutputGrain {
+  return resolveTimeOutputGrain(spec.time ?? {}, undefined, {
+    grouped: (spec.dimensions ?? []).length > 0,
+  });
+}
+
+/** 未声明列轴时的确定性表格布局；编辑器与编译器共用这一条规则。 */
+export function defaultTableLayout(spec: ChartSpecContext): TableLayoutDecl {
   const dimensions = spec.dimensions ?? [];
   const measures = spec.measures ?? [];
-  const grain = resolveTimeOutputGrain(spec.time ?? {}, undefined, {
-    grouped: dimensions.length > 0,
-  });
+  const grain = tableLayoutGrain(spec);
   const rows: TableAxis[] = dimensions.map(tableFieldAxis);
   if (!measures.length) return { rows, columns: [] };
   if (grain === "month" && !dimensions.length) {
@@ -128,17 +140,15 @@ function defaultTableLayout(spec: ChartSpecContext): TableLayoutDecl {
   };
 }
 
-function normalizeTableLayout(
+/** 声明的列轴归一为表格布局：指标轴自动补位、剩余维度与时间留在行轴，非法声明抛错。 */
+export function normalizeTableLayout(
   columns: string[] | undefined,
   spec: ChartSpecContext,
 ): TableLayoutDecl {
   if (!columns) return defaultTableLayout(spec);
   const dimensions = spec.dimensions ?? [];
   const measures = spec.measures ?? [];
-  const grain = resolveTimeOutputGrain(spec.time ?? {}, undefined, {
-    grouped: dimensions.length > 0,
-  });
-  const temporal = grain !== "total";
+  const temporal = tableLayoutGrain(spec) !== "total";
   const columnAxes: TableAxis[] = columns.map((axis) => {
     if (axis === "metrics") {
       if (!measures.length) throw new Error("presentation.columns 使用 metrics 时查询必须包含指标");

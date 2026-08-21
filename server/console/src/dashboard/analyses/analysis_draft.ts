@@ -22,10 +22,7 @@ export type AnalysisEditState = {
   view: SemanticViewIntent;
   view_preferences: ViewPreferences;
   baseline_name: string;
-  /**
-   * 进入编辑时的落定基线：脏判定与离开拦截以此为准。
-   * 声明的自动落定（见 settledAgainst）不是用户改动，不该触发「放弃修改」拦截。
-   */
+  /** 进入编辑时的落定基线：脏判定与离开拦截以此为准。 */
   baseline_analysis: AnalysisDefinition;
   baseline_view: SemanticViewIntent;
   baseline_view_preferences: ViewPreferences;
@@ -115,10 +112,7 @@ export function isPreviewCurrent(draft: AnalysisEditState): boolean {
   );
 }
 
-/**
- * 保存成功：当前草稿即新的落定基线，脏判定从此以它为准。
- * 不靠「回读服务端再重播种」落定——那要等一次刷新往返，其间页面会先退回保存前的规格再跳回来。
- */
+/** 保存成功：当前草稿就地成为新的落定基线，脏判定从此以它为准。 */
 export function settleSaved(draft: AnalysisEditState): AnalysisEditState {
   return {
     ...draft,
@@ -156,10 +150,6 @@ export function isAnalysisEditDirty(draft: AnalysisEditState): boolean {
 
 export function renameAnalysisDraft(draft: AnalysisEditState, name: string): AnalysisEditState {
   return draft.name === name ? draft : { ...draft, name };
-}
-
-export function semanticViewIntent(draft: Pick<AnalysisEditState, "view">): SemanticViewIntent {
-  return draft.view;
 }
 
 export function semanticSummaryEnabled(draft: Pick<AnalysisEditState, "analysis">): boolean {

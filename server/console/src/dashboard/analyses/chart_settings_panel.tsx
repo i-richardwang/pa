@@ -22,10 +22,17 @@ import {
 import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
 import type { ReplayPayload } from "@contracts/replay_contract";
 import { SERIES_COLORS } from "@charts";
+import {
+  type ChartSpecContext,
+  normalizeTableLayout,
+  type TableAxis,
+  tableLayoutGrain,
+} from "@chart-spec";
+import { memberShortName } from "@member";
 import { isSemanticDerivedView, type SemanticViewIntent } from "@semantic-analysis";
 import type { SeriesPreferences, TableShadingPreferences } from "@view-preferences";
 import { makeTitleOf, sensibleForms, type SensibleForm, tableShadingDefaults } from "@shape";
-import { compileTimeIntent, resolveTimeOutputGrain } from "@time";
+import { compileTimeIntent } from "@time";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -61,7 +68,6 @@ import { SwitchField } from "@/components/ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   defaultSemanticViewIntent,
-  semanticViewIntent,
   semanticSummaryEnabled,
   semanticViewContext,
   setSemanticViewIntent,
@@ -123,7 +129,7 @@ export function ChartSettingsPanel({
   const titleOf = (member: string) =>
     [...catalog.measures, ...catalog.dimensions].find((item) => item.id === member)?.title ??
     resultTitleOf(member);
-  const chart: SemanticViewIntent = semanticViewIntent(draft);
+  const chart = draft.view;
   const forms = new Set(sensibleForms(resultView));
   const measures = context?.measures ?? [];
   const dimensions = context?.dimensions ?? [];
@@ -135,49 +141,47 @@ export function ChartSettingsPanel({
     semanticView && !isSemanticDerivedView(semanticView) && semanticView.calculations?.length
       ? "已有构成占比，各类合计就是总体"
       : undefined;
-  const resolvedGrain = context?.time
-    ? (resultView.time?.grain ??
-      resolveTimeOutputGrain(compileTimeIntent(context.time), catalog.data_as_of, {
-        grouped: dimensions.length > 0,
-      }))
-    : undefined;
-  const temporal = resolvedGrain !== undefined && resolvedGrain !== "total";
-  const defaultTableColumns = [
-    ...(measures.length ? ["metrics"] : []),
-    ...(temporal ? ["time"] : []),
-  ];
-  const tableColumns =
+  // 表格布局与服务端同一条规则：行列归属出自 normalizeTableLayout，面板只排版、只写回列轴声明。
+  const tableSpec: ChartSpecContext = {
+    measures,
+    dimensions,
+    ...(context?.time ? { time: compileTimeIntent(context.time) } : {}),
+  };
+  const tableGrain = tableLayoutGrain(tableSpec);
+  const temporal = tableGrain !== "total";
+  const tableLayout =
     chart.type === "table"
-      ? chart.columns
-        ? (() => {
-            const columns = [...chart.columns];
-            if (measures.length && !columns.includes("metrics")) {
-              const timeIndex = columns.indexOf("time");
-              columns.splice(timeIndex < 0 ? columns.length : timeIndex, 0, "metrics");
-            }
-            return columns;
-          })()
-        : defaultTableColumns
-      : [];
-  const tableAxisCandidates = [
-    ...(measures.length ? ["metrics"] : []),
-    ...(temporal ? ["time"] : []),
-    ...(!summaryEnabled ? dimensions : []),
-  ];
+      ? normalizeTableLayout(chart.columns, tableSpec)
+      : { rows: [] as TableAxis[], columns: [] as TableAxis[] };
+  /** 列轴声明里的轴名：指标 / 时间 / 维度成员 id。 */
+  const tableAxisName = (axis: TableAxis): string =>
+    axis.kind === "field"
+      ? (dimensions.find((member) => memberShortName(member) === axis.column) ?? axis.column)
+      : axis.kind;
   const tableAxisLabel = (axis: string) =>
     axis === "time"
-      ? resolvedGrain === "year"
+      ? tableGrain === "year"
         ? "年份"
         : "时间"
       : axis === "metrics"
         ? "指标"
         : titleOf(axis);
-  const tableColumnSummary = tableColumns.map(tableAxisLabel).join(" · ") || "选择";
-  const tableRowSummary =
-    [
-      ...dimensions.filter((member) => !tableColumns.includes(member)).map(titleOf),
-      ...(temporal && !tableColumns.includes("time") ? ["时间"] : []),
-    ].join(" · ") || "无";
+  const tableLayoutAxisLabel = (axis: TableAxis) =>
+    axis.kind === "time"
+      ? axis.level === "year"
+        ? "年份"
+        : axis.level === "month"
+          ? "月份"
+          : tableAxisLabel("time")
+      : tableAxisLabel(tableAxisName(axis));
+  const tableColumns = tableLayout.columns.map(tableAxisName);
+  const tableAxisCandidates = [
+    ...(measures.length ? ["metrics"] : []),
+    ...(temporal ? ["time"] : []),
+    ...(!summaryEnabled ? dimensions : []),
+  ];
+  const tableColumnSummary = tableLayout.columns.map(tableLayoutAxisLabel).join(" · ") || "选择";
+  const tableRowSummary = tableLayout.rows.map(tableLayoutAxisLabel).join(" · ") || "无";
   const remainingTableAxes = tableAxisCandidates.filter((axis) => !tableColumns.includes(axis));
   const y = chart.type === "table" || chart.type === "kpi" ? [] : (chart.series ?? measures);
   const annotations =

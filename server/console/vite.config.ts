@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
         "@contracts": path.resolve(import.meta.dirname, "../src/contracts"),
         "@payload": path.resolve(import.meta.dirname, "../src/semantic_core/query_payload.ts"),
         "@charts": path.resolve(import.meta.dirname, "../src/presentation_core/chart_config.ts"),
+        "@chart-spec": path.resolve(import.meta.dirname, "../src/presentation_core/chart_spec.ts"),
         "@shape": path.resolve(import.meta.dirname, "../src/presentation_core/view_shape.ts"),
         "@format": path.resolve(import.meta.dirname, "../src/presentation_core/view_format.ts"),
         "@member": path.resolve(import.meta.dirname, "../src/semantic_core/member_name.ts"),

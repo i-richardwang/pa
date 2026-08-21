@@ -60,12 +60,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { authClient } from "../../auth_client";
 import { Titlebar } from "@/components/ui/titlebar";
 import { RowMenu } from "../kit/table_kit";
 import { RowBadge, SettingsChromeContext } from "../kit/settings_kit";
 import { UsersPage } from "./users_page";
-import { authErrorText } from "../better_auth_adapter";
+import {
+  type ApiKeyRow,
+  errorText,
+  useApiKeys,
+  useCreateApiKey,
+  useRevokeApiKey,
+} from "../dashboard_queries";
 
 export type SettingsTab = "account" | "api" | "users";
 
@@ -328,16 +333,6 @@ function AccountPage({ me }: { me: MePayload }) {
 
 /* ─── API Key ─── */
 
-type ApiKeyRow = {
-  id: string;
-  name: string | null;
-  start: string | null;
-  enabled: boolean;
-  createdAt: string | Date;
-  expiresAt: string | Date | null;
-  lastRequest: string | Date | null;
-};
-
 const DAY = 60 * 60 * 24;
 const EXPIRY_OPTIONS: readonly { label: string; seconds: number | null }[] = [
   { label: "永不过期", seconds: null },
@@ -358,36 +353,21 @@ function fmt(d: string | Date | null | undefined): string {
 }
 
 function KeysPage() {
-  const [keys, setKeys] = useState<ApiKeyRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const keysQuery = useApiKeys();
+  const revokeKey = useRevokeApiKey();
   const [showCreate, setShowCreate] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyRow | null>(null);
   // 列表按签发时间倒序（服务端给的顺序），不做表头排序：一个人手里就那么几把 key。
+  const keys = keysQuery.data ?? null;
   const rows = keys ?? [];
+  const error = errorText(keysQuery.error) ?? errorText(revokeKey.error);
 
-  async function load() {
-    setError(null);
-    const { data, error: err } = await authClient.apiKey.list();
-    if (err) {
-      setError(authErrorText(err));
-      return;
-    }
-    setKeys(data?.apiKeys ?? []);
-  }
-
-  useEffect(() => {
-    void load();
-  }, []);
-
-  async function revoke(k: ApiKeyRow) {
-    setError(null);
-    const { error: err } = await authClient.apiKey.delete({ keyId: k.id });
-    if (err) {
-      setError(authErrorText(err));
-      return;
-    }
-    toastManager.add({ type: "success", title: `已吊销「${k.name || "未命名"}」` });
-    await load();
+  function revoke(k: ApiKeyRow) {
+    revokeKey.mutate(k.id, {
+      onSuccess: () => {
+        toastManager.add({ type: "success", title: `已吊销「${k.name || "未命名"}」` });
+      },
+    });
   }
 
   return (
@@ -478,7 +458,7 @@ function KeysPage() {
         </Table>
       )}
 
-      <CreateKeyDialog open={showCreate} onClose={() => setShowCreate(false)} onCreated={load} />
+      <CreateKeyDialog open={showCreate} onClose={() => setShowCreate(false)} />
 
       <AlertDialog open={revokeTarget != null} onOpenChange={(o) => !o && setRevokeTarget(null)}>
         <AlertDialogPopup>
@@ -495,7 +475,7 @@ function KeysPage() {
                 <Button
                   variant="danger"
                   onClick={() => {
-                    if (revokeTarget) void revoke(revokeTarget);
+                    if (revokeTarget) revoke(revokeTarget);
                   }}
                 />
               }
@@ -509,46 +489,30 @@ function KeysPage() {
   );
 }
 
-function CreateKeyDialog({
-  open,
-  onClose,
-  onCreated,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onCreated: () => void | Promise<void>;
-}) {
+function CreateKeyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [name, setName] = useState("");
   const [expiryIdx, setExpiryIdx] = useState(0);
-  const [pending, setPending] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
   const [issued, setIssued] = useState<{ key: string; name: string } | null>(null);
   const [saved, setSaved] = useState(false);
+  const createKey = useCreateApiKey();
+  const formError = errorText(createKey.error);
 
   function reset() {
     setName("");
     setExpiryIdx(0);
-    setFormError(null);
+    createKey.reset();
     setIssued(null);
     setSaved(false);
   }
 
-  async function onSubmit(e: React.FormEvent) {
+  function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setPending(true);
-    setFormError(null);
     const expiresIn = EXPIRY_OPTIONS[expiryIdx].seconds;
-    const { data, error: err } = await authClient.apiKey.create({
-      name: name.trim(),
-      ...(expiresIn != null ? { expiresIn } : {}),
-    });
-    setPending(false);
-    if (err || !data?.key) {
-      setFormError(authErrorText(err) ?? "创建失败");
-      return;
-    }
-    setIssued({ key: data.key, name: name.trim() });
-    await onCreated();
+    const keyName = name.trim();
+    createKey.mutate(
+      { name: keyName, ...(expiresIn != null ? { expiresIn } : {}) },
+      { onSuccess: (key) => setIssued({ key, name: keyName }) },
+    );
   }
 
   // 明文在场且尚未确认保存时，把弹层的所有自动关闭路径都掐掉。
@@ -622,7 +586,7 @@ function CreateKeyDialog({
                 <Button
                   variant="filled"
                   type="submit"
-                  loading={pending}
+                  loading={createKey.isPending}
                   disabled={name.trim().length === 0}
                 >
                   创建 Key

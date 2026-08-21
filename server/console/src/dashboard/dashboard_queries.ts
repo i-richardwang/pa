@@ -1,14 +1,15 @@
 /**
  * 控制台通用服务端资源的取数与写入（TanStack Query）——报告编辑器族之外的一切：
- * 会话身份、口径目录、维度取值、报告/分析/看板列表与其增删。同一资源多处消费时收口到
- * 一个键位即跨页去重（如目录被报告编辑器/目录页/筛选编辑器、看板列表被列表页/命令面板共用）。
- * 缓存只存 api.ts 经 Zod 校验的契约类型。
+ * 会话身份、口径目录、维度取值、报告/分析/看板列表与其增删、管理端的成员 / API Key / 反馈 / 日志。
+ * 同一资源多处消费时收口到一个键位即跨页去重（如目录被报告编辑器/目录页/筛选编辑器、
+ * 看板列表被列表页/命令面板共用）。缓存只存 api.ts 经 Zod 校验的契约类型。
  */
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ADD_BOARD_ITEM_PAYLOAD_SCHEMA,
   BOARD_PAYLOAD_SCHEMA,
   BOARDS_PAYLOAD_SCHEMA,
+  type UpdateBoardBody,
 } from "@contracts/board_contract";
 import {
   BUSINESS_TERM_SCHEMA,
@@ -21,6 +22,12 @@ import {
   CATALOG_DIMENSION_VALUES_SCHEMA as CATALOG_VALUES_PAYLOAD_SCHEMA,
 } from "@contracts/catalog_contract";
 import {
+  FEEDBACK_GROUP_PAYLOAD_SCHEMA,
+  FEEDBACK_LIST_PAYLOAD_SCHEMA,
+  type FeedbackStatus,
+} from "@contracts/feedback_contract";
+import { DASHBOARD_PAGE_SIZE } from "@contracts/pagination_contract";
+import {
   type CreateReportBody,
   REPORT_ROW_PAYLOAD_SCHEMA,
   REPORTS_PAYLOAD_SCHEMA,
@@ -29,8 +36,22 @@ import { ME_PAYLOAD_SCHEMA } from "@contracts/session_contract";
 import { MY_ANALYSES_PAYLOAD_SCHEMA } from "@contracts/analysis_contract";
 import { OK_PAYLOAD_SCHEMA } from "@contracts/response_contract";
 import { REPLAY_PAYLOAD_SCHEMA } from "@contracts/replay_contract";
+import {
+  UNANSWERED_PAYLOAD_SCHEMA,
+  USAGE_OVERVIEW_PAYLOAD_SCHEMA,
+  USAGE_TITLES_PAYLOAD_SCHEMA,
+} from "@contracts/usage_contract";
+import {
+  ADMIN_USER_SCHEMA,
+  ADMIN_USERS_PAYLOAD_SCHEMA,
+  type CreateAdminUserBody,
+  type ResetUserPasswordBody,
+  type UpdateUserAuthorizationBody,
+} from "@contracts/user_administration_contract";
 import type { TimeIntent } from "@time";
-import { ApiError, deleteJson, getJson, postJson, putJson } from "./api";
+import { authClient } from "../auth_client";
+import { ApiError, deleteJson, getJson, patchJson, postJson, putJson } from "./api";
+import { authErrorText } from "./better_auth_adapter";
 import { DATA_CAPABILITY_MAP_SCHEMA } from "@data-capability-map";
 
 export const dashboardKeys = {
@@ -47,11 +68,14 @@ export const dashboardKeys = {
   analysisReplay: (id: string) => ["analysis_replay", id] as const,
   boards: ["boards"] as const,
   board: (id: string) => ["board", id] as const,
-  /** 板级时间覆盖是键的一部分：结构化值直接进键，TanStack 按结构哈希，不另串成字符串 */
-  boardReportReplay: (boardId: string, reportId: string, time: TimeIntent | null = null) =>
-    ["board_report_replay", boardId, reportId, time] as const,
-  /** 编辑期瓦片走 owner 端点实时预览（草稿新加的瓦片尚未落库，板级端点会 404） */
-  boardTilePreview: (reportId: string) => ["board_tile_preview", reportId] as const,
+  /** 板级时间覆盖是键的一部分：结构化值直接进键，TanStack 按结构哈希 */
+  boardReportReplay: (boardId: string, reportId: string, timeOverride: TimeIntent | null) =>
+    ["board_report_replay", boardId, reportId, timeOverride] as const,
+  users: ["users"] as const,
+  apiKeys: ["api_keys"] as const,
+  feedback: ["feedback"] as const,
+  feedbackPage: (offset: number) => ["feedback", offset] as const,
+  usage: (days: number, offset: number) => ["usage", days, offset] as const,
 };
 
 /** 已登录整页跳转由 getJson 处理，401 在此不作为可展示错误。 */
@@ -211,21 +235,29 @@ export function useBoard(id: string) {
   });
 }
 
-export function boardReportReplayQueryOptions(boardId: string, reportId: string) {
+/** 看板成员视角重放一块报告瓦片；板级时间覆盖随查询串下发，键位随之分开。 */
+export function boardReportReplayQueryOptions(
+  boardId: string,
+  reportId: string,
+  timeOverride: TimeIntent | null,
+) {
+  const params = timeOverride ? `?time=${encodeURIComponent(JSON.stringify(timeOverride))}` : "";
   return {
-    queryKey: dashboardKeys.boardReportReplay(boardId, reportId),
-    // 编辑器把本次载荷当会话基线；窗口切回不得在用户无动作时替换它。
-    refetchOnWindowFocus: false as const,
+    queryKey: dashboardKeys.boardReportReplay(boardId, reportId, timeOverride),
     queryFn: () =>
       getJson(
-        `/dashboard/api/boards/${encodeURIComponent(boardId)}/items/${encodeURIComponent(reportId)}/replay`,
+        `/dashboard/api/boards/${encodeURIComponent(boardId)}/items/${encodeURIComponent(reportId)}/replay${params}`,
         REPLAY_PAYLOAD_SCHEMA,
       ),
   };
 }
 
+/** 编辑器把这份载荷当会话基线；窗口切回不得在用户无动作时替换它。 */
 export function useBoardReportReplay(boardId: string, reportId: string) {
-  return useQuery(boardReportReplayQueryOptions(boardId, reportId));
+  return useQuery({
+    ...boardReportReplayQueryOptions(boardId, reportId, null),
+    refetchOnWindowFocus: false,
+  });
 }
 
 export function useCreateBoard() {
@@ -233,6 +265,19 @@ export function useCreateBoard() {
   return useMutation({
     mutationFn: (name: string) => postJson("/dashboard/api/boards", { name }, BOARD_PAYLOAD_SCHEMA),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.boards });
+    },
+  });
+}
+
+/** 保存看板：写回详情缓存并失效看板列表（名称 / 瓦片数随之刷新）。 */
+export function useSaveBoard(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdateBoardBody) =>
+      patchJson(`/dashboard/api/boards/${encodeURIComponent(id)}`, body, BOARD_PAYLOAD_SCHEMA),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(dashboardKeys.board(id), updated);
       void queryClient.invalidateQueries({ queryKey: dashboardKeys.boards });
     },
   });
@@ -267,6 +312,147 @@ export function useDeleteBoard() {
       deleteJson(`/dashboard/api/boards/${encodeURIComponent(id)}`, OK_PAYLOAD_SCHEMA),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: dashboardKeys.boards });
+    },
+  });
+}
+
+/* ─── 成员（admin） ─── */
+
+export function useUsers() {
+  return useQuery({
+    queryKey: dashboardKeys.users,
+    queryFn: () => getJson("/dashboard/api/users", ADMIN_USERS_PAYLOAD_SCHEMA),
+  });
+}
+
+function useUsersMutation<TInput, TResult>(mutationFn: (input: TInput) => Promise<TResult>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.users });
+    },
+  });
+}
+
+export function useCreateUser() {
+  return useUsersMutation((body: CreateAdminUserBody) =>
+    postJson("/dashboard/api/users", body, ADMIN_USER_SCHEMA),
+  );
+}
+
+export function useUpdateUserAuthorization() {
+  return useUsersMutation(({ id, body }: { id: string; body: UpdateUserAuthorizationBody }) =>
+    putJson(
+      `/dashboard/api/users/${encodeURIComponent(id)}/authorization`,
+      body,
+      ADMIN_USER_SCHEMA,
+    ),
+  );
+}
+
+export function useResetUserPassword() {
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: ResetUserPasswordBody }) =>
+      postJson(`/dashboard/api/users/${encodeURIComponent(id)}/password`, body, OK_PAYLOAD_SCHEMA),
+  });
+}
+
+/* ─── API Key（Better Auth 自助端点） ─── */
+
+export function useApiKeys() {
+  return useQuery({
+    queryKey: dashboardKeys.apiKeys,
+    queryFn: async () => {
+      const { data, error } = await authClient.apiKey.list();
+      if (error) throw new Error(authErrorText(error) ?? "读取失败");
+      return data?.apiKeys ?? [];
+    },
+  });
+}
+
+export type ApiKeyRow = NonNullable<ReturnType<typeof useApiKeys>["data"]>[number];
+
+/** 签发：完整 key 只在响应里出现一次，由调用方展示。 */
+export function useCreateApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { name: string; expiresIn?: number }) => {
+      const { data, error } = await authClient.apiKey.create(input);
+      if (error || !data?.key) throw new Error(authErrorText(error) ?? "创建失败");
+      return data.key;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.apiKeys });
+    },
+  });
+}
+
+export function useRevokeApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (keyId: string) => {
+      const { error } = await authClient.apiKey.delete({ keyId });
+      if (error) throw new Error(authErrorText(error) ?? "吊销失败");
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.apiKeys });
+    },
+  });
+}
+
+/* ─── 反馈与日志（admin） ─── */
+
+export function useFeedbackPage(offset: number) {
+  return useQuery({
+    queryKey: dashboardKeys.feedbackPage(offset),
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      getJson(
+        `/dashboard/api/feedback?limit=${DASHBOARD_PAGE_SIZE}&offset=${offset}`,
+        FEEDBACK_LIST_PAYLOAD_SCHEMA,
+      ),
+  });
+}
+
+export function useResolveFeedback() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      topicKey,
+      status,
+      note,
+    }: {
+      topicKey: string;
+      status: Exclude<FeedbackStatus, "open">;
+      note: string;
+    }) =>
+      patchJson(
+        `/dashboard/api/feedback/${encodeURIComponent(topicKey)}`,
+        { status, note },
+        FEEDBACK_GROUP_PAYLOAD_SCHEMA,
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.feedback });
+    },
+  });
+}
+
+/** 日志页三块并取：概况、业务问题分页、未答信号共用一个时间窗。 */
+export function useUsage(days: number, offset: number) {
+  return useQuery({
+    queryKey: dashboardKeys.usage(days, offset),
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const [overview, titles, unanswered] = await Promise.all([
+        getJson(`/dashboard/api/usage/overview?days=${days}`, USAGE_OVERVIEW_PAYLOAD_SCHEMA),
+        getJson(
+          `/dashboard/api/usage/titles?days=${days}&limit=${DASHBOARD_PAGE_SIZE}&offset=${offset}`,
+          USAGE_TITLES_PAYLOAD_SCHEMA,
+        ),
+        getJson(`/dashboard/api/usage/unanswered?days=${days}`, UNANSWERED_PAYLOAD_SCHEMA),
+      ]);
+      return { overview, titles, unanswered };
     },
   });
 }

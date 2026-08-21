@@ -4,15 +4,8 @@
  * 业务术语不走本通道——术语在指标字典页直接维护，未登记的叫法经使用日志的零命中检索浮现。
  */
 import { useEffect, useState } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, CircleAlertIcon, InboxIcon, XIcon } from "lucide-react";
-import { DASHBOARD_PAGE_SIZE } from "@contracts/pagination_contract";
-import {
-  FEEDBACK_LIMITS,
-  FEEDBACK_GROUP_PAYLOAD_SCHEMA,
-  FEEDBACK_LIST_PAYLOAD_SCHEMA,
-  type FeedbackGroup,
-} from "@contracts/feedback_contract";
+import { FEEDBACK_LIMITS, type FeedbackGroup } from "@contracts/feedback_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -37,8 +30,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, formatAt, getJson, patchJson } from "../api";
-import { errorText } from "../dashboard_queries";
+import { formatAt } from "../api";
+import { errorText, useFeedbackPage, useResolveFeedback } from "../dashboard_queries";
 import { ListPageBody, ListScrollBody } from "../layout/layout_chrome";
 import { SheetSection } from "../kit/sheet_kit";
 import { SortableHead, useTableSort } from "../kit/table_kit";
@@ -58,16 +51,7 @@ const FEEDBACK_SORT: Record<
 export function FeedbackPage() {
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<FeedbackGroup | null>(null);
-  const queryClient = useQueryClient();
-  const feedbackQuery = useQuery({
-    queryKey: ["feedback", offset],
-    placeholderData: keepPreviousData,
-    queryFn: () =>
-      getJson(
-        `/dashboard/api/feedback?limit=${DASHBOARD_PAGE_SIZE}&offset=${offset}`,
-        FEEDBACK_LIST_PAYLOAD_SCHEMA,
-      ),
-  });
+  const feedbackQuery = useFeedbackPage(offset);
   const data = feedbackQuery.data ?? null;
   const loading = feedbackQuery.isFetching;
   const error = errorText(feedbackQuery.error);
@@ -155,56 +139,33 @@ export function FeedbackPage() {
           )}
         </ListScrollBody>
       </ListPageBody>
-      <ReviewDialog
-        row={selected}
-        onClose={() => setSelected(null)}
-        onResolved={() => {
-          setSelected(null);
-          void queryClient.invalidateQueries({ queryKey: ["feedback"] });
-        }}
-      />
+      <ReviewDialog row={selected} onClose={() => setSelected(null)} />
     </>
   );
 }
 
-function ReviewDialog({
-  row,
-  onClose,
-  onResolved,
-}: {
-  row: FeedbackGroup | null;
-  onClose: () => void;
-  onResolved: () => void | Promise<void>;
-}) {
+function ReviewDialog({ row, onClose }: { row: FeedbackGroup | null; onClose: () => void }) {
   const [note, setNote] = useState("");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [noteMissing, setNoteMissing] = useState(false);
+  const resolveFeedback = useResolveFeedback();
+  const { reset: resetResolve } = resolveFeedback;
+  const error = noteMissing ? "请填写处置备注" : errorText(resolveFeedback.error);
+  const pending = resolveFeedback.isPending;
 
   useEffect(() => {
     setNote(row?.note ?? "");
-    setError(null);
-  }, [row]);
+    setNoteMissing(false);
+    resetResolve();
+  }, [row, resetResolve]);
 
-  async function resolve(status: "accepted" | "rejected") {
-    if (!row || !note.trim()) {
-      setError("请填写处置备注");
+  function resolve(status: "accepted" | "rejected") {
+    if (!row) return;
+    if (!note.trim()) {
+      setNoteMissing(true);
       return;
     }
-    setPending(true);
-    setError(null);
-    try {
-      await patchJson(
-        `/dashboard/api/feedback/${encodeURIComponent(row.topic_key)}`,
-        { status, note },
-        FEEDBACK_GROUP_PAYLOAD_SCHEMA,
-      );
-      await onResolved();
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 401) return;
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setPending(false);
-    }
+    setNoteMissing(false);
+    resolveFeedback.mutate({ topicKey: row.topic_key, status, note }, { onSuccess: onClose });
   }
 
   return (
