@@ -1,23 +1,16 @@
-import {
-  CHART_DARK_COLORS,
-  RANK_ROW,
-  SERIES_COLORS,
-} from "../../../src/presentation_core/chart_config.js";
-import type { PaChartExtension, ViewChart } from "../../../src/presentation_core/chart_config.js";
+import { RANK_ROW, themedColor } from "../../../src/presentation_core/chart_config.js";
+import type { ViewChart } from "../../../src/presentation_core/chart_config.js";
 import { formatSeriesValue } from "../../../src/presentation_core/view_format.js";
 
 type RankRow = { label: string; value: number | null; share: number | null };
 
-/** option 里已有的四样东西按行拼起来；条长的归一在渲染时按最大值算 */
+/** 模型里的类目、唯一那条系列的取值与占比按行拼起来；条长的归一在渲染时按最大值算 */
 export function rankRows(chart: ViewChart): RankRow[] {
-  const pa = chart.option.pa as PaChartExtension | undefined;
-  const labels = ((chart.option.yAxis as { data?: unknown[] } | undefined)?.data ?? []) as string[];
-  const series = chart.option.series as { data?: unknown[] }[] | undefined;
-  const values = (series?.[0]?.data ?? []) as (number | null)[];
-  return labels.map((label, i) => ({
+  const { categories, legend, share } = chart.model;
+  return categories.map((label, i) => ({
     label,
-    value: typeof values[i] === "number" ? values[i] : null,
-    share: pa?.share?.values[label] ?? null,
+    value: legend[0]?.values[i] ?? null,
+    share: share?.values[i] ?? null,
   }));
 }
 
@@ -33,15 +26,13 @@ export function RankRows({
   /** 该格能不能开明细：不能开就不画成可点的样子，缺省即有投影就能开。 */
   canOpenPoint?: (point: { row: number; column: string }) => boolean;
 }) {
-  const pa = chart.option.pa as PaChartExtension | undefined;
   const rows = rankRows(chart);
-  const seriesName = pa?.legend?.[0]?.name ?? "";
-  const format = pa?.series?.[seriesName] ?? "number";
-  const decimals = pa?.decimals?.[seriesName];
-  const rawColor = pa?.legend?.[0]?.color ?? SERIES_COLORS[0];
-  const color = dark ? (CHART_DARK_COLORS[rawColor.toLowerCase()] ?? rawColor) : rawColor;
+  const lead = chart.model.legend[0];
+  const format = lead?.format ?? "number";
+  const decimals = lead?.decimals;
+  const color = themedColor(lead?.color ?? "", dark);
   const widest = rows.reduce((max, row) => Math.max(max, Math.abs(row.value ?? 0)), 0);
-  const points = pa?.records?.points?.[0] ?? [];
+  const points = chart.model.records?.points[0] ?? [];
 
   return (
     // 框内再内缩一圈：分隔线与末列的数都不该贴到框缘上
@@ -94,7 +85,7 @@ export function RankRows({
                 {value}
               </span>
             )}
-            {pa?.share ? (
+            {chart.model.share ? (
               <span
                 className="shrink-0 pl-2 text-right text-sm text-pa-faint tabular-nums"
                 style={{ width: RANK_ROW.shareColumn }}

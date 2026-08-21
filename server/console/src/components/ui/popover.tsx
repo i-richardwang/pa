@@ -2,6 +2,7 @@
 
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import type * as React from "react";
+import { BlockedHint } from "@/components/ui/inspector";
 import { GLASS_POPUP_SURFACE } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 
@@ -67,3 +68,32 @@ export function PopoverPopup({
 }
 
 export { PopoverPrimitive };
+
+/**
+ * 设置浮层里的组题。菜单族的组题走 `POPUP_GROUP_LABEL`（与菜单行同缩进）；
+ * 这一档给浮层里摆控件与清单行的那种面，缩进与行对齐。
+ */
+export function PopoverSettingTitle({
+  blocked,
+  children,
+}: {
+  blocked?: React.ReactNode;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <div
+      className="flex min-w-0 items-center gap-1 px-2 py-1.5"
+      data-slot="popover-setting-title"
+    >
+      <span
+        className={cn(
+          "min-w-0 truncate font-semibold text-md leading-5",
+          blocked ? "text-pa-faint" : "text-pa-ink",
+        )}
+      >
+        {children}
+      </span>
+      {blocked ? <BlockedHint reason={blocked} /> : null}
+    </div>
+  );
+}

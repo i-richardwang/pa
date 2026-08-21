@@ -21,7 +21,8 @@ import {
 import { REPLAY_PAYLOAD_SCHEMA } from "@contracts/replay_contract";
 import type { TimeIntent } from "@time";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { LoadingMark, type CardActions, ViewRenderer } from "pa-result-view";
+import { LoadingMark, ViewRenderer } from "pa-result-view";
+import { BROWSER_CARD_ACTIONS } from "../kit/browser_actions";
 import { Button } from "@/components/ui/button";
 import {
   Menu,
@@ -38,24 +39,6 @@ import type { RecordProjectionDialogRequest } from "../reports/record_projection
 import { useRecordProjection } from "../reports/use_record_projection";
 import { TileShell, tileEditMenuTriggerClass } from "./tile_shell";
 import { boardReportEditHash, reportHash } from "../router";
-
-/**
- * 环境动作注入（与回放弹窗同款 web 原生接线）：导出走浏览器新标签页打开签名链接
- * ——不把"打开链接"伪装成下载；剪贴板用原生 API。瓦片常驻全幅形态，不注入 requestFullscreen。
- */
-const TILE_ACTIONS: CardActions = {
-  exportAction: {
-    kind: "open_link",
-    run: async (link) => {
-      window.open(link.url, "_blank", "noopener");
-    },
-  },
-  copyText: async (text) => navigator.clipboard.writeText(text),
-};
-
-function timeKeyOf(time: TimeIntent | null | undefined): string {
-  return time ? JSON.stringify(time) : "default";
-}
 
 export function TileError({ message }: { message: string }) {
   return (
@@ -74,7 +57,6 @@ export function BoardTile({
   reportId,
   name,
   editing,
-  interacting,
   viewerEmail,
   timeOverride,
   canMoveUp,
@@ -87,8 +69,6 @@ export function BoardTile({
   boardId: string;
   reportId: string;
   name: string;
-
-  interacting?: boolean;
   /** 编辑态（仅创建者可达）：浮出「…」操作菜单，取数走 owner 端点实时预览 */
   editing?: boolean;
   viewerEmail: string;
@@ -104,13 +84,12 @@ export function BoardTile({
   onRemove?: () => void;
 }) {
   const override = !editing && timeOverride ? timeOverride : null;
-  const timeKey = timeKeyOf(override);
   // 编辑期草稿新加的瓦片尚未落库，board-scoped 端点（校验瓦片在持久化看板内）会 404；
   // 编辑仅创建者可达、瓦片引用的都是本人报告，故编辑期走 owner 端点实时预览，查看期走成员端点。
   const replayQuery = useQuery({
     queryKey: editing
-      ? (["tile_replay", boardId, reportId, "editing"] as const)
-      : dashboardKeys.boardReportReplay(boardId, reportId, timeKey),
+      ? dashboardKeys.boardTilePreview(reportId)
+      : dashboardKeys.boardReportReplay(boardId, reportId, override),
     queryFn: () => {
       if (editing) {
         return getJson(
@@ -134,7 +113,7 @@ export function BoardTile({
     reportId,
     timeOverride: override,
     replay: data,
-    disabled: !!editing || !!interacting,
+    disabled: !!editing,
     onRequest: onRecordProjectionRequest,
   });
 
@@ -186,9 +165,7 @@ export function BoardTile({
   return (
     <TileShell
       title={title}
-      interacting={interacting}
       affordance={editing ? "pinned" : "hover"}
-      frame="xl"
       actions={
         showMenu ? (
           <Menu>
@@ -241,9 +218,8 @@ export function BoardTile({
         <ViewRenderer
           payload={data.payload}
           presentation={data.presentation}
-          actions={TILE_ACTIONS}
+          actions={BROWSER_CARD_ACTIONS}
           records={records}
-          interacting={!!interacting}
           scene="tile"
         />
       )}

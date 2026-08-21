@@ -22,6 +22,37 @@ async function readSources(base: URL): Promise<Array<{ name: string; text: strin
   );
 }
 
+const STAGE_RAIL_DIVIDER = /\bborder-l-\[0\.5px\]/g;
+const STAGE_RAIL_OWNER = "dashboard/layout/shell.tsx";
+
+test("右栏与主区之间那道线只由壳画一次", async () => {
+  const bad = 'className="flex flex-col border-pa-line border-l-[0.5px]"';
+  const good = 'className="flex flex-col border-pa-line border-l"';
+  expect([...bad.matchAll(STAGE_RAIL_DIVIDER)], "分界线探测器失灵").toHaveLength(1);
+  const other = 'className="md:border-r-[0.5px] border-pa-line border-l"';
+  expect([...good.matchAll(STAGE_RAIL_DIVIDER)], "探测器把整像素的边框也算了进来").toEqual([]);
+  expect(
+    [...other.matchAll(STAGE_RAIL_DIVIDER)],
+    "探测器把别处的竖线也算成了这一道（设置页左导航画的是自己的右缘）",
+  ).toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  expect(sources.length, "console source scan found no files — path likely stale").toBeGreaterThan(
+    0,
+  );
+  const owner = sources.find(({ name }) => name.endsWith(STAGE_RAIL_OWNER));
+  expect(owner?.text, "壳不再画这道线，本条规则已经落空").toMatch(STAGE_RAIL_DIVIDER);
+  STAGE_RAIL_DIVIDER.lastIndex = 0;
+
+  for (const { name, text } of sources) {
+    if (name.endsWith(STAGE_RAIL_OWNER)) continue;
+    expect(
+      [...text.matchAll(STAGE_RAIL_DIVIDER)],
+      `console/src/${name} 自己画了半像素分界线；那道线是「列与列之间」，归壳排——两处各画一次会叠成 1px`,
+    ).toEqual([]);
+  }
+});
+
 const HAND_ROLLED_ROLE =
   /(?<![[\w-])role=["'](listbox|option|combobox|menu|menubar|menuitem|menuitemcheckbox|menuitemradio|tab|tablist|tabpanel|tree|treeitem|grid|gridcell|dialog|alertdialog|radiogroup|slider|spinbutton)["']/g;
 
@@ -532,29 +563,40 @@ test("only page-naming components may emit an h1", async () => {
   expect(emitters.length, "h1 一个都没扫到，名单已经形同虚设").toBeGreaterThan(2);
 });
 
-const OPTION_ROW = /<InspectorOptionRow\b([\s\S]*?)<\/InspectorOptionRow>/g;
+const OPTION_ROW = /<InspectorRow\b([\s\S]*?)<\/InspectorRow>/g;
+const SELECT_TRIGGER = /<SelectTrigger\b([^>]*)>/g;
 
+/**
+ * 行里的下拉必须有名字。名字要么由行的标签给（`label={<SelectLabel>…}`，读屏才不会把当前值
+ * 念成名字），要么下拉自带 `aria-label`——浮层里那些不归本行标签管的下拉走的是后一条。
+ */
 function unnamedSelectRows(text: string): string[] {
   const bad: string[] = [];
   for (const [block, body] of text.matchAll(OPTION_ROW)) {
-    if (!body.includes("<SelectTrigger")) continue;
-    if (/label=\{[\s\S]{0,80}?<SelectLabel\b/.test(block)) continue;
+    const named = /label=\{[\s\S]{0,80}?<SelectLabel\b/.test(block);
+    const anonymous = [...body.matchAll(SELECT_TRIGGER)].filter(
+      ([, attributes]) => !attributes.includes("aria-label"),
+    );
+    if (!anonymous.length || named) continue;
     bad.push(block.slice(0, 60).replaceAll(/\s+/g, " "));
   }
   return bad;
 }
 
 test("a settings row names its control, it does not merely sit next to it", async () => {
-  const BAD = '<InspectorOptionRow label="坐标轴">\n<SelectTrigger />\n</InspectorOptionRow>';
+  const BAD = '<InspectorRow label="坐标轴">\n<SelectTrigger />\n</InspectorRow>';
   const GOOD =
-    "<InspectorOptionRow label={<SelectLabel>坐标轴</SelectLabel>}>\n<SelectTrigger />\n</InspectorOptionRow>";
-  const TEXT_ONLY = '<InspectorOptionRow label="类型">\n<span>指标</span>\n</InspectorOptionRow>';
+    "<InspectorRow label={<SelectLabel>坐标轴</SelectLabel>}>\n<SelectTrigger />\n</InspectorRow>";
+  const SELF_NAMED =
+    '<InspectorRow label="按组织">\n<SelectTrigger aria-label="算哪个指标的占比" />\n</InspectorRow>';
+  const TEXT_ONLY = '<InspectorRow label="类型">\n<span>指标</span>\n</InspectorRow>';
   expect(unnamedSelectRows(BAD), "探测器失灵").toHaveLength(1);
   expect(unnamedSelectRows(GOOD), "探测器把自带命名件的那种也当成了裸标签").toEqual([]);
+  expect(unnamedSelectRows(SELF_NAMED), "下拉自己报了名字，本条不该管").toEqual([]);
   expect(unnamedSelectRows(TEXT_ONLY), "静态文本行没有控件可命名，不该被拦").toEqual([]);
 
   const sources = await readSources(CONSOLE_SRC);
-  const rows = sources.filter(({ text }) => text.includes("<InspectorOptionRow"));
+  const rows = sources.filter(({ text }) => text.includes("<InspectorRow"));
   expect(rows.length, "一处设置行都没扫到，这条规则已经形同虚设").toBeGreaterThan(1);
   for (const { name, text } of rows) {
     expect(

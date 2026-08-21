@@ -14,7 +14,7 @@ import {
   isPresentationBlock,
   RANK_ROW,
   SERIES_COLORS,
-  type PaChartExtension,
+  type ChartModel,
   type ViewChart,
 } from "./chart_config.js";
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
@@ -67,12 +67,13 @@ function view(
 }
 
 /** 真系列：折线的垫层追加在它们之后，形态断言只看前几条 */
-function realSeries<T>(chart: { option: Record<string, unknown> }): T[] {
-  return (chart.option.series as T[]).slice(0, pa(chart).legend?.length ?? 0);
+function realSeries<T>(chart: ViewChart): T[] {
+  return (chart.option.series as T[]).slice(0, chart.model.legend.length);
 }
 
-function pa(chart: { option: Record<string, unknown> }): PaChartExtension {
-  return chart.option.pa as PaChartExtension;
+/** 呈现模型（与 option 并列交付的那份读数） */
+function pa(chart: ViewChart): ChartModel {
+  return chart.model;
 }
 
 describe("趋势折线", () => {
@@ -91,7 +92,8 @@ describe("趋势折线", () => {
   test("时间占 x 轴、度量成折线系列，使用项目色板与克制网格", () => {
     if (!chart) throw new Error("应产出折线配置");
     expect(chart.form).toBe("line");
-    expect(chart.option.color).toEqual([...SERIES_COLORS]);
+    // 色显式写在每条系列上（图例色点与画布要同一个字面值），option 不另带一份调色板
+    expect(chart.option.color).toBeUndefined();
     expect(SERIES_COLORS[0]).toBe("#3b6fdb");
     const xAxis = chart.option.xAxis as {
       type: string;
@@ -146,16 +148,9 @@ describe("趋势折线", () => {
     expect(series).toHaveLength(1);
     expect(series[0].type).toBe("line");
     expect(series[0].name).toBe("在职人数");
-    // 末点带自己的实心记号（见「末点」用例），其余是裸值
-    expect(series[0].data.slice(0, -1)).toEqual([100, 120]);
-    expect(series[0].data.at(-1)).toMatchObject({ value: 140 });
-    const grid = chart.option.grid as {
-      containLabel: boolean;
-      left: number;
-      right: number;
-      top: number;
-      bottom: number;
-    };
+    // 数据格恒为裸数值；末点实心记号是样式，见「末点」用例
+    expect(series[0].data).toEqual([100, 120, 140]);
+    const grid = chart.option.grid as { containLabel: boolean };
     // 值轴刻度的摆法（判据见 ui_spec「图表画布」节）；最高那格翻面，免得跑到框外
     const yLabel = (chart.option.yAxis as { axisLabel: Record<string, unknown> }[])[0].axisLabel;
     expect(yLabel).toEqual({
@@ -169,16 +164,14 @@ describe("趋势折线", () => {
       verticalAlignMaxLabel: "top",
       padding: [4, 0, 4, 0],
     });
-    // 框缘不为轴标签让路，故 containLabel 关；四缘因此在渲染前就算得出来
+    // 框缘不为轴标签让路，故 containLabel 关
     expect(grid.containLabel).toBe(false);
     // 框本身不由 grid 画（DOM 那层画，圆角在 canvas 上画不出来）
     expect(grid).not.toHaveProperty("show");
     expect(grid).not.toHaveProperty("backgroundColor");
+    // 四缘的数字不在编译产物里：宿主是哪一档留白编译期不知道，由渲染端按场景档位一次算定
     expect(chart.plot_gutter).toBeUndefined();
-    expect(grid.left).toBe(16);
-    expect(grid.right).toBe(16);
-    expect(grid.top).toBe(0);
-    expect(grid.bottom).toBe(30);
+    expect(grid).toEqual({ containLabel: false });
   });
 
   test("折线语言：空心圆点、激活点变实心、单系列填面积", () => {
@@ -202,12 +195,11 @@ describe("趋势折线", () => {
     expect(series[0].lineStyle).toEqual({ width: 1.5, color: "#3b6fdb" });
     // 单系列填面积：编译期只落纯色，渐变由渲染端按翻转后的色现拼
     expect(series[0].areaStyle).toEqual({ color: "#3b6fdb" });
-    // 激活点实心：系列色填充 + 底面色描边；opacity 显式抬回 1，否则被圆点密度规则压住
+    // 激活点实心：系列色填充 + 底面色描边
     expect(series[0].emphasis.itemStyle).toEqual({
       color: "#3b6fdb",
       borderColor: "#ffffff",
       borderWidth: 1,
-      opacity: 1,
     });
     // 焦点保持本色：不重申一遍，echarts 会自动提亮成第四种颜色
     expect(series[0].emphasis.lineStyle.color).toBe(series[0].lineStyle.color);
@@ -231,11 +223,12 @@ describe("趋势折线", () => {
     expect(focusedColor(color, 0, 1)).toBe(CHART_CHROME.blurred.light);
 
     // 换焦点只重发样式段：本色出现在哪几处就换哪几处，data 不重发（重发要把静态形状重画一遍）
-    const focused = focusPatch(pair, 0).series;
+    const focused = focusPatch(pair, 0).series ?? [];
     const dimmed = focused[1] as {
       lineStyle: { color: string };
       itemStyle: { borderColor: string; color: string };
       emphasis: { lineStyle: { color: string }; itemStyle: { color: string } };
+      markPoint: { itemStyle: { color: string } };
       data?: unknown;
     };
     expect(dimmed.lineStyle.color).toBe(CHART_CHROME.blurred.light);
@@ -244,12 +237,14 @@ describe("趋势折线", () => {
     expect(dimmed.itemStyle.color).toBe(CHART_CHROME.surface.light);
     expect(dimmed.emphasis.lineStyle.color).toBe(CHART_CHROME.blurred.light);
     expect(dimmed.emphasis.itemStyle.color).toBe(CHART_CHROME.blurred.light);
+    // 末点标记的色写在自己的样式段上，换焦点一并染到：ECharts 的继承只认系列级 color，而那一项不重发
+    expect(dimmed.markPoint.itemStyle.color).toBe(CHART_CHROME.blurred.light);
     expect(dimmed).not.toHaveProperty("data");
 
     const self = focused[0] as { lineStyle: { color: string } };
     expect(self.lineStyle.color).toBe(SERIES_COLORS[0]);
     // 收回焦点：人人本色，与编译期那一份同形
-    const rest = focusPatch(pair, null).series[0] as { lineStyle: { color: string } };
+    const rest = focusPatch(pair, null).series?.[0] as { lineStyle: { color: string } };
     expect(rest.lineStyle.color).toBe(SERIES_COLORS[0]);
 
     // 置灰全由这道取色式算出：编译期的 option 里没有第二套交互态，故绘图区内的悬停改不动谁的色
@@ -261,7 +256,7 @@ describe("趋势折线", () => {
   test("数值标签跟焦点走：焦点在时只有焦点那条印数，档位没选中的也现出来", () => {
     const labelsOf = (chart: ViewChart | null, focused: number | null) => {
       if (!chart) throw new Error("应产出双系列折线配置");
-      return focusPatch(chart, focused).series.map(
+      return (focusPatch(chart, focused).series ?? []).map(
         (series) => (series.label as { show: boolean }).show,
       );
     };
@@ -312,19 +307,28 @@ describe("趋势折线", () => {
     });
   });
 
-  test("图例走 pa.legend（HTML 图例），option 不含 echarts legend 组件", () => {
+  test("图例走 model.legend（HTML 图例），option 不含 echarts legend 组件", () => {
     if (!chart) throw new Error("应产出折线配置");
     expect(chart.option.legend).toBeUndefined();
-    // 末桶读数随图例下发（触屏没有悬停浮层，图例是仅剩的读数位）：值取自铺开的最后一行本身，
-    // 不是另算的合计；哪一桶由 legend_latest_label 挑明，两者恒同进同出。
-    expect(pa(chart).legend).toEqual([{ name: "在职人数", color: "#3b6fdb", latest: 140 }]);
-    expect(pa(chart).legend_latest_label).toBe("2026-03");
-    // 末点在数据里带上自己的实心记号，值仍是那一桶的原值
-    expect((chart.option.series as { data: unknown[] }[])[0].data.at(-1)).toMatchObject({
-      value: 140,
-      itemStyle: { color: "#3b6fdb", borderColor: "#ffffff", opacity: 1 },
+    // 图例单元带着自己的取值与格式：画面上每个要读的数都出自模型，不从 option 里反解
+    expect(pa(chart).legend).toEqual([
+      { name: "在职人数", color: "#3b6fdb", format: "number", values: [100, 120, 140] },
+    ]);
+    expect(pa(chart).categories).toEqual(["2026-01", "2026-02", "2026-03"]);
+    // 「最新」只此一处：图例读数（触屏没有悬停浮层，图例是仅剩的读数位）与末点实心记号同出此桶
+    expect(pa(chart).latest).toEqual({ index: 2, label: "2026-03" });
+    // 末点实心记号是样式，走 markPoint；数据格恒为裸数值，读数端不必认识任何逐点特例
+    const line = (chart.option.series as { data: unknown[]; markPoint: unknown }[])[0];
+    expect(line.data).toEqual([100, 120, 140]);
+    expect(line.markPoint).toEqual({
+      silent: true,
+      symbol: "circle",
+      symbolSize: 8,
+      label: { show: false },
+      emphasis: { label: { show: false } },
+      itemStyle: { color: "#3b6fdb", borderColor: "#ffffff", borderWidth: 1 },
+      data: [{ coord: [2, 140] }],
     });
-    expect(pa(chart).series).toEqual({ 在职人数: "number" });
     expect(pa(chart).axes.y).toEqual(["number"]);
   });
 
@@ -341,8 +345,13 @@ describe("趋势折线", () => {
       { type: "line", y: ["active_employee_count", "new_hire_count"] },
     );
     if (!ragged) throw new Error("应产出折线配置");
-    expect(pa(ragged).legend_latest_label).toBe("2026-07");
-    expect(pa(ragged).legend?.map((item) => item.latest)).toEqual([100, 9]);
+    expect(pa(ragged).latest).toEqual({ index: 0, label: "2026-07" });
+    expect(pa(ragged).legend.map((item) => item.values[0])).toEqual([100, 9]);
+    // 末点实心记号跟着同一个「最新」走：落在 2026-07，不落在缺数的 2026-08
+    const marks = realSeries<{ markPoint: { data: { coord: number[] }[] } }>(ragged).map(
+      (s) => s.markPoint.data[0].coord[0],
+    );
+    expect(marks).toEqual([0, 0]);
 
     // 一桶都凑不齐时整条不发：宁可没有读数，也不给半行数配一个说不清的桶名
     const empty = buildViewChart(
@@ -356,8 +365,10 @@ describe("趋势折线", () => {
       { type: "line", y: ["active_employee_count", "new_hire_count"] },
     );
     if (!empty) throw new Error("应产出折线配置");
-    expect(pa(empty).legend_latest_label).toBeUndefined();
-    expect(pa(empty).legend?.every((item) => item.latest === undefined)).toBe(true);
+    expect(pa(empty).latest).toBeUndefined();
+    expect(realSeries<{ markPoint?: unknown }>(empty).every((s) => s.markPoint === undefined)).toBe(
+      true,
+    );
   });
 
   test("每个图形点保留原始结果格坐标，供 Web 明细入口确定性回溯", () => {
@@ -534,10 +545,7 @@ describe("分类柱线组合（量+率混量纲）", () => {
       },
     );
     if (!chart) throw new Error("应产出分类柱线组合图");
-    expect(pa(chart).share).toEqual({
-      title: "占比",
-      values: { 研发: 0.6, 销售: 0.4 },
-    });
+    expect(pa(chart).share).toEqual({ title: "占比", values: [0.6, 0.4] });
   });
 });
 
@@ -564,23 +572,15 @@ describe("分类条形", () => {
     if (!chart) throw new Error("应产出条形配置");
     expect(chart.form).toBe("bar");
     expect(chart.layout).toBe("rank");
-    // 排行版式没有绘图区可退让，四列的几何归渲染端；高度按行数一次算定
+    // 排行版式不落 echarts：没有 option 可言，类目、取值与占比全在模型里；高度按行数一次算定
     expect(chart.plot_gutter).toBeUndefined();
-    expect(chart.option.grid).toBeUndefined();
-    expect(chart.option.xAxis).toBeUndefined();
+    expect(chart.option).toEqual({});
     expect(chart.height).toBe(2 * RANK_ROW.height);
-    const yAxis = chart.option.yAxis as { type: string; data: string[] };
-    expect(yAxis.type).toBe("category");
-    expect(yAxis.data).toEqual(["Band C", "Band B"]);
-    const series = chart.option.series as { type: string; data: unknown[] }[];
-    expect(series).toHaveLength(1);
-    expect(series[0].type).toBe("bar");
-    expect(series[0].data).toEqual([60, 40]);
-    // 占比仍随 pa.share 交付：排行版式把它摆成第四列，读数卡也读同一份
-    expect(pa(chart).share).toEqual({
-      title: "占比",
-      values: { "Band C": 0.6, "Band B": 0.4 },
-    });
+    expect(pa(chart).categories).toEqual(["Band C", "Band B"]);
+    expect(pa(chart).legend).toHaveLength(1);
+    expect(pa(chart).legend[0].values).toEqual([60, 40]);
+    // 占比仍随 model.share 交付：排行版式把它摆成第四列，读数卡也读同一份
+    expect(pa(chart).share).toEqual({ title: "占比", values: [0.6, 0.4] });
     expect(pa(chart).axes.x).toEqual(["number"]);
   });
 
@@ -608,7 +608,6 @@ describe("分类条形", () => {
     expect((chart.option.grid as { containLabel: boolean }).containLabel).toBe(false);
     const gutter = chart.plot_gutter?.left ?? 0;
     expect(gutter, "类目栏没算出宽度，框会盖住标签").toBeGreaterThan(0);
-    expect((chart.option.grid as { left: number }).left).toBe(16 + gutter);
     const yLabel = (chart.option.yAxis as { axisLabel: Record<string, unknown> }).axisLabel;
     expect(yLabel.inside).toBeUndefined();
     // 放不下就截断——不截断的话栏宽是估的、框缘却是定的，两者迟早对不上
@@ -645,7 +644,7 @@ describe("分类条形", () => {
     );
     if (!declared) throw new Error("应产出占比柱状图");
     expect(declared.form).toBe("bar");
-    expect(declared.option.series).toMatchObject([{ type: "bar", data: [0.6, 0.4] }]);
+    expect(pa(declared).legend[0].values).toEqual([0.6, 0.4]);
     expect(pa(declared).axes.x).toEqual(["percent"]);
   });
 
@@ -662,11 +661,8 @@ describe("分类条形", () => {
       { type: "bar", x: "job_level_band", y: ["active_employee_count", "active_employee_share"] },
     );
     if (!declared) throw new Error("应产出带占比辅助通道的柱状图");
-    expect(declared.option.series).toMatchObject([{ type: "bar", data: [60, 40] }]);
-    expect(pa(declared).share).toEqual({
-      title: "占比",
-      values: { "Band C": 0.6, "Band B": 0.4 },
-    });
+    expect(pa(declared).legend[0].values).toEqual([60, 40]);
+    expect(pa(declared).share).toEqual({ title: "占比", values: [0.6, 0.4] });
   });
 
   test("显式辅助通道控制占比是否进入柱图读数卡", () => {
@@ -691,7 +687,7 @@ describe("分类条形", () => {
       annotations: [],
     });
     if (!annotated || !plain) throw new Error("应产出柱状图");
-    expect(pa(annotated).share?.values).toEqual({ "Band C": 0.6, "Band B": 0.4 });
+    expect(pa(annotated).share?.values).toEqual([0.6, 0.4]);
     expect(pa(plain).share).toBeUndefined();
   });
 
@@ -820,10 +816,13 @@ describe("无图形态与回答级块", () => {
   });
 
   test("isViewChart 边界校验", () => {
-    expect(isViewChart({ form: "line", height: 300, option: {} })).toBe(true);
-    expect(isViewChart({ form: "pie", height: 300, option: {} })).toBe(true);
-    expect(isViewChart({ form: "donut", height: 300, option: {} })).toBe(false);
-    expect(isViewChart({ form: "line", height: 0, option: {} })).toBe(false);
+    const model = { categories: [], legend: [], axes: {}, pointer: "axis" };
+    expect(isViewChart({ form: "line", height: 300, option: {}, model })).toBe(true);
+    expect(isViewChart({ form: "pie", height: 300, option: {}, model })).toBe(true);
+    expect(isViewChart({ form: "donut", height: 300, option: {}, model })).toBe(false);
+    expect(isViewChart({ form: "line", height: 0, option: {}, model })).toBe(false);
+    // 模型是渲染端读数的唯一来源，缺了就不是一张可呈现的图
+    expect(isViewChart({ form: "line", height: 300, option: {} })).toBe(false);
     expect(isViewChart(null)).toBe(false);
   });
 
@@ -896,6 +895,46 @@ describe("服务端物理呈现声明", () => {
     expect(realSeries(chart)).toHaveLength(1);
   });
 
+  test("只改线色：系列按解析结果一次建成，面积、激活态、末点与图例全是新色", () => {
+    const chart = buildViewChart(trendView, {
+      type: "line",
+      y: ["new_hire_count"],
+      display: { new_hire_count: { color: "#123abc" } },
+    });
+    if (!chart) throw new Error("应产出折线配置");
+    const line = realSeries<{ data: unknown[] }>(chart)[0];
+    // 本色只以字面值出现一次，换色没有「第二遍改不到」的残段——焦点换色靠的就是这一点
+    expect(JSON.stringify(line)).not.toContain(SERIES_COLORS[0]);
+    expect(JSON.stringify(line)).toContain("#123abc");
+    expect(pa(chart).legend[0].color).toBe("#123abc");
+    expect(line.data.every((v) => v === null || typeof v === "number")).toBe(true);
+  });
+
+  test("分类组合里的率线没有「最新」可标：末点实心记号只属时间趋势", () => {
+    const chart = buildViewChart(
+      view(
+        ["organization_name", "active_employee_count", "ytd_primary_event_rate"],
+        [
+          ["研发", 120, 0.2],
+          ["销售", 80, 0.1],
+        ],
+        { formats: { ytd_primary_event_rate: "percent" } },
+      ),
+      {
+        type: "bar",
+        x: "organization_name",
+        y: ["active_employee_count", "ytd_primary_event_rate"],
+        display: { active_employee_count: { type: "line" } },
+      },
+    );
+    if (!chart) throw new Error("应产出分类柱线组合图");
+    expect(realSeries<{ type: string }>(chart).map((s) => s.type)).toEqual(["line", "line"]);
+    expect(realSeries<{ markPoint?: unknown }>(chart).every((s) => s.markPoint === undefined)).toBe(
+      true,
+    );
+    expect(pa(chart).latest).toBeUndefined();
+  });
+
   test("display 覆盖颜色、型别，value_labels 印数，并为右轴补 option 与 pa 格式", () => {
     const chart = buildViewChart(trendView, {
       type: "line",
@@ -933,6 +972,9 @@ describe("服务端物理呈现声明", () => {
     });
     // 视觉覆盖必须同步到 HTML 图例的标记色
     expect(pa(chart).legend?.[0]?.color).toBe("#123abc");
+    // 末点标记随最终形态重出：改成柱的不再带点，留作线的带点且末桶坐标不变
+    expect(series[0]).not.toHaveProperty("markPoint");
+    expect(series[1]).toHaveProperty("markPoint");
     expect(series[1].yAxisIndex).toBe(1);
     expect(chart.option.yAxis as unknown[]).toHaveLength(2);
     expect(pa(chart).axes.y).toEqual(["number", "number"]);
@@ -980,7 +1022,6 @@ describe("服务端物理呈现声明", () => {
     const labeled = buildViewChart(trendView, { ...decl, valueLabels: "all" });
     if (!labeled) throw new Error("应产出带标签的折线配置");
     expect(labeled.plot_inset?.top).toBe(30);
-    expect((labeled.option.grid as { top: number }).top).toBe(30);
     // 标签形制：浅灰底片 + 承载面色描边 + 14px 系列色数字
     const pill = (realSeries(labeled)[0] as { label?: Record<string, unknown> }).label;
     expect(pill?.backgroundColor).toBe("#f7f7f8");
@@ -1014,7 +1055,6 @@ describe("服务端物理呈现声明", () => {
     // 最宽标签是「1,234」：右栏 = 实测底片宽 + 号距，框外栏（左类目栏）保持不动
     const right = flat.plot_inset?.right ?? 0;
     expect(right).toBeGreaterThan(30);
-    expect((flat.option.grid as { right: number }).right).toBe(16 + right);
     expect(flat.plot_gutter?.left).toBeGreaterThan(0);
     expect(flat.plot_inset?.top).toBeUndefined();
 
@@ -1047,22 +1087,28 @@ describe("服务端物理呈现声明", () => {
       radius: [string, string];
       label: { show: boolean };
       labelLine: { show: boolean };
-      data: { name: string; value: unknown; itemStyle: { color: string } }[];
+      data: { name: string; value: unknown }[];
     }[];
     expect(series[0].type).toBe("pie");
     expect(series[0].radius).toEqual(["48%", "80%"]);
     // 占比进图例，总计进环心；切片不出外部标签和引线。
     expect(series[0].label.show).toBe(false);
     expect(series[0].labelLine.show).toBe(false);
-    expect(series[0].data.map((d) => d.name)).toEqual(["A", "B"]);
-    expect(series[0].data.map((d) => d.itemStyle.color)).toEqual(["#3b6fdb", "#e0857a"]);
+    // 数据格只有名与值；切片色走调色板按序对位（样式不进数据格，换焦点换的是整份调色板）
+    expect(series[0].data).toEqual([
+      { name: "A", value: 60 },
+      { name: "B", value: 40 },
+    ]);
+    expect(chart.option.color).toEqual(["#3b6fdb", "#e0857a"]);
     // 饼图没有类目轴也就没有指针，落在哪一片由逐项事件报，echarts 那层整个关掉
     expect(chart.option.tooltip).toEqual({ show: false });
     expect(chart.option.legend).toBeUndefined();
     expect(pa(chart).legend).toEqual([
-      { name: "A", color: "#3b6fdb" },
-      { name: "B", color: "#e0857a" },
+      { name: "A", color: "#3b6fdb", format: "number", values: [60] },
+      { name: "B", color: "#e0857a", format: "number", values: [40] },
     ]);
+    expect(pa(chart).categories).toEqual(["在职人数"]);
+    expect(pa(chart).pointer).toBe("item");
     // 绘图底只属直角坐标系：饼图无 grid，不铺底也不出发丝框
     expect(chart.option.grid).toBeUndefined();
     // 扇形的角度就是值：悬停态整个关掉，切片上也就没有第二份交互样式
@@ -1308,8 +1354,8 @@ describe("整窗读数进呈现块", () => {
   });
 });
 
-describe("小数位随系列进 pa 扩展块", () => {
-  test("声明过位数的系列列进 pa.decimals，其所在值轴给 axis_decimals；未声明的不出现", () => {
+describe("小数位随系列进呈现模型", () => {
+  test("声明过位数的系列带上 decimals，其所在值轴给 axis_decimals；未声明的不出现", () => {
     const chart = buildViewChart(
       view(
         ["year", "month", "survey_score", "active_employee_count"],
@@ -1322,7 +1368,7 @@ describe("小数位随系列进 pa 扩展块", () => {
       { type: "line", y: ["survey_score", "active_employee_count"] },
     );
     if (!chart) throw new Error("应产出折线配置");
-    expect(pa(chart).decimals).toEqual({ survey_score: 0 });
+    expect(pa(chart).legend.map((item) => item.decimals)).toEqual([0, undefined]);
     // 量在主轴、率在副轴：只有率轴拿到位数
     expect(pa(chart).axis_decimals).toEqual({ y: [null, 0] });
 
@@ -1337,7 +1383,7 @@ describe("小数位随系列进 pa 扩展块", () => {
       { type: "line", y: ["active_employee_count"] },
     );
     if (!plain) throw new Error("应产出折线配置");
-    expect(pa(plain).decimals).toBeUndefined();
+    expect(pa(plain).legend[0].decimals).toBeUndefined();
     expect(pa(plain).axis_decimals).toBeUndefined();
   });
 });
@@ -1459,11 +1505,11 @@ test("每种形态一律照同一道取色式置灰：折线、柱线组合、�
 
   for (const [name, chart] of forms) {
     if (!chart) throw new Error(`${name}没编译出来，下面全部落空`);
-    const legend = pa(chart).legend ?? [];
+    const legend = pa(chart).legend;
     expect(legend.length, `${name}应有两条以上图例才谈得上焦点`).toBeGreaterThan(1);
-    // 饼图的落选是同一条系列里的别的切片，故焦点写在切片上；其余按系列对位
-    const patched = focusPatch(chart, 0).series;
-    const [self, other] = chart.form === "pie" ? (patched[0].data as unknown[]) : patched;
+    // 饼图的落选是同一条系列里的别的切片，故焦点换的是调色板；其余按系列重出样式段
+    const patch = focusPatch(chart, 0);
+    const [self, other] = (patch.series ?? patch.color) as unknown[];
     expect(JSON.stringify(other), `${name}的落选没换成失焦色`).toContain(
       CHART_CHROME.blurred.light,
     );

@@ -53,9 +53,19 @@ const DetailChromeContext = createContext<DetailChromeValue>({
 
 export type StageAside = {
   node: React.ReactNode;
+  /** 这栏是拿来调的还是拿来读的——壳据此取宽度那一档。 */
+  face: StageAsideFace;
 
   dismiss: (() => void) | null;
 };
+
+type StageAsideFace = "settings" | "profile";
+
+/**
+ * 右栏宽度单源，按栏的用途分两档：配置面摆控件，档案面摆记录本身、行更长也更该摊开。
+ * 页面自己不写宽度，否则常量与真实 DOM 各活各的。
+ */
+export const STAGE_ASIDE_WIDTH = { settings: 320, profile: 380 } as const;
 
 type StageAsideValue = {
   aside: StageAside | null;
@@ -161,15 +171,16 @@ export function useSetStageAside(
   factory: () => React.ReactNode | null,
   deps: DependencyList,
   dismiss?: () => void,
+  face: StageAsideFace = "settings",
 ): void {
   const { setAside } = useContext(StageAsideContext);
   const node = useMemo(factory, deps);
   const dismissRef = useRef(dismiss);
   dismissRef.current = dismiss;
   useEffect(() => {
-    setAside(node ? { node, dismiss: () => dismissRef.current?.() } : null);
+    setAside(node ? { node, face, dismiss: () => dismissRef.current?.() } : null);
     return () => setAside(null);
-  }, [node, setAside]);
+  }, [node, face, setAside]);
 }
 
 /** 页面把「+ 新建」挂到主区 titlebar 右侧。 */
@@ -368,7 +379,13 @@ export function ListCategoryPill({
 }: React.ComponentProps<"button"> & { absent?: boolean }): React.ReactElement {
   return (
     <Button
-      className={cn("text-pa-muted", absent && "cursor-default border-dashed", className)}
+      className={cn(
+        "text-pa-muted",
+        // 不可点的芯片出的是 span，钮那套指针与悬停在它身上没有对应动作。
+        !props.onClick && "cursor-default hover:border-pa-line",
+        absent && "border-dashed",
+        className,
+      )}
       render={props.onClick ? undefined : <span />}
       size="compact"
       {...props}

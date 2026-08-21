@@ -1,6 +1,7 @@
 /**
  * 呈现设置分区。组件只负责图表能力，不决定编辑器面板的宽度、标题和底部动作。
- * `embedded` 用于把内容嵌入统一的右侧 inspector；保留独立渲染能力方便局部测试和复用。
+ * 它嵌在统一的右侧 inspector 里，分两段（`section`）落在查询步前后——故自己不包容器，
+ * 分区必须与查询步是同一层兄弟，「末节不画底线」才认得出整栏真正的最后一节。
  *
  * **成员名恒经 makeTitleOf 翻成中文标题后才上屏**——出现限定名即违规。
  */
@@ -31,16 +32,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ChartTypeOption, ChartTypePicker } from "@/components/ui/chart-type-option";
 import { ColorPill } from "@/components/ui/color-pill";
 import {
-  INSPECTOR_MEMBER_INSET_CLASS,
+  INSPECTOR_ROW_INDENT_CLASS,
   INSPECTOR_SECTION_CLASS,
   InspectorFieldGroup,
   InspectorFieldRow,
-  InspectorOptionRow,
+  InspectorRow,
   InspectorSection,
 } from "@/components/ui/inspector";
 import { Hint } from "@/components/ui/hint";
-import { Popover, PopoverPopup, PopoverTrigger } from "@/components/ui/popover";
-import { POPUP_GROUP_LABEL } from "@/components/ui/surface";
+import {
+  Popover,
+  PopoverPopup,
+  PopoverSettingTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectItem,
@@ -90,40 +95,26 @@ const GHOST_SELECT_TRIGGER = "w-auto justify-end";
 
 const SUMMARY_TOOLTIP = "总体保留当前筛选与时间粒度，并由数据模型去掉业务分组后重新计算。";
 
-const SETTING_CONTENT_CLASS = cn(INSPECTOR_MEMBER_INSET_CLASS, "px-0 md:px-0");
-
-function selectedViewIntent(
-  draft: AnalysisEditState,
-  _replay: ReplayPayload,
-  _catalog: CatalogPayload,
-): SemanticViewIntent {
-  return semanticViewIntent(draft);
-}
+const SETTING_CONTENT_CLASS = cn(INSPECTOR_ROW_INDENT_CLASS, "px-0 md:px-0");
 
 export function ChartSettingsPanel({
   draft,
   replay,
   onChange,
   catalog,
-  embedded = false,
-  section = "all",
+  section,
 }: {
   draft: AnalysisEditState;
   replay: ReplayPayload;
   onChange: (draft: AnalysisEditState) => void;
   catalog: CatalogPayload;
-  /** 作为统一 inspector 的内容区渲染时，不创建第二个滚动容器。 */
-  embedded?: boolean;
-  /**
-   * 图型条在栏顶，其余设置在查询步之后。
-   * `type` / `options` 拆开以便嵌入同一滚动上下文的不同位置。
-   */
-  section?: "all" | "type" | "options";
+  /** 图型条在栏顶（`type`），其余设置在查询步之后（`options`）。 */
+  section: "type" | "options";
 }) {
   const [expandedSeries, setExpandedSeries] = useState<string | null>(null);
   const fieldId = useId();
-  const showType = section === "all" || section === "type";
-  const showOptions = section === "all" || section === "options";
+  const showType = section === "type";
+  const showOptions = section === "options";
 
   const resultView = replay.payload.view;
   const resultTitleOf = makeTitleOf(resultView);
@@ -132,7 +123,7 @@ export function ChartSettingsPanel({
   const titleOf = (member: string) =>
     [...catalog.measures, ...catalog.dimensions].find((item) => item.id === member)?.title ??
     resultTitleOf(member);
-  const chart = selectedViewIntent(draft, replay, catalog);
+  const chart: SemanticViewIntent = semanticViewIntent(draft);
   const forms = new Set(sensibleForms(resultView));
   const measures = context?.measures ?? [];
   const dimensions = context?.dimensions ?? [];
@@ -278,10 +269,7 @@ export function ChartSettingsPanel({
     });
   }
 
-  // 嵌入 inspector 时**不包裹任何容器**：分区必须与查询步是同一层兄弟，
-  // 「末节不画底线」才认得出整栏真正的最后一节。包一层的后果是每个包裹各自算一次「末节」，
-  // 图型条明明后面还有内容却把底线抹掉了。
-  const body = (
+  return (
     <>
       {/* 图型条紧贴栏顶（在查询步之前），无「图表类型」节题。 */}
       {showType ? (
@@ -351,62 +339,59 @@ export function ChartSettingsPanel({
                       </Hint>
                       <div className="space-y-0.5">
                         {tableColumns.map((axis, index) => (
-                          <div
-                            className="flex min-h-8 items-center gap-0.5 rounded-md px-0.5 hover:bg-pa-surface"
+                          <InspectorRow
+                            actions={
+                              <>
+                                <Button
+                                  aria-label={`上移${tableAxisLabel(axis)}`}
+                                  className="text-pa-muted"
+                                  disabled={index === 0}
+                                  onClick={() => moveTableColumn(axis, -1)}
+                                  size="icon-xs"
+                                  variant="subtle"
+                                >
+                                  <ChevronUpIcon />
+                                </Button>
+                                <Button
+                                  aria-label={`下移${tableAxisLabel(axis)}`}
+                                  className="text-pa-muted"
+                                  disabled={index === tableColumns.length - 1}
+                                  onClick={() => moveTableColumn(axis, 1)}
+                                  size="icon-xs"
+                                  variant="subtle"
+                                >
+                                  <ChevronDownIcon />
+                                </Button>
+                                {axis === "metrics" ? (
+                                  <span aria-hidden="true" className="size-6 shrink-0" />
+                                ) : (
+                                  <Button
+                                    aria-label={`将${tableAxisLabel(axis)}移到行轴`}
+                                    className="text-pa-muted"
+                                    onClick={() => removeTableColumn(axis)}
+                                    size="icon-xs"
+                                    variant="subtle"
+                                  >
+                                    <XIcon />
+                                  </Button>
+                                )}
+                              </>
+                            }
                             key={axis}
-                          >
-                            <span className="min-w-0 flex-1 truncate px-1.5 text-sm leading-5 text-pa-ink">
-                              {tableAxisLabel(axis)}
-                            </span>
-                            <Button
-                              aria-label={`上移${tableAxisLabel(axis)}`}
-                              className="text-pa-muted"
-                              disabled={index === 0}
-                              onClick={() => moveTableColumn(axis, -1)}
-                              size="icon-xs"
-                              variant="subtle"
-                            >
-                              <ChevronUpIcon />
-                            </Button>
-                            <Button
-                              aria-label={`下移${tableAxisLabel(axis)}`}
-                              className="text-pa-muted"
-                              disabled={index === tableColumns.length - 1}
-                              onClick={() => moveTableColumn(axis, 1)}
-                              size="icon-xs"
-                              variant="subtle"
-                            >
-                              <ChevronDownIcon />
-                            </Button>
-                            {axis === "metrics" ? (
-                              <span aria-hidden="true" className="size-6 shrink-0" />
-                            ) : (
-                              <Button
-                                aria-label={`将${tableAxisLabel(axis)}移到行轴`}
-                                className="text-pa-muted"
-                                onClick={() => removeTableColumn(axis)}
-                                size="icon-xs"
-                                variant="subtle"
-                              >
-                                <XIcon />
-                              </Button>
-                            )}
-                          </div>
+                            label={tableAxisLabel(axis)}
+                          />
                         ))}
                       </div>
                       {remainingTableAxes.length > 0 ? (
                         <>
                           <div className="my-1 h-px bg-pa-line" />
-                          <p className={POPUP_GROUP_LABEL}>加入列轴</p>
+                          <PopoverSettingTitle>加入列轴</PopoverSettingTitle>
                           {remainingTableAxes.map((axis) => (
-                            <button
-                              className="flex min-h-8 w-full items-center rounded-md px-2 text-left text-sm leading-5 text-pa-ink hover:bg-pa-surface"
+                            <InspectorRow
                               key={axis}
+                              label={tableAxisLabel(axis)}
                               onClick={() => addTableColumn(axis)}
-                              type="button"
-                            >
-                              {tableAxisLabel(axis)}
-                            </button>
+                            />
                           ))}
                         </>
                       ) : summaryEnabled && dimensions.length > 0 ? (
@@ -445,7 +430,7 @@ export function ChartSettingsPanel({
                   }}
                   value={shadingStyle}
                 >
-                  <InspectorOptionRow label={<SelectLabel>着色</SelectLabel>}>
+                  <InspectorRow label={<SelectLabel>着色</SelectLabel>}>
                     <SelectTrigger className={GHOST_SELECT_TRIGGER} size="sm" variant="ghost">
                       <SelectValue />
                     </SelectTrigger>
@@ -454,16 +439,16 @@ export function ChartSettingsPanel({
                       <SelectItem value="values">数值与颜色</SelectItem>
                       <SelectItem value="colors">仅颜色</SelectItem>
                     </SelectPopup>
-                  </InspectorOptionRow>
+                  </InspectorRow>
                 </Select>
                 {tableShading ? (
-                  <InspectorOptionRow label="配色">
+                  <InspectorRow label="配色">
                     <TableShadingSettings
                       defaults={tableShadingDefaults(resultView)}
                       onChange={setShading}
                       shading={tableShading}
                     />
-                  </InspectorOptionRow>
+                  </InspectorRow>
                 ) : null}
               </div>
             </InspectorSection>
@@ -482,12 +467,14 @@ export function ChartSettingsPanel({
                   .filter((member) => !annotations.includes(member))
                   .map((member) => {
                     const checked = y.includes(member);
-                    // 色序取自它在 Y 轴上的位次，不是行位次——否则勾掉一个指标会让
-                    // 它下面所有系列的颜色跟着挪一格。
-                    const axisIndex = y.indexOf(member);
+                    // 没显式选色时亮的是编译器给这条系列的那一色：色怎么分是编译期的事，
+                    // 面板不另算一份色序
                     const intent = series[member] ?? {};
                     const color =
-                      intent.color ?? SERIES_COLORS[Math.max(axisIndex, 0) % SERIES_COLORS.length];
+                      intent.color ??
+                      replay.presentation.chart?.model.legend.find(
+                        (item) => item.name === titleOf(member),
+                      )?.color;
                     const styleable = canStyleSeries && checked;
                     const open = styleable && expandedSeries === member;
                     return (
@@ -544,7 +531,7 @@ export function ChartSettingsPanel({
                               }}
                               value={intent.axis ?? "left"}
                             >
-                              <InspectorOptionRow label={<SelectLabel>坐标轴</SelectLabel>}>
+                              <InspectorRow label={<SelectLabel>坐标轴</SelectLabel>}>
                                 <SelectTrigger
                                   className={GHOST_SELECT_TRIGGER}
                                   size="sm"
@@ -556,7 +543,7 @@ export function ChartSettingsPanel({
                                   <SelectItem value="left">左轴</SelectItem>
                                   <SelectItem value="right">右轴</SelectItem>
                                 </SelectPopup>
-                              </InspectorOptionRow>
+                              </InspectorRow>
                             </Select>
                             <Select
                               items={SERIES_FORM_ITEMS}
@@ -567,7 +554,7 @@ export function ChartSettingsPanel({
                               }}
                               value={intent.mark ?? (chart.type === "line" ? "line" : "bar")}
                             >
-                              <InspectorOptionRow label={<SelectLabel>形态</SelectLabel>}>
+                              <InspectorRow label={<SelectLabel>形态</SelectLabel>}>
                                 <SelectTrigger
                                   className={GHOST_SELECT_TRIGGER}
                                   size="sm"
@@ -579,7 +566,7 @@ export function ChartSettingsPanel({
                                   <SelectItem value="line">折线</SelectItem>
                                   <SelectItem value="bar">柱形</SelectItem>
                                 </SelectPopup>
-                              </InspectorOptionRow>
+                              </InspectorRow>
                             </Select>
                           </div>
                         )}
@@ -597,9 +584,9 @@ export function ChartSettingsPanel({
               >
                 <div className="space-y-0.5">
                   {annotations.map((member) => (
-                    <InspectorOptionRow key={member} label={titleOf(member)}>
+                    <InspectorRow key={member} label={titleOf(member)}>
                       <Badge>自动</Badge>
-                    </InspectorOptionRow>
+                    </InspectorRow>
                   ))}
                 </div>
               </InspectorSection>
@@ -629,7 +616,7 @@ export function ChartSettingsPanel({
                       }}
                       value={chart.group_by ?? "none"}
                     >
-                      <InspectorOptionRow label={<SelectLabel>拆分系列</SelectLabel>}>
+                      <InspectorRow label={<SelectLabel>拆分系列</SelectLabel>}>
                         <SelectTrigger className={GHOST_SELECT_TRIGGER} size="sm" variant="ghost">
                           <SelectValue />
                         </SelectTrigger>
@@ -643,7 +630,7 @@ export function ChartSettingsPanel({
                               </SelectItem>
                             ))}
                         </SelectPopup>
-                      </InspectorOptionRow>
+                      </InspectorRow>
                     </Select>
                   )}
 
@@ -671,7 +658,7 @@ export function ChartSettingsPanel({
                           : undefined) ?? "none"
                       }
                     >
-                      <InspectorOptionRow label={<SelectLabel>显示数值</SelectLabel>}>
+                      <InspectorRow label={<SelectLabel>显示数值</SelectLabel>}>
                         <SelectTrigger className={GHOST_SELECT_TRIGGER} size="sm" variant="ghost">
                           <SelectValue />
                         </SelectTrigger>
@@ -681,7 +668,7 @@ export function ChartSettingsPanel({
                           {chart.group_by ? null : <SelectItem value="main">仅主指标</SelectItem>}
                           <SelectItem value="all">全部</SelectItem>
                         </SelectPopup>
-                      </InspectorOptionRow>
+                      </InspectorRow>
                     </Select>
                   ) : null}
 
@@ -703,16 +690,5 @@ export function ChartSettingsPanel({
         )
       ) : null}
     </>
-  );
-
-  if (embedded) return body;
-  return (
-    <div
-      className="flex flex-col"
-      data-slot="chart-settings-sidebar"
-      data-testid="chart-settings-sidebar"
-    >
-      <div className="min-h-0 flex-1 overflow-y-auto py-6">{body}</div>
-    </div>
   );
 }

@@ -111,7 +111,6 @@ function session(overrides: Partial<AnalysisEditSession>): AnalysisEditSession {
     activeReplay: null,
     showingSavedReplay: false,
     resultPending: false,
-    preview: { presentation: null, error: null },
     presentationNotes: [],
     saving: false,
     previewing: false,

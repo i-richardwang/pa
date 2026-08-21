@@ -1,26 +1,35 @@
 /**
- * 图表配置的渲染端补全：option 由 chart_config.ts 在完整行上生成（服务端查询管线，
- * 或编辑器草稿预览在浏览器直调同一份实现），函数不可序列化，
- * 故数值轴刻度与值标签的格式化在这里按 option.pa 扩展块注入。
+ * 渲染期的 option 派生：编译产物（`chart.option` + `chart.model`）× 此刻的渲染状态
+ * （主题、场景档位、视口尺寸、焦点、钉住）→ 可直接 `setOption` 的完整对象。
  *
- * 读数卡不在此列：它是与菜单同层的浮层件（`readout_card.tsx`），要印的行出自 `readout.ts`。
- * 饼图另注入环心总计；单系列折线的面积渐变也在这里现拼——序列化只带得动纯色，
- * 而渐变必须用**已按主题翻转过的**那个色去算。
- * 暗色主题：option 恒为亮色原值，这里按 CHART_DARK_COLORS 映射递归替换字符串
- * （系列色与中性色均可按映射适配暗色）。
+ * 编译期不知道的事全在这里一次算完：宿主是哪一档留白、画布多宽（符号与标签密度、刻度档数）、
+ * 谁在焦点、是否钉住；函数不可序列化，值轴刻度与值标签的格式化器也在此注入。
+ * 它是一个纯函数：同样的输入恒得同样的 option。
+ *
+ * 暗色主题：option 恒为亮色原值，这里按 CHART_DARK_COLORS 映射递归替换字符串；
+ * 单系列折线的面积渐变在翻色之后现拼——序列化只带得动纯色，而渐变必须用翻过的那个色去算。
  */
 import {
   CHART_CHROME,
   CHART_DARK_COLORS,
   FONT_FAMILY,
   PLOT_PADDING,
+  focusPatch,
   valueLabelPillWidth,
-  type PaChartExtension,
+  type ChartModel,
   type ViewChart,
 } from "../../src/presentation_core/chart_config.js";
-import { asArray, type MutableOption, pieData, pieTotal } from "./chart_option.js";
 import { formatSeriesValue, formatTick } from "../../src/presentation_core/view_format.js";
 import type { ColumnFormat } from "../../src/semantic_core/query_payload.js";
+
+type MutableOption = Record<string, unknown>;
+
+/** `series`、`xAxis` 这些字段单个与数组两种写法都合法，写它们的地方不各归一一遍。 */
+function asArray(value: unknown): MutableOption[] {
+  if (Array.isArray(value)) return value as MutableOption[];
+  if (value && typeof value === "object") return [value as MutableOption];
+  return [];
+}
 
 /** 宿主经 applyDocumentTheme 落 data-theme；无宿主环境时随系统明暗。 */
 export function isDarkTheme(): boolean {
@@ -41,116 +50,165 @@ export function watchTheme(onChange: () => void): () => void {
   };
 }
 
-/** 值轴刻度：与读数卡同源的格式与位数，率轴按百分比/百分点标单位。 */
-function injectAxisFormatters(option: MutableOption, pa: PaChartExtension): void {
-  const inject = (
-    axes: MutableOption[],
-    formats: (ColumnFormat | null)[] | undefined,
-    decimals: (number | null)[] | undefined,
-  ) => {
-    if (!formats) return;
-    axes.forEach((axis, index) => {
-      const format = formats[index];
-      if (!format || axis.type !== "value") return;
-      const label = (axis.axisLabel ?? {}) as MutableOption;
-      const digits = decimals?.[index] ?? undefined;
-      axis.axisLabel = {
-        ...label,
-        formatter: (value: number) => formatTick(value, format, digits),
-      };
-    });
-  };
-  inject(asArray(option.xAxis), pa.axes.x, pa.axis_decimals?.x);
-  inject(asArray(option.yAxis), pa.axes.y, pa.axis_decimals?.y);
-}
+/* ---------- 几何 ---------- */
 
-/** 值标签：与读数卡同一套格式（率带单位、位数随列声明），否则 0–1 标度的率会以小数印在图上。 */
-function injectValueLabelFormatters(option: MutableOption, pa: PaChartExtension): void {
-  asArray(option.series).forEach((series) => {
-    const label = series.label as MutableOption | undefined;
-    // 配了标签形制就装格式化器，不看此刻印不印：焦点会现出档位没选中的那条，
-    // 缺格式化器它就按 echarts 的原样印，率会以 0–1 的小数落在图上
-    if (!label) return;
-    const name = String(series.name ?? "");
-    const format: ColumnFormat = pa.series[name] ?? "number";
-    const decimals = pa.decimals?.[name];
-    series.label = {
-      ...label,
-      formatter: (params: { value?: unknown }) => {
-        const value = Array.isArray(params.value) ? params.value.at(-1) : params.value;
-        return typeof value === "number" ? formatSeriesValue(value, format, decimals) : "";
-      },
-    };
-  });
-}
+export type Viewport = { width: number; height: number };
 
 /**
- * 值标签密度守卫：空间不足时按步距挑桶印数、恒印末点。
+ * 场地框相对画布四缘的退让（px）：场景留白 + 该形态自己那一栏框外轴标签。
+ * echarts 的 grid 与 DOM 那层 plot 框读同一道算式——两处各算一次，框迟早圈错地方。
+ * 值标签的框内余量（`plot_inset`）不在此列：它只缩数据区（见 `gridRect`），框不动。
+ */
+export function plotRect(
+  chart: ViewChart,
+  plot: keyof typeof PLOT_PADDING,
+): { left: number; right: number; top: number; bottom: number } {
+  const pad = PLOT_PADDING[plot];
+  return { ...pad, left: pad.left + (chart.plot_gutter?.left ?? 0) };
+}
+
+/** 数据区 = 场地框 + 框内标签余量：框不因标签开关移动，余量只缩数据区。 */
+export function gridRect(
+  chart: ViewChart,
+  plot: keyof typeof PLOT_PADDING,
+): { left: number; right: number; top: number; bottom: number } {
+  const rect = plotRect(chart, plot);
+  const inset = chart.plot_inset ?? {};
+  return { ...rect, top: rect.top + (inset.top ?? 0), right: rect.right + (inset.right ?? 0) };
+}
+
+/** 数据区实际尺寸；依赖轴向空间的密度策略统一从这里取值。 */
+export function plotSize(
+  chart: ViewChart,
+  plot: keyof typeof PLOT_PADDING,
+  viewport: Viewport,
+): Viewport {
+  const rect = gridRect(chart, plot);
+  return {
+    width: Math.max(0, viewport.width - rect.left - rect.right),
+    height: Math.max(0, viewport.height - rect.top - rect.bottom),
+  };
+}
+
+/* ---------- 密度 ---------- */
+
+/** 折线圆点：每点摊不到 12px 就只在指针命中时现出那一颗（`showSymbol` 的原生语义）。 */
+const SYMBOL_SPACING = 12;
+
+/**
+ * 值标签密度：空间不足时按步距挑桶印数、恒印末点。
  * 折线：每点摊到 37.33px 以上才逐点印，否则步距 = ceil(50 / 每点宽)；
  * 柱：步距 = ceil((最宽底片 + 4) / 每列宽)（放得下即逐列印，无独立阈值）。
- * 宽度到渲染时才知道，故与符号密度一样在实例上按尺寸补丁，而非编译期定死。
- * 横排条一行一格不会横向挤，不在此列。
+ * 横排条一行一格不会横向挤，不在此列（类目不在 x 轴）。
  */
 const VALUE_LABEL_SPACING = 37.33;
 const LINE_LABEL_BUDGET = 50;
 const BAR_LABEL_GAP = 4;
 
-export function applyValueLabelDensity(
-  instance: { setOption: (option: unknown) => void },
-  chart: ViewChart,
-  width: number,
-): void {
-  const series = chart.option.series;
-  if (!Array.isArray(series) || width <= 0) return;
-  const xAxis = Array.isArray(chart.option.xAxis) ? chart.option.xAxis[0] : chart.option.xAxis;
-  if ((xAxis as { type?: string } | undefined)?.type !== "category") return;
-  const pa = chart.option.pa as PaChartExtension | undefined;
-  let touched = false;
-  const patch = series.map((s) => {
-    const record = s as Record<string, unknown>;
-    const label = record.label as Record<string, unknown> | undefined;
-    const kind = record.type;
-    // 按「配了标签形制」认领而非按此刻是否印：焦点能现出档位没选中的那条，格式化器得先在
-    if ((kind !== "line" && kind !== "bar") || !label || !Array.isArray(record.data)) return {};
-    touched = true;
-    const count = (record.data as unknown[]).length;
-    const per = count > 0 ? width / count : width;
-    const name = String(record.name ?? "");
-    const format: ColumnFormat = pa?.series[name] ?? "number";
-    const decimals = pa?.decimals?.[name];
-    const widest = (record.data as unknown[]).reduce<number>(
+/** 值轴档数随绘图区尺度走：每 80px 一档，夹在 2–10。 */
+const TICK_SPACING = 80;
+
+function labelStep(kind: unknown, per: number, widest: number): number {
+  if (kind === "line") {
+    return per <= VALUE_LABEL_SPACING ? Math.max(1, Math.ceil(LINE_LABEL_BUDGET / per)) : 1;
+  }
+  return Math.max(1, Math.ceil((widest + BAR_LABEL_GAP) / per));
+}
+
+/**
+ * 值标签格式化器：与读数卡同一套格式（率带单位、位数随列声明），否则 0–1 标度的率会以
+ * 小数印在图上。配了标签形制就装，不看此刻印不印——焦点会现出档位没选中的那条。
+ * 步距 > 1 时只印整步与末点。
+ */
+function valueLabelFormatter(
+  format: ColumnFormat,
+  decimals: number | undefined,
+  step: number,
+  count: number,
+) {
+  return (params: { value?: unknown; dataIndex?: number }) => {
+    const index = params.dataIndex ?? 0;
+    if (step > 1 && index !== count - 1 && index % step !== 0) return "";
+    const value = Array.isArray(params.value) ? params.value.at(-1) : params.value;
+    return typeof value === "number" ? formatSeriesValue(value, format, decimals) : "";
+  };
+}
+
+/** 真系列按 legend 对位：密度、格式化器都只写在这几条上，垫层不碰。 */
+function applySeriesDensity(option: MutableOption, model: ChartModel, plotWidth: number): void {
+  const series = asArray(option.series);
+  const categoryOnX = asArray(option.xAxis)[0]?.type === "category";
+  model.legend.forEach((item, i) => {
+    const target = series[i];
+    if (!target) return;
+    const count = item.values.length;
+    const per = count > 0 ? plotWidth / count : plotWidth;
+    if (target.type === "line" && plotWidth > 0) {
+      target.showSymbol = count <= plotWidth / SYMBOL_SPACING;
+    }
+    const label = target.label as MutableOption | undefined;
+    if (!label) return;
+    const widest = item.values.reduce<number>(
       (max, value) =>
-        typeof value === "number"
-          ? Math.max(max, valueLabelPillWidth(formatSeriesValue(value, format, decimals)))
-          : max,
+        value === null
+          ? max
+          : Math.max(
+              max,
+              valueLabelPillWidth(formatSeriesValue(value, item.format, item.decimals)),
+            ),
       0,
     );
-    const step =
-      kind === "line"
-        ? per <= VALUE_LABEL_SPACING
-          ? Math.max(1, Math.ceil(LINE_LABEL_BUDGET / per))
-          : 1
-        : Math.max(1, Math.ceil((widest + BAR_LABEL_GAP) / per));
-    return {
-      label: {
-        formatter: (params: { value?: unknown; dataIndex?: number }) => {
-          const index = params.dataIndex ?? 0;
-          if (step > 1 && index !== count - 1 && index % step !== 0) return "";
-          const value = Array.isArray(params.value) ? params.value.at(-1) : params.value;
-          return typeof value === "number" ? formatSeriesValue(value, format, decimals) : "";
-        },
-      },
+    const step = categoryOnX && plotWidth > 0 ? labelStep(target.type, per, widest) : 1;
+    target.label = {
+      ...label,
+      formatter: valueLabelFormatter(item.format, item.decimals, step, count),
     };
   });
-  if (touched) instance.setOption({ series: patch });
+}
+
+function applyTickDensity(option: MutableOption, plot: Viewport): void {
+  const ticks = (axes: MutableOption[], extent: number) => {
+    for (const axis of axes) {
+      if (axis.type !== "value" || extent <= 0) continue;
+      axis.splitNumber = Math.min(10, Math.max(2, Math.round(extent / TICK_SPACING)));
+    }
+  };
+  ticks(asArray(option.xAxis), plot.width);
+  ticks(asArray(option.yAxis), plot.height);
+}
+
+/* ---------- 注入 ---------- */
+
+/** 值轴刻度：与读数卡同源的格式与位数，率轴按百分比/百分点标单位。 */
+function injectAxisFormatters(option: MutableOption, model: ChartModel): void {
+  const inject = (
+    axes: MutableOption[],
+    formats: (ColumnFormat | null)[] | undefined,
+    decimals: (number | null)[] | undefined,
+  ) => {
+    axes.forEach((axis, index) => {
+      const format = formats?.[index];
+      if (!format || axis.type !== "value") return;
+      const digits = decimals?.[index] ?? undefined;
+      axis.axisLabel = {
+        ...((axis.axisLabel ?? {}) as MutableOption),
+        formatter: (value: number) => formatTick(value, format, digits),
+      };
+    });
+  };
+  inject(asArray(option.xAxis), model.axes.x, model.axis_decimals?.x);
+  inject(asArray(option.yAxis), model.axes.y, model.axis_decimals?.y);
+}
+
+/** 饼图切片总量：呈现算术（与切片占比同级），环心总计与占比读同一份。 */
+export function legendTotal(model: ChartModel): number {
+  return model.legend.reduce((sum, item) => sum + (item.values[0] ?? 0), 0);
 }
 
 /** 环心总计：值为主、总计标签为次，居中常驻。 */
-function injectPieCenterTotal(option: MutableOption, pa: PaChartExtension, dark: boolean): void {
-  const total = pieTotal(option);
-  if (pieData(option).length === 0) return;
-  const format: ColumnFormat = Object.values(pa.series)[0] ?? "number";
-  const decimals = Object.values(pa.decimals ?? {})[0];
+function injectPieCenterTotal(option: MutableOption, model: ChartModel, dark: boolean): void {
+  const lead = model.legend[0];
+  if (!lead) return;
   // 主次靠这两档的深浅差说话：值取 `valueText`（数据注释那一档），标签退到 `axisText`
   // （轴刻度那一档）。反过来接的后果是环心正中那个数比它自己的标签还淡——一张图里
   // 最该被读到的数，读起来像个注脚。
@@ -164,7 +222,7 @@ function injectPieCenterTotal(option: MutableOption, pa: PaChartExtension, dark:
       silent: true,
       z: 10,
       style: {
-        text: `{v|${formatSeriesValue(total, format, decimals)}}\n{l|总计}`,
+        text: `{v|${formatSeriesValue(legendTotal(model), lead.format, lead.decimals)}}\n{l|总计}`,
         rich: {
           v: {
             fontSize: 22,
@@ -226,8 +284,8 @@ function injectAreaGradient(option: MutableOption): void {
   }
 }
 
-/** 亮色 → 暗色：递归替换 option 里的已知颜色字符串。交互期的增量补丁走同一道翻译。 */
-export function applyDarkColors(value: unknown): unknown {
+/** 亮色 → 暗色：递归替换 option 里的已知颜色字符串。 */
+function applyDarkColors(value: unknown): unknown {
   if (typeof value === "string") return CHART_DARK_COLORS[value.toLowerCase()] ?? value;
   if (Array.isArray(value)) return value.map(applyDarkColors);
   if (value && typeof value === "object") {
@@ -238,67 +296,59 @@ export function applyDarkColors(value: unknown): unknown {
   return value;
 }
 
+/* ---------- 派生 ---------- */
+
+export type RenderState = {
+  dark: boolean;
+  plot: keyof typeof PLOT_PADDING;
+  viewport: Viewport;
+  /** 在焦点的图例单元（系列或切片） */
+  focused: number | null;
+  /** 钉住的那一格；钉住期间指针不再跟随鼠标 */
+  pinned: number | null;
+};
+
 /**
- * 场地框相对画布四缘的退让（px）：场景留白 + 该形态自己那一栏框外轴标签。
- * echarts 的 grid 与 DOM 那层 plot 框读同一道算式——两处各算一次，框迟早圈错地方。
- * 值标签的框内余量（`plot_inset`）不在此列：它只缩数据区（见 `gridRect`），框不动。
+ * 焦点落到 option 上：样式段与层序按单元重出（`focusPatch` 出的就是按序号对位的那几项），
+ * 饼图换的是整份调色板。在翻色之前做——焦点色与本色同是亮色原值。
  */
-export function plotRect(
-  chart: ViewChart,
-  plot: keyof typeof PLOT_PADDING,
-): { left: number; right: number; top: number; bottom: number } {
-  const pad = PLOT_PADDING[plot];
-  return { ...pad, left: pad.left + (chart.plot_gutter?.left ?? 0) };
+function applyFocus(option: MutableOption, chart: ViewChart, focused: number | null): void {
+  const patch = focusPatch(chart, focused);
+  if (patch.color) option.color = patch.color;
+  if (patch.series) {
+    const series = asArray(option.series);
+    patch.series.forEach((item, i) => {
+      if (series[i]) Object.assign(series[i], item);
+    });
+  }
 }
 
-/** 数据区 = 场地框 + 框内标签余量：框不因标签开关移动，余量只缩数据区。 */
-export function gridRect(
-  chart: ViewChart,
-  plot: keyof typeof PLOT_PADDING,
-): { left: number; right: number; top: number; bottom: number } {
-  const rect = plotRect(chart, plot);
-  const inset = chart.plot_inset ?? {};
-  return { ...rect, top: rect.top + (inset.top ?? 0), right: rect.right + (inset.right ?? 0) };
-}
-
-/** 数据区实际宽度；依赖横轴空间的密度策略统一从这里取值。 */
-export function plotWidth(
-  chart: ViewChart,
-  plot: keyof typeof PLOT_PADDING,
-  canvasWidth: number,
-): number {
-  const rect = gridRect(chart, plot);
-  return Math.max(0, canvasWidth - rect.left - rect.right);
-}
-
-/** 渲染前补全：克隆 option、注入格式化函数与环心总计、按主题翻色；返回可直接 setOption 的对象 */
-export function prepareOption(
-  chart: ViewChart,
-  dark: boolean,
-  layout?: { plot?: keyof typeof PLOT_PADDING },
-): MutableOption {
-  const base = dark
-    ? (applyDarkColors(chart.option) as MutableOption)
-    : (structuredClone(chart.option) as MutableOption);
-  // 动画契约：option 保留静态形状，仅允许交互态透明度过渡。
-  // 形状不做动画、只保留悬停态的透明度过渡（否则明暗瞬时跳变成闪烁）。
-  // 系统开了减动效时在渲染端整体关闭。
+/**
+ * 一次派生出这张图此刻该长的样子。顺序只有一条硬约束：翻色要在注入函数之前——
+ * 翻色递归走字面值，函数与渐变对象走不进去；其余各步互不相干。
+ */
+export function renderOption(chart: ViewChart, state: RenderState): MutableOption {
+  const option = structuredClone(chart.option) as MutableOption;
+  const model = chart.model;
+  applyFocus(option, chart, state.focused);
+  if (option.grid)
+    option.grid = { ...(option.grid as MutableOption), ...gridRect(chart, state.plot) };
+  const plot = plotSize(chart, state.plot, state.viewport);
+  applySeriesDensity(option, model, plot.width);
+  applyTickDensity(option, plot);
+  if (model.pointer === "axis") {
+    option.tooltip = {
+      ...((option.tooltip ?? {}) as MutableOption),
+      triggerOn: state.pinned === null ? "mousemove|click" : "none",
+    };
+  }
+  // 系统开了减动效时整体关闭；option 本身的动画契约只留交互态那一点过渡
   if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    base.animation = false;
+    option.animation = false;
   }
-  // 编译期只知道 compact 那一档（宿主身份那时还不存在）；宿主要换档就**按名取表**，
-  // 不在这里另写数字——否则 grid() 与本处各持一份留白，改哪边都只改对一半。
-
-  if (layout?.plot && base.grid) {
-    const rect = gridRect(chart, layout.plot);
-    for (const g of asArray(base.grid)) Object.assign(g, rect);
-  }
-  const pa = base.pa as PaChartExtension | undefined;
-  delete base.pa;
-  if (!pa) return base;
-  injectAxisFormatters(base, pa);
-  injectValueLabelFormatters(base, pa);
-  injectAreaGradient(base);
-  if (chart.form === "pie") injectPieCenterTotal(base, pa, dark);
-  return base;
+  const themed = (state.dark ? applyDarkColors(option) : option) as MutableOption;
+  injectAxisFormatters(themed, model);
+  injectAreaGradient(themed);
+  if (chart.form === "pie") injectPieCenterTotal(themed, model, state.dark);
+  return themed;
 }

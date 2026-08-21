@@ -4,7 +4,7 @@ import {
   ArrowUpDownIcon,
   ArrowUpNarrowWideIcon,
   ChevronsUpDownIcon,
-  LayersIcon,
+  TagIcon,
   ListFilterIcon,
   MinusIcon,
   PlusIcon,
@@ -27,13 +27,18 @@ import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/hint";
 import { Input } from "@/components/ui/input";
 import {
-  INSPECTOR_MEMBER_INSET_CLASS,
+  INSPECTOR_ROW_INDENT_CLASS,
   INSPECTOR_SECTION_CLASS,
-  InspectorMemberRow,
+  InspectorBody,
+  InspectorRow,
   InspectorSection,
-  InspectorSettingTitle,
 } from "@/components/ui/inspector";
-import { Popover, PopoverPopup, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverPopup,
+  PopoverSettingTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -73,7 +78,7 @@ const MEMBER_CONTENT_CLASS = "px-0 pt-0 md:px-0";
  * 行间的缝走 `gap-y`，不写在行上：行已经不是一个盒子了。
  */
 const BREAKDOWN_CONTENT_CLASS = cn(
-  INSPECTOR_MEMBER_INSET_CLASS,
+  INSPECTOR_ROW_INDENT_CLASS,
   "grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-y-1.5 px-0 pl-2 md:px-0 md:pl-2",
 );
 
@@ -214,26 +219,24 @@ function CalculationRow({
     onChange({ ...merged, id: calculationId(merged.measure, merged.category_dimension) });
   };
   return (
-    <div className="flex items-center gap-0.5" data-slot="calculation-row">
-      <div
-        className={cn(INSPECTOR_MEMBER_INSET_CLASS, "flex min-h-8 min-w-0 grow items-center px-2")}
-      >
-        <span
-          className="min-w-0 truncate text-sm leading-5 text-pa-muted"
-          title={calculation.title}
-        >
-          {calculation.title}
-        </span>
-      </div>
+    <InspectorRow
+      actions={
+        <RowAction
+          icon={<MinusIcon />}
+          label={`移除 ${calculation.title}`}
+          onClick={onRemove}
+          tip="移除这个占比"
+        />
+      }
+      indent
+      label={calculation.title}
+    >
       <Popover>
         <PopoverTrigger
           render={
             <button
               aria-label={`${calculation.title}怎么算：${measureTitle}按${dimensionTitle}的占比`}
-              className={cn(
-                selectTriggerVariants({ size: "sm" }),
-                "mr-0.5 w-auto min-w-0 max-w-[60%] text-pa-muted",
-              )}
+              className={cn(selectTriggerVariants({ size: "sm" }), "w-auto min-w-0 text-pa-muted")}
               type="button"
             />
           }
@@ -243,7 +246,7 @@ function CalculationRow({
           <ChevronsUpDownIcon className={selectTriggerIconClassName} />
         </PopoverTrigger>
         <PopoverPopup align="end" className="w-[264px] p-1.5" data-slot="calculation-settings">
-          <InspectorSettingTitle>算哪个指标的占比</InspectorSettingTitle>
+          <PopoverSettingTitle>算哪个指标的占比</PopoverSettingTitle>
           <div className="px-2 pb-2">
             <Select
               onValueChange={(value) => value && commit({ measure: value })}
@@ -261,7 +264,7 @@ function CalculationRow({
               </SelectPopup>
             </Select>
           </div>
-          <InspectorSettingTitle>按哪个分组算</InspectorSettingTitle>
+          <PopoverSettingTitle>按哪个分组算</PopoverSettingTitle>
           <div className="px-2 pb-2">
             <Select
               onValueChange={(value) => {
@@ -295,7 +298,7 @@ function CalculationRow({
           <div className="-mx-1.5 my-3">
             <Separator />
           </div>
-          <InspectorSettingTitle>名称</InspectorSettingTitle>
+          <PopoverSettingTitle>名称</PopoverSettingTitle>
           <div className="px-2 pb-0.5">
             <Input
               aria-label={`${calculation.title}的名称`}
@@ -315,13 +318,7 @@ function CalculationRow({
           </div>
         </PopoverPopup>
       </Popover>
-      <RowAction
-        icon={<MinusIcon />}
-        label={`移除 ${calculation.title}`}
-        onClick={onRemove}
-        tip="移除这个占比"
-      />
-    </div>
+    </InspectorRow>
   );
 }
 
@@ -440,7 +437,7 @@ function BreakdownField({
         </PopoverTrigger>
 
         <PopoverPopup align="end" className="w-[248px] p-1.5" data-slot="breakdown-range">
-          <InspectorSettingTitle>排序依据</InspectorSettingTitle>
+          <PopoverSettingTitle>排序依据</PopoverSettingTitle>
           <div className="flex items-center gap-1.5 px-2 pb-2">
             <ToggleGroup
               bordered
@@ -504,9 +501,9 @@ function BreakdownField({
           <div className="-mx-1.5 my-3">
             <Separator />
           </div>
-          <InspectorSettingTitle blocked={measures.length ? undefined : NO_MEASURE_REASON}>
+          <PopoverSettingTitle blocked={measures.length ? undefined : NO_MEASURE_REASON}>
             最大项数
-          </InspectorSettingTitle>
+          </PopoverSettingTitle>
           <div className="px-2 pb-0.5">
             <Input
               aria-label={`${label}最大项数`}
@@ -592,7 +589,7 @@ export function ReportQueryRail({
         data-slot="report-editor-inspector"
         data-testid="report-query-rail"
       >
-        <div className="min-h-0 flex-1 overflow-y-auto pb-8">
+        <InspectorBody>
           {leading}
           <section className={INSPECTOR_SECTION_CLASS}>
             <p className="px-2 text-sm/4.5 text-pa-muted">
@@ -600,7 +597,7 @@ export function ReportQueryRail({
             </p>
           </section>
           {children}
-        </div>
+        </InspectorBody>
       </div>
     );
   }
@@ -716,7 +713,8 @@ export function ReportQueryRail({
       {measures.length || calculation ? (
         <>
           {measures.map((member) => (
-            <InspectorMemberRow
+            <InspectorRow
+              indent
               actions={
                 <RowAction
                   icon={<MinusIcon />}
@@ -760,7 +758,7 @@ export function ReportQueryRail({
         />
       }
       contentClassName={BREAKDOWN_CONTENT_CLASS}
-      icon={<LayersIcon />}
+      icon={<TagIcon />}
       key="dimensions"
       title="分组"
     >
@@ -793,11 +791,11 @@ export function ReportQueryRail({
       data-slot="report-editor-inspector"
       data-testid="report-query-rail"
     >
-      <div className="min-h-0 flex-1 overflow-y-auto pb-8">
+      <InspectorBody>
         {leading}
         {steps}
         {children}
-      </div>
+      </InspectorBody>
 
       <div className="shrink-0 border-t border-pa-line bg-pa-bg px-3 py-3 md:px-2.5">
         <Button

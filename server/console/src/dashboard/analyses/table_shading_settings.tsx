@@ -14,8 +14,12 @@ import { Button } from "@/components/ui/button";
 import { ColorPill } from "@/components/ui/color-pill";
 import { ColorScale, ColorScaleStop, ColorScaleTick } from "@/components/ui/color-scale";
 import { Input } from "@/components/ui/input";
-import { InspectorSettingTitle } from "@/components/ui/inspector";
-import { Popover, PopoverPopup, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverPopup,
+  PopoverSettingTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -88,7 +92,7 @@ export function TableShadingSettings({
         </span>
       </PopoverTrigger>
       <PopoverPopup align="end" className="w-[248px] p-1.5" data-slot="table-shading-settings">
-        <InspectorSettingTitle>颜色</InspectorSettingTitle>
+        <PopoverSettingTitle>颜色</PopoverSettingTitle>
         <div className="flex justify-center gap-2 py-2">
           <button
             aria-label="单色深浅"
@@ -151,7 +155,7 @@ export function TableShadingSettings({
         <div className="-mx-1.5 my-3">
           <Separator />
         </div>
-        <InspectorSettingTitle>阈值</InspectorSettingTitle>
+        <PopoverSettingTitle>阈值</PopoverSettingTitle>
         <div className="mx-4 mt-2 mb-4 flex items-center gap-2">
           <Tooltip>
             <TooltipTrigger

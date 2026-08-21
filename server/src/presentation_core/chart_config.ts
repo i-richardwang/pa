@@ -1,10 +1,16 @@
 /**
  * 声明式呈现编译：在完整行上确定性编译表格、KPI 或 Agent 显式声明的图表。
  * 服务端产出可序列化的完整呈现块并在此完成选型，浏览器只布局和渲染。
- * 函数不可序列化，数值轴与值标签的格式化由渲染端按 option.pa 注入。
- * 视觉常量取自 design_tokens.ts，
- * 序列化 option 恒为亮色原值，暗色由渲染端按 CHART_DARK_COLORS 映射翻转。
- * 本文件只做数据编排与样式声明，零度量算术（engine_boundary 守护）。
+ *
+ * 图表交付两样东西：echarts `option`（绘图指令）与 `model`（呈现模型——渲染端要**读**的
+ * 每一个数：类目、图例单元及其取值/格式/色、占比、最新桶、指针模型、下钻投影）。
+ * 系列在编译前一次解析成 {形态, 色, 轴位}（缺省出自图型，显式声明按来源列覆盖），
+ * option 的每一段样式都按解析结果一次写就。
+ * 样式不进数据格：`series.data` 恒为裸数值，末点记号走 markPoint、饼图色走调色板。
+ *
+ * 函数不可序列化，数值轴与值标签的格式化由渲染端按 `model` 注入；四缘留白按宿主场景档位
+ * 由渲染端算定。视觉常量取自 design_tokens.ts，序列化 option 恒为亮色原值，暗色由渲染端按
+ * CHART_DARK_COLORS 映射翻转。本文件只做数据编排与样式声明，零度量算术（engine_boundary 守护）。
  */
 import {
   canCompileKpi,
@@ -53,60 +59,49 @@ export type AxisDecimals = {
   y?: (number | null)[];
 };
 
-/** option.pa：本产品的非样式扩展块，承载不可序列化格式化所需的声明 */
-export type PaChartExtension = {
-  /** 系列名 → 值格式（读数卡与值标签的数值按此格式化） */
-  series: Record<string, ColumnFormat>;
-  /** 系列名 → 模型声明的小数位；未声明的系列不列，走呈现层默认 */
-  decimals?: Record<string, number>;
-  /** 值轴刻度格式（按轴索引对位；null = 默认数值） */
-  axes: AxisFormats;
-  /** 值轴刻度小数位；只在有系列声明过位数时下发 */
-  axis_decimals?: AxisDecimals;
-  /** 结构占比注释：分类值 → 占比（0–1）；读数卡随附一行占比说明 */
-  share?: { title: string; values: Record<string, number | null> };
+/**
+ * 图例单元：画面上可被聚焦、可被逐行读出的那一个东西——笛卡尔图是系列，饼图是切片。
+ * 取值按类目序对位（`values[i]` 是第 i 个类目上的读数；饼图一片一个值，只有 `values[0]`）。
+ */
+export type ChartLegendItem = {
+  name: string;
+  color: string;
+  format: ColumnFormat;
+  /** 模型声明的小数位；未声明缺席，走呈现层默认 */
+  decimals?: number;
+  values: (number | null)[];
   /**
-   * 图例清单（图例是 HTML 而非 echarts legend 组件）：渲染端据此画图例行、
-   * 取读数卡行内标记色（空心圆点把 itemStyle.color 让给了填充色，params.color 不可用）。
-   * 折线/条形按系列对位，饼图按切片对位；单系列也交付（标记色仍需要），渲染端决定是否显示。
-   *
-   * `latest` 是该系列在**最后一个时间桶**上的取值，只随时间趋势下发：窄面读不到悬停浮层，
-   * 图例是画面上唯一还剩的读数位。它取的是画面上真实存在的那一个点，不是另算的合计——
-   * 哪一桶由 `legend_latest_label` 挑明，两者恒同进同出。
+   * 本单元所对照的那个单元的序号（同期叠加里各对照期都指向主期）。读数卡据此附差值；
+   * 「谁减谁」在编排期立好，呈现层不猜哪条是主期。
    */
-  legend?: {
-    name: string;
-    color: string;
-    latest?: number | null;
-    /**
-     * 本系列所对照的那条系列的序号（同期叠加里各对照期都指向主期）。读数卡据此在行上
-     * 附一枚差值芯片；无对照关系的系列不列此字段。
-     */
-    baseline?: number;
-  }[];
-  /** `legend[].latest` 所属的时间桶名（末桶的横轴标签）；无 latest 时缺席。 */
-  legend_latest_label?: string;
-  /** ECharts seriesIndex/dataIndex → 原始结果格；只在浏览器交互通道消费。 */
-  records?: { points: ({ row: number; column: string } | null)[][] };
+  baseline?: number;
 };
 
-function recordProjectionPoints(
-  rows: ChartRow[],
-  sourceRows: ChartSourceRow[],
-  series: SeriesDef[],
-) {
-  return {
-    points: series.map((item) =>
-      rows.map((_, rowIndex) => {
-        const source = sourceRows[rowIndex];
-        const value = source?.series?.[item.key] ?? source?.row;
-        return typeof value === "number" && item.column
-          ? { row: value, column: item.column }
-          : null;
-      }),
-    ),
-  };
-}
+/**
+ * 呈现模型：与 echarts `option` 并列交付、供渲染端**读**的那份数据。
+ *
+ * option 只是绘图指令——它里面的数字是画出来给眼睛看的，不是给程序读回来的；读数卡、
+ * 排行版式、图例读数、饼图环心总计要的每一个数都在这里，渲染端不从 option 里反解任何东西。
+ */
+export type ChartModel = {
+  /** 类目名：笛卡尔图是类目轴的顺序，饼图是度量名那一个「桶」 */
+  categories: string[];
+  legend: ChartLegendItem[];
+  axes: AxisFormats;
+  /** 值轴刻度小数位；只在有单元声明过位数时下发 */
+  axis_decimals?: AxisDecimals;
+  /** 结构占比注释：按类目序对位；读数卡随附一行占比说明 */
+  share?: { title: string; values: (number | null)[] };
+  /**
+   * 「最新」落在哪个类目：每个单元都有值的最后一个时间桶。图例读数与末点实心标记同出此处——
+   * 一个标签只交代得了一个时间断面，凑不齐就整个不发。只随时间趋势下发。
+   */
+  latest?: { index: number; label: string };
+  /** 读数索引由谁报：整列指针（类目轴）或逐项进出（饼图无类目轴） */
+  pointer: "axis" | "item";
+  /** legendIndex × categoryIndex → 原始结果格；只在浏览器交互通道消费 */
+  records?: { points: ({ row: number; column: string } | null)[][] };
+};
 
 export type ViewChartForm = "line" | "bar" | "pie";
 
@@ -121,7 +116,9 @@ export type ViewChart = {
   plot_inset?: { top?: number; right?: number };
 
   layout?: "rank";
+  /** echarts 绘图指令；排行版式不落 echarts，此处为空对象 */
   option: Record<string, unknown>;
+  model: ChartModel;
 };
 
 /** 服务端确定性编译产物；表格恒在册，图表只是同一结果的可选首选视图。 */
@@ -185,7 +182,6 @@ export const SERIES_COLORS: readonly string[] = CHART_SERIES.map((pair) => pair.
 const GRID_LINE = CHART_CHROME.gridLine.light;
 const GRID_EDGE = CHART_CHROME.gridEdge.light;
 const AXIS_TEXT = CHART_CHROME.axisText.light;
-const VALUE_TEXT = CHART_CHROME.valueText.light;
 const LABEL_CHIP = CHART_CHROME.labelChip.light;
 const CHART_SURFACE = CHART_CHROME.surface.light;
 const POINTER_BAND = CHART_CHROME.pointerBand.light;
@@ -262,21 +258,6 @@ function seriesColorAt(index: number): string {
   return SERIES_COLORS[index % SERIES_COLORS.length];
 }
 
-/** pa.legend：读数条与读数卡标记的色源（两者的件本体都在渲染端） */
-function legendItems(
-  names: string[],
-  colorAt: (i: number) => string,
-  latest?: (number | null)[],
-  baselines?: (number | null)[],
-) {
-  return names.map((name, i) => ({
-    name,
-    color: colorAt(i),
-    ...(latest ? { latest: latest[i] ?? null } : {}),
-    ...(baselines?.[i] != null ? { baseline: baselines[i] as number } : {}),
-  }));
-}
-
 const LABEL_COLUMN = { max: 160, gap: 8 } as const;
 
 function labelColumnWidth(labels: string[]): number {
@@ -289,16 +270,16 @@ function labelColumnWidth(labels: string[]): number {
 /**
  * 失焦是一次取色。
  *
- * 「谁在焦点」只有图例悬停一个来源，两个消费点——图例上的色点、画布上的系列——都按这一道
- * 式子取色，故两处不可能各自置灰一半。绘图区内的悬停只出读数（判据见 ui_spec「图表画布」节），
- * 而 echarts 自带的 emphasis/blur 恒由鼠标命中图形触发，故编译期不声明这两个状态。
+ * 「谁在焦点」只有一个状态，两个消费点——图例上的色点、画布上的系列——都按这一道式子取色，
+ * 故两处不可能各自置灰一半。绘图区内的悬停只出读数（判据见 ui_spec「图表画布」节）：
+ * echarts 的 blur/focus 状态机不声明；`emphasis` 只用来把指针所在那一列的点填实。
  */
 export function focusedColor(color: string, index: number, focused: number | null): string {
   return focused === null || focused === index ? color : BLURRED;
 }
 
-/** 系列色写得出的几个段：线、面、柱面与激活态都在其中。 */
-const STYLE_KEYS = ["lineStyle", "itemStyle", "areaStyle", "emphasis"] as const;
+/** 系列色写得出的几个段：线、面、柱面、激活态与末点标记都在其中。 */
+const STYLE_KEYS = ["lineStyle", "itemStyle", "areaStyle", "emphasis", "markPoint"] as const;
 
 function recolor<T>(node: T, from: string, to: string): T {
   if (typeof node === "string") return (node === from ? to : node) as T;
@@ -310,26 +291,23 @@ function recolor<T>(node: T, from: string, to: string): T {
 }
 
 /**
- * 换焦点下发的补丁：只重出样式段，`data` 不动——重发数据要把静态形状连带重画一遍。
- * 段内凡是这条系列的本色一律换成取色结果，就地认色，不必逐形态各记一份「色写在哪几处」。
- * 饼图的色写在切片自己身上，故按切片重出一份数据。
+ * 换焦点要改的那几样，按单元出一份：只重出样式段与层序，`data` 不动。
+ * 段内凡是这个单元的本色一律换成取色结果——就地认色，不必逐形态各记一份「色写在哪几处」；
+ * 这一招成立的前提是本色只以字面值出现，故系列在编译期一次建成、不回补（见 `resolveSeries`）。
+ * 饼图的色在调色板上，换焦点即换一份调色板。
  */
 export function focusPatch(
   chart: ViewChart,
   focused: number | null,
-): { series: Record<string, unknown>[] } {
-  const pa = chart.option.pa as PaChartExtension | undefined;
-  const items = pa?.legend ?? [];
+): { series?: Record<string, unknown>[]; color?: string[] } {
+  const items = chart.model.legend;
+  if (chart.model.pointer === "item") {
+    return { color: items.map((item, i) => focusedColor(item.color, i, focused)) };
+  }
   const series = (Array.isArray(chart.option.series) ? chart.option.series : []) as Record<
     string,
     unknown
   >[];
-  if (chart.form === "pie") {
-    const data = ((series[0]?.data ?? []) as Record<string, unknown>[]).map((slice, i) =>
-      recolor(slice, items[i]?.color ?? "", focusedColor(items[i]?.color ?? "", i, focused)),
-    );
-    return { series: [{ data }] };
-  }
   return {
     series: items.map((item, i) => {
       const shown = focusedColor(item.color, i, focused);
@@ -341,7 +319,11 @@ export function focusPatch(
         ]),
       );
       const label = source.label as { show?: boolean } | undefined;
-      return label ? { ...styles, label: { show: valueLabelShown(label, i, focused) } } : styles;
+      return {
+        ...styles,
+        z: i === focused ? SERIES_Z.focused : seriesZ(i),
+        ...(label ? { label: { show: valueLabelShown(label, i, focused) } } : {}),
+      };
     }),
   };
 }
@@ -365,12 +347,13 @@ export const haloZ = (index: number) => 2 * index + 1;
 
 /**
  * 折线的垫层：同一份数据、同一条路径，只画成 4px 的承载面色，压在本色线正下方。
- * 它不参与任何交互（`silent`），也不进读数卡——读数卡按 `pa.legend` 的条数取前几条系列。
+ * 垫层一律追加在真系列之后，真系列的序号因此不动——`model.legend` 与 option.series 按序号对位，
+ * 真系列的条数以 `model.legend.length` 为准。它不参与任何交互（`silent`），也不进读数卡。
  */
-function lineHalo(source: Record<string, unknown>, index: number) {
+function lineHalo(values: (number | null)[], index: number) {
   return {
     type: "line",
-    data: source.data,
+    data: values,
     z: haloZ(index),
     silent: true,
     showSymbol: false,
@@ -380,28 +363,31 @@ function lineHalo(source: Record<string, unknown>, index: number) {
 }
 
 /**
- * 给折线补垫层：垫层一律追加在真系列之后，真系列的序号因此不动——
- * `pa.legend`、`pa.records.points`、显式覆盖都是按序号对位的。
+ * 末点实心标记：「最新」那一桶上压一颗本色实心圆。它是样式不是数据，故走 markPoint——
+ * `series.data` 恒为裸数值，读数、垫层、焦点换色都不必认识「末点长得不一样」这个特例。
+ * 颜色显式写在自己的 itemStyle 上：ECharts 的继承取系列级 `color`，而焦点换色只重出样式段。
  */
-function withLineHalo(series: Record<string, unknown>[]): Record<string, unknown>[] {
-  const halos = series.flatMap((s, i) => (s.type === "line" ? [lineHalo(s, i)] : []));
-  return [...series.map((s, i) => ({ ...s, z: seriesZ(i) })), ...halos];
+function latestMarkPoint(values: (number | null)[], latest: number | undefined, color: string) {
+  const value = latest === undefined ? null : values[latest];
+  if (value === null || value === undefined) return {};
+  return {
+    markPoint: {
+      silent: true,
+      symbol: "circle",
+      symbolSize: 8,
+      label: { show: false },
+      emphasis: { label: { show: false } },
+      itemStyle: { color, borderColor: CHART_SURFACE, borderWidth: 1 },
+      data: [{ coord: [latest, value] }],
+    },
+  };
 }
 
-function withLatestMarker(values: (number | null)[], color: string) {
-  const last = values.length - 1;
-  if (last < 0 || values[last] === null) return values;
-  return values.map((value, i) =>
-    i === last
-      ? {
-          value,
-          symbolSize: 8,
-          itemStyle: { color, borderColor: CHART_SURFACE, borderWidth: 1, opacity: 1 },
-        }
-      : value,
-  );
-}
-
+/**
+ * 折线：空心圆点，指针所在那一列的点由 emphasis 填实。`showSymbol` 是密度开关——
+ * 关掉后 echarts 只在指针命中时现出那一颗，这正是「密集时藏点、悬停仍读得出」要的行为，
+ * 渲染端按实宽翻这一位即可，不必另写透明度。
+ */
 function lineSeriesPreferences(color: string, multi: boolean) {
   return {
     color,
@@ -413,9 +399,8 @@ function lineSeriesPreferences(color: string, multi: boolean) {
     ...(multi ? {} : { areaStyle: { color } }),
     emphasis: {
       scale: 1.35,
-
       lineStyle: { color },
-      itemStyle: { color, borderColor: CHART_SURFACE, borderWidth: 1, opacity: 1 },
+      itemStyle: { color, borderColor: CHART_SURFACE, borderWidth: 1 },
     },
   };
 }
@@ -449,21 +434,14 @@ function barSeriesPreferences(color: string) {
  * 该在的一列，并按 `updateAxisPointer` 报出落在哪一格。饼图没有类目轴也就没有指针，
  * 索引由逐项的 mouseover 报出，故整个组件关掉。
  */
-export type PointerForm = "band" | "line" | "item";
-
-function axisPointer(form: Exclude<PointerForm, "item">) {
-  return form === "band"
-    ? { type: "shadow", shadowStyle: { color: POINTER_BAND } }
-    : { type: "line", lineStyle: { color: POINTER_LINE, type: "dashed", width: 1 } };
-}
-
-function pointerOption(form: PointerForm) {
-  if (form === "item") return { show: false };
+function pointerOption(hasBar: boolean) {
   return {
     show: true,
     showContent: false,
     trigger: "axis",
-    axisPointer: axisPointer(form),
+    axisPointer: hasBar
+      ? { type: "shadow", shadowStyle: { color: POINTER_BAND } }
+      : { type: "line", lineStyle: { color: POINTER_LINE, type: "dashed", width: 1 } },
   };
 }
 
@@ -471,11 +449,6 @@ function pointerOption(form: PointerForm) {
 function seriesIndexOf(series: { key: string }[], key: string): number | null {
   const index = series.findIndex((item) => item.key === key);
   return index < 0 ? null : index;
-}
-
-/** 指针形出自「图里有没有柱」这一件事实，故恒由已编译的 series 现算，不另存一份 */
-function pointerFormOf(series: { type?: unknown }[]): Exclude<PointerForm, "item"> {
-  return series.some((s) => s.type === "bar") ? "band" : "line";
 }
 
 export const PLOT_PADDING = {
@@ -520,179 +493,117 @@ export function chartMarkerClass(variant: "row" | "lead" = "row"): string {
   return `${drop} size-2 shrink-0 self-start rounded-full pointer-coarse:size-3`;
 }
 
-/**
- * plot 场地。`containLabel` 恒关，框也不由 grid 画（见 `PLOT_FRAME`）：绘图区四缘必须
- * 在渲染前就算得出来，DOM 那层框才对得上。开着 containLabel 就等于把四缘交给 echarts
- * 量标签，量出来的数只有画完才知道。要为标签留栏的形态自己给 `plot_gutter`。
- */
-function grid(gutter: { left?: number } = {}) {
-  const pad = PLOT_PADDING.compact;
-  return { containLabel: false, ...pad, left: pad.left + (gutter.left ?? 0) };
-}
-
 /* ---------- option 构建 ---------- */
 
 export const CHART_HEIGHT = { cartesian: 300, pie: 320 } as const;
 
-function seriesFormats(series: SeriesDef[]): Record<string, ColumnFormat> {
-  return Object.fromEntries(series.map((s) => [s.name, s.format]));
+function cellNumber(value: string | number | null | undefined): number | null {
+  return value === undefined ? null : toNumber(value);
 }
 
-function seriesDecimals(series: { name: string; decimals?: number }[]) {
-  const entries = series.flatMap((s) => (s.decimals === undefined ? [] : [[s.name, s.decimals]]));
-  return entries.length ? { decimals: Object.fromEntries(entries) } : {};
-}
+type Mark = "line" | "bar";
 
-/** 一根轴上的系列若声明了位数，刻度随它；同轴多系列位数不一时取最长的那档 */
-function axisDecimalsOf(...groups: SeriesDef[][]): (number | null)[] {
-  return groups.map((group) => {
-    const declared = group.flatMap((s) => (s.decimals === undefined ? [] : [s.decimals]));
-    return declared.length ? Math.max(...declared) : null;
+/** 一条系列画出来要知道的全部：形态出自量纲、色出自色板，都可被显式声明覆盖——但只解析这一次。 */
+type ResolvedSeries = Omit<SeriesDef, "mark"> & {
+  mark: Mark;
+  color: string;
+  axis: number;
+  values: (number | null)[];
+};
+
+/**
+ * 系列解析：缺省形态/轴位由图型给，显式声明（`decl.display`）按来源列覆盖，色缺省按序取板。
+ * 解析在建 option 之前完成，option 里的每一段样式都按解析结果一次写就——没有「先按缺省建好
+ * 再改」的第二遍：第二遍改不到的那几段（面积色、激活态色、末点）就是换色后的残影。
+ */
+function resolveSeries(
+  series: SeriesDef[],
+  rows: ChartRow[],
+  display: Record<string, SeriesDisplay> | undefined,
+  defaults: (s: SeriesDef) => { mark: Mark; axis: number },
+): ResolvedSeries[] {
+  return series.map((s, i) => {
+    const intent = (s.column && display?.[s.column]) || {};
+    const base = defaults(s);
+    return {
+      ...s,
+      mark: intent.type ?? base.mark,
+      axis: intent.yAxis === undefined ? base.axis : intent.yAxis === "right" ? 1 : 0,
+      color: intent.color ?? seriesColorAt(i),
+      values: rows.map((row) => cellNumber(row[s.key])),
+    };
   });
+}
+
+/** 值轴按系列落在哪根轴上算出来：轴的格式取落在它上面的第一条，位数取最长的那档。 */
+function valueAxes(series: ResolvedSeries[]) {
+  const count = Math.max(1, ...series.map((s) => s.axis + 1));
+  const axes = Array.from({ length: count }, (_, axis) => {
+    const on = series.filter((s) => s.axis === axis);
+    const declared = on.flatMap((s) => (s.decimals === undefined ? [] : [s.decimals]));
+    return {
+      format: on[0]?.format ?? null,
+      decimals: declared.length ? Math.max(...declared) : null,
+    };
+  });
+  return {
+    formats: axes.map((a) => a.format),
+    decimals: axes.map((a) => a.decimals),
+  };
 }
 
 function axisDecimals(key: "x" | "y", values: (number | null)[]) {
   return values.some((v) => v !== null) ? { axis_decimals: { [key]: values } } : {};
 }
 
-function cellNumber(value: string | number | null | undefined): number | null {
-  return value === undefined ? null : toNumber(value);
+function legendOf(series: ResolvedSeries[], all: SeriesDef[]): ChartLegendItem[] {
+  return series.map((s) => ({
+    name: s.name,
+    color: s.color,
+    format: s.format,
+    ...(s.decimals === undefined ? {} : { decimals: s.decimals }),
+    values: s.values,
+    ...(s.baselineKey && seriesIndexOf(all, s.baselineKey) !== null
+      ? { baseline: seriesIndexOf(all, s.baselineKey) as number }
+      : {}),
+  }));
 }
 
-function applyDisplay(
-  option: Record<string, unknown>,
-  display: Record<string, SeriesDisplay>,
-  series: SeriesDef[],
-): void {
-  const optionSeries = option.series as Record<string, unknown>[] | undefined;
-  if (!Array.isArray(optionSeries)) return;
-  const pa = option.pa as PaChartExtension | undefined;
-  const multi = optionSeries.length > 1;
-
-  series.forEach((definition, index) => {
-    const target = optionSeries[index];
-    const intent = definition.column ? display[definition.column] : undefined;
-    if (!target || !intent) return;
-    const color =
-      intent.color ?? (typeof target.color === "string" ? target.color : seriesColorAt(index));
-
-    if (intent.type === "bar") {
-      Object.assign(target, { type: "bar" }, barSeriesPreferences(color));
-      delete target.showSymbol;
-      delete target.symbol;
-      delete target.symbolSize;
-      delete target.lineStyle;
-      delete target.areaStyle;
-    } else if (intent.type === "line") {
-      Object.assign(target, { type: "line" }, lineSeriesPreferences(color, multi));
-    } else if (intent.color !== undefined) {
-      target.color = color;
-      if (target.type === "line") {
-        target.lineStyle = {
-          ...((target.lineStyle as Record<string, unknown> | undefined) ?? {}),
-          color,
-        };
-        target.itemStyle = {
-          ...((target.itemStyle as Record<string, unknown> | undefined) ?? {}),
-          borderColor: color,
-        };
-      } else {
-        target.itemStyle = {
-          ...((target.itemStyle as Record<string, unknown> | undefined) ?? {}),
-          color,
-        };
-      }
-    }
-    if (pa?.legend?.[index]) pa.legend[index].color = color;
-    if (intent.yAxis !== undefined) {
-      target.yAxisIndex = intent.yAxis === "right" ? 1 : 0;
-      if (intent.yAxis === "right") {
-        const currentAxes = Array.isArray(option.yAxis)
-          ? [...option.yAxis]
-          : option.yAxis
-            ? [option.yAxis]
-            : [];
-        while (currentAxes.length < 2) {
-          currentAxes.push({
-            type: "value",
-            splitNumber: VALUE_SPLIT,
-            axisLabel: insideValueLabel("right"),
-            axisLine: axisLineStyle,
-            splitLine: { show: false },
-          });
-        }
-        option.yAxis = currentAxes;
-        if (pa) {
-          const yFormats = [...(pa.axes.y ?? [])];
-          while (yFormats.length < 2) yFormats.push(definition.format);
-          pa.axes.y = yFormats;
-        }
-      }
-    }
-  });
-
-  // 指针形取决于覆盖后的系列类型，避免纯折线仍使用列高亮带。
-  const pointer = option.tooltip as Record<string, unknown> | undefined;
-  if (pointer?.trigger === "axis") {
-    pointer.axisPointer = axisPointer(pointerFormOf(optionSeries));
-  }
+function recordPoints(rows: ChartRow[], sourceRows: ChartSourceRow[], series: SeriesDef[]) {
+  return {
+    points: series.map((item) =>
+      rows.map((_, rowIndex) => {
+        const source = sourceRows[rowIndex];
+        const value = source?.series?.[item.key] ?? source?.row;
+        return typeof value === "number" && item.column
+          ? { row: value, column: item.column }
+          : null;
+      }),
+    ),
+  };
 }
 
 /**
- * 图级数值标签：main=仅第一主系列，all=全部系列。真系列数以 pa.legend 为准，
- * 垫层与标记系列不印数；密度守卫在渲染层按实宽收敛（见 chart_render）。
- * 形制是浅灰底片（高 18、圆角 4、承载面色描边）+ 14px 系列色数字——系列色对底片的
- * 对比度整套色板两个主题都过 1.45，由 design_tokens 测试看住，故不带运行时调暗环节。
- * 标签的场地余量留在框内：grid 缩进、框不动，纵向留 30、横向按最宽底片实测留右栏。
- * 排行版式的值恒以独立一列印出，条上不贴标签。
+ * 图级数值标签：main=仅第一主系列，all=全部系列。每条真系列都配齐标签形制，`show` 才是开关：
+ * 焦点期间「只有焦点系列印数」要把档位没选中的那些也现出来，形制现搭会与编译期这份长不一样。
+ * 形制是浅灰底片（高 18、圆角 4、承载面色描边）+ 14px 系列色数字——系列色对底片的对比度
+ * 整套色板两个主题都过 1.45，由 design_tokens 测试看住，故不带运行时调暗环节。
+ * 堆叠段的外侧是相邻段不是空场地：标签进段内；平铺条才朝值轴末端画。
  */
-function applyValueLabels(
-  chart: ViewChart,
-  mode: "main" | "all",
-  orientation: "vertical" | "horizontal" = "vertical",
-): void {
-  if (chart.layout === "rank") return;
-  const option = chart.option;
-  const optionSeries = option.series as Record<string, unknown>[] | undefined;
-  if (!Array.isArray(optionSeries)) return;
-  const pa = option.pa as PaChartExtension | undefined;
-  const count = pa?.legend?.length ?? optionSeries.length;
-  // 每条真系列都配齐标签形制，`show` 才是那个开关：焦点期间「只有焦点系列印数」要把
-  // 档位没选中的那些也现出来，形制现搭会与编译期这份长不一样（见 focusPatch）。
-  const labeled = optionSeries.slice(0, count);
-  labeled.forEach((target, index) => {
-    target.label = {
-      show: mode === "all" || index === 0,
-      // 堆叠段的外侧是相邻段不是空场地：标签进段内；平铺条才朝值轴末端画
-      position:
-        target.stack !== undefined ? "inside" : orientation === "horizontal" ? "right" : "top",
-      distance: VALUE_LABEL_GAP,
-      color: pa?.legend?.[index]?.color ?? VALUE_TEXT,
-      fontSize: 14,
-      lineHeight: 14,
-      padding: [2, 5],
-      backgroundColor: LABEL_CHIP,
-      borderColor: CHART_SURFACE,
-      borderWidth: 1,
-      borderRadius: 4,
-    };
-  });
-  // 段内标签不占余量；贴上限的平铺标签朝框缘画，框内不留这道就被画布裁掉。
-  // 余量按「印得出数的全部系列」留：焦点能现出档位没选中的那条，框却不该随悬停移动
-  const flat = labeled.filter((target) => target.stack === undefined);
-  if (flat.length === 0) return;
-  const inset =
-    orientation === "horizontal"
-      ? { right: valueLabelSpan(flat, pa) }
-      : { top: VALUE_LABEL_HEADROOM };
-  chart.plot_inset = { ...(chart.plot_inset ?? {}), ...inset };
-  for (const g of Array.isArray(option.grid) ? option.grid : [option.grid]) {
-    if (g && typeof g === "object") {
-      const record = g as Record<string, unknown>;
-      if (inset.top) record.top = Number(record.top ?? 0) + inset.top;
-      if (inset.right) record.right = Number(record.right ?? 0) + inset.right;
-    }
-  }
+function valueLabel(show: boolean, color: string, position: "inside" | "top" | "right") {
+  return {
+    show,
+    position,
+    distance: VALUE_LABEL_GAP,
+    color,
+    fontSize: 14,
+    lineHeight: 14,
+    padding: [2, 5],
+    backgroundColor: LABEL_CHIP,
+    borderColor: CHART_SURFACE,
+    borderWidth: 1,
+    borderRadius: 4,
+  };
 }
 
 /** 值标签的顶部余量（px）：间距 6 + 底片 18，余下是描边与最高点自身的缓冲。 */
@@ -719,233 +630,245 @@ export function valueLabelPillWidth(text: string): number {
 }
 
 /** 横排条右侧标签要占的框内余量：最宽底片 + 号距 + 描边缓冲。 */
-function valueLabelSpan(
-  series: Record<string, unknown>[],
-  pa: PaChartExtension | undefined,
-): number {
+function valueLabelSpan(series: ResolvedSeries[]): number {
   let widest = 0;
-  for (const target of series) {
-    const name = String(target.name ?? "");
-    const format = pa?.series[name] ?? "number";
-    const decimals = pa?.decimals?.[name];
-    for (const value of Array.isArray(target.data) ? target.data : []) {
-      if (typeof value !== "number") continue;
-      widest = Math.max(widest, valueLabelPillWidth(formatSeriesValue(value, format, decimals)));
+  for (const s of series) {
+    for (const value of s.values) {
+      if (value === null) continue;
+      widest = Math.max(
+        widest,
+        valueLabelPillWidth(formatSeriesValue(value, s.format, s.decimals)),
+      );
     }
   }
   return widest === 0 ? 0 : widest + VALUE_LABEL_GAP + 2;
 }
 
-/** 纯时间趋势 / 柱线组合：时间恒占 x 轴；混量纲时量画柱（主轴）、率画线（副轴） */
-function trendOption(spec: TrendSpec): ViewChart {
-  const labels = spec.rows.map((r) => String(r.t ?? ""));
-  // 图例读数取「每条系列都有值的最后一个桶」，不是单纯的最后一行：当月未完时，
-  // 存量指标已有数而流量指标还空着，取最后一行会让同一行读数缺几个。
-  // 一个标签只交代得了一个时间断面，凑不齐就整条不发。
-  const latestRow = [...spec.rows]
-    .reverse()
-    .find((row) => spec.series.every((s) => cellNumber(row[s.key]) !== null));
-  const countFormat = spec.series.find((s) => !s.isRate)?.format ?? "number";
-  const yFormats: (ColumnFormat | null)[] = spec.mixedAxes
-    ? [countFormat, spec.rateFormat]
-    : [spec.allRate ? spec.rateFormat : countFormat];
-  const multi = spec.series.length > 1;
-  const hasBar = spec.series.some((s) => s.mark === "bar");
-  const rateSeries = spec.series.filter((s) => s.isRate);
-  const countSeries = spec.series.filter((s) => !s.isRate);
-  const yDecimals = spec.mixedAxes
-    ? axisDecimalsOf(countSeries, rateSeries)
-    : axisDecimalsOf(spec.allRate ? rateSeries : countSeries);
-  const pa: PaChartExtension = {
-    series: seriesFormats(spec.series),
-    ...seriesDecimals(spec.series),
-    axes: { y: yFormats },
-    ...axisDecimals("y", yDecimals),
-    legend: legendItems(
-      spec.series.map((s) => s.name),
-      seriesColorAt,
-      // 值取自铺开的行本身，不重算：图例给的就是画面上那一列真实的点。
-      latestRow ? spec.series.map((s) => cellNumber(latestRow[s.key])) : undefined,
-      spec.series.map((s) => (s.baselineKey ? seriesIndexOf(spec.series, s.baselineKey) : null)),
-    ),
-    ...(latestRow ? { legend_latest_label: String(latestRow.t ?? "") } : {}),
-    records: recordProjectionPoints(spec.rows, spec.sourceRows, spec.series),
-  };
+type SeriesContext = {
+  multi: boolean;
+  orientation: "vertical" | "horizontal";
+  latest?: number;
+  stacked?: boolean;
+  valueLabels?: "main" | "all";
+};
+
+/** 一条系列的 option：形态、色、轴位、标签、末点，按解析结果一次写就。 */
+function seriesOption(s: ResolvedSeries, index: number, ctx: SeriesContext) {
+  const label =
+    ctx.valueLabels === undefined
+      ? {}
+      : {
+          label: valueLabel(
+            ctx.valueLabels === "all" || index === 0,
+            s.color,
+            ctx.stacked ? "inside" : ctx.orientation === "horizontal" ? "right" : "top",
+          ),
+        };
   return {
-    form: "line",
+    name: s.name,
+    type: s.mark,
+    data: s.values,
+    z: seriesZ(index),
+    ...(ctx.orientation === "vertical" ? { yAxisIndex: s.axis } : {}),
+    ...(s.mark === "bar"
+      ? { ...barSeriesPreferences(s.color), ...(ctx.stacked ? { stack: "total" } : {}) }
+      : {
+          ...lineSeriesPreferences(s.color, ctx.multi),
+          ...latestMarkPoint(s.values, ctx.latest, s.color),
+        }),
+    ...label,
+  };
+}
+
+/** 真系列在前、垫层在后：序号约定见 `lineHalo`。 */
+function seriesWithHalo(series: ResolvedSeries[], ctx: SeriesContext) {
+  return [
+    ...series.map((s, i) => seriesOption(s, i, ctx)),
+    ...series.flatMap((s, i) => (s.mark === "line" ? [lineHalo(s.values, i)] : [])),
+  ];
+}
+
+/** 值标签要的框内余量：段内标签不占，平铺标签按方向留顶栏或右栏（只按印得出数的系列算，框不随悬停移动） */
+function valueLabelInset(series: ResolvedSeries[], ctx: SeriesContext) {
+  if (ctx.valueLabels === undefined || ctx.stacked) return {};
+  return ctx.orientation === "horizontal"
+    ? { plot_inset: { right: valueLabelSpan(series) } }
+    : { plot_inset: { top: VALUE_LABEL_HEADROOM } };
+}
+
+const valueAxisOption = (side: "left" | "right", first: boolean) => ({
+  type: "value",
+  splitNumber: VALUE_SPLIT,
+  axisLabel: insideValueLabel(side),
+  axisLine: axisLineStyle,
+  axisTick: axisTickStyle,
+  splitLine: first ? gridSplit : noSplit,
+});
+
+const OPTION_BASE = { textStyle: { fontFamily: FONT_FAMILY }, ...MOTION } as const;
+
+/**
+ * plot 场地。`containLabel` 恒关，框也不由 grid 画（见 `PLOT_FRAME`）：绘图区四缘必须
+ * 在渲染前就算得出来，DOM 那层框才对得上。四缘的数字由渲染端按场景档位（`PLOT_PADDING`）
+ * 加 `plot_gutter`/`plot_inset` 算定——编译期不知道宿主是哪一档，故不写数字。
+ */
+const GRID = { containLabel: false } as const;
+
+type CartesianInput = {
+  form: "line" | "bar";
+  categories: string[];
+  series: ResolvedSeries[];
+  all: SeriesDef[];
+  sourceRows: ChartSourceRow[];
+  rows: ChartRow[];
+  latest?: { index: number; label: string };
+  share?: { title: string; values: (number | null)[] };
+  valueLabels?: "main" | "all";
+};
+
+/**
+ * 竖排笛卡尔图：类目占 x 轴，量画柱（主轴）、率画线（副轴）；时间趋势与分类组合同一张版式，
+ * 差别只在类目是什么、有没有「最新」与占比。
+ */
+function cartesianOption(input: CartesianInput): ViewChart {
+  const { series } = input;
+  const ctx: SeriesContext = {
+    multi: series.length > 1,
+    orientation: "vertical",
+    latest: input.latest?.index,
+    valueLabels: input.valueLabels,
+  };
+  const axes = valueAxes(series);
+  const hasBar = series.some((s) => s.mark === "bar");
+  return {
+    form: input.form,
     height: CHART_HEIGHT.cartesian,
+    ...valueLabelInset(series, ctx),
     option: {
-      color: [...SERIES_COLORS],
-      textStyle: { fontFamily: FONT_FAMILY },
-      ...MOTION,
-      grid: grid(),
-      tooltip: pointerOption(hasBar ? "band" : "line"),
+      ...OPTION_BASE,
+      grid: GRID,
+      tooltip: pointerOption(hasBar),
       xAxis: {
         type: "category",
-        data: labels,
+        data: input.categories,
         axisLabel: axisLabelStyle,
         axisLine: axisLineStyle,
         axisTick: axisTickStyle,
         splitLine: hasBar ? noSplit : gridSplitEdge,
       },
-      yAxis: yFormats.map((_, i) => ({
-        type: "value",
-        splitNumber: VALUE_SPLIT,
-        axisLabel: insideValueLabel(i === 0 ? "left" : "right"),
-        axisLine: axisLineStyle,
-        axisTick: axisTickStyle,
-        splitLine: i === 0 ? gridSplit : { show: false },
-      })),
-      series: spec.series.map((s, i) => {
-        const values = spec.rows.map((r) => cellNumber(r[s.key]));
-        return {
-          name: s.name,
-          type: s.mark === "bar" ? "bar" : "line",
-          data: s.mark === "bar" ? values : withLatestMarker(values, seriesColorAt(i)),
-          ...(s.mark === "bar"
-            ? { yAxisIndex: 0, ...barSeriesPreferences(seriesColorAt(i)) }
-            : {
-                yAxisIndex: spec.mixedAxes ? 1 : 0,
-                ...lineSeriesPreferences(seriesColorAt(i), multi),
-              }),
-        };
-      }),
-      pa,
+      yAxis: axes.formats.map((_, i) => valueAxisOption(i === 0 ? "left" : "right", i === 0)),
+      series: seriesWithHalo(series, ctx),
+    },
+    model: {
+      categories: input.categories,
+      legend: legendOf(series, input.all),
+      axes: { y: axes.formats },
+      ...axisDecimals("y", axes.decimals),
+      ...(input.share ? { share: input.share } : {}),
+      ...(input.latest ? { latest: input.latest } : {}),
+      pointer: "axis",
+      records: recordPoints(input.rows, input.sourceRows, input.all),
     },
   };
+}
+
+function lastIndexWhere(length: number, test: (index: number) => boolean): number {
+  for (let i = length - 1; i >= 0; i--) if (test(i)) return i;
+  return -1;
+}
+
+/** 纯时间趋势 / 柱线组合：时间恒占 x 轴；混量纲时量画柱（主轴）、率画线（副轴） */
+function trendOption(spec: TrendSpec, decl: ChartRenderDecl): ViewChart {
+  const categories = spec.rows.map((r) => String(r.t ?? ""));
+  const series = resolveSeries(spec.series, spec.rows, decl.display, (s) => ({
+    mark: s.mark === "bar" ? "bar" : "line",
+    axis: spec.mixedAxes && s.mark !== "bar" ? 1 : 0,
+  }));
+  // 「最新」取每条系列都有值的最后一个桶，不是单纯的最后一行：当月未完时存量已有数而流量
+  // 还空着，取最后一行会让同一断面的读数缺几个。
+  const latestIndex = lastIndexWhere(spec.rows.length, (i) =>
+    series.every((s) => s.values[i] !== null),
+  );
+  return cartesianOption({
+    form: "line",
+    categories,
+    series,
+    all: spec.series,
+    rows: spec.rows,
+    sourceRows: spec.sourceRows,
+    ...(latestIndex >= 0 ? { latest: { index: latestIndex, label: categories[latestIndex] } } : {}),
+    valueLabels: decl.valueLabels,
+  });
 }
 
 /** 分类柱线组合：分类占 x 轴，绝对量画柱（左轴），率画线（右轴）。 */
-function categoryComboOption(spec: CategoryComboSpec): ViewChart {
-  const labels = spec.rows.map((row) => String(row.label ?? ""));
-  const multi = spec.series.length > 1;
-  const shareSeries = spec.series.find((series) => series.shareKey !== undefined);
-  const share = shareSeries?.shareKey
-    ? {
-        title: "占比",
-        values: Object.fromEntries(
-          spec.rows.map((row) => [String(row.label ?? ""), cellNumber(row[shareSeries.shareKey!])]),
-        ),
-      }
-    : undefined;
-  const pa: PaChartExtension = {
-    series: seriesFormats(spec.series),
-    ...seriesDecimals(spec.series),
-    axes: { y: [spec.countFormat, spec.rateFormat] },
-    ...axisDecimals(
-      "y",
-      axisDecimalsOf(
-        spec.series.filter((s) => !s.isRate),
-        spec.series.filter((s) => s.isRate),
-      ),
-    ),
-    ...(share ? { share } : {}),
-    legend: legendItems(
-      spec.series.map((series) => series.name),
-      seriesColorAt,
-    ),
-    records: recordProjectionPoints(spec.rows, spec.sourceRows, spec.series),
-  };
-  return {
+function categoryComboOption(spec: CategoryComboSpec, decl: ChartRenderDecl): ViewChart {
+  const series = resolveSeries(spec.series, spec.rows, decl.display, (s) => ({
+    mark: s.isRate ? "line" : "bar",
+    axis: s.isRate ? 1 : 0,
+  }));
+  const shareKey = spec.series.find((s) => s.shareKey !== undefined)?.shareKey;
+  return cartesianOption({
     form: "bar",
-    height: CHART_HEIGHT.cartesian,
-    option: {
-      color: [...SERIES_COLORS],
-      textStyle: { fontFamily: FONT_FAMILY },
-      ...MOTION,
-      grid: grid(),
-      tooltip: pointerOption("band"),
-      xAxis: {
-        type: "category",
-        data: labels,
-        axisLabel: axisLabelStyle,
-        axisLine: axisLineStyle,
-        axisTick: axisTickStyle,
-        splitLine: noSplit,
-      },
-      yAxis: [spec.countFormat, spec.rateFormat].map((_, index) => ({
-        type: "value",
-        splitNumber: VALUE_SPLIT,
-        axisLabel: insideValueLabel(index === 0 ? "left" : "right"),
-        axisLine: axisLineStyle,
-        axisTick: axisTickStyle,
-        splitLine: index === 0 ? gridSplit : { show: false },
-      })),
-      series: spec.series.map((series, index) => ({
-        name: series.name,
-        type: series.isRate ? "line" : "bar",
-        yAxisIndex: series.isRate ? 1 : 0,
-        data: spec.rows.map((row) => cellNumber(row[series.key])),
-        ...(series.isRate
-          ? lineSeriesPreferences(seriesColorAt(index), multi)
-          : barSeriesPreferences(seriesColorAt(index))),
-      })),
-      pa,
-    },
-  };
+    categories: spec.rows.map((row) => String(row.label ?? "")),
+    series,
+    all: spec.series,
+    rows: spec.rows,
+    sourceRows: spec.sourceRows,
+    ...(shareKey
+      ? { share: { title: "占比", values: spec.rows.map((row) => cellNumber(row[shareKey])) } }
+      : {}),
+    valueLabels: decl.valueLabels,
+  });
 }
 
 /** 分类条形（横排容纳中文长标签）：多系列并列、双分类构成堆叠；占比注释随读数卡 */
-function barOption(spec: BarSpec): ViewChart {
-  const multi = spec.series.length > 1;
-  const labels = spec.rows.map((r) => String(r.label ?? ""));
-  const height = barChartHeight(labels.length, spec.stacked ? 1 : spec.series.length);
-  const share = spec.hasShare
-    ? {
-        title: "占比",
-        values: Object.fromEntries(
-          spec.rows.map((r) => {
-            const key = spec.stacked ? "share" : (spec.series[0]?.shareKey ?? "share");
-            return [String(r.label ?? ""), cellNumber(r[key])];
-          }),
-        ),
-      }
-    : undefined;
-  const pa: PaChartExtension = {
-    series: seriesFormats(spec.series),
-    ...seriesDecimals(spec.series),
+function barOption(spec: BarSpec, decl: ChartRenderDecl): ViewChart {
+  const categories = spec.rows.map((r) => String(r.label ?? ""));
+  const series = resolveSeries(spec.series, spec.rows, decl.display, () => ({
+    mark: "bar",
+    axis: 0,
+  }));
+  const declared = series.flatMap((s) => (s.decimals === undefined ? [] : [s.decimals]));
+  const shareKey = spec.stacked ? "share" : (spec.series[0]?.shareKey ?? "share");
+  const model: ChartModel = {
+    categories,
+    legend: legendOf(series, spec.series),
     axes: { x: [spec.format] },
-    ...axisDecimals("x", axisDecimalsOf(spec.series)),
-    ...(share ? { share } : {}),
-    legend: legendItems(
-      spec.series.map((s) => s.name),
-      seriesColorAt,
-    ),
-    records: recordProjectionPoints(spec.rows, spec.sourceRows, spec.series),
+    ...axisDecimals("x", [declared.length ? Math.max(...declared) : null]),
+    ...(spec.hasShare
+      ? { share: { title: "占比", values: spec.rows.map((r) => cellNumber(r[shareKey])) } }
+      : {}),
+    pointer: "axis",
+    records: recordPoints(spec.rows, spec.sourceRows, spec.series),
   };
-  // 单系列（不堆叠）改走排行版式：一行说一个类目，值与占比各占一列
-  if (!multi && !spec.stacked) {
+  // 单系列（不堆叠）改走排行版式：一行说一个类目，值与占比各占一列；不落 echarts，故无 option
+  if (series.length === 1 && !spec.stacked) {
     return {
       form: "bar",
-      height: labels.length * RANK_ROW.height,
+      height: categories.length * RANK_ROW.height,
       layout: "rank",
-      option: {
-        color: [...SERIES_COLORS],
-        textStyle: { fontFamily: FONT_FAMILY },
-        ...MOTION,
-        yAxis: { type: "category", data: labels },
-        series: spec.series.map((s, i) => ({
-          name: s.name,
-          type: "bar",
-          data: spec.rows.map((r) => cellNumber(r[s.key])),
-          ...barSeriesPreferences(seriesColorAt(i)),
-        })),
-        pa,
-      },
+      option: {},
+      model,
     };
   }
-  const gutter = { left: labelColumnWidth(labels) + LABEL_COLUMN.gap };
+  const ctx: SeriesContext = {
+    multi: series.length > 1,
+    orientation: "horizontal",
+    stacked: spec.stacked,
+    valueLabels: decl.valueLabels,
+  };
+  const gutter = { left: labelColumnWidth(categories) + LABEL_COLUMN.gap };
   return {
     form: "bar",
-    height: height + 24,
+    height: barChartHeight(categories.length, spec.stacked ? 1 : series.length) + 24,
     plot_gutter: gutter,
+    ...valueLabelInset(series, ctx),
     option: {
-      color: [...SERIES_COLORS],
-      textStyle: { fontFamily: FONT_FAMILY },
-      ...MOTION,
+      ...OPTION_BASE,
       // 类目在左轴（中文长标签），刻度留在框外自占一栏
-      grid: grid(gutter),
-      tooltip: pointerOption("band"),
+      grid: GRID,
+      tooltip: pointerOption(true),
       xAxis: {
         type: "value",
         splitNumber: VALUE_SPLIT,
@@ -956,7 +879,7 @@ function barOption(spec: BarSpec): ViewChart {
       },
       yAxis: {
         type: "category",
-        data: labels,
+        data: categories,
         inverse: true,
         // 栏宽已按字面量算定，放不下的截断——全名仍在读数卡里
         axisLabel: {
@@ -968,50 +891,32 @@ function barOption(spec: BarSpec): ViewChart {
         axisTick: axisTickStyle,
         splitLine: noSplit,
       },
-      series: spec.series.map((s, i) => ({
-        name: s.name,
-        type: "bar",
-        data: spec.rows.map((r) => cellNumber(r[s.key])),
-        ...barSeriesPreferences(seriesColorAt(i)),
-        ...(spec.stacked ? { stack: "total" } : {}),
-      })),
-      pa,
+      series: seriesWithHalo(series, ctx),
     },
+    model,
   };
 }
 
 /**
- * 饼图（声明路径专属）：内半径 = 外半径 3/5、切缝用底面色边框，
- * 切片不出外部标签和引线，
- * 占比进图例（percent_visibility 默认 legend，渲染端按值计算）、环心常驻总计（渲染端注入）。
+ * 饼图（声明路径专属）：内半径 = 外半径 3/5、切缝用底面色边框，切片不出外部标签和引线，
+ * 占比进图例（渲染端按值计算）、环心常驻总计（渲染端注入）。
+ * 切片色走调色板（`option.color` 按切片序对位），数据格只有名与值。
  */
-
 function pieOption(spec: PieSpec): ViewChart {
-  const pa: PaChartExtension = {
-    series: { [spec.seriesName]: spec.format },
-    ...seriesDecimals([{ name: spec.seriesName, decimals: spec.decimals }]),
-    axes: {},
-    legend: legendItems(
-      spec.rows.map((r) => r.label),
-      seriesColorAt,
-    ),
-    records: {
-      points: [
-        spec.rows.map((_, rowIndex) => {
-          const source = spec.sourceRows[rowIndex]?.row;
-          return source === undefined ? null : { row: source, column: spec.column };
-        }),
-      ],
-    },
-  };
+  const legend: ChartLegendItem[] = spec.rows.map((r, i) => ({
+    name: r.label,
+    color: seriesColorAt(i),
+    format: spec.format,
+    ...(spec.decimals === undefined ? {} : { decimals: spec.decimals }),
+    values: [r.value],
+  }));
   return {
     form: "pie",
     height: CHART_HEIGHT.pie,
     option: {
-      color: [...SERIES_COLORS],
-      textStyle: { fontFamily: FONT_FAMILY },
-      ...MOTION,
-      tooltip: pointerOption("item"),
+      ...OPTION_BASE,
+      color: legend.map((item) => item.color),
+      tooltip: { show: false },
       series: [
         {
           name: spec.seriesName,
@@ -1023,14 +928,21 @@ function pieOption(spec: PieSpec): ViewChart {
           itemStyle: { borderColor: CHART_SURFACE, borderWidth: 2 },
           // 扇形的角度就是值：鼠标碰哪一片都不许它改样子
           emphasis: { disabled: true },
-          data: spec.rows.map((r, i) => ({
-            name: r.label,
-            value: r.value,
-            itemStyle: { color: seriesColorAt(i) },
-          })),
+          data: spec.rows.map((r) => ({ name: r.label, value: r.value })),
         },
       ],
-      pa,
+    },
+    model: {
+      categories: [spec.seriesName],
+      legend,
+      axes: {},
+      pointer: "item",
+      records: {
+        points: spec.rows.map((_, rowIndex) => {
+          const source = spec.sourceRows[rowIndex]?.row;
+          return [source === undefined ? null : { row: source, column: spec.column }];
+        }),
+      },
     },
   };
 }
@@ -1039,32 +951,16 @@ function pieOption(spec: PieSpec): ViewChart {
 export function buildViewChart(view: ViewBlock, decl: ChartRenderDecl): ViewChart | null {
   const shape = compileChart(view, makeTitleOf(view), decl);
   if (!shape) return null;
-  // 垫层最后补：显式覆盖可以把一条折线改成柱，改完才知道谁还是折线
-  const withHalo = (chart: ViewChart): ViewChart => {
-    const series = chart.option.series;
-    if (!Array.isArray(series)) return chart;
-    chart.option.series = withLineHalo(series as Record<string, unknown>[]);
-    return chart;
-  };
-  if (shape.kind === "line") {
-    const chart = trendOption(shape);
-    if (decl.display) applyDisplay(chart.option, decl.display, shape.series);
-    if (decl.valueLabels) applyValueLabels(chart, decl.valueLabels);
-    return withHalo(chart);
+  switch (shape.kind) {
+    case "line":
+      return trendOption(shape, decl);
+    case "bar":
+      return barOption(shape, decl);
+    case "category_combo":
+      return categoryComboOption(shape, decl);
+    case "pie":
+      return pieOption(shape);
   }
-  if (shape.kind === "bar") {
-    const chart = barOption(shape);
-    if (decl.display) applyDisplay(chart.option, decl.display, shape.series);
-    if (decl.valueLabels) applyValueLabels(chart, decl.valueLabels, "horizontal");
-    return withHalo(chart);
-  }
-  if (shape.kind === "category_combo") {
-    const chart = categoryComboOption(shape);
-    if (decl.display) applyDisplay(chart.option, decl.display, shape.series);
-    if (decl.valueLabels) applyValueLabels(chart, decl.valueLabels);
-    return withHalo(chart);
-  }
-  return pieOption(shape);
 }
 
 export function compilePresentationBlock(
@@ -1097,7 +993,10 @@ export function isViewChart(value: unknown): value is ViewChart {
     typeof value.height === "number" &&
     Number.isFinite(value.height) &&
     value.height > 0 &&
-    isRecord(value.option)
+    isRecord(value.option) &&
+    isRecord(value.model) &&
+    Array.isArray(value.model.categories) &&
+    Array.isArray(value.model.legend)
   );
 }
 

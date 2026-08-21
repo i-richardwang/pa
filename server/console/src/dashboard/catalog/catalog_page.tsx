@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CircleAlertIcon, InboxIcon, LockIcon, PanelRightIcon, PlusIcon } from "lucide-react";
+import { CircleAlertIcon, InboxIcon, LockIcon, PlusIcon } from "lucide-react";
 import type {
   PublicCatalogMember as CatalogMemberPayload,
   PublicCatalogDocument as CatalogPayload,
@@ -40,11 +40,7 @@ import {
 } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  INSPECTOR_SECTION_CLASS,
-  InspectorOptionRow,
-  InspectorSection,
-} from "@/components/ui/inspector";
+import { InspectorRow, InspectorProfileCard, InspectorSection } from "@/components/ui/inspector";
 import { Popover, PopoverPopup, PopoverTrigger } from "@/components/ui/popover";
 import { POPOVER_LIST_WIDTH, PopoverListPanel } from "@/components/ui/popover-list";
 import {
@@ -79,8 +75,7 @@ import {
   useSetListChromeActions,
   useSetStageAside,
 } from "../layout/layout_chrome";
-import { Titlebar } from "@/components/ui/titlebar";
-import { HeaderIconButton, HeaderTextAction } from "../layout/view_chrome";
+import { HeaderTextAction, ProfileAside } from "../layout/view_chrome";
 import { EmptyPanel } from "../kit/empty_panel";
 import { RowMenu } from "../kit/table_kit";
 import { MenuDangerGroup, MenuItem } from "@/components/ui/menu";
@@ -196,6 +191,8 @@ export function CatalogPage() {
         />
       ) : null,
     [detail, termsQuery.data?.rows, data, openMember],
+    () => setDetail(null),
+    "profile",
   );
 
   return (
@@ -908,50 +905,23 @@ function CatalogProfileAside({
   onValues: (target: ValuesTarget) => void;
 }) {
   const domain = detail.kind === "member" ? domainOf(catalog, detail.member) : detail.topic;
-  const title = detail.kind === "member" ? detail.member.title : detail.topic.title;
   const dimensions = dimensionGroups(catalog, domain?.dimension_ids ?? []);
 
   return (
-    <aside
-      aria-label="字典档案"
-      className="relative flex h-full min-h-0 w-full min-w-0 flex-col border-t border-pa-line bg-pa-bg sm:border-t-0 sm:border-l-[0.5px] sm:border-pa-line"
-      data-slot="catalog-profile-aside"
-    >
-      <Titlebar align="end" className="gap-0">
-        <HeaderIconButton label="关闭档案" onClick={onClose}>
-          <PanelRightIcon aria-hidden="true" />
-        </HeaderIconButton>
-      </Titlebar>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-        <div className="border-b-[0.5px] border-pa-line px-3 py-3 md:px-2.5">
-          <h2 className="text-xl font-semibold text-pa-fg">{title}</h2>
-        </div>
-        {detail.kind === "member" ? (
-          <MemberProfileBody
-            dimensions={dimensions}
-            domain={domain}
-            member={detail.member}
-            onOpenMember={onOpenMember}
-            onValues={onValues}
-            terms={terms}
-          />
-        ) : (
-          <MetricDomainProfileBody dimensions={dimensions} topic={detail.topic} />
-        )}
-      </div>
-    </aside>
-  );
-}
-
-/**
- * 元信息网格：label 左、值右，**整块不带段题**。这些是同一类东西——关于这条成员的
- * 若干项事实，各自给一个带边框的段题，段题会比它统辖的那一个值还重。
- */
-function ProfileFacts({ children }: { children: React.ReactNode }) {
-  return (
-    <div className={INSPECTOR_SECTION_CLASS} data-slot="catalog-profile-facts">
-      <div className="flex flex-col gap-0.5">{children}</div>
-    </div>
+    <ProfileAside closeLabel="关闭档案" label="字典档案" onClose={onClose}>
+      {detail.kind === "member" ? (
+        <MemberProfileBody
+          dimensions={dimensions}
+          domain={domain}
+          member={detail.member}
+          onOpenMember={onOpenMember}
+          onValues={onValues}
+          terms={terms}
+        />
+      ) : (
+        <MetricDomainProfileBody dimensions={dimensions} topic={detail.topic} />
+      )}
+    </ProfileAside>
   );
 }
 
@@ -959,7 +929,7 @@ function DimensionsRow({ groups }: { groups: DimensionGroupRow[] }) {
   const count = groups.reduce((total, row) => total + row.titles.length, 0);
   if (count === 0) return null;
   return (
-    <InspectorOptionRow label="可用维度">
+    <InspectorRow label="可用维度">
       <Popover>
         <PopoverTrigger render={<ListCategoryPill />}>{count} 个</PopoverTrigger>
         <PopoverPopup align="end" className={POPOVER_LIST_WIDTH}>
@@ -974,7 +944,7 @@ function DimensionsRow({ groups }: { groups: DimensionGroupRow[] }) {
           </PopoverListPanel>
         </PopoverPopup>
       </Popover>
-    </InspectorOptionRow>
+    </InspectorRow>
   );
 }
 
@@ -1049,42 +1019,25 @@ function MemberProfileBody({
     [format, member.sensitivity, dimensionKind].filter(Boolean).length;
   return (
     <>
-      <InspectorSection actions={action} title="定义">
-        <p className="text-sm leading-5 text-pa-fg">{member.description || "—"}</p>
+      <InspectorProfileCard action={action} description={member.description} title={member.title}>
         {member.formula ? (
           <FormulaRow formula={member.formula} onOpenMember={onOpenMember} />
         ) : null}
-      </InspectorSection>
-      {facts > 0 ? (
-        <ProfileFacts>
-          {domain ? (
-            <InspectorOptionRow label="指标域">
-              <span className="text-sm text-pa-fg">{domain.title}</span>
-            </InspectorOptionRow>
-          ) : null}
-          <DimensionsRow groups={dimensions} />
-          {domain?.time_context_title ? (
-            <InspectorOptionRow label="数据时间">
-              <span className="text-sm text-pa-fg">{domain.time_context_title}</span>
-            </InspectorOptionRow>
-          ) : null}
-          {format ? (
-            <InspectorOptionRow label="格式">
-              <span className="text-sm text-pa-fg">{format}</span>
-            </InspectorOptionRow>
-          ) : null}
-          {member.sensitivity ? (
-            <InspectorOptionRow label="敏感度">
-              <span className="text-sm text-pa-fg">{sensitivityLabel(member.sensitivity)}</span>
-            </InspectorOptionRow>
-          ) : null}
-          {dimensionKind ? (
-            <InspectorOptionRow label="维度种类">
-              <span className="text-sm text-pa-fg">{dimensionKind}</span>
-            </InspectorOptionRow>
-          ) : null}
-        </ProfileFacts>
-      ) : null}
+        {facts > 0 ? (
+          <>
+            {domain ? <InspectorRow label="指标域">{domain.title}</InspectorRow> : null}
+            <DimensionsRow groups={dimensions} />
+            {domain?.time_context_title ? (
+              <InspectorRow label="数据时间">{domain.time_context_title}</InspectorRow>
+            ) : null}
+            {format ? <InspectorRow label="格式">{format}</InspectorRow> : null}
+            {member.sensitivity ? (
+              <InspectorRow label="敏感度">{sensitivityLabel(member.sensitivity)}</InspectorRow>
+            ) : null}
+            {dimensionKind ? <InspectorRow label="维度种类">{dimensionKind}</InspectorRow> : null}
+          </>
+        ) : null}
+      </InspectorProfileCard>
       {related.length > 0 ? (
         <InspectorSection title="相关业务术语">
           <ul className="flex flex-col gap-1 text-sm leading-5">
@@ -1109,25 +1062,14 @@ function MetricDomainProfileBody({
   dimensions: DimensionGroupRow[];
 }) {
   return (
-    <>
-      {topic.query_contract ? (
-        <InspectorSection title="数据范围与口径">
-          <p className="text-sm leading-5 text-pa-fg">{topic.query_contract}</p>
-        </InspectorSection>
+    <InspectorProfileCard description={topic.query_contract ?? ""} title={topic.title}>
+      <DimensionsRow groups={dimensions} />
+      {topic.time_context_title ? (
+        <InspectorRow label="数据时间">{topic.time_context_title}</InspectorRow>
       ) : null}
-      <ProfileFacts>
-        <DimensionsRow groups={dimensions} />
-        {topic.time_context_title ? (
-          <InspectorOptionRow label="数据时间">
-            <span className="text-sm text-pa-fg">{topic.time_context_title}</span>
-          </InspectorOptionRow>
-        ) : null}
-        {topic.synonyms.length > 0 ? (
-          <InspectorOptionRow label="也叫">
-            <span className="text-sm text-pa-fg">{topic.synonyms.join("、")}</span>
-          </InspectorOptionRow>
-        ) : null}
-      </ProfileFacts>
-    </>
+      {topic.synonyms.length > 0 ? (
+        <InspectorRow label="也叫">{topic.synonyms.join("、")}</InspectorRow>
+      ) : null}
+    </InspectorProfileCard>
   );
 }

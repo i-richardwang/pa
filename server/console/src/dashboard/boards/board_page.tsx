@@ -151,13 +151,6 @@ export function BoardPage({
     useState<RecordProjectionDialogRequest | null>(null);
   // 离开确认的 promise resolver：useLeaveBlocker 拦截导航时挂起，用户抉择后兑现
   const leaveResolve = useRef<((ok: boolean) => void) | null>(null);
-  // 拖拽/缩放进行中：瓦片据此冻结重图的重渲
-  const [interacting, setInteracting] = useState(false);
-  const beginInteraction = useCallback(() => {
-    setRecordProjectionRequest(null);
-    setInteracting(true);
-  }, []);
-  const endInteraction = useCallback(() => setInteracting(false), []);
   const { ref: canvasRef, size: canvasSize } = useElementSize<HTMLDivElement>();
   const rowHeight = deriveRowHeight(canvasSize?.width);
 
@@ -465,10 +458,6 @@ export function BoardPage({
                     draggableCancel="[data-dontdrag], button, a, input, textarea, select"
                     compactType="vertical"
                     onLayoutChange={editing ? applyLayout : undefined}
-                    onDragStart={beginInteraction}
-                    onDragStop={endInteraction}
-                    onResizeStart={beginInteraction}
-                    onResizeStop={endInteraction}
                   >
                     {tiles.map((tile) => {
                       const orderIdx = readingOrder.findIndex((t) => t.tile_id === tile.tile_id);
@@ -481,7 +470,6 @@ export function BoardPage({
                             <TextTile
                               md={tile.md}
                               editing={editing}
-                              interacting={interacting}
                               canMoveUp={canMoveUp}
                               canMoveDown={canMoveDown}
                               onMoveUp={() => moveTile(tile.tile_id, "up")}
@@ -495,7 +483,6 @@ export function BoardPage({
                               reportId={tile.report_id}
                               name={tile.name}
                               editing={editing}
-                              interacting={interacting}
                               viewerEmail={me.email}
                               timeOverride={timeOverride}
                               canMoveUp={canMoveUp}

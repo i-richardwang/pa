@@ -35,9 +35,9 @@ import type { RouteKey } from "../router";
 import { useOpenerFocus } from "@/components/ui/command";
 import { CommandPalette } from "./command_palette";
 import type { NavEntry } from "./navigation";
-import { CHART_STAGE_ASIDE_WIDTH } from "../analyses/chart_stage";
 import {
   ListChromeProvider,
+  STAGE_ASIDE_WIDTH,
   type StageAside,
   useDetailChromeActions,
   useDetailCrumb,
@@ -281,7 +281,7 @@ function StageAsideSheet({ aside }: { aside: StageAside }) {
       }}
     >
       <SheetPopup
-        aria-label="配置"
+        aria-label={aside.face === "profile" ? "档案" : "配置"}
         className="h-[85svh] overflow-hidden rounded-t-xl"
         finalFocus={finalFocus}
         ref={popupRef}
@@ -339,7 +339,9 @@ function MainColumn({
         <div
           className="flex h-full min-h-0 w-(--pa-stage-aside) shrink-0 flex-col border-pa-line border-l-[0.5px]"
           data-slot="chart-stage-aside"
-          style={{ "--pa-stage-aside": `${CHART_STAGE_ASIDE_WIDTH}px` } as React.CSSProperties}
+          style={
+            { "--pa-stage-aside": `${STAGE_ASIDE_WIDTH[stageAside.face]}px` } as React.CSSProperties
+          }
         >
           {stageAside.node}
         </div>

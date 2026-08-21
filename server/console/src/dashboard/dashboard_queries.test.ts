@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import type { TimeIntent } from "@time";
 import { boardReportReplayQueryOptions, dashboardKeys } from "./dashboard_queries";
 
 test("维度取值键位含维度与过滤词，避免跨维度、跨过滤词复用结果", () => {
@@ -16,16 +17,17 @@ test("维度取值键位含维度与过滤词，避免跨维度、跨过滤词�
     "board_report_replay",
     "board-1",
     "report-1",
-    "default",
+    null,
   ]);
-  expect(dashboardKeys.boardReportReplay("board-1", "report-1", '{"last":{"months":12}}')).toEqual([
+  const time: TimeIntent = { window: { kind: "trailing", unit: "month", count: 12 } };
+  expect(dashboardKeys.boardReportReplay("board-1", "report-1", time)).toEqual([
     "board_report_replay",
     "board-1",
     "report-1",
-    '{"last":{"months":12}}',
+    time,
   ]);
   expect(boardReportReplayQueryOptions("board-1", "report-1")).toMatchObject({
-    queryKey: ["board_report_replay", "board-1", "report-1", "default"],
+    queryKey: ["board_report_replay", "board-1", "report-1", null],
     refetchOnWindowFocus: false,
   });
 });

@@ -48,8 +48,6 @@ export type ViewRendererProps = {
    * 同一个 card 场景两种取值都合法。缺省跟场景默认档。
    */
   fullscreen?: boolean;
-  /** 容器正被拖拽或缩放：重图冻结重渲，交互结束后补渲。 */
-  interacting?: boolean;
   /** 浏览器报告页注入的格子明细能力；MCP Widget 不注入，因而没有明细请求入口。 */
   records?: {
     /** 能否查看构成记录由指标的记录集绑定决定，与具体值无关——零值同样开放，空集也是诚实答案。 */
@@ -169,12 +167,6 @@ function DerivedBadge() {
   );
 }
 
-/**
- * 拖拽缩放期仍实时重渲的行数上限：小图重渲廉价且跟手，
- * 超过则冻结到交互结束——大基数图每帧重排的代价远超实时预览的价值。
- */
-const LIVE_RESIZE_MAX_ROWS = 10;
-
 /** 单个视图的内容体：指标卡 / 图表 / 表格 + 随附提示；页态下提示让位给页脚带 */
 function ViewBody({
   payload,
@@ -183,7 +175,6 @@ function ViewBody({
   actions,
   exportResource,
   traits,
-  interacting,
   records,
 }: {
   payload: QueryPayload;
@@ -192,7 +183,6 @@ function ViewBody({
   actions: CardActions;
   exportResource?: ExportResourceLink;
   traits: SceneTraits;
-  interacting: boolean;
   records?: ViewRendererProps["records"];
 }) {
   const { view, presentation } = analysis;
@@ -258,7 +248,6 @@ function ViewBody({
             chart={chart}
             fill={fill}
             plot={traits.plot}
-            suspendResize={interacting && view.rows.length >= LIVE_RESIZE_MAX_ROWS}
             canOpenPoint={({ column }) => records?.canOpen(view.id, column) ?? false}
             onPointClick={
               records
@@ -362,7 +351,6 @@ export function ViewRenderer({
   actions,
   scene = "card",
   fullscreen,
-  interacting = false,
   records,
 }: ViewRendererProps) {
   const traits =
@@ -396,7 +384,6 @@ export function ViewRenderer({
         actions={actions}
         exportResource={exportResource ?? undefined}
         traits={traits}
-        interacting={interacting}
         records={records}
       />
       {/* 口径带只在答数态常驻 */}

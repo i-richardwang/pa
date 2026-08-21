@@ -110,6 +110,11 @@
   box-shadow: 3px 3px 8px var(--pa-shadow);
 }
 
+/* 正被拖拽/缩放的那一块不出操作钮：手在搬它，钮此刻按不到也不该闪 */
+.react-grid-item:is(.react-draggable-dragging, .resizing) [data-dontdrag] {
+  visibility: hidden;
+}
+
 .react-grid-item > .react-resizable-handle::after {
   border-color: var(--pa-ink) !important;
 }

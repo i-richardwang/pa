@@ -114,11 +114,6 @@ export function useAnalysisEditSession({
   );
   useLeaveBlocker(dirty, confirmLeave);
 
-  const preview = useMemo(
-    () => ({ presentation: activeReplay?.presentation ?? null, error: null as string | null }),
-    [activeReplay],
-  );
-
   const presentationNotes = useMemo(() => {
     if (!activeReplay) return [];
     if (draft && (hasAnalysisChanges(draft) || hasViewChanges(draft)) && !isPreviewCurrent(draft)) {
@@ -332,7 +327,6 @@ export function useAnalysisEditSession({
     showingSavedReplay,
 
     resultPending: seed?.hasSavedResult === true && activeReplay === null,
-    preview,
     presentationNotes,
     saving:
       updateReport.isPending ||

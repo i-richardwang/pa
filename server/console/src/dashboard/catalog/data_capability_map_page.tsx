@@ -28,13 +28,12 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
   DatabaseIcon,
-  HashIcon,
   LayersIcon,
   MinusIcon,
   PlusIcon,
   ScanIcon,
+  SigmaIcon,
   TagIcon,
-  XIcon,
 } from "lucide-react";
 import type {
   DataCapabilityMapMetricDomain,
@@ -42,10 +41,12 @@ import type {
   DataCapabilityMapData,
   DataCapabilityMapDimensionGroup,
 } from "@data-capability-map";
+import { PLOT_RADIUS } from "@charts";
 import { Button } from "@/components/ui/button";
-import { ViewSidebar } from "@/components/ui/view-sidebar";
+import { InspectorProfileCard, InspectorRow, InspectorSection } from "@/components/ui/inspector";
+import { ProfileAside } from "../layout/view_chrome";
 import { cn } from "@/lib/utils";
-import { MAIN_CARD_BODY_INSET } from "../layout/layout_chrome";
+import { ListCategoryPill, MAIN_CARD_BODY_INSET, useSetStageAside } from "../layout/layout_chrome";
 import { errorText, useCapabilityMapQuery } from "../dashboard_queries";
 import {
   NODE_HEIGHT,
@@ -56,13 +57,15 @@ import {
   groupedMemberNames,
   highlightFor,
   layoutCapabilities,
+  listedHierarchies,
+  listedMembers,
   memberCounts,
   nodeId,
   visibleEdges,
   type CapabilityNodeRef,
   type LaneKey,
+  type ListedMember,
 } from "./data_capability_map";
-import { SheetSection } from "../kit/sheet_kit";
 
 const CapabilityMapContext = createContext<DataCapabilityMapData | null>(null);
 
@@ -86,12 +89,6 @@ const LANE_TITLES: Record<LaneKey, string> = {
   metric_domains: "指标域",
   facts: "事实构件",
 };
-
-/** 层级引用成员名；无中文名时按原名展示。 */
-function levelTitle(fact: DataCapabilityMapFact, level: string): string {
-  const member = fact.members.find((candidate) => candidate.name === level);
-  return member?.title ?? level;
-}
 
 const HANDLE_STYLE = {
   opacity: 0,
@@ -118,8 +115,8 @@ function nodeIcon(ref: CapabilityNodeRef): React.ReactElement {
 }
 
 function nodeTitle(ref: CapabilityNodeRef): string {
-  if (ref.kind === "fact") return ref.fact.title ?? ref.fact.name;
-  if (ref.kind === "dimension_group") return ref.group.title ?? ref.group.name;
+  if (ref.kind === "fact") return ref.fact.title;
+  if (ref.kind === "dimension_group") return ref.group.title;
   return ref.topic.title;
 }
 
@@ -251,88 +248,105 @@ const PRO_OPTIONS = { hideAttribution: true };
 /** 首屏取景与「回到全景」共用一份取景参数：两处各写一个数，回不到人记得的那一屏。 */
 const MAP_FIT_VIEW = { padding: 0.1 };
 
-type ListedMember = {
-  name: string;
-  label: string;
-  mono: boolean;
-  kind: "dimension" | "measure";
-};
-
-/**
- * 展平为可列举成员：不传 names 取主题全部公开成员；传 names（绑定 includes）时
- * 逐名解析——公开成员按类型归组，部门树归入维度组，未识别名原样保留（与边上计数守恒）。
- */
-function listedMembers(fact: DataCapabilityMapFact, names?: string[]): ListedMember[] {
-  if (!names) {
-    return fact.members
-      .filter((member) => !member.internal)
-      .map((member) => ({
-        name: member.name,
-        label: member.title ?? member.name,
-        mono: !member.title,
-        kind: member.kind,
-      }));
-  }
-  const listed: ListedMember[] = [];
-  for (const name of names) {
-    const member = fact.members.find((candidate) => candidate.name === name);
-    if (member) {
-      if (member.internal) continue;
-      listed.push({
-        name,
-        label: member.title ?? member.name,
-        mono: !member.title,
-        kind: member.kind,
-      });
-      continue;
-    }
-    const hierarchy = fact.hierarchies.find((candidate) => candidate.name === name);
-    listed.push({
-      name,
-      label: hierarchy?.title ?? name,
-      mono: !hierarchy?.title,
-      kind: "dimension",
-    });
-  }
-  return listed;
-}
-
-function MemberRows({ members, kind }: { members: ListedMember[]; kind: ListedMember["kind"] }) {
-  const group = members.filter((member) => member.kind === kind);
-  if (!group.length) return null;
+/** 清单行：左图标 + 业务名。右侧留给读者用得上的口径说明，不印物理名与语义 id。 */
+function MemberRow({ member }: { member: ListedMember }) {
   return (
-    <div className="flex flex-col">
-      <div className="flex h-[26px] items-center font-medium text-pa-muted text-xs">
-        {kind === "dimension" ? "分析维度" : "指标"}
-      </div>
-      {group.map((member) => (
-        <div className="flex h-6 items-center gap-1.5 text-xs" key={member.name}>
-          <span className="shrink-0 text-pa-ink [&_svg]:size-3" aria-hidden="true">
-            {kind === "dimension" ? <TagIcon /> : <HashIcon />}
-          </span>
-          <span className={cn("truncate", member.mono && "font-mono")}>{member.label}</span>
-        </div>
-      ))}
-    </div>
+    <InspectorRow
+      icon={member.kind === "dimension" ? <TagIcon /> : <SigmaIcon />}
+      label={member.label}
+    />
   );
 }
 
 function MemberListSection({
   title,
-  fact,
-  names,
+  members,
+  kind,
 }: {
   title: string;
-  fact: DataCapabilityMapFact;
-  names?: string[];
+  members: ListedMember[];
+  kind: ListedMember["kind"];
 }) {
-  const members = listedMembers(fact, names);
-  if (!members.length) return null;
+  const group = members.filter((member) => member.kind === kind);
+  if (!group.length) return null;
   return (
-    <SheetSection title={title}>
-      <MemberRows kind="dimension" members={members} />
-      <MemberRows kind="measure" members={members} />
-    </SheetSection>
+    <InspectorSection collapsible title={title}>
+      {group.map((member) => (
+        <MemberRow key={member.name} member={member} />
+      ))}
+    </InspectorSection>
+  );
+}
+
+/** 关系行：label 左，指向的那些记录各成一枚芯片——这些名字是这一行的全部内容。 */
+function RelationRow({ label, names }: { label: string; names: string[] }) {
+  return (
+    <InspectorRow label={label}>
+      <div className="flex flex-wrap justify-end gap-1">
+        {names.map((name) => (
+          <ListCategoryPill key={name}>{name}</ListCategoryPill>
+        ))}
+      </div>
+    </InspectorRow>
+  );
+}
+
+/** 该事实被哪些指标域取用：地图上那是一根线，档案里要读得出名字。 */
+function domainTitlesOfFact(data: DataCapabilityMapData, fact: string): string[] {
+  return data.metric_domains
+    .filter((topic) => topic.bindings.some((binding) => binding.fact === fact))
+    .map((topic) => topic.title);
+}
+
+/** 该属性组的维度进了哪些指标域的共同维度空间。 */
+function domainTitlesOfGroup(
+  data: DataCapabilityMapData,
+  group: DataCapabilityMapDimensionGroup,
+): string[] {
+  return data.metric_domains
+    .filter((topic) => bindingGroupIncludes(topic.dimensions, group).length > 0)
+    .map((topic) => topic.title);
+}
+
+/**
+ * 头卡：这一条构件本身是什么——名字、口径，以及它在图上那几根线读不出名字的去向。
+ * 物理表名与语义 id 不进这里：控制台只说业务的话。
+ */
+function CapabilityProfileCard({ nodeRef }: { nodeRef: CapabilityNodeRef }) {
+  const capabilityMap = useCapabilityMapData();
+  const relations: { label: string; names: string[] }[] = [];
+  let description: string | null = null;
+  if (nodeRef.kind === "fact") {
+    description = nodeRef.fact.description;
+    relations.push({
+      label: "所属指标域",
+      names: domainTitlesOfFact(capabilityMap, nodeRef.fact.name),
+    });
+  } else if (nodeRef.kind === "dimension_group") {
+    description = nodeRef.group.description;
+    relations.push({ label: "可用于", names: domainTitlesOfGroup(capabilityMap, nodeRef.group) });
+  } else {
+    description = nodeRef.topic.description;
+    const factByName = factsByName(capabilityMap);
+    relations.push({
+      label: "事实来源",
+      names: nodeRef.topic.bindings.flatMap((binding) => {
+        const title = factByName.get(binding.fact)?.title;
+        return title ? [title] : [];
+      }),
+    });
+  }
+  const shown = relations.filter((relation) => relation.names.length > 0);
+  return (
+    <InspectorProfileCard
+      description={description}
+      icon={nodeIcon(nodeRef)}
+      title={nodeTitle(nodeRef)}
+    >
+      {shown.map((relation) => (
+        <RelationRow key={relation.label} label={relation.label} names={relation.names} />
+      ))}
+    </InspectorProfileCard>
   );
 }
 
@@ -340,73 +354,57 @@ function FactInspectorBody({ fact }: { fact: DataCapabilityMapFact }) {
   const capabilityMap = useCapabilityMapData();
   // 被属性组认领的维度归属左列组节点，事实本体清单只列剩余内容。
   const grouped = groupedNamesOf(capabilityMap, fact.name);
-  const ownNames = fact.members
-    .filter((member) => !member.internal && !grouped.has(member.name))
-    .map((member) => member.name);
+  const own = listedMembers(
+    fact,
+    fact.members
+      .filter((member) => !member.internal && !grouped.has(member.name))
+      .map((member) => member.name),
+  );
+  const hierarchies = listedHierarchies(fact);
   return (
     <>
-      {fact.description && (
-        <SheetSection>
-          <p className="text-sm">{fact.description}</p>
-        </SheetSection>
-      )}
-      <MemberListSection fact={fact} names={ownNames} title="内容清单" />
-      {fact.hierarchies.length > 0 && (
-        <SheetSection title="部门树">
-          {fact.hierarchies.map((hierarchy) => (
-            <p className="text-sm" key={hierarchy.name}>
-              <span className="font-medium">{hierarchy.title ?? hierarchy.name}</span>
-              <span className="ms-2 text-pa-muted text-xs">
-                {hierarchy.levels.map((level) => levelTitle(fact, level)).join(" → ")}
-              </span>
-            </p>
+      <MemberListSection kind="dimension" members={own} title="分析维度" />
+      <MemberListSection kind="measure" members={own} title="指标" />
+      {hierarchies.length > 0 && (
+        <InspectorSection collapsible title="部门树">
+          {hierarchies.map((hierarchy) => (
+            <InspectorRow key={hierarchy.name} label={hierarchy.title}>
+              {hierarchy.levels.join(" → ")}
+            </InspectorRow>
           ))}
-        </SheetSection>
+        </InspectorSection>
       )}
     </>
   );
 }
 
 function DimensionGroupInspectorBody({ group }: { group: DataCapabilityMapDimensionGroup }) {
-  const factByName = factsByName(useCapabilityMapData());
+  const capabilityMap = useCapabilityMapData();
+  const factByName = factsByName(capabilityMap);
   const members = group.members.flatMap((name): ListedMember[] => {
     for (const binding of group.bindings) {
       if (!binding.members.includes(name)) continue;
       const fact = factByName.get(binding.fact);
       const member = fact?.members.find((candidate) => candidate.name === name);
-      if (!member || member.internal) continue;
-      return [
-        {
-          name,
-          label: member.title ?? name,
-          mono: !member.title,
-          kind: "dimension",
-        },
-      ];
+      if (!member || member.internal || !member.title) continue;
+      return [{ name, label: member.title, kind: "dimension" }];
     }
     return [];
   });
   return (
     <>
-      {group.description && (
-        <SheetSection>
-          <p className="text-sm">{group.description}</p>
-        </SheetSection>
-      )}
-      <SheetSection title="内容清单">
-        <MemberRows kind="dimension" members={members} />
-      </SheetSection>
-      <SheetSection title="事实绑定">
-        {group.bindings.map((binding) => {
-          const fact = factByName.get(binding.fact);
-          return (
-            <p className="text-sm" key={binding.fact}>
-              {fact?.title ?? binding.fact}
-              <span className="ms-2 text-pa-muted text-xs">{binding.members.length} 个维度</span>
-            </p>
-          );
+      <MemberListSection kind="dimension" members={members} title="分析维度" />
+      <InspectorSection collapsible title="事实绑定">
+        {group.bindings.flatMap((binding) => {
+          const title = factByName.get(binding.fact)?.title;
+          if (!title) return [];
+          return [
+            <InspectorRow key={binding.fact} label={title}>
+              {`${binding.members.length} 个维度`}
+            </InspectorRow>,
+          ];
         })}
-      </SheetSection>
+      </InspectorSection>
     </>
   );
 }
@@ -418,53 +416,31 @@ function MetricDomainInspectorBody({ topic }: { topic: DataCapabilityMapMetricDo
   const metrics: ListedMember[] = topic.metrics.map((metric) => ({
     name: metric.name,
     label: metric.title,
-    mono: false,
     kind: "measure",
   }));
   return (
     <>
-      {topic.description && (
-        <SheetSection>
-          <p className="text-sm">{topic.description}</p>
-        </SheetSection>
-      )}
-      <SheetSection title="指标">
-        <MemberRows kind="measure" members={metrics} />
-      </SheetSection>
+      <MemberListSection kind="measure" members={metrics} title="指标" />
       {capabilityMap.dimension_groups.map((group) => {
         const names = bindingGroupIncludes(topic.dimensions, group);
         if (!names.length) return null;
-        const members: ListedMember[] = names.map((name) => {
+        const members: ListedMember[] = names.flatMap((name): ListedMember[] => {
           for (const binding of group.bindings) {
             const fact = factByName.get(binding.fact);
-            const member = fact?.members.find((candidate) => candidate.name === name);
-            if (member) {
-              return {
-                name,
-                label: member.title ?? name,
-                mono: !member.title,
-                kind: "dimension",
-              };
-            }
+            const title = fact?.members.find((candidate) => candidate.name === name)?.title;
+            if (title) return [{ name, label: title, kind: "dimension" }];
           }
-          return { name, label: name, mono: true, kind: "dimension" };
+          return [];
         });
         return (
-          <SheetSection key={group.name} title={group.title}>
-            <MemberRows kind="dimension" members={members} />
-          </SheetSection>
+          <MemberListSection
+            key={group.name}
+            kind="dimension"
+            members={members}
+            title={group.title}
+          />
         );
       })}
-      <SheetSection title="事实来源">
-        {topic.bindings.map((binding) => {
-          const fact = factByName.get(binding.fact);
-          return (
-            <p className="text-sm" key={binding.fact}>
-              {fact?.title ?? binding.fact}
-            </p>
-          );
-        })}
-      </SheetSection>
     </>
   );
 }
@@ -477,24 +453,12 @@ function CapabilityInspector({
   onClose: () => void;
 }) {
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center gap-2 border-b px-4 py-3">
-        <span className="shrink-0 text-pa-ink [&_svg]:size-4" aria-hidden="true">
-          {nodeIcon(nodeRef)}
-        </span>
-        <h3 className="min-w-0 flex-1 truncate font-medium text-sm">{nodeTitle(nodeRef)}</h3>
-        <Button aria-label="关闭详情" onClick={onClose} size="icon-xs" variant="subtle">
-          <XIcon />
-        </Button>
-      </header>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-        {nodeRef.kind === "fact" && <FactInspectorBody fact={nodeRef.fact} />}
-        {nodeRef.kind === "dimension_group" && (
-          <DimensionGroupInspectorBody group={nodeRef.group} />
-        )}
-        {nodeRef.kind === "metric_domain" && <MetricDomainInspectorBody topic={nodeRef.topic} />}
-      </div>
-    </div>
+    <ProfileAside closeLabel="关闭详情" label="能力档案" onClose={onClose}>
+      <CapabilityProfileCard nodeRef={nodeRef} />
+      {nodeRef.kind === "fact" && <FactInspectorBody fact={nodeRef.fact} />}
+      {nodeRef.kind === "dimension_group" && <DimensionGroupInspectorBody group={nodeRef.group} />}
+      {nodeRef.kind === "metric_domain" && <MetricDomainInspectorBody topic={nodeRef.topic} />}
+    </ProfileAside>
   );
 }
 
@@ -625,43 +589,54 @@ function DataCapabilityMapContent() {
 
   const clearSelection = useCallback(() => setSelected(null), []);
 
+  /*
+    档案由壳渲染，落在本页的 Provider 之外——语义包上下文要随节点一起交出去，
+    否则档案里读上下文的那几处会当场抛「缺少运行时语义包上下文」。
+  */
+  useSetStageAside(
+    () =>
+      selectedRef ? (
+        <CapabilityMapContext.Provider value={capabilityMap}>
+          <CapabilityInspector nodeRef={selectedRef} onClose={clearSelection} />
+        </CapabilityMapContext.Provider>
+      ) : null,
+    [capabilityMap, selectedRef, clearSelection],
+    clearSelection,
+    "profile",
+  );
+
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col", MAIN_CARD_BODY_INSET)}>
-      <div className="min-h-0 flex-1">
-        <div className="h-full overflow-hidden rounded-xl">
-          <div className="flex h-full">
-            {/* 窄屏一次只显示其一，不并排挤。 */}
-            <div className={cn("min-w-0 flex-1", selected && "max-sm:hidden")}>
-              <ReactFlow
-                edges={edges}
-                edgeTypes={EDGE_TYPES}
-                fitView
-                fitViewOptions={MAP_FIT_VIEW}
-                maxZoom={1.5}
-                minZoom={0.2}
-                nodes={nodes}
-                nodesConnectable={false}
-                nodesDraggable={false}
-                nodeTypes={NODE_TYPES}
-                onNodeClick={(_, node) => {
-                  if (node.type === "capability") setSelected(node.id);
-                }}
-                onPaneClick={clearSelection}
-                panOnScroll
-                proOptions={PRO_OPTIONS}
-                zoomOnScroll={false}
-              >
-                <Background color="var(--pa-border)" gap={24} variant={BackgroundVariant.Dots} />
-                <MapCameraControls />
-              </ReactFlow>
-            </div>
-            <ViewSidebar open={selected !== null} side="right">
-              {selectedRef && (
-                <CapabilityInspector nodeRef={selectedRef} onClose={clearSelection} />
-              )}
-            </ViewSidebar>
-          </div>
-        </div>
+      {/*
+        画布的场地：与结果面那圈发丝框同一件事——框圈住绘图区，与里面长成什么样无关。
+        半径取 `PLOT_RADIUS`（图表场地的同一个数），两处各写一个数就会差出一档圆角。
+      */}
+      <div
+        className="min-h-0 flex-1 overflow-hidden border border-pa-line"
+        style={{ borderRadius: PLOT_RADIUS }}
+      >
+        <ReactFlow
+          edges={edges}
+          edgeTypes={EDGE_TYPES}
+          fitView
+          fitViewOptions={MAP_FIT_VIEW}
+          maxZoom={1.5}
+          minZoom={0.2}
+          nodes={nodes}
+          nodesConnectable={false}
+          nodesDraggable={false}
+          nodeTypes={NODE_TYPES}
+          onNodeClick={(_, node) => {
+            if (node.type === "capability") setSelected(node.id);
+          }}
+          onPaneClick={clearSelection}
+          panOnScroll
+          proOptions={PRO_OPTIONS}
+          zoomOnScroll={false}
+        >
+          <Background color="var(--pa-border)" gap={24} variant={BackgroundVariant.Dots} />
+          <MapCameraControls />
+        </ReactFlow>
       </div>
     </div>
   );

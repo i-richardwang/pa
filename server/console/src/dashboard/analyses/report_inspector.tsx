@@ -44,7 +44,6 @@ export function ReportInspector({
                 <ChartSettingsPanel
                   catalog={catalog}
                   draft={draft}
-                  embedded
                   onChange={session.setDraft}
                   replay={session.activeReplay}
                   section="type"
@@ -60,7 +59,6 @@ export function ReportInspector({
               <ChartSettingsPanel
                 catalog={catalog}
                 draft={draft}
-                embedded
                 onChange={session.setDraft}
                 replay={session.activeReplay}
                 section="options"

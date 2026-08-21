@@ -18,13 +18,24 @@ const COLUMN_GAP = 176;
 const NODE_GAP = 32;
 const LANE_LABEL_OFFSET = 48;
 
+/**
+ * 上图的事实：有业务名，且有公开成员。读者念不出名字的构件，地图上没有它能说的话——
+ * 这条由类型带着走，于是节点标题、档案与关系行都无处回落到物理名。
+ */
+export type CanvasFact = DataCapabilityMapFact & { title: string };
+
 export type CapabilityNodeRef =
-  | { kind: "fact"; fact: DataCapabilityMapFact }
+  | { kind: "fact"; fact: CanvasFact }
   | { kind: "dimension_group"; group: DataCapabilityMapDimensionGroup }
   | { kind: "metric_domain"; topic: DataCapabilityMapMetricDomain };
 
+/** 事实节点的 id 只认名字：还没上图的事实也要问得出「它在不在图上」。 */
+export function factNodeId(fact: DataCapabilityMapFact): string {
+  return `fact:${fact.name}`;
+}
+
 export function nodeId(ref: CapabilityNodeRef): string {
-  if (ref.kind === "fact") return `fact:${ref.fact.name}`;
+  if (ref.kind === "fact") return factNodeId(ref.fact);
   if (ref.kind === "dimension_group") return `dimension_group:${ref.group.name}`;
   return ref.topic.id;
 }
@@ -37,12 +48,58 @@ export type DimensionComponentRef = {
 
 export type CapabilityColumns = {
   dimensions: DimensionComponentRef[];
-  facts: DataCapabilityMapFact[];
+  facts: CanvasFact[];
   metricDomains: DataCapabilityMapMetricDomain[];
 };
 
-export function canvasFact(fact: DataCapabilityMapFact): boolean {
-  return fact.members.some((member) => !member.internal);
+export function canvasFact(fact: DataCapabilityMapFact): fact is CanvasFact {
+  return fact.title !== null && fact.members.some((member) => !member.internal);
+}
+
+/** 可上屏的一条成员：名字是业务名，没有业务名的成员根本不成行。 */
+export type ListedMember = {
+  name: string;
+  label: string;
+  kind: "dimension" | "measure";
+};
+
+/** 可上屏的一条部门树：树名与逐层业务名。 */
+export type ListedHierarchy = {
+  name: string;
+  title: string;
+  levels: string[];
+};
+
+/**
+ * 展平为可列举成员：不传 names 取事实全部公开成员；传 names（绑定 includes）时逐名解析，
+ * 公开成员按类型归组、部门树归入维度组。内部成员与没有业务名的名字都不列——
+ * 控制台只说业务的话，说不出的那一条整行不发，不退回物理名或语义 id。
+ */
+export function listedMembers(fact: DataCapabilityMapFact, names?: string[]): ListedMember[] {
+  const named = (name: string, title: string | null, kind: ListedMember["kind"]) =>
+    title ? [{ name, label: title, kind }] : [];
+  if (!names) {
+    return fact.members.flatMap((member) =>
+      member.internal ? [] : named(member.name, member.title, member.kind),
+    );
+  }
+  return names.flatMap((name) => {
+    const member = fact.members.find((candidate) => candidate.name === name);
+    if (member) return member.internal ? [] : named(name, member.title, member.kind);
+    const hierarchy = fact.hierarchies.find((candidate) => candidate.name === name);
+    return named(name, hierarchy?.title ?? null, "dimension");
+  });
+}
+
+/** 树是一条自上而下的路径：其中一层说不出业务名，这条路径就读不通，整条不发。 */
+export function listedHierarchies(fact: DataCapabilityMapFact): ListedHierarchy[] {
+  return fact.hierarchies.flatMap((hierarchy) => {
+    const levels = hierarchy.levels.map(
+      (level) => fact.members.find((candidate) => candidate.name === level)?.title ?? null,
+    );
+    if (!hierarchy.title || levels.some((level) => level === null)) return [];
+    return [{ name: hierarchy.name, title: hierarchy.title, levels: levels as string[] }];
+  });
 }
 
 /** 某事实被属性组认领的维度名集合；这些成员在呈现上归属左列属性组而非事实本体。 */

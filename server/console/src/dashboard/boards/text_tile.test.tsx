@@ -15,7 +15,7 @@ function contentTag(html: string): string {
 
 test("文本瓦片正文不叠第二道衬垫", () => {
   const html = renderToStaticMarkup(
-    <TextTile md="**说明**" editing={false} interacting={false} onChangeMd={() => {}} />,
+    <TextTile md="**说明**" editing={false} onChangeMd={() => {}} />,
   );
   const content = contentTag(html);
   expect(content, "没定位到文本瓦片自己那层，下面那条落空").not.toBe("");

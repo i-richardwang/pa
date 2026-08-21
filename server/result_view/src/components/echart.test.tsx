@@ -6,16 +6,8 @@
  */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  applyValueTickDensity,
-  applyFocus,
-  applyPin,
-  raiseSeries,
-  readoutPosition,
-  subscribeReadout,
-  ViewChartCanvas,
-} from "./echart.js";
-import { plotRect } from "../chart_render.js";
+import { applyPin, readoutPosition, subscribeReadout, ViewChartCanvas } from "./echart.js";
+import { plotRect, renderOption, type RenderState } from "../chart_render.js";
 import { ViewRenderer } from "./view_renderer.js";
 import {
   compilePresentationBlock,
@@ -29,7 +21,19 @@ import {
   SERIES_Z,
   haloZ,
   seriesZ,
+  type ViewChart,
 } from "../../../src/presentation_core/chart_config.js";
+
+const state = (over: Partial<RenderState> = {}): RenderState => ({
+  dark: false,
+  plot: "compact",
+  viewport: { width: 0, height: 0 },
+  focused: null,
+  pinned: null,
+  ...over,
+});
+const seriesOf = (chart: ViewChart, over: Partial<RenderState> = {}) =>
+  renderOption(chart, state(over)).series as Record<string, unknown>[];
 
 /**
  * 存根落在 import 之后：模块求值期 `document` 必须仍然缺席——zrender 在加载时嗅探
@@ -278,50 +282,33 @@ test("触屏上图例兼作读数位：末桶的值与桶名随图例交付，�
 
 test("聚焦某条系列时它单独抬层，收回时按序号落回各自那一层", () => {
   expect(CHART, "柱图没编译出来，下面全部落空").not.toBeNull();
-  const patches: unknown[] = [];
-  const stub = { setOption: (option: unknown) => void patches.push(option) };
-
-  raiseSeries(stub as never, CHART!, 1);
-  expect(patches.pop()).toEqual({ series: [{ z: seriesZ(0) }, { z: SERIES_Z.focused }] });
-
-  raiseSeries(stub as never, CHART!, null);
-  expect(patches.pop()).toEqual({ series: [{ z: seriesZ(0) }, { z: seriesZ(1) }] });
+  const z = (focused: number | null) => seriesOf(CHART!, { focused }).map((s) => s.z);
+  expect(z(1).slice(0, 2)).toEqual([seriesZ(0), SERIES_Z.focused]);
+  expect(z(null).slice(0, 2)).toEqual([seriesZ(0), seriesZ(1)]);
 
   expect(seriesZ(1) - seriesZ(0)).toBeGreaterThan(1);
   expect(haloZ(1)).toBeGreaterThan(seriesZ(0));
   expect(haloZ(1)).toBeLessThan(seriesZ(1));
   expect(SERIES_Z.focused).toBeGreaterThan(seriesZ(100));
-  const single = {
-    ...CHART!,
-    option: { ...CHART!.option, pa: { ...(CHART!.option.pa as object), legend: [{}] } },
-  };
-  raiseSeries(stub as never, single as never, 0);
-  expect(patches, "单系列也去抬层，白改一次 option").toEqual([]);
 });
 
 test("焦点只改色不换态：落选换成失焦色，暗色下走与首帧同一道主题翻译", () => {
   expect(CHART, "柱图没编译出来，下面全部落空").not.toBeNull();
-  const patches: { series: { itemStyle: { color: string } }[] }[] = [];
-  const stub = { setOption: (option: unknown) => void patches.push(option as never) };
-
-  applyFocus(stub as never, CHART!, false, 0);
-  expect(patches.pop()?.series.map((s) => s.itemStyle.color)).toEqual([
-    SERIES_COLORS[0],
-    CHART_CHROME.blurred.light,
-  ]);
-
-  applyFocus(stub as never, CHART!, false, null);
-  expect(patches.pop()?.series.map((s) => s.itemStyle.color)).toEqual([
-    SERIES_COLORS[0],
-    SERIES_COLORS[1],
-  ]);
-
+  const colors = (over: Partial<RenderState>) =>
+    seriesOf(CHART!, over)
+      .slice(0, 2)
+      .map((s) => (s.itemStyle as { color: string }).color);
+  expect(colors({ focused: 0 })).toEqual([SERIES_COLORS[0], CHART_CHROME.blurred.light]);
+  expect(colors({ focused: null })).toEqual([SERIES_COLORS[0], SERIES_COLORS[1]]);
   // 暗色：色出自同一张对照表，交互期不另立一套灰
-  applyFocus(stub as never, CHART!, true, 0);
-  expect(patches.pop()?.series.map((s) => s.itemStyle.color)).toEqual([
+  expect(colors({ focused: 0, dark: true })).toEqual([
     CHART_DARK_COLORS[SERIES_COLORS[0].toLowerCase()],
     CHART_CHROME.blurred.dark,
   ]);
+  // 编译期的 option 里没有第二套交互态：置灰全由取色式算出，绘图区内的悬停改不动谁的色
+  const compiled = CHART!.option.series as { emphasis?: Record<string, unknown> }[];
+  expect(compiled[0].emphasis).not.toHaveProperty("focus");
+  expect(compiled[0]).not.toHaveProperty("blur");
 });
 
 test("读数卡落在光标左侧 24，左边放不下才翻到右侧，且恒夹在场地内留一道边", () => {
@@ -340,24 +327,25 @@ test("读数卡落在光标左侧 24，左边放不下才翻到右侧，且恒�
 
 test("钉住期间指针停在被钉的那一格，撤钉即交还给鼠标", () => {
   const calls: unknown[] = [];
-  const stub = {
-    setOption: (option: unknown) => void calls.push(option),
-    dispatchAction: (action: unknown) => void calls.push(action),
-  };
+  const stub = { dispatchAction: (action: unknown) => void calls.push(action) };
 
-  applyPin(stub as never, CHART!, 3);
-  expect(calls).toEqual([
-    { tooltip: { triggerOn: "none" } },
-    { type: "showTip", seriesIndex: 0, dataIndex: 3 },
-  ]);
+  // option 那一半在派生里：钉住即交出 triggerOn；指针落点由这里点名
+  expect(
+    (renderOption(CHART!, state({ pinned: 3 })).tooltip as { triggerOn: string }).triggerOn,
+  ).toBe("none");
+  applyPin(stub, CHART!, 3);
+  expect(calls).toEqual([{ type: "showTip", seriesIndex: 0, dataIndex: 3 }]);
 
   calls.length = 0;
-  applyPin(stub as never, CHART!, null);
-  expect(calls).toEqual([{ tooltip: { triggerOn: "mousemove|click" } }, { type: "hideTip" }]);
+  expect(
+    (renderOption(CHART!, state({ pinned: null })).tooltip as { triggerOn: string }).triggerOn,
+  ).toBe("mousemove|click");
+  applyPin(stub, CHART!, null);
+  expect(calls).toEqual([{ type: "hideTip" }]);
 
   // 饼图没有指针可冻：那一路的索引出自逐项事件，钉住只冻卡片自己
   calls.length = 0;
-  applyPin(stub as never, { ...CHART!, form: "pie" }, 3);
+  applyPin(stub, { model: { ...CHART!.model, pointer: "item" } }, 3);
   expect(calls).toEqual([]);
 });
 
@@ -433,34 +421,22 @@ const LINE_CHART = compilePresentationBlock(TREND_VIEW, {
 }).chart;
 
 test("值轴档数随绘图区尺度走，不是编译期那个定数", () => {
-  const patches: Record<string, unknown>[] = [];
-  const stub = { setOption: (option: Record<string, unknown>) => patches.push(option) };
-  type Axes = { xAxis: { splitNumber?: number }[]; yAxis: { splitNumber?: number }[] };
-  const patch = (chart: typeof CHART, w: number, h: number) => {
-    patches.length = 0;
-    applyValueTickDensity(stub as never, chart!, "compact", { width: w, height: h });
-    return patches.pop() as Axes | undefined;
-  };
+  type Axes = { xAxis: { splitNumber?: number }; yAxis: { splitNumber?: number }[] };
+  const axes = (chart: typeof CHART, width: number, height: number) =>
+    renderOption(chart!, state({ viewport: { width, height } })) as unknown as Axes;
 
   // 值轴在纵向的折线：整页那么高刻得细，卡片那么矮刻得粗——同一张图，档数不同
-  const tall = patch(LINE_CHART, 900, 700)?.yAxis[0]?.splitNumber ?? 0;
-  const short = patch(LINE_CHART, 900, 200)?.yAxis[0]?.splitNumber ?? 0;
+  const tall = axes(LINE_CHART, 900, 700).yAxis[0]?.splitNumber ?? 0;
+  const short = axes(LINE_CHART, 900, 200).yAxis[0]?.splitNumber ?? 0;
   expect(tall).toBeGreaterThan(short);
-
   expect(short).toBeGreaterThanOrEqual(2);
   expect(tall).toBeLessThanOrEqual(10);
-  expect(patch(LINE_CHART, 900, 10)?.yAxis[0]?.splitNumber).toBeGreaterThanOrEqual(2);
-  expect(patch(LINE_CHART, 900, 700)?.xAxis).toEqual([{}]);
-  const wide = patch(CHART, 900, 300)?.xAxis[0]?.splitNumber ?? 0;
-  const narrow = patch(CHART, 260, 300)?.xAxis[0]?.splitNumber ?? 0;
+  expect(axes(LINE_CHART, 900, 10).yAxis[0]?.splitNumber).toBeGreaterThanOrEqual(2);
+  // 类目轴没有档数可言
+  expect(axes(LINE_CHART, 900, 700).xAxis.splitNumber).toBeUndefined();
+  const wide = axes(CHART, 900, 300).xAxis.splitNumber ?? 0;
+  const narrow = axes(CHART, 260, 300).xAxis.splitNumber ?? 0;
   expect(wide, "横排条形的值轴没跟着宽走").toBeGreaterThan(narrow);
-  expect(patch(CHART, 900, 300)?.yAxis).toEqual([{}]);
-  patches.length = 0;
-  applyValueTickDensity(stub as never, { ...CHART!, form: "pie" }, "compact", {
-    width: 900,
-    height: 700,
-  });
-  expect(patches, "饼图也去改值轴，白改一次 option").toEqual([]);
 });
 
 /** 拆卸时实例已 dispose：`getZr()` 改口返回 null，回头再要手柄就是在清理里抛错。 */
@@ -489,7 +465,11 @@ function disposableSource() {
 
 test("读数订阅的清理只碰订阅时那两个手柄，实例散场后照样退得干净", () => {
   const pie = disposableSource();
-  const release = subscribeReadout(pie.source, { form: "pie" }, () => {});
+  const release = subscribeReadout(
+    pie.source,
+    { model: { ...CHART!.model, pointer: "item" } },
+    () => {},
+  );
   expect(pie.events).toEqual(["on:mouseover", "on:mouseout", "zr.on:globalout"]);
   // 实例先散场（建实例那道 effect 的清理声明在前，拆卸时先跑）
   pie.dispose();
@@ -503,7 +483,7 @@ test("读数订阅的清理只碰订阅时那两个手柄，实例散场后照�
 
   // 整列触发的图订的是另一件事，退订同样不回头要手柄
   const axis = disposableSource();
-  const releaseAxis = subscribeReadout(axis.source, { form: "bar" }, () => {});
+  const releaseAxis = subscribeReadout(axis.source, CHART!, () => {});
   expect(axis.events).toEqual(["on:updateAxisPointer", "zr.on:globalout"]);
   axis.dispose();
   expect(() => releaseAxis?.()).not.toThrow();

@@ -2,30 +2,19 @@ import type { ReactNode } from "react";
 import { MAIN_CARD_BODY_INSET } from "../layout/layout_chrome";
 import { cn } from "@/lib/utils";
 
-/**
- * 右栏宽度单源。壳排右栏读本常量——配置栏自己不写宽度，否则常量与真实 DOM 各活各的。
- */
-export const CHART_STAGE_ASIDE_WIDTH = 320 as const;
-
 export function ChartStage({
   heading,
   footer,
   children,
-  className,
 }: {
   /** 题名区：Explore 式 22/26 + 灰副文，恒在结果之上。 */
   heading?: ReactNode;
   /** 页面底栏：时间栏 + 结果元信息。通栏落在结果区之外。 */
   footer?: ReactNode;
   children: ReactNode;
-  className?: string;
 }) {
   return (
-    <div
-      className={cn("flex h-full min-h-0 flex-col", className)}
-      data-slot="chart-stage"
-      data-testid="chart-stage"
-    >
+    <div className="flex h-full min-h-0 flex-col" data-slot="chart-stage" data-testid="chart-stage">
       <section className="flex min-h-0 min-w-0 flex-1 flex-col" data-slot="chart-stage-main">
         <div
           className={cn("flex min-h-0 flex-1 flex-col", MAIN_CARD_BODY_INSET)}

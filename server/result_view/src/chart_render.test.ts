@@ -1,11 +1,10 @@
 /**
- * 渲染端补全：绘图留白 / plot 框的归属，以及注入的那几个格式化器。
+ * 渲染期派生：绘图留白 / plot 框的归属、密度、注入的那几个格式化器，全部经 `renderOption`
+ * 这一个入口验——它是一个纯函数，同样的输入恒得同样的 option。
  *
- * 留白与框：编译期给的是紧凑档，宿主换档必须**从 PLOT_PADDING / PLOT_FRAME 取**。
- * 渲染产物必须等于表里那一行——若渲染端另写一组数字，两处各持一份留白，改哪边都只改对
- * 一半，而没有任何东西会报错。故断言落在「渲染产物 === 表里那一行」上，不是落在
- * 「渲染端写了某个数字」上。框的归属同理：整页的框归舞台，瓦片与整页图内关框，
- * 关不掉就是双层框，而双层框在截图上很容易被当成「设计就是这样」。
+ * 留白与框：宿主换档必须**从 PLOT_PADDING / PLOT_FRAME 取**。渲染产物必须等于表里那一行——
+ * 若渲染端另写一组数字，两处各持一份留白，改哪边都只改对一半，而没有任何东西会报错。
+ * 故断言落在「渲染产物 === 表里那一行」上，不是落在「渲染端写了某个数字」上。
  *
  * 读数卡的行与版式在 `readout.test.ts` 与 `readout_card.test.tsx`。
  */
@@ -13,26 +12,47 @@ import { expect, test } from "bun:test";
 import {
   PLOT_FRAME,
   PLOT_PADDING,
-  type PaChartExtension,
+  type ChartLegendItem,
+  type ChartModel,
   type ViewChart,
 } from "../../src/presentation_core/chart_config.js";
-import {
-  applyValueLabelDensity,
-  gridRect,
-  plotRect,
-  plotWidth,
-  prepareOption,
-} from "./chart_render.js";
+import { gridRect, plotRect, plotSize, renderOption, type RenderState } from "./chart_render.js";
 
-function chart(): ViewChart {
+const state = (over: Partial<RenderState> = {}): RenderState => ({
+  dark: false,
+  plot: "compact",
+  viewport: { width: 0, height: 0 },
+  focused: null,
+  pinned: null,
+  ...over,
+});
+
+const item = (
+  name: string,
+  values: (number | null)[],
+  extra: Partial<ChartLegendItem> = {},
+): ChartLegendItem => ({ name, color: "#3b6fdb", format: "number", values, ...extra });
+
+function chart(
+  series: Record<string, unknown>[] = [{ type: "bar", name: "在职人数", data: [120] }],
+  model: Partial<ChartModel> = {},
+  form: ViewChart["form"] = "bar",
+): ViewChart {
   return {
-    form: "bar",
+    form,
     height: 300,
     option: {
-      grid: { containLabel: false, ...PLOT_PADDING.compact },
+      grid: { containLabel: false },
       xAxis: { type: "category", data: ["研发"] },
       yAxis: { type: "value" },
-      series: [{ type: "bar", name: "在职人数", data: [120] }],
+      series,
+    },
+    model: {
+      categories: ["研发"],
+      legend: [item("在职人数", [120])],
+      axes: {},
+      pointer: "axis",
+      ...model,
     },
   };
 }
@@ -43,17 +63,17 @@ test("plot 留白按名取档：缺省紧凑，整页 / 瓦片宿主换到对应
   expect(PLOT_PADDING.tile.left).toBeLessThan(PLOT_PADDING.compact.left);
   expect(PLOT_PADDING.tile.bottom).not.toBe(PLOT_PADDING.compact.bottom);
 
-  const base = gridOf(prepareOption(chart(), false));
+  const base = gridOf(renderOption(chart(), state()));
   expect(base.left).toBe(PLOT_PADDING.compact.left);
   expect(base.top).toBe(PLOT_PADDING.compact.top);
 
-  const page = gridOf(prepareOption(chart(), false, { plot: "page" }));
+  const page = gridOf(renderOption(chart(), state({ plot: "page" })));
   expect(page.left).toBe(PLOT_PADDING.page.left);
   expect(page.right).toBe(PLOT_PADDING.page.right);
   expect(page.top).toBe(PLOT_PADDING.page.top);
   expect(page.bottom).toBe(PLOT_PADDING.page.bottom);
 
-  const tile = gridOf(prepareOption(chart(), false, { plot: "tile" }));
+  const tile = gridOf(renderOption(chart(), state({ plot: "tile" })));
   expect(tile.left).toBe(PLOT_PADDING.tile.left);
   expect(tile.bottom).toBe(PLOT_PADDING.tile.bottom);
 
@@ -63,12 +83,10 @@ test("plot 留白按名取档：缺省紧凑，整页 / 瓦片宿主换到对应
 
 test("形态自己那一栏叠在场景留白之上，grid 与 DOM 那层框读同一道算式", () => {
   const bars = { ...chart(), plot_gutter: { left: 120 } };
-  expect(bars.plot_gutter.left).toBeGreaterThan(0);
-
   for (const plot of ["compact", "tile", "page"] as const) {
     const rect = plotRect(bars, plot);
     expect(rect.left, `${plot} 档的类目栏没叠进绘图区`).toBe(PLOT_PADDING[plot].left + 120);
-    expect(gridOf(prepareOption(bars, false, { plot }))).toMatchObject(rect);
+    expect(gridOf(renderOption(bars, state({ plot })))).toMatchObject(rect);
     expect(plotRect(chart(), plot).left).toBe(PLOT_PADDING[plot].left);
   }
 });
@@ -82,21 +100,23 @@ test("值标签的框内余量只缩数据区：grid 加余量、场地框不动
     const grid = gridRect(labeled, plot);
     expect(grid.top).toBe(frame.top + 22);
     expect(grid.right).toBe(frame.right + 48);
-    expect(gridOf(prepareOption(labeled, false, { plot }))).toMatchObject(grid);
+    expect(gridOf(renderOption(labeled, state({ plot })))).toMatchObject(grid);
   }
 });
 
-test("值标签密度读取数据区宽度，不把轴栏与场景留白算成可用空间", () => {
+test("密度读取数据区尺寸，不把轴栏与场景留白算成可用空间", () => {
   const labeled = { ...chart(), plot_gutter: { left: 80 }, plot_inset: { right: 40 } };
   const rect = gridRect(labeled, "page");
-  expect(plotWidth(labeled, "page", 500)).toBe(500 - rect.left - rect.right);
+  expect(plotSize(labeled, "page", { width: 500, height: 300 })).toEqual({
+    width: 500 - rect.left - rect.right,
+    height: 300 - rect.top - rect.bottom,
+  });
 });
 
 test("绘图区边框由 DOM 绘制，grid 不重复画框", () => {
   expect(PLOT_FRAME.tile).not.toBe(PLOT_FRAME.page);
-
   for (const plot of ["compact", "tile", "page"] as const) {
-    const grid = gridOf(prepareOption(chart(), false, { plot }));
+    const grid = gridOf(renderOption(chart(), state({ plot })));
     expect(grid, `${plot} 档的 grid 又画了一遍框，会与 DOM 那层叠成双框`).not.toHaveProperty(
       "show",
     );
@@ -105,21 +125,44 @@ test("绘图区边框由 DOM 绘制，grid 不重复画框", () => {
   }
 });
 
+test("值轴档数随绘图区尺度走：每 80px 一档、夹在 2–10；尺寸未知时不动编译期那个数", () => {
+  const ticks = (viewport: { width: number; height: number }) =>
+    (renderOption(chart(), state({ viewport })).yAxis as { splitNumber?: number }).splitNumber;
+  expect(ticks({ width: 0, height: 0 })).toBeUndefined();
+  const rect = gridRect(chart(), "compact");
+  expect(ticks({ width: 400, height: 240 + rect.top + rect.bottom })).toBe(3);
+  expect(ticks({ width: 400, height: 100 + rect.top + rect.bottom })).toBe(2);
+  expect(ticks({ width: 400, height: 2000 })).toBe(10);
+});
+
+test("折线圆点密度走 showSymbol：每点摊不到 12px 就藏起来，只在指针命中时现出", () => {
+  const line = chart(
+    [{ type: "line", name: "在职人数", data: Array(20).fill(1), showSymbol: true }],
+    { legend: [item("在职人数", Array(20).fill(1))] },
+    "line",
+  );
+  const symbol = (width: number) =>
+    (
+      renderOption(line, state({ viewport: { width, height: 300 } })).series as {
+        showSymbol: boolean;
+      }[]
+    )[0].showSymbol;
+  const rect = gridRect(line, "compact");
+  expect(symbol(240 + rect.left + rect.right)).toBe(true);
+  expect(symbol(200 + rect.left + rect.right)).toBe(false);
+});
+
 function areaLineChart(color: string): ViewChart {
-  return {
-    form: "line",
-    height: 300,
-    option: {
-      xAxis: { type: "category", data: ["2026-07"] },
-      yAxis: { type: "value" },
-      series: [{ type: "line", name: "在职人数", data: [120], areaStyle: { color } }],
-      pa: { series: { 在职人数: "number" as const }, axes: {} } satisfies PaChartExtension,
-    },
-  };
+  return chart(
+    [{ type: "line", name: "在职人数", data: [120], areaStyle: { color } }],
+    { legend: [item("在职人数", [120], { color })] },
+    "line",
+  );
 }
 
 const areaOf = (chart: ViewChart, dark: boolean) =>
-  (prepareOption(chart, dark).series as { areaStyle: Record<string, unknown> }[])[0].areaStyle;
+  (renderOption(chart, state({ dark })).series as { areaStyle: Record<string, unknown> }[])[0]
+    .areaStyle;
 
 test("面积渐变在渲染端按已翻转的色现拼，自顶 5% 淡出到 70%", () => {
   const light = areaOf(areaLineChart("#3b6fdb"), false);
@@ -147,40 +190,28 @@ test("解析不了的自定义色退成平涂，不留一块实色", () => {
   expect(area.opacity).toBe(0.05);
 });
 
-test("刻度与值标签都按列声明的小数位报数：整数百分比就是整数", () => {
-  const pa: PaChartExtension = {
-    series: { 组织推荐指数: "percent" },
-    decimals: { 组织推荐指数: 0 },
-    axes: { y: ["percent"] },
-    axis_decimals: { y: [0] },
-    legend: [{ name: "组织推荐指数", color: "#000000" }],
-  };
-  const chart: ViewChart = {
-    form: "bar",
-    height: 300,
-    option: {
-      xAxis: { type: "category", data: ["研发"] },
-      yAxis: { type: "value" },
-      series: [{ type: "bar", name: "组织推荐指数", data: [0.2349], label: { show: true } }],
-      pa,
-    },
-  };
-  const option = prepareOption(chart, false);
+type Formatter = (params: { value?: unknown; dataIndex?: number }) => string;
+
+test("刻度与值标签都按单元声明的小数位报数：整数百分比就是整数", () => {
+  const percent = (decimals?: number) =>
+    chart([{ type: "bar", name: "组织推荐指数", data: [0.2349], label: { show: true } }], {
+      legend: [
+        item("组织推荐指数", [0.2349], {
+          format: "percent",
+          ...(decimals === undefined ? {} : { decimals }),
+        }),
+      ],
+      axes: { y: ["percent"] },
+      ...(decimals === undefined ? {} : { axis_decimals: { y: [decimals] } }),
+    });
+  const option = renderOption(percent(0), state());
   const yAxis = option.yAxis as { axisLabel: { formatter: (value: number) => string } };
   expect(yAxis.axisLabel.formatter(0.225)).toBe("23%");
-  const series = (
-    option.series as { label: { formatter: (p: { value: unknown }) => string } }[]
-  )[0];
+  const series = (option.series as { label: { formatter: Formatter } }[])[0];
   expect(series.label.formatter({ value: 0.2349 })).toBe("23%");
 
   // 没声明位数就走默认一位
-  const plain = prepareOption(
-    {
-      ...chart,
-      option: { ...chart.option, pa: { ...pa, decimals: undefined, axis_decimals: undefined } },
-    },
-    false,
-  );
+  const plain = renderOption(percent(), state());
   expect(
     (plain.yAxis as { axisLabel: { formatter: (value: number) => string } }).axisLabel.formatter(
       0.225,
@@ -189,115 +220,84 @@ test("刻度与值标签都按列声明的小数位报数：整数百分比就�
 });
 
 test("焦点现出的那条也带格式化器：此刻不印数的系列同样配齐格式与步距", () => {
-  const pa: PaChartExtension = {
-    series: { 在职人数: "number", 离职率: "percent" },
-    decimals: { 离职率: 0 },
-    axes: { y: ["number"] },
-    legend: [
-      { name: "在职人数", color: "#000000" },
-      { name: "离职率", color: "#111111" },
+  const two = chart(
+    [
+      { type: "line", name: "在职人数", data: [10, 20], label: { show: true } },
+      // 「仅主指标」档：形制配齐、此刻不印；焦点落在它身上才现出来
+      { type: "line", name: "离职率", data: [0.0234, 0.0312], label: { show: false } },
     ],
-  };
-  const chart: ViewChart = {
-    form: "line",
-    height: 300,
-    option: {
-      xAxis: { type: "category", data: ["1月", "2月"] },
-      yAxis: { type: "value" },
-      series: [
-        { type: "line", name: "在职人数", data: [10, 20], label: { show: true } },
-        // 「仅主指标」档：形制配齐、此刻不印；焦点落在它身上才现出来
-        { type: "line", name: "离职率", data: [0.0234, 0.0312], label: { show: false } },
+    {
+      categories: ["1月", "2月"],
+      legend: [
+        item("在职人数", [10, 20]),
+        item("离职率", [0.0234, 0.0312], { format: "percent", decimals: 0 }),
       ],
-      pa,
     },
-  };
-  type Formatter = (params: { value?: unknown; dataIndex?: number }) => string;
-  const prepared = prepareOption(chart, false);
-  const hidden = (prepared.series as { label: { formatter: Formatter } }[])[1];
+    "line",
+  );
+  const hidden = (renderOption(two, state()).series as { label: { formatter: Formatter } }[])[1];
   expect(hidden.label.formatter({ value: 0.0234 })).toBe("2%");
-
-  let patch: { series?: { label?: { formatter?: Formatter } }[] } = {};
-  applyValueLabelDensity({ setOption: (option) => (patch = option as typeof patch) }, chart, 200);
-  expect(patch.series?.[1]?.label?.formatter?.({ value: 0.0312, dataIndex: 1 })).toBe("3%");
+  // 焦点落在它身上：现出来，格式化器仍在
+  const focused = (
+    renderOption(two, state({ focused: 1 })).series as {
+      label: { show: boolean; formatter: Formatter };
+    }[]
+  )[1];
+  expect(focused.label.show).toBe(true);
+  expect(focused.label.formatter({ value: 0.0312, dataIndex: 1 })).toBe("3%");
 });
 
 test("值标签密度守卫：局促时按步距挑桶印数且恒印末点，充裕时逐点印", () => {
-  const pa: PaChartExtension = {
-    series: { 在职人数: "number" },
-    axes: { y: ["number"] },
-    legend: [{ name: "在职人数", color: "#000000" }],
-  };
-  const chart: ViewChart = {
-    form: "line",
-    height: 300,
-    option: {
-      xAxis: { type: "category", data: ["1月", "2月", "3月"] },
-      yAxis: { type: "value" },
-      series: [{ type: "line", name: "在职人数", data: [10, 20, 30], label: { show: true } }],
-      pa,
-    },
-  };
-  type Formatter = (params: { value?: unknown; dataIndex?: number }) => string;
-  const run = (width: number) => {
-    let patch: { series?: { label?: { formatter?: Formatter } }[] } = {};
-    applyValueLabelDensity(
-      { setOption: (option) => (patch = option as typeof patch) },
-      chart,
-      width,
-    );
-    return patch.series?.[0]?.label?.formatter;
-  };
+  const three = (type: "line" | "bar") =>
+    chart([{ type, name: "在职人数", data: [10, 20, 30], label: { show: true } }], {
+      categories: ["1月", "2月", "3月"],
+      legend: [item("在职人数", [10, 20, 30])],
+    });
+  const rect = gridRect(three("line"), "compact");
+  const run = (c: ViewChart, plotWidth: number) =>
+    (
+      renderOption(c, state({ viewport: { width: plotWidth + rect.left + rect.right, height: 0 } }))
+        .series as { label: { formatter: Formatter } }[]
+    )[0].label.formatter;
   // 3 点：120px 充裕（每点 40 > 37.33，逐点）；90px 局促（每点 30，步距 ceil(50/30)=2 → 0、末点）
-  const wide = run(120);
-  expect(wide?.({ value: 20, dataIndex: 1 })).toBe("20");
-  const sparse = run(90);
-  expect(sparse?.({ value: 10, dataIndex: 0 })).toBe("10");
-  expect(sparse?.({ value: 20, dataIndex: 1 })).toBe("");
-  expect(sparse?.({ value: 30, dataIndex: 2 })).toBe("30");
-  // 柱按底片宽定步距：底片 26+4=30 > 每列 20 → 步距 2；横排（y 轴类目）不受触碰
-  const barChart: ViewChart = {
-    ...chart,
+  const wide = run(three("line"), 120);
+  expect(wide({ value: 20, dataIndex: 1 })).toBe("20");
+  const sparse = run(three("line"), 90);
+  expect(sparse({ value: 10, dataIndex: 0 })).toBe("10");
+  expect(sparse({ value: 20, dataIndex: 1 })).toBe("");
+  expect(sparse({ value: 30, dataIndex: 2 })).toBe("30");
+  // 柱按底片宽定步距：底片 26+4=30 > 每列 20 → 步距 2
+  const barSparse = run(three("bar"), 60);
+  expect(barSparse({ value: 20, dataIndex: 1 })).toBe("");
+  expect(barSparse({ value: 30, dataIndex: 2 })).toBe("30");
+  // 横排（y 轴类目）一行一格不会横向挤：逐格印
+  const horizontal: ViewChart = {
+    ...three("bar"),
     option: {
-      ...chart.option,
-      series: [{ type: "bar", name: "在职人数", data: [10, 20, 30], label: { show: true } }],
+      ...three("bar").option,
+      xAxis: { type: "value" },
+      yAxis: { type: "category", data: ["A", "B", "C"] },
     },
   };
-  let barPatch: { series?: { label?: { formatter?: Formatter } }[] } = {};
-  applyValueLabelDensity(
-    { setOption: (option) => (barPatch = option as typeof barPatch) },
-    barChart,
-    60,
+  expect(run(horizontal, 60)({ value: 20, dataIndex: 1 })).toBe("20");
+  // 没开标签的系列不配格式化器
+  const unlabeled = renderOption(
+    chart([{ type: "line", name: "在职人数", data: [10, 20, 30] }], {}, "line"),
+    state(),
   );
-  const barSparse = barPatch.series?.[0]?.label?.formatter;
-  expect(barSparse?.({ value: 20, dataIndex: 1 })).toBe("");
-  expect(barSparse?.({ value: 30, dataIndex: 2 })).toBe("30");
-  let horizontalTouched = false;
-  applyValueLabelDensity(
-    { setOption: () => (horizontalTouched = true) },
-    {
-      ...barChart,
-      option: {
-        ...barChart.option,
-        xAxis: { type: "value" },
-        yAxis: { type: "category", data: ["A", "B", "C"] },
-      },
-    },
-    60,
-  );
-  expect(horizontalTouched).toBe(false);
-  // 没开标签的系列不受触碰
-  let touched = false;
-  applyValueLabelDensity(
-    { setOption: () => (touched = true) },
-    {
-      ...chart,
-      option: {
-        ...chart.option,
-        series: [{ type: "line", name: "在职人数", data: [10, 20, 30] }],
-      },
-    },
-    90,
-  );
-  expect(touched).toBe(false);
+  expect((unlabeled.series as { label?: unknown }[])[0].label).toBeUndefined();
+});
+
+test("钉住期间指针交出鼠标驱动；饼图没有指针可交", () => {
+  const tooltip = (c: ViewChart, pinned: number | null) =>
+    renderOption(c, state({ pinned })).tooltip as { triggerOn?: string } | undefined;
+  expect(tooltip(chart(), null)?.triggerOn).toBe("mousemove|click");
+  expect(tooltip(chart(), 0)?.triggerOn).toBe("none");
+  const pie: ViewChart = {
+    form: "pie",
+    height: 300,
+    option: { series: [{ type: "pie", data: [{ name: "A", value: 1 }] }] },
+    model: { categories: ["x"], legend: [item("A", [1])], axes: {}, pointer: "item" },
+  };
+  expect(tooltip(pie, 0)).toBeUndefined();
 });

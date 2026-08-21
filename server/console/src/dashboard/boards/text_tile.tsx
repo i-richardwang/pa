@@ -8,7 +8,6 @@ import { TileShell, tileEditMenuTriggerClass } from "./tile_shell";
 export function TextTile({
   md,
   editing,
-  interacting,
   canMoveUp,
   canMoveDown,
   onMoveUp,
@@ -18,7 +17,6 @@ export function TextTile({
 }: {
   md: string;
   editing: boolean;
-  interacting: boolean;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
   onMoveUp?: () => void;
@@ -29,9 +27,7 @@ export function TextTile({
   return (
     <TileShell
       title={<span className="text-pa-muted">文本</span>}
-      interacting={interacting}
       affordance={editing ? "pinned" : "hover"}
-      frame="xl"
       actions={
         editing && onRemove ? (
           <Menu>

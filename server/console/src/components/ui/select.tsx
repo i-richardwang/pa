@@ -114,7 +114,7 @@ export function SelectTrigger({
 /**
  * 下拉的名字由 Base UI 绑定到触发件上；不带它的下拉没有可读名称。
  *
- * 它出 `<span>`：设置行的左槽是行内的（见 `InspectorOptionRow`），Base UI 默认的 div 塞不进去。
+ * 它出 `<span>`：设置行的左槽是行内的（见 `InspectorRow`），Base UI 默认的 div 塞不进去。
  */
 export function SelectLabel({
   className,

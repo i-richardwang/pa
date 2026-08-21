@@ -154,9 +154,7 @@ function FilterCard({
           {/* 列表高度取整行数：切在半行上会让最后那行读成渲染坏了。 */}
           <div className="max-h-42 overflow-y-auto border-pa-line-subtle border-t p-1">
             {candidates.map((value) => (
-              <InspectorRow key={value} onClick={() => add(value)}>
-                <span className="min-w-0 truncate">{value}</span>
-              </InspectorRow>
+              <InspectorRow key={value} label={value} onClick={() => add(value)} />
             ))}
             {candidates.length === 0 ? (
               <p className="px-2 py-1.5 text-sm text-pa-muted">

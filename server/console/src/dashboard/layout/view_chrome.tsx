@@ -1,8 +1,11 @@
-import { CircleAlertIcon, EllipsisIcon } from "lucide-react";
+import type * as React from "react";
+import { CircleAlertIcon, EllipsisIcon, PanelRightIcon } from "lucide-react";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Menu, MenuPopup, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
+import { InspectorBody } from "@/components/ui/inspector";
+import { Titlebar } from "@/components/ui/titlebar";
 import { LoadingMark } from "pa-result-view";
 import { cn } from "@/lib/utils";
 
@@ -83,5 +86,34 @@ export function ViewPageError({ message }: { message: string }) {
         <AlertTitle>{message}</AlertTitle>
       </Alert>
     </div>
+  );
+}
+
+/** 档案栏的壳：通高一条栏，栏顶只有一枚关闭钮，栏身是档案密度的可滚正文。 */
+export function ProfileAside({
+  label,
+  closeLabel,
+  onClose,
+  children,
+}: {
+  /** 这条栏是谁的档案，念给读屏听。 */
+  label: string;
+  closeLabel: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <aside
+      aria-label={label}
+      className="relative flex h-full min-h-0 w-full min-w-0 flex-col bg-pa-bg"
+      data-slot="profile-aside"
+    >
+      <Titlebar align="end" className="gap-0">
+        <HeaderIconButton label={closeLabel} onClick={onClose}>
+          <PanelRightIcon aria-hidden="true" />
+        </HeaderIconButton>
+      </Titlebar>
+      <InspectorBody density="reading">{children}</InspectorBody>
+    </aside>
   );
 }

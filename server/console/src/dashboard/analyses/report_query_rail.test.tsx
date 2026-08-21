@@ -183,7 +183,7 @@ test("无结果时成员名仍走目录翻译，不上屏限定名", () => {
 test("已选成员成行不成片：胶囊只留给筛选取值", () => {
   const out = render(withMembers(blankDraft()));
   // 指标仍是一行；分组维度是一行 Breakdown，维度与范围两枚触发件并列在同一行内。
-  expect(out.match(/data-slot="inspector-member-row"/g)).toHaveLength(1);
+  expect(out.match(/data-slot="inspector-row"/g)).toHaveLength(1);
   expect(out.match(/data-slot="breakdown-field"/g)).toHaveLength(1);
   expect(out).toContain('aria-label="组织分组范围：全部"');
   expect(out).not.toContain('data-slot="inspector-field-group"');
@@ -295,7 +295,7 @@ test("构成占比住在指标节：候选就在指标浮层里，落定后是�
   const calculated = render(withCalculation(blankDraft()));
   const measuresAt = calculated.indexOf(">指标<");
   const groupsAt = calculated.indexOf(">分组<");
-  const rowAt = calculated.indexOf('data-slot="calculation-row"');
+  const rowAt = calculated.indexOf('aria-label="组织结构怎么算');
   expect(rowAt).toBeGreaterThan(measuresAt);
   expect(rowAt).toBeLessThan(groupsAt);
   expect(calculated).toContain("组织结构");

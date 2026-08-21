@@ -2,13 +2,8 @@ import { useEffect, useState, type ComponentProps, type ReactNode } from "react"
 import { useIsMobile } from "@/hooks/use-mobile";
 import { CircleAlertIcon, PanelRightIcon, TableIcon } from "lucide-react";
 import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
-import {
-  LoadingMark,
-  type CardActions,
-  PageFooterBand,
-  ViewPageFooter,
-  ViewRenderer,
-} from "pa-result-view";
+import { LoadingMark, PageFooterBand, ViewPageFooter, ViewRenderer } from "pa-result-view";
+import { BROWSER_CARD_ACTIONS } from "../kit/browser_actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -163,22 +158,11 @@ export function AnalysisWorkbench({
       />
     ) : null;
 
-  // 浏览器环境的真实能力：导出走新开链接，复制走剪贴板。
-  const viewActions: CardActions = {
-    exportAction: {
-      kind: "open_link",
-      run: async (link) => {
-        window.open(link.url, "_blank", "noopener");
-      },
-    },
-    copyText: async (text) => navigator.clipboard.writeText(text),
-  };
-
-  const presentation = replay ? (session.preview.presentation ?? replay.presentation) : null;
+  const presentation = replay?.presentation ?? null;
   const footer =
     replay && presentation ? (
       <ViewPageFooter
-        actions={viewActions}
+        actions={BROWSER_CARD_ACTIONS}
         leading={timeBar ?? undefined}
         payload={replay.payload}
         presentation={presentation}
@@ -233,7 +217,7 @@ export function AnalysisWorkbench({
             <ViewRenderer
               payload={replay.payload}
               presentation={presentation}
-              actions={viewActions}
+              actions={BROWSER_CARD_ACTIONS}
               records={records}
               scene="page"
             />

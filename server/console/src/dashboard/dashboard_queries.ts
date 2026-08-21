@@ -29,6 +29,7 @@ import { ME_PAYLOAD_SCHEMA } from "@contracts/session_contract";
 import { MY_ANALYSES_PAYLOAD_SCHEMA } from "@contracts/analysis_contract";
 import { OK_PAYLOAD_SCHEMA } from "@contracts/response_contract";
 import { REPLAY_PAYLOAD_SCHEMA } from "@contracts/replay_contract";
+import type { TimeIntent } from "@time";
 import { ApiError, deleteJson, getJson, postJson, putJson } from "./api";
 import { DATA_CAPABILITY_MAP_SCHEMA } from "@data-capability-map";
 
@@ -46,8 +47,11 @@ export const dashboardKeys = {
   analysisReplay: (id: string) => ["analysis_replay", id] as const,
   boards: ["boards"] as const,
   board: (id: string) => ["board", id] as const,
-  boardReportReplay: (boardId: string, reportId: string, timeKey = "default") =>
-    ["board_report_replay", boardId, reportId, timeKey] as const,
+  /** 板级时间覆盖是键的一部分：结构化值直接进键，TanStack 按结构哈希，不另串成字符串 */
+  boardReportReplay: (boardId: string, reportId: string, time: TimeIntent | null = null) =>
+    ["board_report_replay", boardId, reportId, time] as const,
+  /** 编辑期瓦片走 owner 端点实时预览（草稿新加的瓦片尚未落库，板级端点会 404） */
+  boardTilePreview: (reportId: string) => ["board_tile_preview", reportId] as const,
 };
 
 /** 已登录整页跳转由 getJson 处理，401 在此不作为可展示错误。 */

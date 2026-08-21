@@ -10,17 +10,20 @@ import {
   canvasFact,
   capabilityColumns,
   capabilityEdges,
+  factNodeId,
   groupedMemberNames,
   highlightFor,
   layoutCapabilities,
+  listedHierarchies,
+  listedMembers,
   memberCounts,
   nodeId,
   visibleEdges,
 } from "./data_capability_map";
 
-const member = (name: string, kind: "dimension" | "measure") => ({
+const member = (name: string, kind: "dimension" | "measure", title: string | null = name) => ({
   name,
-  title: null,
+  title,
   description: null,
   kind,
   member_type: null,
@@ -36,7 +39,7 @@ const synthetic: DataCapabilityMapData = {
   facts: [
     {
       name: "fact_a",
-      title: null,
+      title: "事实一",
       description: null,
       kind: "fact",
       members: [member("d1", "dimension"), member("m1", "measure")],
@@ -44,7 +47,7 @@ const synthetic: DataCapabilityMapData = {
     },
     {
       name: "fact_b",
-      title: null,
+      title: "事实二",
       description: null,
       kind: "fact",
       members: [member("d2", "dimension"), member("m2", "measure")],
@@ -52,12 +55,20 @@ const synthetic: DataCapabilityMapData = {
     },
     {
       name: "technical_fact",
-      title: null,
+      title: "技术事实",
       description: null,
       kind: "fact",
       members: [
         { ...member("availability", "measure"), internal: true, role: "availability_control" },
       ],
+      hierarchies: [],
+    },
+    {
+      name: "unnamed_fact",
+      title: null,
+      description: null,
+      kind: "fact",
+      members: [member("d3", "dimension"), member("m3", "measure")],
       hierarchies: [],
     },
   ],
@@ -107,6 +118,7 @@ test("列归属与排序只使用全局维度、业务指标域和宽事实", ()
     "metric_domain:scene_b",
     "metric_domain:scene_a",
   ]);
+  // 全内部成员的技术事实不上图；没有业务名的事实同样不上图——地图上没有它能说的话。
   expect(columns.facts.map((fact) => fact.name)).toEqual(["fact_a", "fact_b"]);
 });
 
@@ -165,6 +177,37 @@ test("无选中只画语义投影，选中事实后补画物理承载血缘", ()
   );
 });
 
+test("说不出业务名的成员、部门树不成行，也不退回原名", () => {
+  const fact = {
+    name: "fact_x",
+    title: "事实",
+    description: null,
+    kind: "fact" as const,
+    members: [
+      member("d1", "dimension", "部门"),
+      member("d2", "dimension", null),
+      { ...member("secret", "measure", "内部量"), internal: true },
+      member("level_1", "dimension", "一级部门"),
+      member("level_2", "dimension", null),
+    ],
+    hierarchies: [
+      { name: "readable", title: "部门树", levels: ["level_1"] },
+      { name: "broken", title: "断树", levels: ["level_1", "level_2"] },
+      { name: "unnamed", title: null, levels: ["level_1"] },
+    ],
+  };
+
+  expect(listedMembers(fact).map((row) => row.label)).toEqual(["部门", "一级部门"]);
+  // 按名解析这一路同样不回落：解析不到业务名就整行不发，计数少一行也不印 d2。
+  expect(listedMembers(fact, ["d1", "d2", "secret", "readable"]).map((row) => row.label)).toEqual([
+    "部门",
+    "部门树",
+  ]);
+  expect(listedHierarchies(fact)).toEqual([
+    { name: "readable", title: "部门树", levels: ["一级部门"] },
+  ]);
+});
+
 test("Demo 参考数据可完整布局且成员计数守恒", () => {
   const data = embedded as unknown as DataCapabilityMapData;
   const columns = capabilityColumns(data);
@@ -179,7 +222,7 @@ test("Demo 参考数据可完整布局且成员计数守恒", () => {
     expect(counts.dimensions + counts.measures + grouped.size).toBe(
       fact.members.filter((candidate) => !candidate.internal).length,
     );
-    expect(positions.has(nodeId({ kind: "fact", fact }))).toBe(canvasFact(fact));
+    expect(positions.has(factNodeId(fact))).toBe(canvasFact(fact));
   }
   for (const group of data.dimension_groups) {
     expect(positions.has(nodeId({ kind: "dimension_group", group }))).toBe(true);
