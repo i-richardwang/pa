@@ -42,7 +42,7 @@ function Marker({ color, span, sole }: { color?: string; span: number; sole: boo
   );
 }
 
-/** 副读数：占比与对照差值同占值下方那一行，与主值同一档中性色。 */
+/** 副读数：占比与对照差值同占值下方那一行，与主值同一档中性色——模型层没有指标方向声明，涨跌染色会把流失类指标读反。 */
 function subReadings(row: ReadoutRow): string[] {
   return [row.secondary, row.delta].filter((text): text is string => text !== undefined);
 }
@@ -140,7 +140,7 @@ export function ReadoutCard({
           const open = openable && point ? () => onRowClick?.(point) : undefined;
           return (
             <button
-              className={`block w-full rounded-md border-0 bg-transparent p-0 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring ${
+              className={`block w-full rounded-md border-0 bg-transparent p-0 text-left pa-focus ${
                 open ? "cursor-pointer hover:bg-pa-wash" : ""
               }`.trim()}
               key={`${row.name}-${index}`}

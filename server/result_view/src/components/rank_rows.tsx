@@ -5,7 +5,7 @@ import { formatSeriesValue } from "../../../src/presentation_core/view_format.js
 type RankRow = { label: string; value: number | null; share: number | null };
 
 /** 模型里的类目、唯一那条系列的取值与占比按行拼起来；条长的归一在渲染时按最大值算 */
-export function rankRows(chart: ViewChart): RankRow[] {
+function rankRows(chart: ViewChart): RankRow[] {
   const { categories, legend, share } = chart.model;
   return categories.map((label, i) => ({
     label,
@@ -70,7 +70,7 @@ export function RankRows({
             {/* 值那一格：可下钻时它本身就是一个按钮，不用 role/tabIndex/keydown 手搭一个出来 */}
             {openable && point ? (
               <button
-                className="shrink-0 cursor-pointer rounded-sm border-0 bg-transparent pl-3 text-right text-pa-fg text-sm tabular-nums underline-offset-2 hover:underline outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring"
+                className="shrink-0 cursor-pointer rounded-sm border-0 bg-transparent pl-3 text-right text-pa-fg text-sm tabular-nums underline-offset-2 hover:underline pa-focus"
                 onClick={() => onPointClick?.(point)}
                 style={{ width: RANK_ROW.valueColumn }}
                 type="button"

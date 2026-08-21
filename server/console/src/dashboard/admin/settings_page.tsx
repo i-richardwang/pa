@@ -82,7 +82,7 @@ import {
   useRevokeApiKey,
 } from "../dashboard_queries";
 
-export type SettingsTab = "account" | "api" | "users";
+type SettingsTab = "account" | "api" | "users";
 
 /** 表单类分节居中一栏读；清单类分节（成员表）铺满。 */
 const FORM_COLUMN_CLASS = "md:mx-auto md:max-w-2xl";

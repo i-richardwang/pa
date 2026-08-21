@@ -50,7 +50,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { isEditableTarget } from "@/lib/keyboard";
 
 /** 主区白面的两种底：清单与工作台坐白卡，看板坐画布灰。 */
-export type MainSurface = "card" | "canvas";
+type MainSurface = "card" | "canvas";
 
 type NavItem = NavEntry & { adminOnly: boolean };
 

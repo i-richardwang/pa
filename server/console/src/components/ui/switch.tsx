@@ -7,7 +7,7 @@ import { InspectorRow } from "@/components/ui/inspector";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-export function Switch({ className, ...props }: SwitchPrimitive.Root.Props): React.ReactElement {
+function Switch({ className, ...props }: SwitchPrimitive.Root.Props): React.ReactElement {
   return (
     <SwitchPrimitive.Root
       className={cn(

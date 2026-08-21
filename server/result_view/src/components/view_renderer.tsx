@@ -70,7 +70,7 @@ const FALLBACK_TITLE = "查询结果";
  * 卡片标题：调用方在查询时声明的业务问题（payload.title）优先——它带着用户的措辞与
  * 过滤/时间窗限定，是结果列反推不出来的；缺省时退服务端派生的结构式标题。
  */
-export function cardTitle(payload: QueryPayload, presentation: PresentationBlock): string {
+function cardTitle(payload: QueryPayload, presentation: PresentationBlock): string {
   return payload.title ?? presentation.structure_title ?? FALLBACK_TITLE;
 }
 
@@ -78,10 +78,7 @@ export function cardTitle(payload: QueryPayload, presentation: PresentationBlock
  * 结构式副标题：标题为调用方声明时，结构式仍作为口径锚点展示在副标题——
  * 标题说意图、副标题说事实，声明与数据错位时读者有对照。
  */
-export function headerSubtitle(
-  payload: QueryPayload,
-  presentation: PresentationBlock,
-): string | null {
+function headerSubtitle(payload: QueryPayload, presentation: PresentationBlock): string | null {
   return payload.title ? (presentation.structure_title ?? null) : null;
 }
 

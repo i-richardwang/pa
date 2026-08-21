@@ -64,6 +64,20 @@ bun run build
 bun run generate:data-capability-map
 ```
 
+对着运行中的栈做实链验证与运维（均在 `server/` 下）：
+
+| 命令 | 作用 |
+| --- | --- |
+| `bun run smoke` | 以 MCP 客户端走通公开 Demo 的目录、候选值、分析与 App 资源 |
+| `bun run smoke:oauth` | OAuth 动态注册、PKCE 授权、持 token 查数与报告生命周期全流程 |
+| `bun run eval:formal` | 对语义包登记的全部正式指标执行 Planner 与真实 Cube 冒烟 |
+| `bun run eval:time` | 公开 Demo 正式指标的时间语义真实 Cube 回归 |
+| `bun run eval:access` | Cube access_policy 实链：组映射、组织范围与正式指标可见性 |
+| `bun run eval:records` | 正式指标规划与受控记录投影实链 |
+| `bun run user:create -- <email> <password>` | 本机开通用户，可附 `--admin`、`--data-scope=…`、`--with-key` |
+| `bun run key:issue -- <email>` | 无头签发 API Key，明文只打印一次 |
+| `bun run clean` | 清空三个构建产物目录 |
+
 修改 Demo 或语义包合同时，必须运行包加载、模型暴露和能力地图测试。提交前运行开源边界扫描。
 
 ## 纪律

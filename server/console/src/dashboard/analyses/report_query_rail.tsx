@@ -139,7 +139,7 @@ function calculationTitle(dimensionTitle: string): string {
 }
 
 /** 成员浮层里那条「构成占比」的身份：不是目录成员，只是加进查询的另一种指标。 */
-export const PERCENT_OF_TOTAL_PICK_ID = "calculation:percent_of_total";
+const PERCENT_OF_TOTAL_PICK_ID = "calculation:percent_of_total";
 
 /**
  * 构成占比在成员浮层里的那一行：与目录指标同一份列表、同一套不可选理由——它是由已选指标

@@ -11,9 +11,6 @@
       "@payload": ["../src/semantic_core/query_payload.ts"],
       "@records": ["../src/contracts/record_projection_contract.ts"],
       "@charts": ["../src/presentation_core/chart_config.ts"],
-      "@shape": ["../src/presentation_core/view_shape.ts"],
-      "@format": ["../src/presentation_core/view_format.ts"],
-      "@member": ["../src/semantic_core/member_name.ts"],
       "@product": ["../src/contracts/product_metadata.ts"]
     },
     "strict": true,

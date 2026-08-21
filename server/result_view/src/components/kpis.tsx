@@ -51,7 +51,7 @@ export function Kpis({
             )}
             {metric.value !== null && canOpen?.(metric.column) ? (
               <button
-                className={`block max-w-full cursor-pointer truncate rounded-sm tabular-nums underline-offset-4 hover:text-pa-accent hover:underline focus-visible:text-pa-accent focus-visible:underline outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring ${VALUE_SIZE}`}
+                className={`block max-w-full cursor-pointer truncate rounded-sm tabular-nums underline-offset-4 hover:text-pa-accent hover:underline focus-visible:text-pa-accent focus-visible:underline pa-focus ${VALUE_SIZE}`}
                 onClick={() => onOpen?.(metric.column)}
                 type="button"
               >

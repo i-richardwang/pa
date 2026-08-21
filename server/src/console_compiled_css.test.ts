@@ -17,7 +17,8 @@ const HOSTS = [
   },
 ];
 
-const OWNED = /^-?(?:rounded|text|font|leading|tracking)-|-pa-/;
+const OWNED =
+  /^-?(?:rounded|text|font|leading|tracking|bg|border|ring|outline|fill|stroke|divide|from|to|via|caret|placeholder|decoration)-|-pa-/;
 
 function utility(candidate: string): string {
   let depth = 0;
@@ -59,7 +60,15 @@ function isProductSource(name: string): boolean {
 }
 
 const ALIVE_PROBE = ["rounded-md", "rounded-avatar", "text-md", "md:rounded-lg", "bg-pa-wash"];
-const DEAD_PROBE = ["rounded-xs", "rounded-4xl", "text-2xl", "bg-pa-wsh", "text-pa-fant"];
+const DEAD_PROBE = [
+  "rounded-xs",
+  "rounded-4xl",
+  "text-2xl",
+  "bg-pa-wsh",
+  "text-pa-fant",
+  "bg-card",
+  "text-muted-foreground",
+];
 
 test("a class name that was written actually compiles to a rule", async () => {
   for (const { label, entry, srcs } of HOSTS) {
@@ -112,6 +121,61 @@ test("a class name that was written actually compiles to a rule", async () => {
         `${label}: ${name} writes \`${candidate}\`, which compiles to nothing under the ${label} ` +
           `entry — the utility is unknown or misspelled`,
       ).toBe(true);
+    }
+  }
+});
+
+const FOREIGN_COLOR_REF = /var\(--color-(?!pa-)[a-z0-9-]+\)/g;
+const COLOR_PROBE = {
+  foreign: ["bg-red-500", "text-white"],
+  owned: ["bg-pa-surface", "text-pa-muted"],
+};
+
+test("every colour a class compiles to comes from the pa-* table", async () => {
+  for (const { label, entry, srcs } of HOSTS) {
+    const origin = new Map<string, string>();
+    for (const src of srcs) {
+      const names = (await readdir(src, { recursive: true })).filter(isProductSource);
+      for (const name of names) {
+        const text = await readFile(new URL(name, src), "utf8");
+        for (const candidate of candidates(text)) {
+          if (!origin.has(candidate)) origin.set(candidate, name);
+        }
+      }
+    }
+    expect(origin.size, `${label}: candidate extraction found nothing to judge`).toBeGreaterThan(
+      20,
+    );
+
+    const { build } = await compile(await readFile(entry, "utf8"), {
+      base: fileURLToPath(new URL(".", entry)),
+      onDependency: () => {},
+    });
+    // build() 累积输出：新增候选若引入了 pa-* 以外的颜色变量，引用集合就会长大。
+    const seen = new Set<string>(build([]).match(FOREIGN_COLOR_REF) ?? []);
+    const introduces = (candidate: string): string[] => {
+      const fresh = (build([candidate]).match(FOREIGN_COLOR_REF) ?? []).filter(
+        (ref) => !seen.has(ref),
+      );
+      for (const ref of fresh) seen.add(ref);
+      return fresh;
+    };
+
+    for (const owned of COLOR_PROBE.owned) {
+      expect(introduces(owned), `${label} probe is broken: ${owned} is a pa-* colour`).toEqual([]);
+    }
+    for (const foreign of COLOR_PROBE.foreign) {
+      expect(
+        introduces(foreign).length,
+        `${label} probe is broken: ${foreign} should reach a palette colour`,
+      ).toBeGreaterThan(0);
+    }
+
+    for (const [candidate, name] of origin) {
+      expect(
+        introduces(candidate),
+        `${label}: ${name} writes \`${candidate}\`, which paints with a colour outside the pa-* table`,
+      ).toEqual([]);
     }
   }
 });

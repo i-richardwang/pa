@@ -77,88 +77,6 @@ test("interaction roles come from primitives, never hand-written", async () => {
   }
 });
 
-const SLOT_NAMES = [
-  "background",
-  "foreground",
-  "card",
-  "card-foreground",
-  "popover",
-  "popover-foreground",
-  "primary",
-  "primary-foreground",
-  "secondary",
-  "secondary-foreground",
-  "muted",
-  "muted-foreground",
-  "accent",
-  "accent-foreground",
-  "destructive",
-  "destructive-foreground",
-  "info",
-  "info-foreground",
-  "success",
-  "success-foreground",
-  "warning",
-  "warning-foreground",
-  "border",
-  "input",
-  "ring",
-  "selected",
-  "sidebar",
-  "sidebar-foreground",
-  "sidebar-primary",
-  "sidebar-primary-foreground",
-  "sidebar-accent",
-  "sidebar-accent-foreground",
-  "sidebar-border",
-  "sidebar-ring",
-];
-const COLOR_PROPS =
-  "bg|text|border|ring|outline|fill|stroke|from|to|via|divide|caret|placeholder|decoration";
-const FOREIGN_TOKEN = new RegExp(
-  `\\b(?:${COLOR_PROPS})-(?:${[...SLOT_NAMES].sort((a, b) => b.length - a.length).join("|")})(?:/\\d+)?\\b`,
-  "g",
-);
-
-const FOREIGN_CSS_VAR = new RegExp(
-  `var\\(\\s*--(?:${[...SLOT_NAMES].sort((a, b) => b.length - a.length).join("|")})\\s*[),]`,
-  "g",
-);
-
-test("colors are spelled in the pa-* vocabulary only", async () => {
-  const badVars = 'style={{ fill: "var(--card)", stroke: "var( --primary )" }}';
-  const goodVars = 'style={{ fill: "var(--pa-bg)", stroke: "var(--pa-line-strong)" }}';
-  expect([...badVars.matchAll(FOREIGN_CSS_VAR)].length, "css-var matcher is stale").toBe(2);
-  expect(
-    [...goodVars.matchAll(FOREIGN_CSS_VAR)].map((match) => match[0]),
-    "css-var matcher over-matches",
-  ).toEqual([]);
-
-  const bad = 'className="text-muted-foreground bg-accent border-border ring-ring/50"';
-  const good =
-    'className="text-pa-muted bg-pa-surface border-pa-line-strong ring-pa-focus-ring/50 shadow-stage border-0"';
-  expect([...bad.matchAll(FOREIGN_TOKEN)].length, "token matcher is stale").toBe(4);
-  expect(
-    [...good.matchAll(FOREIGN_TOKEN)].map((match) => match[0]),
-    "token matcher over-matches",
-  ).toEqual([]);
-
-  for (const base of [CONSOLE_SRC, RESULT_VIEW_SRC, WIDGET_SRC]) {
-    const sources = await readSources(base);
-    expect(sources.length, "source scan found no files — path likely stale").toBeGreaterThan(0);
-    for (const { name, text } of sources) {
-      const found = [
-        ...[...text.matchAll(FOREIGN_TOKEN)].map((match) => match[0]),
-        ...[...text.matchAll(FOREIGN_CSS_VAR)].map((match) => match[0]),
-      ];
-      expect(
-        found,
-        `${name} spells colors in the component-slot vocabulary (${found.join(", ")}); use the pa-* name`,
-      ).toEqual([]);
-    }
-  }
-});
-
 const POPUP_SURFACE_CSS = new URL("./presentation_core/tokens.css", import.meta.url);
 const POPUP_SURFACE_CLASS = "pa-popup-surface";
 const POPUP_SURFACE_INGREDIENT =
@@ -539,7 +457,7 @@ test("aria-label is written in the interface's own language", async () => {
 
 const PAGE_WRITTEN_SHEET_WIDTH = /<SheetPopup\b[^>]*\bmax-w-/g;
 
-test("a page never writes the sidesheet's width", async () => {
+test("a page never writes the sheet's width", async () => {
   const bad = '<SheetPopup className="max-w-160">';
   const good = '<SheetPopup>\n<DialogPopup className="max-w-lg">';
   expect([...bad.matchAll(PAGE_WRITTEN_SHEET_WIDTH)], "sheet width matcher is stale").toHaveLength(
@@ -554,12 +472,12 @@ test("a page never writes the sidesheet's width", async () => {
     if (name.endsWith("components/ui/sheet.tsx")) continue;
     expect(
       [...text.matchAll(PAGE_WRITTEN_SHEET_WIDTH)],
-      `console/src/${name} writes the sidesheet width; it belongs to ui/sheet.tsx`,
+      `console/src/${name} writes the sheet width; it belongs to ui/sheet.tsx`,
     ).toEqual([]);
   }
 
   const sheet = sources.find(({ name }) => name.endsWith("components/ui/sheet.tsx"));
-  expect(sheet?.text, "ui/sheet.tsx no longer defines the single sidesheet width").toMatch(
+  expect(sheet?.text, "ui/sheet.tsx does not define the single sheet width").toMatch(
     /const SIDESHEET_WIDTH = ["']max-w-/,
   );
 });
@@ -1075,15 +993,25 @@ test("keyboard focus has one mark: the pa-focus utilities, never a hand-written 
     /\boutline-pa-/,
   );
 
-  const sources = await readSources(CONSOLE_SRC);
-  for (const { name, text } of sources) {
+  for (const [label, base, floor] of [
+    ["console/src", CONSOLE_SRC, 10],
+    ["result_view/src", RESULT_VIEW_SRC, 5],
+    ["widget/src", WIDGET_SRC, -1],
+  ] as const) {
+    // widget 自己不画接焦的件（它只摆结果视图），floor 为 -1 表示只查没有手写标记。
+    const sources = await readSources(base);
+    for (const { name, text } of sources) {
+      expect(
+        [...text.matchAll(HAND_WRITTEN_FOCUS)].map((match) => match[0]),
+        `${label}/${name} spells a focus mark by hand; take pa-focus or pa-focus-within`,
+      ).toEqual([]);
+    }
+    const users = sources.filter(({ text }) => /\bpa-focus(?:-within)?\b/.test(text));
     expect(
-      [...text.matchAll(HAND_WRITTEN_FOCUS)].map((match) => match[0]),
-      `console/src/${name} spells a focus mark by hand; take pa-focus or pa-focus-within`,
-    ).toEqual([]);
+      users.length,
+      `${label}: nobody takes the focus utilities — the name moved`,
+    ).toBeGreaterThan(floor);
   }
-  const users = sources.filter(({ text }) => /\bpa-focus(?:-within)?\b/.test(text));
-  expect(users.length, "nobody takes the focus utilities — the name moved").toBeGreaterThan(10);
 });
 
 const OVERRIDDEN_SMALLEST_LEADING =

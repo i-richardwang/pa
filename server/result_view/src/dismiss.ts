@@ -2,7 +2,7 @@
  * 浮层撤下：判据与订阅。
  *
  * 钉住的浮层会留在原地等人，故要有一条明确的撤下策略——Esc，或按在它所在那一块之外。
- * 两条合成一条，各浮层不再各写一遍；宿主对象由调用方交进来（与 `observeElementSize`、
+ * 两条合成一条，所有浮层共用；宿主对象由调用方交进来（与 `observeElementSize`、
  * `watchTheme` 同式），策略与订阅因此都跑得出用例，不必先支起一个 DOM。
  */
 import { useEffect, useRef, type RefObject } from "react";

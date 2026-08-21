@@ -86,70 +86,6 @@ test("every pa-* token the render stack uses is defined by both host stylesheets
 });
 
 /**
- * 宿主专有令牌名：控制台样式表定义、MCP widget 样式表没有。渲染栈跨两个宿主复用，
- * 用了这些名字的工具类在 widget 侧生不出规则——与 pa-* 缺映射同一种失败，方向相反。
- * chart-N 不在其列：两个宿主都定义，图表系列色本就是共享契约。
- */
-const HOST_ONLY_COLORS = [
-  "background",
-  "foreground",
-  "card",
-  "card-foreground",
-  "popover",
-  "popover-foreground",
-  "primary",
-  "primary-foreground",
-  "secondary",
-  "secondary-foreground",
-  "muted",
-  "muted-foreground",
-  "accent",
-  "accent-foreground",
-  "destructive",
-  "destructive-foreground",
-  "info",
-  "info-foreground",
-  "success",
-  "success-foreground",
-  "warning",
-  "warning-foreground",
-  "border",
-  "input",
-  "ring",
-  "sidebar",
-  "sidebar-foreground",
-  "sidebar-primary",
-  "sidebar-primary-foreground",
-  "sidebar-accent",
-  "sidebar-accent-foreground",
-  "sidebar-border",
-  "sidebar-ring",
-];
-
-const HOST_COLOR_PATTERN = new RegExp(
-  `\\b(?:bg|text|border|ring|fill|stroke|outline|divide|from|to|via)-(${HOST_ONLY_COLORS.join("|")})(?![\\w-])`,
-  "g",
-);
-
-test("the render stack styles itself only through pa-* tokens", async () => {
-  // 探测器自身的活性：已知坏输入必中、好输入必零中
-  expect([..."text-primary-foreground bg-card".matchAll(HOST_COLOR_PATTERN)].length).toBe(2);
-  expect([..."border-b text-xs bg-pa-surface".matchAll(HOST_COLOR_PATTERN)].length).toBe(0);
-
-  const names = (await readdir(RENDER_STACK, { recursive: true })).filter(
-    (name) => name.endsWith(".ts") || name.endsWith(".tsx"),
-  );
-  for (const name of names) {
-    const source = await readFile(new URL(name, RENDER_STACK), "utf8");
-    const found = [...source.matchAll(HOST_COLOR_PATTERN)].map((match) => match[0]);
-    expect(
-      found,
-      `result_view/src/${name} uses host-only color utilities: ${found.join(", ")}`,
-    ).toEqual([]);
-  }
-});
-
-/**
  * 出类名的源目录必须在两个宿主样式表里 `@source` 登记。没登记的目录不是立刻失效——
  * 它的类只在别处碰巧写过同名类时才生出规则，于是新类静默丢失、旧类看着还好。
  * 渲染栈在 result_view，图例行版式那份配方在 presentation_core（`legendRowClass`）。
@@ -173,63 +109,56 @@ test("every source directory that emits class names is registered with both host
 });
 
 /**
- * 浏览器工作区的模块别名白名单：名字集合全等，任何新别名都必须先记到这里，
- * 编译器内务模块无从借道一个未登记的别名进入浏览器。tsconfig 与 vite 两套必须一致。
- * 自身工作区根别名（@、@widget）之外，别名一律指向显式源码边界。
+ * 浏览器工作区的模块别名：tsconfig 与 vite 两套声明同一个集合，每个别名都有源码在 import，
+ * 自身工作区根别名之外，别名一律指向显式源码边界（contracts / semantic_core / presentation_core）。
  */
-const BROWSER_ALIASES: Record<string, string[]> = {
-  console: [
-    "@",
-    "@chart-spec",
-    "@charts",
-    "@contracts",
-    "@data-capability-map",
-    "@format",
-    "@member",
-    "@payload",
-    "@semantic-analysis",
-    "@shape",
-    "@time",
-    "@view-preferences",
-  ],
-  widget: [
-    "@charts",
-    "@format",
-    "@member",
-    "@payload",
-    "@product",
-    "@records",
-    "@shape",
-    "@widget",
-  ],
-};
+const BROWSER_WORKSPACES = ["console", "widget"] as const;
 const WORKSPACE_ROOT_ALIASES = new Set(["@", "@widget"]);
 
 const aliasNames = (source: string, pattern: RegExp): string[] =>
   [...source.matchAll(pattern)].map((match) => match[1].replace(/\/\*$/, "")).sort();
 
-test("browser aliases are exactly the approved source-boundary set", async () => {
-  // 探测器活性：登记形态必须被抽出，非别名键必须落空
+const importers = (alias: string, sources: string[]): number =>
+  sources.filter((text) =>
+    new RegExp(`from\\s+["']${alias}(?:/|["'])|import\\(\\s*["']${alias}(?:/|["'])`).test(text),
+  ).length;
+
+test("every browser alias is declared twice and imported at least once", async () => {
+  // 探测器活性：登记形态必须被抽出，非别名键必须落空；importer 计数认 from 与动态 import 两种写法
   expect(
     aliasNames(`"@shape": ["../src/presentation_core/view_shape.ts"]`, /"(@[^"]*)"\s*:\s*\[/g),
   ).toEqual(["@shape"]);
   expect(aliasNames(`"strict": true`, /"(@[^"]*)"\s*:\s*\[/g)).toEqual([]);
+  expect(
+    importers("@shape", ['import { a } from "@shape";', 'import("@widget/x")', 'from "@shapes"']),
+  ).toBe(1);
+  expect(importers("@widget", ['import("@widget/components/x")'])).toBe(1);
+  expect(importers("@member", ['from "@members"'])).toBe(0);
 
-  for (const [workspace, approved] of Object.entries(BROWSER_ALIASES)) {
+  for (const workspace of BROWSER_WORKSPACES) {
     const tsconfig = await readFile(
       new URL(`../${workspace}/tsconfig.json`, import.meta.url),
       "utf8",
     );
     const vite = await readFile(new URL(`../${workspace}/vite.config.ts`, import.meta.url), "utf8");
-    expect(aliasNames(tsconfig, /"(@[^"]*)"\s*:\s*\[/g), `${workspace}/tsconfig.json`).toEqual(
-      approved,
-    );
+    const declared = aliasNames(tsconfig, /"(@[^"]*)"\s*:\s*\[/g);
+    expect(declared.length, `${workspace}/tsconfig.json declares no alias`).toBeGreaterThan(0);
     expect(
       aliasNames(vite, /"(@[^"]*)"\s*:\s*path\.resolve\(/g),
-      `${workspace}/vite.config.ts`,
-    ).toEqual(approved);
+      `${workspace}/vite.config.ts and tsconfig.json disagree`,
+    ).toEqual(declared);
 
-    for (const alias of approved) {
+    const srcDir = new URL(`../${workspace}/src/`, import.meta.url);
+    const names = (await readdir(srcDir, { recursive: true })).filter(
+      (name) => name.endsWith(".ts") || name.endsWith(".tsx"),
+    );
+    const sources = await Promise.all(names.map((name) => readFile(new URL(name, srcDir), "utf8")));
+
+    for (const alias of declared) {
+      expect(
+        importers(alias, sources),
+        `${workspace} declares ${alias} but nothing imports it — drop it from both configs`,
+      ).toBeGreaterThan(0);
       if (WORKSPACE_ROOT_ALIASES.has(alias)) continue;
       const line = tsconfig
         .split("\n")

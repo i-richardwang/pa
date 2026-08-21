@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "clean": "bun scripts/clean_build.ts",
-    "build": "bun run clean && tsc && vite build widget && bun run build:console",
+    "build": "bun run clean && tsc && bun run build:widget && bun run build:console",
     "build:widget": "vite build widget",
     "build:console": "vite build console && vite build console --mode dashboard",
     "start": "node dist/index.js",
@@ -39,7 +39,6 @@
   "dependencies": {
     "@better-auth/api-key": "1.6.23",
     "@fontsource-variable/inter": "5.3.0",
-    "@fontsource/inter": "5.3.0",
     "@hono/mcp": "0.3.1",
     "@hono/node-server": "2.0.12",
     "@modelcontextprotocol/ext-apps": "1.7.4",
@@ -54,7 +53,6 @@
     "@biomejs/biome": "2.5.4",
     "@tailwindcss/node": "4.3.2",
     "@tailwindcss/vite": "4.3.2",
-    "@tanstack/react-query": "5.101.4",
     "@types/bun": "1.3.14",
     "@types/node": "24.13.3",
     "@types/react": "19.2.17",

@@ -374,9 +374,8 @@ function formatLabel(format: string | undefined): string | null {
 }
 
 /**
- * 清单主列：名称一行、说明一行，说明走次级字色。
- * 格自己撤掉 `whitespace-nowrap`——说明句不许换行时 `line-clamp-2` 收不住，
- * 整列被撑成一行的宽度，末列挤出白卡外。
+ * 清单主列：名称一行、说明一行，说明走次级字色。说明格允许换行（`line-clamp-2`），
+ * 否则整列被撑成一行的宽度，末列挤出白卡外。
  */
 function MetricNameCell({ member }: { member: CatalogMemberPayload }) {
   return (

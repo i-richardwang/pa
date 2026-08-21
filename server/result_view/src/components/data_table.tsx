@@ -236,7 +236,7 @@ export function DataTable({
         cellSource !== null && canOpenCell?.(cellSource, i) ? (
           <button
             aria-label={`查看明细：${col.label} ${text ?? ""}`}
-            className="block w-full cursor-pointer rounded-sm text-right underline-offset-2 outline-none hover:text-pa-accent hover:underline focus-visible:text-pa-accent focus-visible:underline focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring"
+            className="block w-full cursor-pointer rounded-sm text-right underline-offset-2 hover:text-pa-accent hover:underline focus-visible:text-pa-accent focus-visible:underline pa-focus"
             onClick={() => onOpenCell?.(cellSource, i)}
             type="button"
           >

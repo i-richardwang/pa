@@ -161,7 +161,7 @@ function LegendRow({
       {/* 图例项是真按钮：它的作为就是把那条系列提到前面来，键盘聚焦与鼠标悬停同效 */}
       {items.map((item, i) => (
         <button
-          className="flex min-w-0 items-start gap-1.5 rounded-sm border-0 bg-transparent p-0 text-left text-pa-muted text-xs outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring"
+          className="flex min-w-0 items-start gap-1.5 rounded-sm border-0 bg-transparent p-0 text-left text-pa-muted text-xs pa-focus"
           key={`${item.name}-${i}`}
           onBlur={() => onFocus(null)}
           onFocus={() => onFocus(i)}

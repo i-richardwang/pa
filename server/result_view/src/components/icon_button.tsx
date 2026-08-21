@@ -22,7 +22,7 @@ export function IconButton({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-pa-muted outline-none hover:bg-pa-surface hover:text-pa-fg focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring [&_svg]:size-4"
+      className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-pa-muted hover:bg-pa-surface hover:text-pa-fg pa-focus [&_svg]:size-4"
     >
       {children}
     </button>
