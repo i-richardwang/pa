@@ -11,16 +11,11 @@
 @source "../../src/presentation_core";
 
 @theme inline {
-  --font-heading: var(--font-sans);
-
-  --shadow-xs: 0 0 0 0.5px var(--pa-border), 0 1px 2px 0 var(--pa-shadow);
   --shadow-sm: 0 1px 4px 2px color-mix(in srgb, var(--pa-shadow) 47%, transparent);
   --shadow-md: 0 4px 20px 0 color-mix(in srgb, var(--pa-shadow) 29%, transparent);
-  --shadow-login: 0 12px 40px 0 rgb(0 0 0 / 0.12);
-  /* 玻璃浮层专用：取值在令牌源，锚定浮层整壳走 .pa-popup-surface，这里只给 ⌘K 那一档单用 */
-  --shadow-popover-glow: var(--pa-popover-glow);
-  /* 大舞台弹层投影：设置面与图表设置这类占满视口中央的弹层 */
-  --shadow-stage: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --shadow-login: 0 12px 40px 0 var(--pa-shadow);
+  /* 弹层投影：表单弹层与占满视口中央的舞台弹层同用 */
+  --shadow-stage: 0 25px 50px -12px var(--pa-shadow);
   --font-serif: ui-serif, Georgia, "Times New Roman", "Songti SC", "Noto Serif SC", serif;
   /* toast 进场/出场动效令牌，成功与失败按奇偶项错相。 */
   --animate-toast-success-odd: toast-success-odd 0.32s cubic-bezier(0.5, 1, 0.89, 1);
@@ -57,10 +52,9 @@
 
 @layer base {
   * {
-    @apply border-pa-line outline-pa-focus-strong/50;
+    @apply border-pa-line;
   }
   body {
-
     @apply font-sans font-normal text-sm bg-pa-page text-pa-fg antialiased;
   }
   html {

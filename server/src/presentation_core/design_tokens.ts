@@ -18,7 +18,7 @@ export const CHART_CHROME = {
   axisText: { light: "#aaaaaa", dark: "#6e6e6e" },
   /** 数据值标签 = text-muted；它是数据注释，比轴刻度高一档 */
   valueText: { light: "#767676", dark: "#a3a3a3" },
-  /** 双向虚线网格 = border 全浓度；线型本身已提供降噪 */
+  /** 双向虚线网格 = line 全浓度；线型本身已提供降噪 */
   gridLine: { light: "#e8e8e8", dark: "#2b2b2b" },
   /** 桶边界那档分隔线：比横向读数线深、比它细——它划的是结构不是读数 */
   gridEdge: { light: "rgba(0, 0, 0, 0.15)", dark: "rgba(255, 255, 255, 0.16)" },
@@ -52,10 +52,10 @@ export const UI_TOKENS: Record<string, TokenPair> = {
   "fg-soft": { light: "#4c4c4c", dark: "#c9c9c9" },
   "disabled-fg": { light: "rgba(0, 0, 0, 0.2)", dark: "rgba(255, 255, 255, 0.22)" },
   placeholder: { light: "#c4c4c4", dark: "#5e5e5e" },
-  border: { light: "rgba(0, 0, 0, 0.09)", dark: "rgba(255, 255, 255, 0.1)" },
-  "border-strong": { light: "#d2d2d2", dark: "#3f3f3f" },
-  "border-hover": { light: "rgba(0, 0, 0, 0.15)", dark: "rgba(255, 255, 255, 0.16)" },
-  "border-subtle": { light: "#f2f2f2", dark: "#212121" },
+  line: { light: "rgba(0, 0, 0, 0.09)", dark: "rgba(255, 255, 255, 0.1)" },
+  "line-strong": { light: "#d2d2d2", dark: "#3f3f3f" },
+  "line-hover": { light: "rgba(0, 0, 0, 0.15)", dark: "rgba(255, 255, 255, 0.16)" },
+  "line-subtle": { light: "#f2f2f2", dark: "#212121" },
   surface: { light: "rgba(0, 0, 0, 0.04)", dark: "rgba(255, 255, 255, 0.07)" },
   wash: { light: "rgba(25, 25, 25, 0.02)", dark: "rgba(255, 255, 255, 0.04)" },
   "wash-solid": { light: "#fafafa", dark: "#1f1f1f" },

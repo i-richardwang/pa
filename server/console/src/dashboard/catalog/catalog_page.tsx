@@ -37,7 +37,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InspectorRow, InspectorProfileCard, InspectorSection } from "@/components/ui/inspector";
 import { Popover, PopoverPopup, PopoverTrigger } from "@/components/ui/popover";
-import { POPOVER_LIST_WIDTH, PopoverListPanel } from "@/components/ui/popover-list";
+import { PopoverListPanel } from "@/components/ui/popover-list";
 import {
   Table,
   TableBody,
@@ -75,7 +75,8 @@ import {
 import { HeaderTextAction, ProfileAside } from "../layout/view_chrome";
 import { EmptyPanel } from "../kit/empty_panel";
 import { RowMenu } from "../kit/table_kit";
-import { MenuDangerGroup, MenuItem } from "@/components/ui/menu";
+import { MenuItem } from "@/components/ui/menu";
+import { PopupSection } from "@/components/ui/surface";
 
 /** 控制条分类：选项是 PA 的成员族。 */
 type CatalogFacet = "measures" | "domains" | "dimensions" | "terms";
@@ -592,9 +593,9 @@ function TermSection({
                 <RowMenu label={`术语操作：${term.canonical_term}`}>
                   <MenuItem onClick={() => onEdit(term)}>编辑</MenuItem>
                   {onDelete ? (
-                    <MenuDangerGroup>
+                    <PopupSection>
                       <MenuItem onClick={() => onDelete(term)}>删除</MenuItem>
-                    </MenuDangerGroup>
+                    </PopupSection>
                   ) : null}
                 </RowMenu>
               </TableCell>
@@ -902,7 +903,7 @@ function DimensionsRow({ groups }: { groups: DimensionGroupRow[] }) {
     <InspectorRow label="可用维度">
       <Popover>
         <PopoverTrigger render={<ListCategoryPill />}>{count} 个</PopoverTrigger>
-        <PopoverPopup align="end" className={POPOVER_LIST_WIDTH}>
+        <PopoverPopup align="end" width="list">
           <PopoverListPanel>
             <ul className="flex flex-col gap-1.5 px-1 py-0.5 text-sm leading-5">
               {groups.map((row) => (

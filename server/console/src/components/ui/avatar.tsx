@@ -34,8 +34,7 @@ export function Avatar({
   size,
   tone,
   ...props
-}: React.ComponentProps<"span"> &
-  VariantProps<typeof avatarVariants>): React.ReactElement {
+}: React.ComponentProps<"span"> & VariantProps<typeof avatarVariants>): React.ReactElement {
   return (
     <span
       className={cn(avatarVariants({ shape, size, tone }), className)}

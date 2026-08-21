@@ -11,21 +11,18 @@ import { cn } from "@/lib/utils";
 export function ColorPill({
   color,
   selected = false,
-  size = "default",
   className,
   ...props
 }: Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
   color: string;
   selected?: boolean;
-  size?: "default" | "sm";
 }): React.ReactElement {
   return (
     <button
       aria-pressed={selected}
       className={cn(
-        "group relative flex shrink-0 rounded-full text-pa-ink-fg ring-1 ring-pa-line ring-inset outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring",
+        "pa-focus group relative flex size-6 shrink-0 rounded-full text-pa-ink-fg ring-1 ring-pa-line ring-inset",
         selected ? "cursor-default" : "cursor-pointer",
-        size === "sm" ? "size-6" : "size-7",
         className,
       )}
       data-slot="color-pill"

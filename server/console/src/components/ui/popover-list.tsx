@@ -2,10 +2,8 @@
 
 import { CheckIcon } from "lucide-react";
 import type * as React from "react";
-import { POPUP_GROUP_LABEL, POPUP_ROW, POPUP_SECTION } from "@/components/ui/surface";
+import { POPUP_ROW } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
-
-export const POPOVER_LIST_WIDTH = "w-max min-w-[240px] max-w-[480px]";
 
 export function PopoverListPanel({
   children,
@@ -22,43 +20,6 @@ export function PopoverListPanel({
       )}
       data-slot="popover-list-panel"
     >
-      {children}
-    </div>
-  );
-}
-
-export function PopoverListLabel({
-  children,
-}: {
-  children: React.ReactNode;
-}): React.ReactElement {
-  return (
-    <p className={cn(POPUP_GROUP_LABEL, "shrink-0")} data-slot="popover-list-label">
-      {children}
-    </p>
-  );
-}
-
-export function PopoverListSeparator(): React.ReactElement {
-  return (
-    <div
-      aria-hidden="true"
-      className="-mx-1.5 my-1.5 h-px w-[calc(100%+0.75rem)] shrink-0 bg-pa-line"
-      data-slot="popover-list-separator"
-    />
-  );
-}
-
-export function PopoverListSection({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}): React.ReactElement {
-  return (
-    <div className={POPUP_SECTION} data-slot="popover-list-section">
-      <PopoverListLabel>{label}</PopoverListLabel>
       {children}
     </div>
   );
@@ -101,8 +62,7 @@ export function PopoverListRow({
       aria-disabled={unavailable || undefined}
       className={cn(
         POPUP_ROW,
-        "group/row flex w-full cursor-pointer items-center border-0 bg-transparent text-left text-pa-fg transition-colors duration-150",
-        "hover:bg-pa-surface active:bg-pa-surface",
+        "pa-focus group/row flex w-full cursor-pointer items-center border-0 bg-transparent text-left text-pa-fg hover:bg-pa-surface active:bg-pa-surface",
         selected && "font-medium",
         unavailable && "cursor-default opacity-30 hover:bg-transparent active:bg-transparent",
         className,
@@ -113,8 +73,9 @@ export function PopoverListRow({
       {...props}
     >
       {icon ? <span className="flex size-4 shrink-0 items-center">{icon}</span> : null}
-
-      <span className={cn("min-w-0 truncate", detail ? "flex-[1_0_auto]" : "flex-1")}>{children}</span>
+      <span className={cn("min-w-0 truncate", detail ? "flex-[1_0_auto]" : "flex-1")}>
+        {children}
+      </span>
       {detail ? (
         <span
           className="ml-3 min-w-0 truncate text-pa-muted tabular-nums"

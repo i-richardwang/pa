@@ -183,9 +183,7 @@ test("期间浮层把两种回看口径分节，并在每行印出实际起止�
       time={{ window: { kind: "trailing", count: 2, unit: "year" } }}
     />,
   );
-  const labels = [...out.matchAll(/data-slot="popover-list-label"[^>]*>([^<]*)</g)].map(
-    (m) => m[1],
-  );
+  const labels = [...out.matchAll(/data-slot="popup-title"[^>]*>([^<]*)</g)].map((m) => m[1]);
   expect(labels).toEqual(["按月滚动", "按日历年"]);
   const rows: Array<[string | undefined, string | undefined]> = [
     ...out.matchAll(

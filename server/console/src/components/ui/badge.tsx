@@ -7,21 +7,15 @@ import type React from "react";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-sm border border-transparent font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring [&_svg:not([class*='size-'])]:size-3 [&_svg]:pointer-events-none [&_svg]:shrink-0 [button&,a&]:cursor-pointer",
+  "pa-focus inline-flex h-5 min-w-5 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-sm border border-transparent px-1.5 font-medium text-xs [&_svg:not([class*='size-'])]:size-3 [&_svg]:pointer-events-none [&_svg]:shrink-0 [button&,a&]:cursor-pointer",
   {
     defaultVariants: {
-      size: "default",
       variant: "default",
     },
     variants: {
-      size: {
-        default: "h-5 min-w-5 px-1.5 text-xs",
-        lg: "h-6 min-w-6 px-2 text-sm",
-      },
       variant: {
         default: "bg-pa-surface text-pa-muted [button&,a&]:hover:bg-pa-selected",
         error: "bg-pa-danger/8 text-pa-danger-fg",
-        info: "bg-pa-accent/8 text-pa-info-fg",
         success: "bg-pa-success/8 text-pa-success-fg",
         warning: "bg-pa-warning/8 text-pa-warning-fg",
       },
@@ -31,18 +25,11 @@ const badgeVariants = cva(
 
 export interface BadgeProps extends useRender.ComponentProps<"span"> {
   variant?: VariantProps<typeof badgeVariants>["variant"];
-  size?: VariantProps<typeof badgeVariants>["size"];
 }
 
-export function Badge({
-  className,
-  variant,
-  size,
-  render,
-  ...props
-}: BadgeProps): React.ReactElement {
+export function Badge({ className, variant, render, ...props }: BadgeProps): React.ReactElement {
   const defaultProps = {
-    className: cn(badgeVariants({ className, size, variant })),
+    className: cn(badgeVariants({ className, variant })),
     "data-slot": "badge",
   };
 

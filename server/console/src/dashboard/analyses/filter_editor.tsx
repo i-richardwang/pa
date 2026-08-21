@@ -84,7 +84,7 @@ function FilterCard({
       <div className="flex h-10 items-center gap-1 pr-1 pl-2.5">
         <button
           aria-expanded={open}
-          className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md text-left outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring"
+          className="pa-focus flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md text-left"
           onClick={() => setOpen(!open)}
           type="button"
         >

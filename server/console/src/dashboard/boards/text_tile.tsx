@@ -1,6 +1,7 @@
 import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Menu, MenuDangerGroup, MenuItem, MenuPopup, MenuTrigger } from "@/components/ui/menu";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@/components/ui/menu";
+import { PopupSection } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
 import { TextMarkdown } from "../kit/text_markdown";
 import { TileShell, tileEditMenuTriggerClass } from "./tile_shell";
@@ -52,12 +53,12 @@ export function TextTile({
                 <ArrowDownIcon aria-hidden="true" />
                 下移
               </MenuItem>
-              <MenuDangerGroup>
+              <PopupSection>
                 <MenuItem onClick={onRemove}>
                   <Trash2Icon aria-hidden="true" />
                   删除
                 </MenuItem>
-              </MenuDangerGroup>
+              </PopupSection>
             </MenuPopup>
           </Menu>
         ) : undefined

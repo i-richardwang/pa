@@ -47,7 +47,7 @@
 | 看板瓦片 | `TileShell` |
 | 结果卡 | `ResultCard` |
 | 整页结果区 | `ChartStage` 的 `chart-stage-result` |
-| 页面分区面板 | `Frame` / `FramePanel` |
+| 页面分区面板 | `Frame` |
 | 清单表 | 裸铺 `Table` |
 | 查询结果表 | `data_table.tsx` |
 | 页面分面 | `Tabs` |

@@ -6,15 +6,8 @@ import {
 } from "@/components/ui/month-picker";
 import { NotebookCellItem } from "@/components/ui/notebook";
 import { Popover, PopoverPopup, PopoverTrigger } from "@/components/ui/popover";
-import {
-  POPOVER_LIST_WIDTH,
-  popoverListCheck,
-  PopoverListLabel,
-  PopoverListPanel,
-  PopoverListRow,
-  PopoverListSection,
-  PopoverListSeparator,
-} from "@/components/ui/popover-list";
+import { popoverListCheck, PopoverListPanel, PopoverListRow } from "@/components/ui/popover-list";
+import { PopupSection } from "@/components/ui/surface";
 import { toastManager } from "@/components/ui/toast";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
@@ -327,13 +320,13 @@ export function WindowPopup({
     window.kind === "trailing" && window.unit === "year" ? window.count : 0,
   ).filter((count) => count > 0);
   return (
-    <>
-      <PopoverListPanel>
+    <PopoverListPanel>
+      <PopupSection>
         {row("current_month", "单个月份", window.kind === "current_month", () =>
           changeWindow(presetWindow("current_month", latest, endpoint)),
         )}
-        <PopoverListSeparator />
-        <PopoverListLabel>按月滚动</PopoverListLabel>
+      </PopupSection>
+      <PopupSection label="按月滚动">
         {monthCounts.map((count) => {
           const candidate = { kind: "trailing", count, unit: "month" } as const;
           return row(
@@ -344,8 +337,8 @@ export function WindowPopup({
             candidate,
           );
         })}
-        <PopoverListSeparator />
-        <PopoverListLabel>按日历年</PopoverListLabel>
+      </PopupSection>
+      <PopupSection label="按日历年">
         {row(
           "year_to_date",
           "今年至今",
@@ -363,8 +356,9 @@ export function WindowPopup({
             candidate,
           );
         })}
-        <PopoverListSeparator />
-        {/* 被校验闸拦下的窗口不开选择弹层：为一个落不下的窗口挑月份是空跑一趟 */}
+      </PopupSection>
+      {/* 被校验闸拦下的窗口不开选择弹层：为一个落不下的窗口挑月份是空跑一趟 */}
+      <PopupSection>
         {row(
           "range",
           "自定义范围",
@@ -377,11 +371,10 @@ export function WindowPopup({
           },
           window.kind === "range" ? window : undefined,
         )}
-      </PopoverListPanel>
-
+      </PopupSection>
       {/* 单月窗口的观察月是窗口自身的表达；相对窗口没有可选端点，恒随数据滚动。 */}
       {window.kind === "current_month" ? (
-        <PopoverListSection label="观察月份">
+        <PopupSection label="观察月份">
           <PopoverListRow
             onClick={() => onChange(withFixedMonth(time))}
             selected={!month}
@@ -399,9 +392,9 @@ export function WindowPopup({
           >
             {month ? formatMonth(month) : "固定到某个月"}
           </PopoverListRow>
-        </PopoverListSection>
+        </PopupSection>
       ) : null}
-    </>
+    </PopoverListPanel>
   );
 }
 
@@ -655,16 +648,17 @@ export function ComparisonPopup({
       {row("previous_year", previousYearLabel(time.window), previousYearComparison(), () =>
         setComparison(previousYearComparison()),
       )}
-      <PopoverListSeparator />
-      {row(
-        "custom",
-        custom ? customComparisonSummary(custom) : "自定义对照",
-        customCandidate,
-        () => {
-          const applied = custom !== undefined || setComparison(customCandidate);
-          if (applied) onPick("comparison");
-        },
-      )}
+      <PopupSection>
+        {row(
+          "custom",
+          custom ? customComparisonSummary(custom) : "自定义对照",
+          customCandidate,
+          () => {
+            const applied = custom !== undefined || setComparison(customCandidate);
+            if (applied) onPick("comparison");
+          },
+        )}
+      </PopupSection>
     </PopoverListPanel>
   );
 }
@@ -805,11 +799,10 @@ export function TimeEditor({
             aria-label="观察时间"
             className="col-span-2 min-w-0 w-full border-pa-line-strong bg-pa-bg"
             render={<PopoverTrigger />}
-            tone="muted"
           >
             {windowSummary(timeIntent)}
           </NotebookCellItem>
-          <PopoverPopup className={POPOVER_LIST_WIDTH}>
+          <PopoverPopup width="list">
             <WindowPopup
               latest={latest}
               onChange={applyChange}
@@ -820,15 +813,10 @@ export function TimeEditor({
         </Popover>
 
         <Popover>
-          <NotebookCellItem
-            aria-label="显示方式"
-            className="w-full"
-            render={<PopoverTrigger />}
-            tone="muted"
-          >
+          <NotebookCellItem aria-label="显示方式" className="w-full" render={<PopoverTrigger />}>
             {displaySummary(timeIntent, latest, capabilities, grouped)}
           </NotebookCellItem>
-          <PopoverPopup className={POPOVER_LIST_WIDTH}>
+          <PopoverPopup width="list">
             <DisplayPopup
               capabilities={capabilities}
               grouped={grouped}
@@ -846,7 +834,6 @@ export function TimeEditor({
               className="w-full"
               icon={<CheckIcon className="size-3.5" />}
               render={<PopoverTrigger />}
-              tone="muted"
             >
               {comparisonSummary(timeIntent)}
             </NotebookCellItem>
@@ -857,12 +844,11 @@ export function TimeEditor({
               aria-label="添加对比"
               className="w-full"
               render={<PopoverTrigger />}
-              tone="muted"
             >
               添加对比
             </NotebookCellItem>
           )}
-          <PopoverPopup className={POPOVER_LIST_WIDTH}>
+          <PopoverPopup width="list">
             <ComparisonPopup
               capabilities={capabilities}
               grouped={grouped}
@@ -956,7 +942,7 @@ export function TimeBar({
             {formatMonth(latest)}
           </TooltipPopup>
         </Tooltip>
-        <PopoverPopup className={POPOVER_LIST_WIDTH}>
+        <PopoverPopup width="list">
           <WindowPopup
             latest={latest}
             onChange={applyChange}
@@ -987,7 +973,7 @@ export function TimeBar({
           <GitCompareArrowsIcon aria-hidden="true" className="size-3.5" />
           <span className="truncate">{comparisonSummary(timeIntent)}</span>
         </PopoverTrigger>
-        <PopoverPopup className={POPOVER_LIST_WIDTH}>
+        <PopoverPopup width="list">
           <ComparisonPopup
             capabilities={capabilities}
             grouped={grouped}

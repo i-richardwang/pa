@@ -61,9 +61,7 @@ export function ToggleGroup({
         <span
           aria-hidden="true"
           className={cn(
-
             "pointer-events-none absolute left-0 bg-pa-selected",
-
             bordered ? "top-0.5 bottom-0.5 rounded-sm" : "top-0 bottom-0 rounded-md",
             slider.animate && "transition-transform duration-250 ease-in-out",
           )}
@@ -76,14 +74,11 @@ export function ToggleGroup({
   );
 }
 
-export function ToggleGroupItem({
-  className,
-  ...props
-}: TogglePrimitive.Props): ReactElement {
+export function ToggleGroupItem({ className, ...props }: TogglePrimitive.Props): ReactElement {
   return (
     <TogglePrimitive
       className={cn(
-        "relative flex h-8 cursor-pointer items-center justify-center rounded-md group-data-bordered/toggle:rounded-sm text-sm text-pa-muted outline-none transition-colors duration-300 hover:text-pa-fg-soft focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring data-disabled:cursor-not-allowed data-disabled:text-pa-disabled-fg data-disabled:hover:text-pa-disabled-fg data-pressed:font-medium data-pressed:text-pa-fg",
+        "pa-focus relative flex h-8 cursor-pointer items-center justify-center rounded-md group-data-bordered/toggle:rounded-sm text-sm text-pa-muted transition-colors duration-300 hover:text-pa-fg-soft data-disabled:cursor-not-allowed data-disabled:text-pa-disabled-fg data-disabled:hover:text-pa-disabled-fg data-pressed:font-medium data-pressed:text-pa-fg",
         className,
       )}
       data-slot="toggle-group-item"

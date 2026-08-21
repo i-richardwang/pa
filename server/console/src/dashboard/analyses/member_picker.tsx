@@ -238,7 +238,7 @@ export function MemberPopover({
       value={query}
     >
       <AutocompleteTrigger render={trigger} />
-      <AutocompletePopup className="w-[299px] min-w-[240px] max-w-[480px]">
+      <AutocompletePopup width="picker">
         <AutocompleteSearch aria-label="搜索字段" placeholder="搜索指标或维度" />
         {/* Empty 的根必须常挂着，读屏靠它播报结果条数的变化；变的只是它的孩子。 */}
         <AutocompleteEmpty>{emptyLabel}</AutocompleteEmpty>

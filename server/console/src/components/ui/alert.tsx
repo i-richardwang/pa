@@ -11,8 +11,7 @@ const alertVariants = cva(
     variants: {
       variant: {
         default: "bg-transparent [&>svg]:text-pa-muted",
-        error:
-          "border-pa-danger/32 bg-pa-danger/4 [&>svg]:text-pa-danger-fg",
+        error: "border-pa-danger/32 bg-pa-danger/4 [&>svg]:text-pa-danger-fg",
         info: "border-pa-accent/32 bg-pa-accent/4 [&>svg]:text-pa-info-fg",
         success: "border-pa-success/32 bg-pa-success/4 [&>svg]:text-pa-success-fg",
         warning: "border-pa-warning/32 bg-pa-warning/4 [&>svg]:text-pa-warning-fg",
@@ -25,8 +24,7 @@ export function Alert({
   className,
   variant,
   ...props
-}: React.ComponentProps<"div"> &
-  VariantProps<typeof alertVariants>): React.ReactElement {
+}: React.ComponentProps<"div"> & VariantProps<typeof alertVariants>): React.ReactElement {
   return (
     <div
       className={cn(alertVariants({ variant }), className)}
@@ -55,10 +53,7 @@ export function AlertDescription({
 }: React.ComponentProps<"div">): React.ReactElement {
   return (
     <div
-      className={cn(
-        "flex flex-col gap-2.5 text-pa-muted [svg~&]:col-start-2",
-        className,
-      )}
+      className={cn("flex flex-col gap-2.5 text-pa-muted [svg~&]:col-start-2", className)}
       data-slot="alert-description"
       {...props}
     />

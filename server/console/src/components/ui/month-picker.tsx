@@ -44,16 +44,15 @@ function MonthCell({
       className={cn(
         "flex justify-center",
         inRange && "bg-pa-highlight-bg",
-        bandStart &&
-          "bg-linear-to-r from-transparent from-50% to-pa-highlight-bg to-50%",
+        bandStart && "bg-linear-to-r from-transparent from-50% to-pa-highlight-bg to-50%",
         bandEnd && "bg-linear-to-l from-transparent from-50% to-pa-highlight-bg to-50%",
       )}
     >
       <button
         aria-pressed={selected}
         className={cn(
-          "h-10 w-full cursor-pointer rounded-full border-2 border-transparent text-base outline-none transition-colors duration-150",
-          "text-pa-muted hover:bg-pa-surface focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring",
+          "pa-focus h-10 w-full cursor-pointer rounded-full border-2 border-transparent text-base transition-colors duration-150",
+          "text-pa-muted hover:bg-pa-surface",
           (inRange || bandStart || bandEnd || current) && "text-pa-highlight",
           selected && "border-pa-highlight-bg bg-pa-highlight-bg text-pa-highlight",
         )}
@@ -78,7 +77,7 @@ function MonthGrid({
   onSelect: (month: number) => void;
 }): React.ReactElement {
   const arrow =
-    "grid size-11 shrink-0 cursor-pointer place-items-center rounded-full text-pa-fg outline-none hover:bg-pa-surface focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring [&_svg]:size-4";
+    "pa-focus grid size-11 shrink-0 cursor-pointer place-items-center rounded-full text-pa-fg hover:bg-pa-surface [&_svg]:size-4";
   return (
     <div className="w-[280px]">
       <div className="flex h-11 items-center justify-between">
@@ -159,11 +158,7 @@ function PickerDialog({
 }): React.ReactElement {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogPopup
-        aria-label={label}
-        className="max-w-[640px] p-4"
-        showCloseButton={false}
-      >
+      <DialogPopup aria-label={label} className="max-w-[640px] p-4" showCloseButton={false}>
         {children}
       </DialogPopup>
     </Dialog>
@@ -184,7 +179,6 @@ export function MonthPickerDialog({
   label: string;
   value: string;
   onValueChange: (value: string) => void;
-
   current?: string;
 }): React.ReactElement {
   const selected = parseMonth(value);
@@ -273,7 +267,10 @@ export function MonthRangePickerDialog({
         <MonthInput
           label={fromLabel}
           onValueChange={(next) =>
-            onValueChange({ from: next, to: monthIndex(next) > monthIndex(value.to) ? next : value.to })
+            onValueChange({
+              from: next,
+              to: monthIndex(next) > monthIndex(value.to) ? next : value.to,
+            })
           }
           value={value.from}
         />

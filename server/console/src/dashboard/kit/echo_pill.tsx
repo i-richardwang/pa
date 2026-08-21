@@ -22,14 +22,7 @@ export function EchoPill({
     return <span className={cn(shape, "pointer-events-none")}>{label}</span>;
   }
   return (
-    <button
-      type="button"
-      className={cn(
-        shape,
-        "cursor-pointer outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring",
-      )}
-      onClick={onClick}
-    >
+    <button type="button" className={cn(shape, "pa-focus cursor-pointer")} onClick={onClick}>
       <span className="min-w-0 truncate">{label}</span>
     </button>
   );

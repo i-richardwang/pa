@@ -10,9 +10,7 @@ import { Button } from "./button.js";
 const render = (node: React.ReactElement) => renderToStaticMarkup(node);
 
 test("loading 按钮显示标记并隐藏文本", () => {
-  const html = render(
-    <Button loading>保存</Button>,
-  );
+  const html = render(<Button loading>保存</Button>);
   expect(html, "标记没进来").toContain('data-slot="loading-mark"');
   expect(html, "文字该被抹成透明留住宽度，而不是抽走").toContain("data-loading:text-transparent");
   expect(html).toContain("保存");
@@ -34,12 +32,14 @@ test("标记按钮的尺寸档缩放：矮钮用更小的那一档", () => {
   }
 });
 
-test("题头那圈图标钮取胶囊时，圆角真的换掉了基准档", () => {
-  const pill = render(<Button aria-label="关闭" shape="pill" size="icon-sm" />);
-  expect(pill, "显式取的胶囊没出现").toContain("rounded-full");
-  expect(pill, "基准圆角还压在上面").not.toContain("rounded-md");
+test("图标钮两档：壳那一圈整圆，内容里的取基准圆角", () => {
+  const shell = render(<Button aria-label="关闭" size="icon" />);
+  expect(shell).toContain("rounded-full");
+  expect(shell).not.toContain("rounded-md");
 
-  const plain = render(<Button aria-label="关闭" size="icon-sm" />);
-  expect(plain).toContain("rounded-md");
-  expect(plain).not.toContain("rounded-full");
+  for (const size of ["icon-sm", "icon-xs"] as const) {
+    const content = render(<Button aria-label="关闭" size={size} />);
+    expect(content, `${size} 档没取基准圆角`).toContain("rounded-md");
+    expect(content, `${size} 档不该是整圆`).not.toContain("rounded-full");
+  }
 });

@@ -5,27 +5,17 @@ import { useRender } from "@base-ui/react/use-render";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 
-export type NotebookTone = "strong" | "muted";
+const ITEM_ACTIVE = "border-transparent bg-pa-surface text-pa-ink hover:bg-pa-selected";
 
-const TONE = {
-  strong: {
-    itemActive: "border-transparent bg-pa-surface text-pa-ink hover:bg-pa-selected",
-    itemGuide: "border-pa-line text-pa-muted hover:border-pa-line-strong hover:bg-pa-surface",
-  },
-  muted: {
-    itemActive: "border-transparent bg-pa-surface text-pa-ink hover:bg-pa-selected",
-    itemGuide: "border-pa-line text-pa-muted hover:border-pa-line-strong hover:bg-pa-surface",
-  },
-} as const satisfies Record<NotebookTone, Record<string, string>>;
+const ITEM_GUIDE = "border-pa-line text-pa-muted hover:border-pa-line-strong hover:bg-pa-surface";
 
 const ITEM_SHELL =
   "inline-flex h-6 max-w-40 items-stretch rounded-full border border-transparent text-sm transition-colors duration-150";
 
 const ITEM_BODY =
-  "flex min-w-0 cursor-pointer items-center gap-1 px-2 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring disabled:pointer-events-none disabled:text-pa-disabled-fg";
+  "pa-focus flex min-w-0 cursor-pointer items-center gap-1 px-2 text-left disabled:pointer-events-none disabled:text-pa-disabled-fg";
 
 export function NotebookCellItem({
-  tone = "strong",
   guide = false,
   icon,
   right,
@@ -34,13 +24,11 @@ export function NotebookCellItem({
   children,
   ...props
 }: useRender.ComponentProps<"button"> & {
-  tone?: NotebookTone;
-
   guide?: boolean;
   icon?: React.ReactNode;
   right?: React.ReactNode;
 }): React.ReactElement {
-  const shell = cn(ITEM_SHELL, guide ? TONE[tone].itemGuide : TONE[tone].itemActive, className);
+  const shell = cn(ITEM_SHELL, guide ? ITEM_GUIDE : ITEM_ACTIVE, className);
   const full = typeof children === "string" ? children : undefined;
   const defaultProps = {
     title: full,

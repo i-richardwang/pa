@@ -22,11 +22,10 @@
      不是一条待读的内容，压到 faint 那一档会被当成已经填好的值 */
   --pa-placeholder: light-dark(#c4c4c4, #5e5e5e);
 
-  --pa-border: light-dark(rgba(0, 0, 0, 0.09), rgba(255, 255, 255, 0.1));
-  --pa-border-strong: light-dark(#d2d2d2, #3f3f3f);
-
-  --pa-border-hover: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.16));
-  --pa-border-subtle: light-dark(#f2f2f2, #212121);
+  --pa-line: light-dark(rgba(0, 0, 0, 0.09), rgba(255, 255, 255, 0.1));
+  --pa-line-strong: light-dark(#d2d2d2, #3f3f3f);
+  --pa-line-hover: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.16));
+  --pa-line-subtle: light-dark(#f2f2f2, #212121);
   --pa-surface: light-dark(rgba(0, 0, 0, 0.04), rgba(255, 255, 255, 0.07));
   --pa-wash: light-dark(rgba(25, 25, 25, 0.02), rgba(255, 255, 255, 0.04));
 
@@ -64,13 +63,14 @@
   --pa-shadow: light-dark(rgba(25, 25, 25, 0.12), rgba(0, 0, 0, 0.4));
   /* 弹层罩层：浅 dimmer 配 backdrop-grayscale，不是重墨遮罩 */
   --pa-dimmer: light-dark(rgba(10, 10, 10, 0.1), rgba(0, 0, 0, 0.4));
-  /* 玻璃浮层面：Jump/大舞台走 glass，菜单与锚定选择器走 glass-popover */
+  /* 玻璃浮层面：命令面这类大舞台走 glass，菜单与锚定选择器走 glass-popover */
   --pa-glass: light-dark(rgba(255, 255, 255, 0.8), rgba(38, 38, 38, 0.8));
   --pa-glass-popover: light-dark(rgba(255, 255, 255, 0.75), rgba(38, 38, 38, 0.75));
-  /* 玻璃的模糊分两档：菜单盖住的是版面，糊掉正好；读数卡盖住的是数据本身，
-     同一档会把底下的线糊成一片色，故降到一半 */
-  --pa-glass-blur: 16px;
+  /* 玻璃的模糊按构件分三档：读数卡盖住的是数据本身，同一档会把底下的线糊成一片色，
+     故取最轻；菜单盖住的是版面，糊掉正好；命令面占满视口中央，底下整页都在动，取最重 */
   --pa-glass-blur-card: 8px;
+  --pa-glass-blur-popup: 16px;
+  --pa-glass-blur-stage: 24px;
   /* 玻璃浮层的外投影 + 双层内高光：只与玻璃底同用，独用会在实底上显出一圈假边。
      内高光必须随明暗换档——暗面上留着亮面那道 50% 白边，浮层就镶了一圈会先于内容被看见的亮线 */
   --pa-popover-glow:
@@ -129,10 +129,10 @@
   --color-pa-fg-soft: var(--pa-fg-soft);
   --color-pa-disabled-fg: var(--pa-disabled-fg);
   --color-pa-placeholder: var(--pa-placeholder);
-  --color-pa-line: var(--pa-border);
-  --color-pa-line-strong: var(--pa-border-strong);
-  --color-pa-line-hover: var(--pa-border-hover);
-  --color-pa-line-subtle: var(--pa-border-subtle);
+  --color-pa-line: var(--pa-line);
+  --color-pa-line-strong: var(--pa-line-strong);
+  --color-pa-line-hover: var(--pa-line-hover);
+  --color-pa-line-subtle: var(--pa-line-subtle);
   --color-pa-surface: var(--pa-surface);
   --color-pa-wash: var(--pa-wash);
   --color-pa-wash-solid: var(--pa-wash-solid);
@@ -176,14 +176,15 @@
 }
 
 /*
- * 锚定浮层的玻璃壳：菜单、Popover、Select 下拉、字段选择面与图表读数卡同料。
+ * 浮层的玻璃壳：菜单、Popover、Select 下拉、字段选择面、图表读数卡与命令面同料。
  *
  * 它落在 CSS 里而不是一串工具类，是因为消费方跨了两个包：控制台的浮层原语与结果视图的
  * 读数卡各自成包，谁也不引谁。同一张壳若两边各拼一次，浮层常彼此叠着开，差异当场可见。
- * 写在 components 层，件仍可用工具类改圆角与宽度。
+ * 写在 components 层，件仍可用工具类改圆角与宽度。模糊档由修饰类换，面料随档走。
  */
 @layer components {
   .pa-popup-surface {
+    --pa-glass-blur: var(--pa-glass-blur-popup);
     border: 0;
     border-radius: var(--radius-xl);
     background-color: var(--pa-glass-popover);
@@ -192,9 +193,31 @@
     backdrop-filter: blur(var(--pa-glass-blur));
   }
 
-  /* 读数卡：同料同框，只换模糊那一档 */
   .pa-popup-surface-card {
     --pa-glass-blur: var(--pa-glass-blur-card);
+  }
+
+  .pa-popup-surface-stage {
+    --pa-glass-blur: var(--pa-glass-blur-stage);
+    background-color: var(--pa-glass);
+  }
+}
+
+/*
+ * 键盘聚焦全站只有一种标记：3px 的半透光环（`pa-focus-ring`），叠在件的外缘。
+ * 自己接焦的件取 `pa-focus`；框住输入件的外壳取 `pa-focus-within`，外壳描边同时转成
+ * `pa-focus-strong`——环与描边成对出现，不单用。两者都是工具类，可带变体前缀。
+ */
+@utility pa-focus {
+  outline: none;
+  &:focus-visible {
+    @apply ring-[3px] ring-pa-focus-ring;
+  }
+}
+
+@utility pa-focus-within {
+  &:focus-within {
+    @apply border-pa-focus-strong ring-[3px] ring-pa-focus-ring;
   }
 }
 

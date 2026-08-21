@@ -7,14 +7,11 @@ import { BlockedHint } from "@/components/ui/inspector";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-export function Switch({
-  className,
-  ...props
-}: SwitchPrimitive.Root.Props): React.ReactElement {
+export function Switch({ className, ...props }: SwitchPrimitive.Root.Props): React.ReactElement {
   return (
     <SwitchPrimitive.Root
       className={cn(
-        "inline-flex h-5 w-10 shrink-0 cursor-pointer items-center rounded-full bg-pa-surface px-[3px] outline-none transition-colors duration-150 focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring data-checked:bg-pa-ink data-disabled:cursor-not-allowed data-disabled:opacity-64",
+        "pa-focus inline-flex h-5 w-10 shrink-0 cursor-pointer items-center rounded-full bg-pa-surface px-[3px] transition-colors duration-150 data-checked:bg-pa-ink data-disabled:cursor-not-allowed data-disabled:opacity-64",
         className,
       )}
       data-slot="switch"
@@ -75,5 +72,3 @@ export function SwitchField({
     </Tooltip>
   );
 }
-
-export { SwitchPrimitive };

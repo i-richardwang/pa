@@ -52,7 +52,7 @@ export function BoardTimeOverride({
         open={open}
       >
         <PopoverTrigger render={<Button variant="subtle" />}>设置板级时间</PopoverTrigger>
-        <PopoverPopup className="w-auto p-3">
+        <PopoverPopup className="p-3">
           <div className="flex flex-wrap items-center gap-2">
             <TimeEditor dataAsOf={dataAsOf} onChange={setDraft} time={draft} />
             <Button

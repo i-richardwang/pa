@@ -112,7 +112,7 @@ export function AddToBoardAction({ reportId }: { reportId: string }) {
         <AddToBoardIcon />
         添加到看板
       </AutocompleteTrigger>
-      <AutocompletePopup align="end" className="w-[240px]" sideOffset={6}>
+      <AutocompletePopup align="end" sideOffset={6} width="list">
         <div className="flex h-11 shrink-0 items-center border-pa-line border-b px-2">
           <div className="min-w-0 flex-1 truncate px-2 pb-0.5 font-medium text-pa-fg text-sm">
             添加到看板

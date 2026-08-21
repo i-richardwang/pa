@@ -1,8 +1,7 @@
-
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
-export const TITLEBAR_HEIGHT = 51;
+const TITLEBAR_HEIGHT = 51;
 
 const ALIGN = {
   start: "justify-start",
@@ -16,8 +15,7 @@ export function Titlebar({
   className,
   children,
   ...props
-}:
-Omit<React.ComponentProps<"div">, "ref"> & {
+}: Omit<React.ComponentProps<"div">, "ref"> & {
   align?: keyof typeof ALIGN;
   as?: "header" | "div";
 }) {

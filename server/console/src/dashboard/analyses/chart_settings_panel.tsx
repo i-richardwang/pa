@@ -47,12 +47,8 @@ import {
   InspectorSection,
 } from "@/components/ui/inspector";
 import { Hint } from "@/components/ui/hint";
-import {
-  Popover,
-  PopoverPopup,
-  PopoverSettingTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverPopup, PopoverTrigger } from "@/components/ui/popover";
+import { PopupSection } from "@/components/ui/surface";
 import {
   Select,
   SelectItem,
@@ -337,7 +333,7 @@ export function ChartSettingsPanel({
                       </span>
                       <ChevronsUpDownIcon className={selectTriggerIconClassName} />
                     </PopoverTrigger>
-                    <PopoverPopup align="end" className="w-64 p-1">
+                    <PopoverPopup align="end" className="p-1.5" width="settings">
                       <Hint className="px-2 py-1.5">
                         从外到内决定交叉表列层次；未列入的维度留在行轴。
                       </Hint>
@@ -387,9 +383,7 @@ export function ChartSettingsPanel({
                         ))}
                       </div>
                       {remainingTableAxes.length > 0 ? (
-                        <>
-                          <div className="my-1 h-px bg-pa-line" />
-                          <PopoverSettingTitle>加入列轴</PopoverSettingTitle>
+                        <PopupSection label="加入列轴">
                           {remainingTableAxes.map((axis) => (
                             <InspectorRow
                               key={axis}
@@ -397,7 +391,7 @@ export function ChartSettingsPanel({
                               onClick={() => addTableColumn(axis)}
                             />
                           ))}
-                        </>
+                        </PopupSection>
                       ) : summaryEnabled && dimensions.length > 0 ? (
                         <Hint className="px-2 py-1.5">显示总体时，业务维度只能在行轴。</Hint>
                       ) : null}
@@ -521,7 +515,6 @@ export function ChartSettingsPanel({
                                     key={option}
                                     onClick={() => setSeriesPreferences(member, { color: option })}
                                     selected={option === color}
-                                    size="sm"
                                   />
                                 ))}
                               </div>

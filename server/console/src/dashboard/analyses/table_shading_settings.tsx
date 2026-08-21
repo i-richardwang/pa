@@ -14,13 +14,8 @@ import { Button } from "@/components/ui/button";
 import { ColorPill } from "@/components/ui/color-pill";
 import { ColorScale, ColorScaleStop, ColorScaleTick } from "@/components/ui/color-scale";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverPopup,
-  PopoverSettingTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
+import { Popover, PopoverPopup, PopoverTrigger } from "@/components/ui/popover";
+import { PopupSection, PopupTitle } from "@/components/ui/surface";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 
 const THRESHOLD_LABELS = { min: "下限", mid: "中点", max: "上限" } as const;
@@ -28,9 +23,9 @@ type ThresholdKey = keyof typeof THRESHOLD_LABELS;
 const UNIT = { percent: "%", percentage_point: "pp", number: "" } as const;
 
 const FAMILY_TILE =
-  "flex cursor-pointer items-center rounded-md border border-pa-line p-3 outline-none transition-colors duration-150 hover:border-pa-line-hover focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring aria-pressed:border-pa-focus-strong";
+  "pa-focus flex cursor-pointer items-center rounded-md border border-pa-line p-3 transition-colors duration-150 hover:border-pa-line-hover aria-pressed:border-pa-focus-strong";
 const DIVERGING_TILE =
-  "flex cursor-pointer items-center rounded-xl border border-pa-line p-1 outline-none transition-colors duration-150 hover:border-pa-line-hover focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring aria-pressed:border-pa-focus-strong";
+  "pa-focus flex cursor-pointer items-center rounded-xl border border-pa-line p-1 transition-colors duration-150 hover:border-pa-line-hover aria-pressed:border-pa-focus-strong";
 
 function divergingNameOf(palette: string) {
   return SHADING_PALETTE_NAMES.find((name) => name === palette);
@@ -73,7 +68,7 @@ export function TableShadingSettings({
     <Popover>
       <PopoverTrigger
         aria-label="配色"
-        className="w-40 cursor-pointer rounded-md p-2 pb-1 text-left outline-none hover:bg-pa-surface focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring"
+        className="pa-focus w-40 cursor-pointer rounded-md p-2 pb-1 text-left hover:bg-pa-surface"
       >
         <span className="relative block">
           <ColorScale outlined stops={stops} />
@@ -91,8 +86,13 @@ export function TableShadingSettings({
           ))}
         </span>
       </PopoverTrigger>
-      <PopoverPopup align="end" className="w-[248px] p-1.5" data-slot="table-shading-settings">
-        <PopoverSettingTitle>颜色</PopoverSettingTitle>
+      <PopoverPopup
+        align="end"
+        className="p-1.5"
+        data-slot="table-shading-settings"
+        width="settings"
+      >
+        <PopupTitle>颜色</PopupTitle>
         <div className="flex justify-center gap-2 py-2">
           <button
             aria-label="单色深浅"
@@ -147,71 +147,68 @@ export function TableShadingSettings({
                 key={color}
                 onClick={() => onChange({ palette: color })}
                 selected={color === shading.palette}
-                size="sm"
               />
             ))}
           </div>
         )}
-        <div className="-mx-1.5 my-3">
-          <Separator />
-        </div>
-        <PopoverSettingTitle>阈值</PopoverSettingTitle>
-        <div className="mx-4 mt-2 mb-4 flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  aria-label="翻转色阶"
-                  aria-pressed={flipped}
-                  onClick={() => onChange({ flipped: flipped ? undefined : true })}
-                  size="icon-sm"
-                  variant="subtle"
-                />
-              }
-            >
-              <ArrowDownUpIcon />
-            </TooltipTrigger>
-            <TooltipPopup>翻转色阶</TooltipPopup>
-          </Tooltip>
-          <div className="relative">
-            <div className="absolute top-0 bottom-0 flex w-4 flex-col justify-between">
-              {[...stops].reverse().map((color, index) => (
-                <ColorScaleStop color={color} key={`${index}:${color}`} />
+        <PopupSection label="阈值">
+          <div className="mx-4 mt-2 mb-4 flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    aria-label="翻转色阶"
+                    aria-pressed={flipped}
+                    onClick={() => onChange({ flipped: flipped ? undefined : true })}
+                    size="icon-sm"
+                    variant="subtle"
+                  />
+                }
+              >
+                <ArrowDownUpIcon />
+              </TooltipTrigger>
+              <TooltipPopup>翻转色阶</TooltipPopup>
+            </Tooltip>
+            <div className="relative">
+              <div className="absolute top-0 bottom-0 flex w-4 flex-col justify-between">
+                {[...stops].reverse().map((color, index) => (
+                  <ColorScaleStop color={color} key={`${index}:${color}`} />
+                ))}
+              </div>
+              <div className="px-1.5 py-3">
+                <ColorScale className={diverging ? "h-21" : "h-9.5"} stops={stops} vertical />
+              </div>
+            </div>
+            <div className="flex flex-col gap-y-3">
+              {[...keys].reverse().map((key) => (
+                <div className="flex min-h-8 items-center gap-2" key={key}>
+                  <span aria-hidden="true" className="h-px w-8 bg-pa-line" />
+                  <span className="relative">
+                    <Input
+                      aria-label={`着色${THRESHOLD_LABELS[key]}`}
+                      className={unit ? "w-20 pr-7" : "w-20"}
+                      defaultValue={plain(shading.thresholds?.[key])}
+                      inputMode="decimal"
+                      key={`${key}:${shading.thresholds?.[key] ?? ""}`}
+                      onBlur={(event) => setThreshold(key, event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.blur();
+                      }}
+                      placeholder={plain(defaults?.scale[key])}
+                      size="sm"
+                    />
+                    {unit ? (
+                      <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-pa-faint">
+                        {unit}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="w-16 text-sm text-pa-muted">{THRESHOLD_LABELS[key]}</span>
+                </div>
               ))}
             </div>
-            <div className="px-1.5 py-3">
-              <ColorScale className={diverging ? "h-21" : "h-9.5"} stops={stops} vertical />
-            </div>
           </div>
-          <div className="flex flex-col gap-y-3">
-            {[...keys].reverse().map((key) => (
-              <div className="flex min-h-8 items-center gap-2" key={key}>
-                <span aria-hidden="true" className="h-px w-8 bg-pa-line" />
-                <span className="relative">
-                  <Input
-                    aria-label={`着色${THRESHOLD_LABELS[key]}`}
-                    className={unit ? "w-20 pr-7" : "w-20"}
-                    defaultValue={plain(shading.thresholds?.[key])}
-                    inputMode="decimal"
-                    key={`${key}:${shading.thresholds?.[key] ?? ""}`}
-                    onBlur={(event) => setThreshold(key, event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                    }}
-                    placeholder={plain(defaults?.scale[key])}
-                    size="sm"
-                  />
-                  {unit ? (
-                    <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-pa-faint">
-                      {unit}
-                    </span>
-                  ) : null}
-                </span>
-                <span className="w-16 text-sm text-pa-muted">{THRESHOLD_LABELS[key]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        </PopupSection>
       </PopoverPopup>
     </Popover>
   );

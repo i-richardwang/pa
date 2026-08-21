@@ -2,7 +2,8 @@
 
 import { ChevronDownIcon, LogOutIcon, SettingsIcon } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
-import { Menu, MenuPopup, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@/components/ui/menu";
+import { PopupSection } from "@/components/ui/surface";
 
 function initials(email: string): string {
   return email.slice(0, 1).toUpperCase();
@@ -22,7 +23,7 @@ export function NavWorkspace({
 }) {
   return (
     <Menu>
-      <MenuTrigger className="flex w-min max-w-full cursor-pointer items-center rounded-xl p-1.5 text-left outline-none hover:bg-pa-surface focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring data-popup-open:bg-pa-surface md:rounded-lg">
+      <MenuTrigger className="pa-focus flex w-min max-w-full cursor-pointer items-center rounded-xl p-1.5 text-left hover:bg-pa-surface data-popup-open:bg-pa-surface md:rounded-lg">
         <span className="flex min-w-0 items-center gap-2">
           <Avatar shape="square" size="xs" tone="accent">
             {initials(user.email)}
@@ -31,13 +32,7 @@ export function NavWorkspace({
         </span>
         <ChevronDownIcon className="ml-1 size-3 shrink-0 text-pa-faint" strokeWidth={2} />
       </MenuTrigger>
-      <MenuPopup
-        align="start"
-        className="min-w-[240px]"
-        side="bottom"
-        sideOffset={6}
-        viewportClassName="p-1.5"
-      >
+      <MenuPopup align="start" side="bottom" sideOffset={6} width="list">
         <div className="mb-0.5 flex items-center gap-2.5 rounded-md px-3 py-2">
           <Avatar shape="square" size="xs" tone="accent">
             {initials(user.email)}
@@ -47,15 +42,16 @@ export function NavWorkspace({
             <div className="truncate text-2xs text-pa-fg-soft">{user.email}</div>
           </div>
         </div>
-        <MenuSeparator className="mx-1.5 bg-pa-line-subtle" />
-        <MenuItem onClick={onOpenSettings}>
-          <SettingsIcon />
-          设置
-        </MenuItem>
-        <MenuItem onClick={onSignOut}>
-          <LogOutIcon />
-          退出登录
-        </MenuItem>
+        <PopupSection>
+          <MenuItem onClick={onOpenSettings}>
+            <SettingsIcon />
+            设置
+          </MenuItem>
+          <MenuItem onClick={onSignOut}>
+            <LogOutIcon />
+            退出登录
+          </MenuItem>
+        </PopupSection>
       </MenuPopup>
     </Menu>
   );

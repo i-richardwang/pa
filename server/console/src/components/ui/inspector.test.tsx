@@ -40,7 +40,7 @@ test("值给字符串就按值排版，给节点就照放", () => {
       <button type="button">3 个</button>
     </InspectorRow>,
   );
-  expect(node).toContain("<button type=\"button\">3 个</button>");
+  expect(node).toContain('<button type="button">3 个</button>');
   expect(node).not.toContain("text-pa-muted text-xs");
 });
 

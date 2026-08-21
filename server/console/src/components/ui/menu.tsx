@@ -2,18 +2,20 @@
 
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import type * as React from "react";
-import { GLASS_POPUP_SURFACE, POPUP_ROW } from "@/components/ui/surface";
+import {
+  GLASS_POPUP_SURFACE,
+  POPUP_ROW,
+  POPUP_WIDTH,
+  type PopupWidth,
+} from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 
 const MENU_ITEM_CLASS = cn(
   POPUP_ROW,
-
   "flex w-full cursor-pointer select-none items-center text-pa-fg outline-none data-disabled:pointer-events-none data-disabled:text-pa-muted data-highlighted:bg-pa-surface [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-pa-fg",
 );
 
 export const Menu: typeof MenuPrimitive.Root = MenuPrimitive.Root;
-
-const MenuPortal = MenuPrimitive.Portal;
 
 export function MenuTrigger({
   className,
@@ -21,11 +23,7 @@ export function MenuTrigger({
   ...props
 }: MenuPrimitive.Trigger.Props): React.ReactElement {
   return (
-    <MenuPrimitive.Trigger
-      className={className}
-      data-slot="menu-trigger"
-      {...props}
-    >
+    <MenuPrimitive.Trigger className={className} data-slot="menu-trigger" {...props}>
       {children}
     </MenuPrimitive.Trigger>
   );
@@ -34,7 +32,7 @@ export function MenuTrigger({
 export function MenuPopup({
   children,
   className,
-  viewportClassName,
+  width = "menu",
   sideOffset = 4,
   align = "center",
   alignOffset,
@@ -43,16 +41,16 @@ export function MenuPopup({
   portalProps,
   ...props
 }: MenuPrimitive.Popup.Props & {
+  width?: PopupWidth;
   align?: MenuPrimitive.Positioner.Props["align"];
   sideOffset?: MenuPrimitive.Positioner.Props["sideOffset"];
   alignOffset?: MenuPrimitive.Positioner.Props["alignOffset"];
   side?: MenuPrimitive.Positioner.Props["side"];
   anchor?: MenuPrimitive.Positioner.Props["anchor"];
   portalProps?: MenuPrimitive.Portal.Props;
-    viewportClassName?: string;
 }): React.ReactElement {
   return (
-    <MenuPortal {...portalProps}>
+    <MenuPrimitive.Portal {...portalProps}>
       <MenuPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}
@@ -64,31 +62,22 @@ export function MenuPopup({
       >
         <MenuPrimitive.Popup
           className={cn(
-            "relative flex not-[class*='w-']:w-[180px] origin-(--transform-origin) flex-col overflow-hidden outline-none focus:outline-none",
+            "relative flex origin-(--transform-origin) flex-col overflow-hidden outline-none",
+            POPUP_WIDTH[width],
             GLASS_POPUP_SURFACE,
             className,
           )}
           data-slot="menu-popup"
           {...props}
         >
-          <div
-            className={cn(
-              "max-h-(--available-height) w-full overflow-y-auto p-1.5",
-              viewportClassName,
-            )}
-          >
-            {children}
-          </div>
+          <div className="max-h-(--available-height) w-full overflow-y-auto p-1.5">{children}</div>
         </MenuPrimitive.Popup>
       </MenuPrimitive.Positioner>
-    </MenuPortal>
+    </MenuPrimitive.Portal>
   );
 }
 
-export function MenuItem({
-  className,
-  ...props
-}: MenuPrimitive.Item.Props): React.ReactElement {
+export function MenuItem({ className, ...props }: MenuPrimitive.Item.Props): React.ReactElement {
   return (
     <MenuPrimitive.Item
       className={cn(MENU_ITEM_CLASS, className)}
@@ -108,32 +97,6 @@ export function MenuLinkItem({
       className={cn(MENU_ITEM_CLASS, className)}
       closeOnClick={closeOnClick}
       data-slot="menu-link-item"
-      {...props}
-    />
-  );
-}
-
-export function MenuSeparator({
-  className,
-  ...props
-}: MenuPrimitive.Separator.Props): React.ReactElement {
-  return (
-    <MenuPrimitive.Separator
-      className={cn("mx-2 my-1 h-px bg-pa-line", className)}
-      data-slot="menu-separator"
-      {...props}
-    />
-  );
-}
-
-export function MenuDangerGroup({
-  className,
-  ...props
-}: React.ComponentProps<"div">): React.ReactElement {
-  return (
-    <div
-      className={cn("-mx-1.5 -mb-1.5 mt-1 border-t border-pa-line p-1.5", className)}
-      data-slot="menu-danger-group"
       {...props}
     />
   );

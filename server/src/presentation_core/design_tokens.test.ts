@@ -33,10 +33,17 @@ test("tokens.css and design_tokens.ts define the same values", async () => {
     expect(cssTokens.get(name), `tokens.css lacks --pa-${name}`).toEqual({ ...pair });
   }
   // 反向：CSS 侧不允许存在 TS 镜像之外的**字面**颜色令牌。
-  // 例外都不是颜色：popover-glow 是投影，glass-blur 两档是模糊半径；selected 由 ink
+  // 例外都不是颜色：popover-glow 是投影，glass-blur 是玻璃壳的模糊槽位与它的三档取值；selected 由 ink
   // 现算（color-mix），没有可镜像的明暗字面值。
   const extra = [...cssTokens.keys()].filter((name) => !(name in UI_TOKENS));
-  expect(extra).toEqual(["selected", "glass-blur", "glass-blur-card", "popover-glow"]);
+  expect(extra).toEqual([
+    "selected",
+    "glass-blur-card",
+    "glass-blur-popup",
+    "glass-blur-stage",
+    "popover-glow",
+    "glass-blur",
+  ]);
 });
 
 test("the series palette feeds serialized options in order", () => {

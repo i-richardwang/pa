@@ -9,11 +9,7 @@ export type TableProps = React.ComponentProps<"table"> & {
   render?: useRender.ComponentProps<"div">["render"];
 };
 
-export function Table({
-  className,
-  render,
-  ...props
-}: TableProps): React.ReactElement {
+export function Table({ className, render, ...props }: TableProps): React.ReactElement {
   const defaultProps = {
     children: (
       <table
@@ -50,31 +46,20 @@ export function TableBody({
   className,
   ...props
 }: React.ComponentProps<"tbody">): React.ReactElement {
-  return (
-    <tbody className={cn(className)} data-slot="table-body" {...props} />
-  );
+  return <tbody className={cn(className)} data-slot="table-body" {...props} />;
 }
 
-export function TableRow({
-  className,
-  ...props
-}: React.ComponentProps<"tr">): React.ReactElement {
+export function TableRow({ className, ...props }: React.ComponentProps<"tr">): React.ReactElement {
   return (
     <tr
-      className={cn(
-        "group/row relative border-t border-pa-line hover:bg-pa-wash",
-        className,
-      )}
+      className={cn("group/row relative border-t border-pa-line hover:bg-pa-wash", className)}
       data-slot="table-row"
       {...props}
     />
   );
 }
 
-export function TableHead({
-  className,
-  ...props
-}: React.ComponentProps<"th">): React.ReactElement {
+export function TableHead({ className, ...props }: React.ComponentProps<"th">): React.ReactElement {
   return (
     <th
       className={cn(
@@ -87,10 +72,7 @@ export function TableHead({
   );
 }
 
-export function TableCell({
-  className,
-  ...props
-}: React.ComponentProps<"td">): React.ReactElement {
+export function TableCell({ className, ...props }: React.ComponentProps<"td">): React.ReactElement {
   return (
     <td
       className={cn(

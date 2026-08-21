@@ -20,6 +20,7 @@ import type { SemanticPercentOfTotalCalculation, SemanticQueryView } from "@sema
 import { makeTitleOf } from "@shape";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/hint";
+import { PopupSection, PopupTitle } from "@/components/ui/surface";
 import { Input } from "@/components/ui/input";
 import {
   INSPECTOR_ROW_INDENT_CLASS,
@@ -28,13 +29,7 @@ import {
   InspectorRow,
   InspectorSection,
 } from "@/components/ui/inspector";
-import {
-  Popover,
-  PopoverPopup,
-  PopoverSettingTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
+import { Popover, PopoverPopup, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectButton,
@@ -238,8 +233,13 @@ function CalculationRow({
           <span className="truncate">{conclusion}</span>
           <ChevronsUpDownIcon className={selectTriggerIconClassName} />
         </PopoverTrigger>
-        <PopoverPopup align="end" className="w-[264px] p-1.5" data-slot="calculation-settings">
-          <PopoverSettingTitle>算哪个指标的占比</PopoverSettingTitle>
+        <PopoverPopup
+          align="end"
+          className="p-1.5"
+          data-slot="calculation-settings"
+          width="settings"
+        >
+          <PopupTitle>算哪个指标的占比</PopupTitle>
           <div className="px-2 pb-2">
             <Select
               onValueChange={(value) => value && commit({ measure: value })}
@@ -257,7 +257,7 @@ function CalculationRow({
               </SelectPopup>
             </Select>
           </div>
-          <PopoverSettingTitle>按哪个分组算</PopoverSettingTitle>
+          <PopupTitle>按哪个分组算</PopupTitle>
           <div className="px-2 pb-2">
             <Select
               onValueChange={(value) => {
@@ -288,27 +288,25 @@ function CalculationRow({
           <Hint className="px-2 pb-1">
             {`每个${dimensionTitle}的${measureTitle}占全部${measureTitle}的百分比，各组加起来是 100%。`}
           </Hint>
-          <div className="-mx-1.5 my-3">
-            <Separator />
-          </div>
-          <PopoverSettingTitle>名称</PopoverSettingTitle>
-          <div className="px-2 pb-0.5">
-            <Input
-              aria-label={`${calculation.title}的名称`}
-              maxLength={30}
-              onBlur={() => {
-                const trimmed = title.trim();
-                if (!trimmed) {
-                  setTitle(calculation.title);
-                  return;
-                }
-                if (trimmed !== calculation.title) commit({ title: trimmed });
-              }}
-              onChange={(event) => setTitle(event.target.value)}
-              size="sm"
-              value={title}
-            />
-          </div>
+          <PopupSection label="名称">
+            <div className="px-2 pb-0.5">
+              <Input
+                aria-label={`${calculation.title}的名称`}
+                maxLength={30}
+                onBlur={() => {
+                  const trimmed = title.trim();
+                  if (!trimmed) {
+                    setTitle(calculation.title);
+                    return;
+                  }
+                  if (trimmed !== calculation.title) commit({ title: trimmed });
+                }}
+                onChange={(event) => setTitle(event.target.value)}
+                size="sm"
+                value={title}
+              />
+            </div>
+          </PopupSection>
         </PopoverPopup>
       </Popover>
     </InspectorRow>
@@ -429,8 +427,8 @@ function BreakdownField({
           <ChevronsUpDownIcon className={selectTriggerIconClassName} />
         </PopoverTrigger>
 
-        <PopoverPopup align="end" className="w-[248px] p-1.5" data-slot="breakdown-range">
-          <PopoverSettingTitle>排序依据</PopoverSettingTitle>
+        <PopoverPopup align="end" className="p-1.5" data-slot="breakdown-range" width="settings">
+          <PopupTitle>排序依据</PopupTitle>
           <div className="flex items-center gap-1.5 px-2 pb-2">
             <ToggleGroup
               bordered
@@ -491,46 +489,42 @@ function BreakdownField({
               </Select>
             </div>
           ) : null}
-          <div className="-mx-1.5 my-3">
-            <Separator />
-          </div>
-          <PopoverSettingTitle blocked={measures.length ? undefined : NO_MEASURE_REASON}>
-            最大项数
-          </PopoverSettingTitle>
-          <div className="px-2 pb-0.5">
-            <Input
-              aria-label={`${label}最大项数`}
-              disabled={!measures.length}
-              inputMode="numeric"
-              onBlur={() => {
-                if (!maxItems) return;
-                const count = Number(maxItems);
-                if (!Number.isInteger(count) || count < 1) {
-                  setMaxItems("");
-                  if (active) commit({ max_items: undefined });
-                } else if (count > 20) {
-                  setMaxItems("20");
-                  commit({ max_items: 20 });
-                }
-              }}
-              onChange={(event) => {
-                const value = event.target.value.replace(/[^\d]/g, "");
-                setMaxItems(value);
-                if (!value) {
-                  if (active) commit({ max_items: undefined });
-                  return;
-                }
-                const count = Number(value);
-                if (Number.isInteger(count) && count >= 1 && count <= 20) {
-                  commit({ max_items: count });
-                }
-              }}
-              placeholder="全部"
-              size="sm"
-              type="text"
-              value={maxItems}
-            />
-          </div>
+          <PopupSection blocked={measures.length ? undefined : NO_MEASURE_REASON} label="最大项数">
+            <div className="px-2 pb-0.5">
+              <Input
+                aria-label={`${label}最大项数`}
+                disabled={!measures.length}
+                inputMode="numeric"
+                onBlur={() => {
+                  if (!maxItems) return;
+                  const count = Number(maxItems);
+                  if (!Number.isInteger(count) || count < 1) {
+                    setMaxItems("");
+                    if (active) commit({ max_items: undefined });
+                  } else if (count > 20) {
+                    setMaxItems("20");
+                    commit({ max_items: 20 });
+                  }
+                }}
+                onChange={(event) => {
+                  const value = event.target.value.replace(/[^\d]/g, "");
+                  setMaxItems(value);
+                  if (!value) {
+                    if (active) commit({ max_items: undefined });
+                    return;
+                  }
+                  const count = Number(value);
+                  if (Number.isInteger(count) && count >= 1 && count <= 20) {
+                    commit({ max_items: count });
+                  }
+                }}
+                placeholder="全部"
+                size="sm"
+                type="text"
+                value={maxItems}
+              />
+            </div>
+          </PopupSection>
         </PopoverPopup>
       </Popover>
       <RowAction

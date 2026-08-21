@@ -53,7 +53,7 @@ export function AddBoardWidget({
       {/* 名字与面上那行字同文：`combobox` 这个角色不许从内容取名，不写它就是一枚无名件。 */}
       <AutocompleteTrigger
         aria-label="添加瓦片"
-        className="flex h-16 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-pa-wash font-normal text-base text-pa-muted hover:bg-pa-surface hover:text-pa-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring/40"
+        className="pa-focus flex h-16 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-pa-wash font-normal text-base text-pa-muted hover:bg-pa-surface hover:text-pa-fg"
       >
         <PlusIcon aria-hidden="true" className="size-4" strokeWidth={1.75} />
         添加瓦片

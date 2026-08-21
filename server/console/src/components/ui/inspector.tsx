@@ -32,7 +32,7 @@ export function BlockedHint({ reason }: { reason: React.ReactNode }): React.Reac
       <TooltipTrigger
         render={
           <button
-            className="flex shrink-0 cursor-help items-center text-pa-faint outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring"
+            className="pa-focus flex shrink-0 cursor-help items-center text-pa-faint"
             data-slot="inspector-blocked"
             type="button"
           />
@@ -114,7 +114,7 @@ export function InspectorSection({
         {collapsible ? (
           <button
             aria-expanded={expanded}
-            className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-md text-left outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring"
+            className="pa-focus flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-md text-left"
             onClick={() => setExpanded((value) => !value)}
             type="button"
           >
@@ -228,7 +228,7 @@ export function InspectorFieldGroup({
     <div
       className={cn(
         "grid grid-cols-[auto_minmax(0,1fr)] divide-y divide-pa-line overflow-hidden rounded-lg border border-pa-line-subtle bg-pa-bg px-3",
-        "focus-within:border-pa-focus-strong focus-within:ring-[3px] focus-within:ring-pa-focus-ring",
+        "pa-focus-within",
       )}
       data-slot="inspector-field-group"
     >
@@ -279,8 +279,7 @@ export function InspectorRow({
   const box = cn(
     "flex min-h-11 min-w-0 grow items-center justify-between gap-3 rounded-md px-2 text-left text-sm md:min-h-8",
     indent && INSPECTOR_ROW_INDENT_CLASS,
-    onClick &&
-      "cursor-pointer outline-none hover:bg-pa-surface focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring",
+    onClick && "pa-focus cursor-pointer hover:bg-pa-surface",
   );
   const name = (
     <span className="flex min-w-0 grow items-center gap-2.5">

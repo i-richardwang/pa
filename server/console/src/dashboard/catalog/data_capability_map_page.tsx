@@ -560,7 +560,7 @@ function DataCapabilityMapContent() {
     () =>
       visibleEdges(edgeRefs, highlight).map((edge) => {
         const lit = highlight?.edges.has(edge.id) ?? false;
-        const stroke = lit ? "var(--pa-ink)" : "var(--pa-border-strong)";
+        const stroke = lit ? "var(--pa-ink)" : "var(--pa-line-strong)";
         return {
           id: edge.id,
           type: "capability" as const,
@@ -634,7 +634,7 @@ function DataCapabilityMapContent() {
           proOptions={PRO_OPTIONS}
           zoomOnScroll={false}
         >
-          <Background color="var(--pa-border)" gap={24} variant={BackgroundVariant.Dots} />
+          <Background color="var(--pa-line)" gap={24} variant={BackgroundVariant.Dots} />
           <MapCameraControls />
         </ReactFlow>
       </div>

@@ -24,14 +24,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { LoadingMark, ViewRenderer } from "pa-result-view";
 import { BROWSER_CARD_ACTIONS } from "../kit/browser_actions";
 import { Button } from "@/components/ui/button";
-import {
-  Menu,
-  MenuDangerGroup,
-  MenuItem,
-  MenuLinkItem,
-  MenuPopup,
-  MenuTrigger,
-} from "@/components/ui/menu";
+import { Menu, MenuItem, MenuLinkItem, MenuPopup, MenuTrigger } from "@/components/ui/menu";
+import { PopupSection } from "@/components/ui/surface";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { boardReportReplayQueryOptions, errorText } from "../dashboard_queries";
 import { reportReplayQueryOptions } from "../editor_queries";
@@ -181,12 +175,12 @@ export function BoardTile({
                   </MenuItem>
                   {reportMenuItem}
                   {onRemove ? (
-                    <MenuDangerGroup>
+                    <PopupSection>
                       <MenuItem onClick={onRemove}>
                         <Trash2Icon aria-hidden="true" />
                         删除
                       </MenuItem>
-                    </MenuDangerGroup>
+                    </PopupSection>
                   ) : null}
                 </>
               ) : (

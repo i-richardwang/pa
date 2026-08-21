@@ -3,79 +3,39 @@
 import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
 import type React from "react";
 import { cn } from "@/lib/utils";
-import { dialogBackdropClass, formDialogClass } from "@/components/ui/dialog";
+import {
+  DIALOG_BACKDROP_CLASS,
+  dialogPopupVariants,
+  dialogViewportVariants,
+} from "@/components/ui/dialog";
 
-export const AlertDialog: typeof AlertDialogPrimitive.Root =
-  AlertDialogPrimitive.Root;
+export const AlertDialog: typeof AlertDialogPrimitive.Root = AlertDialogPrimitive.Root;
 
-const AlertDialogPortal: typeof AlertDialogPrimitive.Portal =
-  AlertDialogPrimitive.Portal;
-
-function AlertDialogBackdrop({
-  className,
-  ...props
-}: AlertDialogPrimitive.Backdrop.Props): React.ReactElement {
-  return (
-    <AlertDialogPrimitive.Backdrop
-      className={cn(
-        "fixed inset-0 z-50 transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0",
-        dialogBackdropClass,
-        className,
-      )}
-      data-slot="alert-dialog-backdrop"
-      {...props}
-    />
-  );
-}
-
-function AlertDialogViewport({
-  className,
-  ...props
-}: AlertDialogPrimitive.Viewport.Props): React.ReactElement {
-  return (
-    <AlertDialogPrimitive.Viewport
-      className={cn(
-        "fixed inset-0 z-50 grid grid-rows-[1fr_auto_3fr] justify-items-center p-4",
-        className,
-      )}
-      data-slot="alert-dialog-viewport"
-      {...props}
-    />
-  );
-}
-
+/** 确认框是表单档弹层的窄一号：罩、视口与壳同 Dialog，只收窄一档。 */
 export function AlertDialogPopup({
   className,
-  bottomStickOnMobile = true,
   portalProps,
   ...props
 }: AlertDialogPrimitive.Popup.Props & {
-  bottomStickOnMobile?: boolean;
   portalProps?: AlertDialogPrimitive.Portal.Props;
 }): React.ReactElement {
   return (
-    <AlertDialogPortal {...portalProps}>
-      <AlertDialogBackdrop />
-      <AlertDialogViewport
-        className={cn(
-          bottomStickOnMobile &&
-            "max-sm:grid-rows-[1fr_auto] max-sm:p-0 max-sm:pt-12",
-        )}
+    <AlertDialogPrimitive.Portal {...portalProps}>
+      <AlertDialogPrimitive.Backdrop
+        className={DIALOG_BACKDROP_CLASS}
+        data-slot="alert-dialog-backdrop"
+      />
+      <AlertDialogPrimitive.Viewport
+        className={dialogViewportVariants({ variant: "form" })}
+        data-slot="alert-dialog-viewport"
       >
         <AlertDialogPrimitive.Popup
-          className={cn(
-
-            "relative row-start-2 flex max-h-full min-h-0 w-full min-w-0 max-w-md origin-center flex-col bg-pa-bg text-pa-fg opacity-[calc(1-0.1*var(--nested-dialogs))] transition-[scale,opacity,translate] duration-150 ease-out will-change-transform data-ending-style:opacity-0 data-starting-style:opacity-0 sm:scale-[calc(1-0.1*var(--nested-dialogs))] sm:data-ending-style:translate-y-2.5 sm:data-starting-style:translate-y-2.5",
-            formDialogClass,
-            bottomStickOnMobile &&
-              "max-sm:max-w-none max-sm:origin-bottom max-sm:rounded-none max-sm:border-x-0 max-sm:border-t max-sm:border-b-0 max-sm:data-ending-style:translate-y-4 max-sm:data-starting-style:translate-y-4",
-            className,
-          )}
+          className={cn(dialogPopupVariants({ variant: "form" }), "max-w-md", className)}
           data-slot="alert-dialog-popup"
           {...props}
         />
-      </AlertDialogViewport>
-    </AlertDialogPortal>
+      </AlertDialogPrimitive.Viewport>
+    </AlertDialogPrimitive.Portal>
   );
 }
 
@@ -85,10 +45,7 @@ export function AlertDialogHeader({
 }: React.ComponentProps<"div">): React.ReactElement {
   return (
     <div
-      className={cn(
-        "flex flex-col gap-2 p-6 text-left",
-        className,
-      )}
+      className={cn("flex flex-col gap-2 p-6 text-left", className)}
       data-slot="alert-dialog-header"
       {...props}
     />
@@ -101,10 +58,7 @@ export function AlertDialogFooter({
 }: React.ComponentProps<"div">): React.ReactElement {
   return (
     <div
-      className={cn(
-        "flex flex-col-reverse gap-2 px-6 py-4 sm:flex-row sm:justify-end",
-        className,
-      )}
+      className={cn("flex flex-col-reverse gap-2 px-6 py-4 sm:flex-row sm:justify-end", className)}
       data-slot="alert-dialog-footer"
       {...props}
     />
@@ -117,10 +71,7 @@ export function AlertDialogTitle({
 }: AlertDialogPrimitive.Title.Props): React.ReactElement {
   return (
     <AlertDialogPrimitive.Title
-      className={cn(
-        "font-semibold text-lg leading-none",
-        className,
-      )}
+      className={cn("font-semibold text-lg leading-none", className)}
       data-slot="alert-dialog-title"
       {...props}
     />
@@ -140,16 +91,6 @@ export function AlertDialogDescription({
   );
 }
 
-export function AlertDialogClose(
-  props: AlertDialogPrimitive.Close.Props,
-): React.ReactElement {
-  return (
-    <AlertDialogPrimitive.Close data-slot="alert-dialog-close" {...props} />
-  );
+export function AlertDialogClose(props: AlertDialogPrimitive.Close.Props): React.ReactElement {
+  return <AlertDialogPrimitive.Close data-slot="alert-dialog-close" {...props} />;
 }
-
-export {
-  AlertDialogPrimitive,
-  AlertDialogBackdrop as AlertDialogOverlay,
-  AlertDialogPopup as AlertDialogContent,
-};

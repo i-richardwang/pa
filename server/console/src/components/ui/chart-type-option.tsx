@@ -38,16 +38,14 @@ export function ChartTypeOption({
       aria-label={label}
       aria-pressed={selected}
       className={cn(
-        "relative flex flex-1 cursor-pointer items-center justify-center text-pa-muted outline-none transition-colors duration-150 hover:text-pa-ink focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring aria-pressed:text-pa-ink disabled:cursor-not-allowed disabled:text-pa-disabled-fg disabled:hover:text-pa-disabled-fg [&_svg]:relative [&_svg]:size-4",
+        "pa-focus relative flex flex-1 cursor-pointer items-center justify-center text-pa-muted transition-colors duration-150 hover:text-pa-ink aria-pressed:text-pa-ink disabled:cursor-not-allowed disabled:text-pa-disabled-fg disabled:hover:text-pa-disabled-fg [&_svg]:relative [&_svg]:size-4",
         className,
       )}
       data-slot="chart-type-option"
       type="button"
       {...props}
     >
-      {selected ? (
-        <span aria-hidden className="absolute inset-0 rounded-md bg-pa-surface" />
-      ) : null}
+      {selected ? <span aria-hidden className="absolute inset-0 rounded-md bg-pa-surface" /> : null}
       {icon}
     </button>
   );

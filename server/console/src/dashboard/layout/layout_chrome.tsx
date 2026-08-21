@@ -319,7 +319,7 @@ export function ListSegment({
       type="button"
       aria-pressed={selected}
       className={cn(
-        "inline-flex h-8 min-w-10 cursor-pointer items-center justify-center whitespace-nowrap rounded-md px-[9px] pb-0.5 text-sm outline-none transition-colors duration-150 focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring",
+        "pa-focus inline-flex h-8 min-w-10 cursor-pointer items-center justify-center whitespace-nowrap rounded-md px-[9px] pb-0.5 text-sm transition-colors duration-150",
         selected ? "bg-pa-surface text-pa-fg" : "bg-transparent text-pa-muted hover:bg-pa-surface",
         className,
       )}
@@ -410,9 +410,7 @@ export function ListControlSearch({
     <label
       className={cn(
         "group flex h-8 w-[182px] max-w-full items-center gap-2 rounded-md border border-pa-line bg-pa-bg px-2 transition duration-200",
-        "hover:border-pa-line-hover",
-
-        "focus-within:border-pa-focus-strong focus-within:hover:border-pa-focus-strong focus-within:ring-[3px] focus-within:ring-pa-focus-ring",
+        "pa-focus-within hover:border-pa-line-hover focus-within:hover:border-pa-focus-strong",
       )}
     >
       <SearchIcon

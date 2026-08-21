@@ -22,7 +22,6 @@ export function HeaderIconButton({
           <Button
             aria-label={label}
             className={cn("[&_svg]:size-4", className)}
-            shape="pill"
             size="icon"
             variant="subtle"
             {...props}

@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 export const Select: typeof SelectPrimitive.Root = SelectPrimitive.Root;
 
 export const selectTriggerVariants = cva(
-  "relative inline-flex w-full min-w-0 cursor-pointer select-none items-center justify-start rounded-lg border text-left text-sm text-pa-fg outline-none transition duration-200 ease-in-out pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 focus-visible:border-transparent focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring aria-invalid:border-pa-danger data-disabled:pointer-events-none data-disabled:text-pa-disabled-fg data-disabled:[&_svg]:text-pa-disabled-fg [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "pa-focus relative inline-flex w-full min-w-0 cursor-pointer select-none items-center justify-start rounded-lg border text-left text-sm text-pa-fg transition duration-200 ease-in-out pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 focus-visible:border-transparent aria-invalid:border-pa-danger data-disabled:pointer-events-none data-disabled:text-pa-disabled-fg data-disabled:[&_svg]:text-pa-disabled-fg [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     defaultVariants: {
       size: "default",
@@ -48,8 +48,9 @@ export function SelectButton({
   children,
   ...props
 }: SelectButtonProps): React.ReactElement {
-  const typeValue: React.ButtonHTMLAttributes<HTMLButtonElement>["type"] =
-    render ? undefined : "button";
+  const typeValue: React.ButtonHTMLAttributes<HTMLButtonElement>["type"] = render
+    ? undefined
+    : "button";
 
   const defaultProps = {
     children: (
@@ -97,8 +98,10 @@ export function SelectTrigger({
         <span className="mx-0.5 flex min-w-0 flex-1 items-center">{children}</span>
       ) : (
         <>
-
-          <span className="flex shrink-0 grow items-center truncate" data-slot="select-trigger-label">
+          <span
+            className="flex shrink-0 grow items-center truncate"
+            data-slot="select-trigger-label"
+          >
             {label}
           </span>
           <span className="mx-0.5 flex min-w-0 shrink items-center justify-end">{children}</span>
@@ -146,7 +149,7 @@ export function SelectValue({
 /**
  * 下拉面：落在触发件下方 4px，**不盖住触发件**——把选中项对到触发件上的那套（Base UI 的
  * `alignItemWithTrigger`）会让同一个「选一个值」在下拉与浮层列表上长出两种开合方式。
- * 面料与行排印出自 `surface.ts`，高度到 19rem 自滚，滚动不另加渐隐箭头。
+ * 面料与行排印出自 `surface.tsx`，高度到 19rem 自滚，滚动不另加渐隐箭头。
  */
 export function SelectPopup({
   className,
@@ -231,5 +234,3 @@ export function SelectItem({
     </SelectPrimitive.Item>
   );
 }
-
-export { SelectPrimitive, SelectPopup as SelectContent };

@@ -127,7 +127,7 @@ const FOREIGN_CSS_VAR = new RegExp(
 
 test("colors are spelled in the pa-* vocabulary only", async () => {
   const badVars = 'style={{ fill: "var(--card)", stroke: "var( --primary )" }}';
-  const goodVars = 'style={{ fill: "var(--pa-bg)", stroke: "var(--pa-border-strong)" }}';
+  const goodVars = 'style={{ fill: "var(--pa-bg)", stroke: "var(--pa-line-strong)" }}';
   expect([...badVars.matchAll(FOREIGN_CSS_VAR)].length, "css-var matcher is stale").toBe(2);
   expect(
     [...goodVars.matchAll(FOREIGN_CSS_VAR)].map((match) => match[0]),
@@ -136,7 +136,7 @@ test("colors are spelled in the pa-* vocabulary only", async () => {
 
   const bad = 'className="text-muted-foreground bg-accent border-border ring-ring/50"';
   const good =
-    'className="text-pa-muted bg-pa-surface border-pa-line-strong ring-pa-focus-ring/50 shadow-popover-glow border-0"';
+    'className="text-pa-muted bg-pa-surface border-pa-line-strong ring-pa-focus-ring/50 shadow-stage border-0"';
   expect([...bad.matchAll(FOREIGN_TOKEN)].length, "token matcher is stale").toBe(4);
   expect(
     [...good.matchAll(FOREIGN_TOKEN)].map((match) => match[0]),
@@ -161,15 +161,25 @@ test("colors are spelled in the pa-* vocabulary only", async () => {
 
 const POPUP_SURFACE_CSS = new URL("./presentation_core/tokens.css", import.meta.url);
 const POPUP_SURFACE_CLASS = "pa-popup-surface";
-const POPUP_SURFACE_INGREDIENT = /\bbg-pa-glass-popover\b/g;
+const POPUP_SURFACE_INGREDIENT =
+  /\bbg-pa-glass(?:-popover)?\b|\bbackdrop-blur(?:-[a-z0-9[\]()-]+)?\b/g;
+const GLASS_TIERS = ["card", "popup", "stage"];
 
-test("the anchored-popup surface has exactly one spelling", async () => {
+test("the glass surface has exactly one spelling, with its blur tiered in tokens", async () => {
   expect(
-    [...'className="bg-pa-glass-popover"'.matchAll(POPUP_SURFACE_INGREDIENT)].length,
+    [
+      ...'className="bg-pa-glass-popover backdrop-blur-lg bg-pa-glass"'.matchAll(
+        POPUP_SURFACE_INGREDIENT,
+      ),
+    ].length,
     "surface matcher is stale",
-  ).toBe(1);
+  ).toBe(3);
   expect(
-    [...'className="bg-pa-glass"'.matchAll(POPUP_SURFACE_INGREDIENT)],
+    [
+      ...'className="pa-popup-surface pa-popup-surface-stage backdrop-grayscale"'.matchAll(
+        POPUP_SURFACE_INGREDIENT,
+      ),
+    ],
     "surface matcher over-matches",
   ).toEqual([]);
 
@@ -178,6 +188,19 @@ test("the anchored-popup surface has exactly one spelling", async () => {
   expect(recipe, "tokens.css no longer defines .pa-popup-surface").not.toBeNull();
   expect(recipe?.[1]).toContain("var(--pa-glass-popover)");
   expect(recipe?.[1]).toContain("var(--pa-popover-glow)");
+  expect(recipe?.[1]).toContain("blur(var(--pa-glass-blur))");
+  for (const tier of GLASS_TIERS) {
+    expect(css, `tokens.css lost the ${tier} blur tier`).toMatch(
+      new RegExp(`--pa-glass-blur-${tier}:\\s*\\d+px;`),
+    );
+  }
+  for (const modifier of ["card", "stage"]) {
+    expect(css, `tokens.css lost the ${modifier} surface modifier`).toMatch(
+      new RegExp(
+        `\\.pa-popup-surface-${modifier}\\s*\\{[^}]*--pa-glass-blur:\\s*var\\(--pa-glass-blur-${modifier}\\)`,
+      ),
+    );
+  }
 
   const sources = [
     ...(await readSources(CONSOLE_SRC)),
@@ -514,7 +537,7 @@ test("aria-label is written in the interface's own language", async () => {
   }
 });
 
-const PAGE_WRITTEN_SHEET_WIDTH = /<(?:SheetPopup|SheetContent)\b[^>]*\bmax-w-/g;
+const PAGE_WRITTEN_SHEET_WIDTH = /<SheetPopup\b[^>]*\bmax-w-/g;
 
 test("a page never writes the sidesheet's width", async () => {
   const bad = '<SheetPopup className="max-w-160">';
@@ -769,7 +792,7 @@ test("the radius ladder has no hand-written steps", async () => {
 
 test("the pill and the round badge are drawn by primitives, not by call sites", async () => {
   const bad = '<Button className="h-8 rounded-full px-3" />';
-  const good = '<Button shape="pill" /><span className="rounded-lg" />';
+  const good = '<Button size="icon" /><span className="rounded-lg" />';
   expect([...bad.matchAll(HAND_DRAWN_ROUND)], "round matcher is stale").toHaveLength(1);
   expect([...good.matchAll(HAND_DRAWN_ROUND)], "round matcher over-matches").toEqual([]);
 
@@ -789,7 +812,7 @@ test("the pill and the round badge are drawn by primitives, not by call sites", 
       if (name.startsWith(ROUND_PRIMITIVES)) continue;
       expect(
         [...text.matchAll(HAND_DRAWN_ROUND)],
-        `${label}/src/${name} draws a round shape by hand; take Button's size / shape="pill" or Avatar`,
+        `${label}/src/${name} draws a round shape by hand; take Button's size="icon" / pill sizes or Avatar`,
       ).toEqual([]);
     }
   }
@@ -949,36 +972,77 @@ test("the overlay close button is drawn in one place", async () => {
   );
 });
 
-const PILL_SHAPE = /shape=["']pill["']/g;
-const PILL_SHAPE_HOMES = ["dashboard/layout/view_chrome.tsx", "components/ui/dialog.tsx"];
+const ICON_SIZE_STEP = /"(icon(?:-sm|-xs)?)":\s*"([^"]*)"|\bicon:\s*"([^"]*)"/g;
+const SHELL_ICON_HOMES = ["dashboard/layout/view_chrome.tsx", "components/ui/dialog.tsx"];
 
-test("the pill icon button stays an exception", async () => {
-  expect([...'<Button shape="pill" size="icon-sm" />'.matchAll(PILL_SHAPE)]).toHaveLength(1);
-  expect([...'<Button size="icon-sm" variant="subtle" />'.matchAll(PILL_SHAPE)]).toEqual([]);
+function iconSteps(text: string): Map<string, string> {
+  const steps = new Map<string, string>();
+  for (const match of text.matchAll(ICON_SIZE_STEP)) {
+    steps.set(match[1] ?? "icon", match[2] ?? match[3] ?? "");
+  }
+  return steps;
+}
+
+test("the icon button's radius follows its size step: shell is round, content is base", async () => {
+  const probe = iconSteps('icon: "size-8 rounded-full", "icon-sm": "size-7 rounded-md",');
+  expect([...probe.keys()], "icon step probe is stale").toEqual(["icon", "icon-sm"]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  const button = sources.find(({ name }) => name.endsWith("components/ui/button.tsx"));
+  const steps = iconSteps(button?.text ?? "");
+  expect([...steps.keys()].sort(), "button.tsx lost an icon step").toEqual([
+    "icon",
+    "icon-sm",
+    "icon-xs",
+  ]);
+  expect(steps.get("icon"), "the shell icon step is no longer round").toContain("rounded-full");
+  for (const step of ["icon-sm", "icon-xs"]) {
+    expect(steps.get(step), `${step} left the base radius`).toContain("rounded-md");
+    expect(steps.get(step), `${step} is not a shell step`).not.toContain("rounded-full");
+  }
+
+  for (const home of SHELL_ICON_HOMES) {
+    const source = sources.find(({ name }) => name.endsWith(home));
+    expect(source?.text, `${home} fell back to a content icon step`).toMatch(/size="icon"/);
+  }
+  const sidebar = sources.find(({ name }) => name.endsWith("components/ui/sidebar.tsx"));
+  expect(sidebar?.text, "the sidebar tool button no longer takes the shell round").toMatch(
+    /sidebarToolButtonClass =\s*\n?\s*"[^"]*\bsize-8\b[^"]*\brounded-full\b/,
+  );
+});
+
+const HAND_WRITTEN_FOCUS =
+  /\b(?:focus|focus-visible|focus-within):(?:ring-(?:\[|pa-|[1-9])[\w[\]/-]*|outline-[\w[\]/-]+)/g;
+const FOCUS_UTILITIES = ["pa-focus", "pa-focus-within"];
+
+test("keyboard focus has one mark: the pa-focus utilities, never a hand-written ring or outline", async () => {
+  const bad =
+    'className="outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring focus-within:ring-2 focus:outline-pa-focus-strong focus-visible:outline-none"';
+  const good =
+    'className="pa-focus has-data-[slot=field-label]:pa-focus-within in-[[data-slot=field]]:focus-within:ring-0 focus-visible:border-transparent"';
+  expect([...bad.matchAll(HAND_WRITTEN_FOCUS)], "focus matcher is stale").toHaveLength(5);
+  expect([...good.matchAll(HAND_WRITTEN_FOCUS)], "focus matcher over-matches").toEqual([]);
+
+  const tokens = await readFile(new URL("./presentation_core/tokens.css", import.meta.url), "utf8");
+  for (const utility of FOCUS_UTILITIES) {
+    expect(tokens, `tokens.css no longer defines @utility ${utility}`).toContain(
+      `@utility ${utility} {`,
+    );
+  }
+  const consoleCss = await readFile(new URL("../console/src/styles.css", import.meta.url), "utf8");
+  expect(consoleCss, "console re-opened a global outline as a second focus mark").not.toMatch(
+    /\boutline-pa-/,
+  );
 
   const sources = await readSources(CONSOLE_SRC);
   for (const { name, text } of sources) {
-    if (name.endsWith("components/ui/button.tsx")) continue;
-    if (PILL_SHAPE_HOMES.some((home) => name.endsWith(home))) continue;
     expect(
-      [...text.matchAll(PILL_SHAPE)],
-      `console/src/${name} takes the title-bar pill outside the title bar`,
+      [...text.matchAll(HAND_WRITTEN_FOCUS)].map((match) => match[0]),
+      `console/src/${name} spells a focus mark by hand; take pa-focus or pa-focus-within`,
     ).toEqual([]);
   }
-
-  for (const home of PILL_SHAPE_HOMES) {
-    const source = sources.find(({ name }) => name.endsWith(home));
-    expect(source?.text, `${home} no longer spells the pill exception`).toMatch(PILL_SHAPE);
-  }
-
-  const chrome = sources.find(({ name }) => name.endsWith("dashboard/layout/view_chrome.tsx"));
-  expect(chrome?.text, "the title-bar icon button fell back to the content step").toMatch(
-    /size="icon"/,
-  );
-  const sidebar = sources.find(({ name }) => name.endsWith("components/ui/sidebar.tsx"));
-  expect(sidebar?.text, "the sidebar tool button no longer takes the shell round").toMatch(
-    /sidebarToolButtonClass =\s*\n?\s*"[^"]*\brounded-full\b/,
-  );
+  const users = sources.filter(({ text }) => /\bpa-focus(?:-within)?\b/.test(text));
+  expect(users.length, "nobody takes the focus utilities — the name moved").toBeGreaterThan(10);
 });
 
 const OVERRIDDEN_SMALLEST_LEADING =

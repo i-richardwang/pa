@@ -37,7 +37,6 @@ import {
   DialogPopup,
   DialogTitle,
   OverlayCloseButton,
-  settingsDialogClass,
 } from "@/components/ui/dialog";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Form } from "@/components/ui/form";
@@ -96,11 +95,7 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup
-        bottomStickOnMobile={false}
-        className={cn(settingsDialogClass, "overflow-hidden")}
-        showCloseButton={false}
-      >
+      <DialogPopup showCloseButton={false} variant="stage">
         <DialogTitle className="sr-only">设置</DialogTitle>
         <SettingsChromeContext.Provider value={chrome}>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:h-full md:flex-row">

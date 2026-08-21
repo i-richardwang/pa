@@ -15,7 +15,6 @@ import {
   DialogTitle,
   DialogPopup,
   OverlayCloseButton,
-  stageDialogClass,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -25,7 +24,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
 import { ChartStageHeading } from "../analyses/chart_stage";
 import { Titlebar } from "@/components/ui/titlebar";
 import { postJson } from "../api";
@@ -123,11 +121,7 @@ export function RecordProjectionDialog({
   return (
     <>
       <Dialog open={request !== null} onOpenChange={(open) => !open && onClose()}>
-        <DialogPopup
-          bottomStickOnMobile={false}
-          className={cn(stageDialogClass, "overflow-hidden")}
-          showCloseButton={false}
-        >
+        <DialogPopup showCloseButton={false} variant="stage">
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:h-full">
             {/* 题条：与报告内 Edit / Explore 同一根基线；分页与关闭住动作槽 */}
             <Titlebar align="between" as="div" className="pr-2.5">

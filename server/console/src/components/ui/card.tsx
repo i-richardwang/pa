@@ -28,10 +28,7 @@ export function CardHeader({
   ...props
 }: useRender.ComponentProps<"div">): React.ReactElement {
   const defaultProps = {
-    className: cn(
-      "grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 p-6 in-[[data-slot=card]:has(>[data-slot=card-panel])]:pb-4 has-data-[slot=card-action]:grid-cols-[1fr_auto]",
-      className,
-    ),
+    className: cn("grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 p-6", className),
     "data-slot": "card-header",
   };
 
@@ -75,25 +72,3 @@ export function CardDescription({
     render,
   });
 }
-
-function CardPanel({
-  className,
-  render,
-  ...props
-}: useRender.ComponentProps<"div">): React.ReactElement {
-  const defaultProps = {
-    className: cn(
-      "flex-1 p-6 in-[[data-slot=card]:has(>[data-slot=card-header]:not(.border-b))]:pt-0 in-[[data-slot=card]:has(>[data-slot=card-footer]:not(.border-t))]:pb-0",
-      className,
-    ),
-    "data-slot": "card-panel",
-  };
-
-  return useRender({
-    defaultTagName: "div",
-    props: mergeProps<"div">(defaultProps, props),
-    render,
-  });
-}
-
-export { CardPanel as CardContent };

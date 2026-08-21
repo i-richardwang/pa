@@ -3,6 +3,7 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
+import { cva, type VariantProps } from "class-variance-authority";
 import { XIcon } from "lucide-react";
 import type React from "react";
 import { cn } from "@/lib/utils";
@@ -11,101 +12,76 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 export const Dialog: typeof DialogPrimitive.Root = DialogPrimitive.Root;
 
-const DialogPortal: typeof DialogPrimitive.Portal =
-  DialogPrimitive.Portal;
-
-export function DialogClose(
-  props: DialogPrimitive.Close.Props,
-): React.ReactElement {
+export function DialogClose(props: DialogPrimitive.Close.Props): React.ReactElement {
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
-export const dialogBackdropClass =
-  "bg-pa-dimmer backdrop-grayscale";
+/** 模态层的罩：Dialog、AlertDialog、Sheet 与命令面同一张。 */
+export const DIALOG_BACKDROP_CLASS =
+  "fixed inset-0 z-50 bg-pa-dimmer backdrop-grayscale transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0";
 
 export const OVERLAY_CLOSE_INSET_CLASS = "absolute end-2.5 top-2.5";
 
-export function OverlayCloseButton(
-  props: React.ComponentProps<typeof Button>,
-): React.ReactElement {
-  return <Button shape="pill" size="icon" variant="subtle" {...props} />;
+export function OverlayCloseButton(props: React.ComponentProps<typeof Button>): React.ReactElement {
+  return <Button size="icon" variant="subtle" {...props} />;
 }
 
-export const formDialogClass =
-  "rounded-3xl border-0 border-pa-line bg-pa-bg shadow-stage sm:rounded-3xl";
+export type DialogVariant = "form" | "stage";
 
-export const stageDialogClass =
-  "max-h-[min(80vh,calc(90vh-4rem))] min-h-[300px] w-[min(100%-2rem,1024px)] max-w-[min(100%-2rem,1024px)] min-w-0 rounded-3xl border-0 bg-pa-bg p-0 shadow-stage sm:max-w-[min(100%-2rem,1024px)] sm:rounded-3xl md:h-[min(80vh,calc(90vh-4rem))] md:min-w-[min(100%-2rem,1024px)]";
+/**
+ * 弹层分两档：`form` 是要提交或确认的动作表单，窄屏贴到底边；`stage` 是占满视口中央的
+ * 舞台（设置面、受控明细），任何屏幕都居中。档位同时决定视口与弹层两层的类。
+ */
+export const dialogViewportVariants = cva(
+  "fixed inset-0 z-50 grid grid-rows-[1fr_auto_3fr] justify-items-center p-4",
+  {
+    defaultVariants: { variant: "form" },
+    variants: {
+      variant: {
+        form: "max-sm:grid-rows-[1fr_auto] max-sm:p-0 max-sm:pt-12",
+        stage: "",
+      },
+    },
+  },
+);
 
-export const settingsDialogClass = stageDialogClass;
-
-function DialogBackdrop({
-  className,
-  ...props
-}: DialogPrimitive.Backdrop.Props): React.ReactElement {
-  return (
-    <DialogPrimitive.Backdrop
-      className={cn(
-        "fixed inset-0 z-50 transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0",
-        dialogBackdropClass,
-        className,
-      )}
-      data-slot="dialog-backdrop"
-      {...props}
-    />
-  );
-}
-
-function DialogViewport({
-  className,
-  ...props
-}: DialogPrimitive.Viewport.Props): React.ReactElement {
-  return (
-    <DialogPrimitive.Viewport
-      className={cn(
-        "fixed inset-0 z-50 grid grid-rows-[1fr_auto_3fr] justify-items-center p-4",
-        className,
-      )}
-      data-slot="dialog-viewport"
-      {...props}
-    />
-  );
-}
+export const dialogPopupVariants = cva(
+  "relative row-start-2 flex max-h-full min-h-0 w-full min-w-0 origin-center flex-col rounded-3xl bg-pa-bg text-pa-fg opacity-[calc(1-0.1*var(--nested-dialogs))] shadow-stage outline-none transition-[scale,opacity,translate] duration-150 ease-out will-change-transform data-ending-style:opacity-0 data-starting-style:opacity-0 sm:scale-[calc(1-0.1*var(--nested-dialogs))] sm:data-ending-style:translate-y-2.5 sm:data-starting-style:translate-y-2.5",
+  {
+    defaultVariants: { variant: "form" },
+    variants: {
+      variant: {
+        form: "max-w-lg max-sm:max-w-none max-sm:origin-bottom max-sm:rounded-none max-sm:border-t max-sm:data-ending-style:translate-y-4 max-sm:data-starting-style:translate-y-4",
+        stage:
+          "max-h-[min(80vh,calc(90vh-4rem))] min-h-[300px] w-[min(100%-2rem,1024px)] max-w-none overflow-hidden md:h-[min(80vh,calc(90vh-4rem))]",
+      },
+    },
+  },
+);
 
 export function DialogPopup({
   className,
   children,
+  variant = "form",
   showCloseButton = true,
-  bottomStickOnMobile = true,
   closeProps,
   portalProps,
-  backdropClassName,
   ...props
-}: DialogPrimitive.Popup.Props & {
-  showCloseButton?: boolean;
-  bottomStickOnMobile?: boolean;
-  closeProps?: DialogPrimitive.Close.Props;
-  portalProps?: DialogPrimitive.Portal.Props;
-
-  backdropClassName?: string;
-}): React.ReactElement {
+}: DialogPrimitive.Popup.Props &
+  VariantProps<typeof dialogPopupVariants> & {
+    showCloseButton?: boolean;
+    closeProps?: DialogPrimitive.Close.Props;
+    portalProps?: DialogPrimitive.Portal.Props;
+  }): React.ReactElement {
   return (
-    <DialogPortal {...portalProps}>
-      <DialogBackdrop className={backdropClassName} />
-      <DialogViewport
-        className={cn(
-          bottomStickOnMobile &&
-            "max-sm:grid-rows-[1fr_auto] max-sm:p-0 max-sm:pt-12",
-        )}
+    <DialogPrimitive.Portal {...portalProps}>
+      <DialogPrimitive.Backdrop className={DIALOG_BACKDROP_CLASS} data-slot="dialog-backdrop" />
+      <DialogPrimitive.Viewport
+        className={dialogViewportVariants({ variant })}
+        data-slot="dialog-viewport"
       >
         <DialogPrimitive.Popup
-          className={cn(
-            formDialogClass,
-            "relative row-start-2 flex max-h-full min-h-0 w-full min-w-0 max-w-lg origin-center flex-col text-pa-fg opacity-[calc(1-0.1*var(--nested-dialogs))] outline-none transition-[scale,opacity,translate] duration-150 ease-out will-change-transform data-ending-style:opacity-0 data-starting-style:opacity-0 sm:scale-[calc(1-0.1*var(--nested-dialogs))] sm:data-ending-style:translate-y-2.5 sm:data-starting-style:translate-y-2.5",
-            bottomStickOnMobile &&
-              "max-sm:max-w-none max-sm:origin-bottom max-sm:rounded-none max-sm:border-x-0 max-sm:border-t max-sm:border-b-0 max-sm:data-ending-style:translate-y-4 max-sm:data-starting-style:translate-y-4",
-            className,
-          )}
+          className={cn(dialogPopupVariants({ variant }), className)}
           data-slot="dialog-popup"
           {...props}
         >
@@ -121,8 +97,8 @@ export function DialogPopup({
             </DialogPrimitive.Close>
           )}
         </DialogPrimitive.Popup>
-      </DialogViewport>
-    </DialogPortal>
+      </DialogPrimitive.Viewport>
+    </DialogPrimitive.Portal>
   );
 }
 
@@ -218,9 +194,3 @@ export function DialogPanel({
     </ScrollArea>
   );
 }
-
-export {
-  DialogPrimitive,
-  DialogBackdrop as DialogOverlay,
-  DialogPopup as DialogContent,
-};

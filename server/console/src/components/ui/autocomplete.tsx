@@ -6,8 +6,10 @@ import { SearchIcon } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   GLASS_POPUP_SURFACE,
-  POPUP_GROUP_LABEL,
   POPUP_ROW,
+  POPUP_TITLE,
+  POPUP_WIDTH,
+  type PopupWidth,
 } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 
@@ -19,12 +21,12 @@ import { cn } from "@/lib/utils";
  * 默认值说的是 PA 的话（玻璃壳、13px/420 行、禁用不降透明度），不是出厂值：
  * 统一封装输入、候选列表与键盘交互，避免消费者重复实现同一组行为。
  */
-export const Autocomplete: typeof AutocompletePrimitive.Root =
-  AutocompletePrimitive.Root;
+export const Autocomplete: typeof AutocompletePrimitive.Root = AutocompletePrimitive.Root;
 
 export function AutocompletePopup({
   className,
   children,
+  width,
   side = "bottom",
   sideOffset = 4,
   alignOffset,
@@ -33,6 +35,7 @@ export function AutocompletePopup({
   portalProps,
   ...props
 }: AutocompletePrimitive.Popup.Props & {
+  width?: PopupWidth;
   align?: AutocompletePrimitive.Positioner.Props["align"];
   sideOffset?: AutocompletePrimitive.Positioner.Props["sideOffset"];
   alignOffset?: AutocompletePrimitive.Positioner.Props["alignOffset"];
@@ -54,6 +57,7 @@ export function AutocompletePopup({
         <span
           className={cn(
             "relative flex max-h-full min-w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) overflow-hidden transition-[scale,opacity]",
+            width && POPUP_WIDTH[width],
             GLASS_POPUP_SURFACE,
             className,
           )}
@@ -103,7 +107,6 @@ export function AutocompleteItem({
     <AutocompletePrimitive.Item
       className={cn(
         POPUP_ROW,
-
         "flex cursor-pointer select-none items-center text-pa-fg outline-none data-disabled:pointer-events-none data-disabled:text-pa-muted data-highlighted:bg-pa-surface",
         className,
       )}
@@ -134,7 +137,7 @@ export function AutocompleteGroupLabel({
 }: AutocompletePrimitive.GroupLabel.Props): React.ReactElement {
   return (
     <AutocompletePrimitive.GroupLabel
-      className={cn(POPUP_GROUP_LABEL, className)}
+      className={cn(POPUP_TITLE, className)}
       data-slot="autocomplete-group-label"
       {...props}
     />
@@ -147,10 +150,7 @@ export function AutocompleteEmpty({
 }: AutocompletePrimitive.Empty.Props): React.ReactElement {
   return (
     <AutocompletePrimitive.Empty
-      className={cn(
-        "not-empty:px-3 not-empty:py-2 text-left text-sm text-pa-muted",
-        className,
-      )}
+      className={cn("not-empty:px-3 not-empty:py-2 text-left text-sm text-pa-muted", className)}
       data-slot="autocomplete-empty"
       {...props}
     />
@@ -196,5 +196,3 @@ export function AutocompleteTrigger({
     </AutocompletePrimitive.Trigger>
   );
 }
-
-export { AutocompletePrimitive };

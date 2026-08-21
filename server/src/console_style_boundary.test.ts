@@ -6,7 +6,10 @@ const CONSOLE_SRC = new URL("../console/src/", import.meta.url);
 const FORBIDDEN = [
   { name: "hex color", pattern: /#[0-9a-fA-F]{3,8}\b/g },
   { name: "rgb()/rgba() literal", pattern: /\brgba?\(/g },
-  { name: "black/N wash", pattern: /\bblack\/(?:\[[\d.]+\]|\d+)/g },
+  {
+    name: "white/black utility",
+    pattern: /\b(?:bg|text|border|ring|from|to|via|fill|stroke)-(?:white|black)\b(?:\/\d+)?/g,
+  },
 ];
 
 function isProductSource(name: string): boolean {
@@ -36,8 +39,9 @@ test("titlebar height has exactly one spelling", async () => {
 });
 
 test("console components style themselves only through design tokens", async () => {
-  const bad = 'className="text-[#767676] border-[rgba(0,0,0,0.09)] hover:bg-black/[0.04]"';
-  const good = 'className="text-pa-muted border-pa-line hover:bg-pa-surface text-white/70"';
+  const bad =
+    'className="text-[#767676] border-[rgba(0,0,0,0.09)] hover:bg-black/[0.04] text-white/70 bg-white"';
+  const good = 'className="text-pa-muted border-pa-line hover:bg-pa-surface [color-scheme:dark]"';
   for (const { name, pattern } of FORBIDDEN) {
     expect([...bad.matchAll(pattern)].length, `${name} matcher is stale`).toBeGreaterThan(0);
     expect(
