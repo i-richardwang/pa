@@ -1,4 +1,5 @@
 export { LoadingMark } from "./components/loading_mark.js";
+export { ActionButton } from "./components/action_button.js";
 export {
   PageFooterBand,
   ViewPageFooter,

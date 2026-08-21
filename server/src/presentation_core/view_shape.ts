@@ -202,6 +202,13 @@ export type Roles = {
   valuesOf: Map<number, string[]>;
 };
 
+/** 声明为 time 的年 / 月列下标；无该列为 -1。时间列只按 column_roles 与标准短名认，不看取值。 */
+function timeColumnIndex(view: ViewBlock, level: "year" | "month"): number {
+  return view.columns.findIndex(
+    (column) => view.column_roles[column] === "time" && memberShortName(column) === level,
+  );
+}
+
 /** 成员显示名取服务端规范化后的口径注释 title；呈现层不根据列名猜测。 */
 export function makeTitleOf(view: ViewBlock): (column: string) => string {
   const byKey = new Map(view.query_notes.map((n) => [memberShortName(n.member), n.title]));
@@ -247,8 +254,8 @@ export function detectRoles(view: ViewBlock): Roles {
     }
   });
 
-  const yearIdx = view.columns.findIndex((c) => isTimeColumn(c) && c.endsWith("year"));
-  const monthIdx = view.columns.findIndex((c) => isTimeColumn(c) && c.endsWith("month"));
+  const yearIdx = timeColumnIndex(view, "year");
+  const monthIdx = timeColumnIndex(view, "month");
   const timeOfRow = timeIdx.length
     ? view.rows.map((r) =>
         timeLabel(yearIdx >= 0 ? r[yearIdx] : null, monthIdx >= 0 ? r[monthIdx] : null),
@@ -262,12 +269,12 @@ export function detectRoles(view: ViewBlock): Roles {
 
 /** 长表：查询结果原样铺开（度量天然成列，单分类 × 多度量本身就是二维表） */
 function flatTable(view: ViewBlock, titleOf: (c: string) => string): TableModel {
-  const columns = view.columns.map((c, i) => ({
+  const columns = view.columns.map((c) => ({
     label: titleOf(c),
     formatKey: c,
     ...(view.column_formats?.[c] ? { format: view.column_formats[c] } : {}),
     ...(view.column_decimals?.[c] !== undefined ? { decimals: view.column_decimals[c] } : {}),
-    numeric: !isTimeColumn(c) && view.rows.some((r) => toNumber(r[i]) !== null),
+    numeric: view.column_roles[c] === "measure",
     headerPath: [{ key: `field:${c}`, label: titleOf(c) }],
   }));
   // 标签占用首个业务分组列；没有分组列可占时照样交付数字，绝不因为放不下标签而丢掉总体。
@@ -541,6 +548,28 @@ export function primaryMeasureIndices(view: ViewBlock, measureIdx: number[]): nu
     sharePairs(view).flatMap((pair) => (selected.has(pair.numeratorIdx) ? [pair.measureIdx] : [])),
   );
   return measureIdx.filter((index) => !auxiliary.has(index));
+}
+
+/**
+ * 结构式标题 = 度量 · 按分类维度 · 趋势粒度，如「收入 · 按区域 · 月度趋势」。
+ * 列角色取自 detectRoles，与图型判定同源：图上画了什么，标题就说什么。
+ * 占比派生列与取值唯一的分类列（过滤条件回显）循同规不进标题；度量超过三个以「等」收束。
+ * 时间列有 ≥2 个时点才算趋势（单时点是过滤回显），带 month 列即月度、否则年度。
+ * 没有度量时只列分类；分类也没有时返回 null。
+ */
+export function structureTitle(view: ViewBlock, titleOf: (c: string) => string): string | null {
+  const roles = detectRoles(view);
+  const measures = primaryMeasureIndices(view, roles.measureIdx).map((i) =>
+    titleOf(view.columns[i]),
+  );
+  const cats = roles.catIdx.map((i) => titleOf(view.columns[i]));
+  if (!measures.length) return cats.length ? cats.join("、") : null;
+  const parts = [measures.slice(0, 3).join("、") + (measures.length > 3 ? " 等" : "")];
+  if (cats.length) parts.push(`按${cats.join(" × ")}`);
+  if (roles.timePoints.length >= 2) {
+    parts.push(timeColumnIndex(view, "month") >= 0 ? "月度趋势" : "年度趋势");
+  }
+  return parts.join(" · ");
 }
 
 /** 分类对比图：同量纲画条形；量+率混合时量画柱、率画线并使用双轴。 */
@@ -839,12 +868,8 @@ function resolveTableAxis(
     };
   }
 
-  const yearIdx = view.columns.findIndex(
-    (column) => view.column_roles[column] === "time" && memberShortName(column) === "year",
-  );
-  const monthIdx = view.columns.findIndex(
-    (column) => view.column_roles[column] === "time" && memberShortName(column) === "month",
-  );
+  const yearIdx = timeColumnIndex(view, "year");
+  const monthIdx = timeColumnIndex(view, "month");
   if (yearIdx < 0 || (axis.level === "month" && monthIdx < 0)) return null;
 
   const fromRow = (row: Cell[]): AxisValue => {
@@ -897,12 +922,8 @@ function periodOfTimeValue(
   periods: CoordinatePeriod[],
 ): Map<string, number> | null {
   if (axis.axis.kind !== "time" || axis.axis.level === "month") return null;
-  const yearIdx = view.columns.findIndex(
-    (column) => view.column_roles[column] === "time" && memberShortName(column) === "year",
-  );
-  const monthIdx = view.columns.findIndex(
-    (column) => view.column_roles[column] === "time" && memberShortName(column) === "month",
-  );
+  const yearIdx = timeColumnIndex(view, "year");
+  const monthIdx = timeColumnIndex(view, "month");
   if (yearIdx < 0) return null;
   const owner = new Map<string, number>();
   for (const [index, period] of periods.entries()) {

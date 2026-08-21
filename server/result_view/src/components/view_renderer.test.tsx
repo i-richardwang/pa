@@ -11,9 +11,9 @@ import {
   PageFooterBand,
   ViewPageFooter,
   ViewRenderer,
-  VIEW_SCENES,
   type ViewRendererProps,
 } from "./view_renderer.js";
+import { VIEW_SCENES } from "../scene.js";
 import { compilePresentationBlock } from "../../../src/presentation_core/chart_config.js";
 import type { QueryPayload, ViewBlock } from "../../../src/semantic_core/query_payload.js";
 
@@ -63,6 +63,7 @@ const render = (props: Partial<ViewRendererProps> & { payload?: QueryPayload }) 
         props.presentation ?? compilePresentationBlock(renderedPayload.view, TABLE_DECL)
       }
       actions={NO_ACTIONS}
+      scene="card"
       {...props}
     />,
   );
@@ -83,7 +84,7 @@ const cells = (html: string) => {
 
 test("三个宿主场景各自的 chrome 取舍就是 VIEW_SCENES 表本身", () => {
   const shapes = Object.values(VIEW_SCENES).map(
-    (t) => `${t.title}${t.scopeBand}${t.inlineChrome}${t.tileTable}`,
+    (t) => `${t.title}${t.scopeBand}${t.inlineChrome}${t.cellPad}`,
   );
   expect(new Set(shapes).size).toBe(3);
 });
@@ -115,7 +116,7 @@ test("查看面旗标：数据与答数态逐格一致；标题归页头，元�
   // 整页不挂口径带
   expect(text(page)).not.toContain("口径：在职含试用期");
   // 表格自身的行数条同样让位给底栏
-  expect(page).not.toContain("flex h-[30px]");
+  expect(page).not.toContain(VIEW_SCENES.page.countBar);
   // fill：高度取容器，表格转为自带内滚
   expect(page).toContain("overflow-auto");
 });
@@ -133,7 +134,7 @@ test("瓦片态不渲染标题带与口径带；两者都不吃掉数据", () =>
 });
 
 test("fill 只改布局类，不改内容：表格转为自带内滚", () => {
-  const fixed = render({ scene: "card", fullscreen: true });
+  const fixed = render({ scene: "card", allRows: true });
   const filled = render({ scene: "tile" });
   expect(cells(filled)).toEqual(cells(fixed));
   expect(filled).toContain("overflow-auto");
@@ -358,4 +359,40 @@ test("答数态题名是这张卡的名字：字号高于正文一档、字重�
   expect(title).toContain("text-base");
   expect(title).toContain("font-medium");
   expect(title).not.toContain("font-semibold");
+});
+
+/** 调用方标题与服务端结构式的组合：标题说意图、副标题说事实。 */
+const structured = payload({
+  view: view({
+    columns: ["hr.job_level_band", "hr.active_employee_count"],
+    column_roles: { "hr.job_level_band": "dimension", "hr.active_employee_count": "measure" },
+    rows: [
+      ["Band B", 40],
+      ["Band C", 30],
+    ],
+  }),
+});
+
+test("调用方声明的标题优先，结构式降为副标题锚点", () => {
+  const html = render({ payload: { ...structured, title: "Aurora Labs 各职级人员结构" } });
+  expect(html).toContain("<h2");
+  expect(text(html)).toContain("Aurora Labs 各职级人员结构");
+  expect(text(html)).toContain("active_employee_count · 按job_level_band · 数据截至");
+});
+
+test("未声明标题时退结构式，无副标题", () => {
+  const { title: _declared, ...untitled } = structured;
+  const html = render({ payload: untitled });
+  expect(html.match(/<h2[^>]*>(.*?)<\/h2>/)?.[1]).toBe("active_employee_count · 按job_level_band");
+  expect(text(html)).not.toContain("按job_level_band · 数据截至");
+});
+
+test("结构派生不出任何一段时退通用标题，副标题只剩新鲜度", () => {
+  const bare = payload({
+    view: view({ columns: ["hr.organization_name"], rows: [["研发"]], row_count: 1 }),
+  });
+  const { title: _declared, ...untitled } = bare;
+  expect(text(render({ payload: untitled }))).toContain("查询结果");
+  const declared = render({ payload: { ...bare, title: "组织清单" } });
+  expect(declared.match(/<p class="mt-0\.5[^"]*">(.*?)<\/p>/)?.[1]).toBe("数据截至 2026-06-30");
 });

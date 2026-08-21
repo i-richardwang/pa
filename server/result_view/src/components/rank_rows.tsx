@@ -70,7 +70,7 @@ export function RankRows({
             {/* 值那一格：可下钻时它本身就是一个按钮，不用 role/tabIndex/keydown 手搭一个出来 */}
             {openable && point ? (
               <button
-                className="shrink-0 cursor-pointer rounded-sm border-0 bg-transparent pl-3 text-right text-pa-fg text-sm tabular-nums underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pa-accent"
+                className="shrink-0 cursor-pointer rounded-sm border-0 bg-transparent pl-3 text-right text-pa-fg text-sm tabular-nums underline-offset-2 hover:underline outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring"
                 onClick={() => onPointClick?.(point)}
                 style={{ width: RANK_ROW.valueColumn }}
                 type="button"

@@ -482,7 +482,7 @@ export const FULL_ROWS_META_KEY = "ai.pa/full_rows";
 /** 唯一结果被模型样本收窄时，在宿主元数据中携带完整行。 */
 export type FullRowsBlock = { rows: (string | number | null)[][] };
 
-const FULL_ROWS_BLOCK_SCHEMA = z
+export const FULL_ROWS_BLOCK_SCHEMA = z
   .object({
     rows: z.array(ROW_SCHEMA),
   })
@@ -495,7 +495,7 @@ export function isFullRowsBlock(value: unknown, payload?: QueryPayload): value i
   return parsed.data.rows.every((row) => row.length === payload.view.columns.length);
 }
 
-const EXPORT_RESOURCE_LINK_SCHEMA = z
+export const EXPORT_RESOURCE_LINK_SCHEMA = z
   .object({
     type: z.literal("resource_link"),
     uri: z.string().startsWith("pa://export/"),

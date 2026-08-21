@@ -2,12 +2,12 @@
  * 统一渲染器：一份应答载荷 → 完整呈现，三个宿主（MCP widget 结果卡、控制台看板瓦片、
  * 控制台查看面）共用。
  * 呈现形态全部消费服务端编译的 PresentationBlock，本组件只摆放，不做形态判定；
- * 图 = 服务端下发的 echarts 配置，表 = 服务端下发的 TableModel。
+ * 图 = 服务端下发的 echarts 配置，表 = 服务端下发的 TableModel，标题 = 服务端下发的结构式。
  * 一个回答只有一个用户可见结果，形态由作者在规格里声明：声明图就出图，声明表就出表。
  * 内部执行腿不进入交付面。
  *
  * 宿主身份是**一个枚举**：`scene` 取 card / tile / page，chrome 的每项取舍由
- * `VIEW_SCENES` 一张表答完。新增场景 = 表里加一行。
+ * `VIEW_SCENES`（scene.ts）一张表答完，子构件各自按 scene 查表。新增场景 = 表里加一行。
  *
  * 外壳（边框、圆角、取数、加载与错误态）归容器，本组件只产出载荷派生的内容栈。
  *
@@ -16,20 +16,19 @@
  */
 import { CircleAlertIcon } from "lucide-react";
 import { QueryNotesDetails } from "./query_notes.js";
+import { Badge } from "./badge.js";
 import { DataTable } from "./data_table.js";
 import { Kpis } from "./kpis.js";
 import { Notices, noticesVisible } from "./notices.js";
 import { ViewChartCanvas } from "./echart.js";
 import type { CardActions } from "./view_actions.js";
-import { cardTitle, headerSubtitle, makeTitleOf } from "../derive.js";
-import type {
-  PLOT_PADDING,
-  PresentationBlock,
-  ViewChart,
+import { VIEW_SCENES, type ViewScene } from "../scene.js";
+import {
+  type PresentationBlock,
+  sceneInsetClass,
 } from "../../../src/presentation_core/chart_config.js";
 import {
   freshnessLabel,
-  type ExportResourceLink,
   type QueryPayload,
   type ViewBlock,
 } from "../../../src/semantic_core/query_payload.js";
@@ -38,16 +37,14 @@ export type ViewRendererProps = {
   payload: QueryPayload;
   /** 唯一结果的服务端确定性呈现产物；判型权在服务端。 */
   presentation: PresentationBlock;
-  /** MCP Widget 宿主下载用的资源链接；web 环境可不传 */
-  exportResource?: ExportResourceLink | null;
   actions: CardActions;
-  /** 宿主场景；缺省 card（答数态）。chrome 取舍见 VIEW_SCENES。 */
-  scene?: ViewScene;
+  /** 宿主场景；chrome 取舍见 VIEW_SCENES。 */
+  scene: ViewScene;
   /**
-   * 表格全量渲染。它是**运行态**不是场景属性：MCP 卡片在宿主全屏时才放开，
+   * 表格全量渲染。它是**运行态**不是场景属性：MCP 结果卡在宿主全屏时才放开，
    * 同一个 card 场景两种取值都合法。缺省跟场景默认档。
    */
-  fullscreen?: boolean;
+  allRows?: boolean;
   /** 浏览器报告页注入的格子明细能力；MCP Widget 不注入，因而没有明细请求入口。 */
   records?: {
     /** 能否查看构成记录由指标的记录集绑定决定，与具体值无关——零值同样开放，空集也是诚实答案。 */
@@ -66,127 +63,57 @@ export type ViewRendererProps = {
   };
 };
 
+/** 结构派生不出任何一段时的通用标题。 */
+const FALLBACK_TITLE = "查询结果";
+
 /**
- * 三个宿主场景：
- * - `card` MCP 结果卡 / 查询页结果：答数态，标题与口径都常驻，高度由内容撑
- * - `tile` 看板瓦片：概览态，标题归瓦片题条，高度取容器；不挂口径
- * - `page` 控制台整页查看面：中段裸铺，标题归页头、其余 chrome 归宿主的页面底栏
- *   （`ViewPageFooter`，住在结果框之外），高度取容器
+ * 卡片标题：调用方在查询时声明的业务问题（payload.title）优先——它带着用户的措辞与
+ * 过滤/时间窗限定，是结果列反推不出来的；缺省时退服务端派生的结构式标题。
  */
-export type ViewScene = "card" | "tile" | "page";
+export function cardTitle(payload: QueryPayload, presentation: PresentationBlock): string {
+  return payload.title ?? presentation.structure_title ?? FALLBACK_TITLE;
+}
 
-type SceneTraits = {
-  inset: string;
-  /** 空态纵向呼吸 */
-  emptyPad: string;
-  /** 图表高度取容器而非 chart.height，表格转为自带内滚——需容器给定确定高度 */
-  fill: boolean;
-  /** 表格允许超出 INLINE_ROWS 全量渲染 */
-  fullscreen: boolean;
-  /** 载荷派生的标题与副行由本组件渲染（容器自带标题时关） */
-  title: boolean;
-  /** 中段内联 chrome：行数条、导出提示行 */
-  inlineChrome: boolean;
-
-  tileTable: boolean;
-  /** 中段常驻口径带（只有答数态挂，瓦片与整页都不挂） */
-  scopeBand: boolean;
-  /** 结果面场地档位（`PLOT_PADDING` / `PLOT_FRAME` 的键）：留白与画不画框都由它定，图与表同档 */
-  plot: keyof typeof PLOT_PADDING;
-};
-
-export const VIEW_SCENES: Record<ViewScene, SceneTraits> = {
-  card: {
-    inset: "px-4",
-    emptyPad: "py-6",
-    fill: false,
-    fullscreen: false,
-    title: true,
-    inlineChrome: true,
-    tileTable: false,
-    scopeBand: true,
-    plot: "compact",
-  },
-  tile: {
-    inset: "px-0",
-    emptyPad: "py-4",
-    fill: true,
-    fullscreen: true,
-    title: false,
-    inlineChrome: true,
-    tileTable: true,
-    scopeBand: false,
-    plot: "tile",
-  },
-  page: {
-    inset: "px-4",
-    emptyPad: "py-6",
-    fill: true,
-    fullscreen: true,
-    title: false,
-    inlineChrome: false,
-    tileTable: false,
-    scopeBand: false,
-    plot: "page",
-  },
-};
-
-type Analysis = {
-  view: ViewBlock;
-  titleOf: (column: string) => string;
-  presentation: PresentationBlock;
-};
+/**
+ * 结构式副标题：标题为调用方声明时，结构式仍作为口径锚点展示在副标题——
+ * 标题说意图、副标题说事实，声明与数据错位时读者有对照。
+ */
+export function headerSubtitle(
+  payload: QueryPayload,
+  presentation: PresentationBlock,
+): string | null {
+  return payload.title ? (presentation.structure_title ?? null) : null;
+}
 
 /**
  * 行数陈述（KPI 与空结果不陈述）。
  * 常规容器由表格行数条承载，查看面由页脚带承载——同一份措辞，两个归宿。
  */
-function countStatement({ view, presentation }: Analysis): string | null {
+function countStatement(view: ViewBlock, presentation: PresentationBlock): string | null {
   if (!view.rows.length || presentation.type === "kpi") return null;
   return `共 ${presentation.table.rows.length} 行`;
-}
-
-/** 服务端已完成呈现编译；浏览器只补标题函数并绑定原始结果。 */
-function analyze(payload: QueryPayload, presentation: PresentationBlock): Analysis {
-  const view = payload.view;
-  const titleOf = makeTitleOf(view);
-  return { view, titleOf, presentation };
-}
-
-/**
- * 派生视图标记：载荷声明该视图由公式派生而非直接查询得来。
- *
- * 形与控制台 `ui/badge.tsx` 的中性档同值。这里手写而非取那件，是因为本包不带宿主、
- * 也不引 cva/tailwind-merge；两边同值由 console_contract_boundary.test.ts 看住。
- */
-function DerivedBadge() {
-  return (
-    <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-sm bg-pa-surface px-1.5 font-medium text-pa-muted text-xs">
-      派生
-    </span>
-  );
 }
 
 /** 单个视图的内容体：指标卡 / 图表 / 表格 + 随附提示；页态下提示让位给页脚带 */
 function ViewBody({
   payload,
-  analysis,
-  chart,
+  presentation,
   actions,
-  exportResource,
-  traits,
+  scene,
+  allRows,
   records,
 }: {
   payload: QueryPayload;
-  analysis: Analysis;
-  chart: ViewChart | null;
+  presentation: PresentationBlock;
   actions: CardActions;
-  exportResource?: ExportResourceLink;
-  traits: SceneTraits;
+  scene: ViewScene;
+  allRows: boolean;
   records?: ViewRendererProps["records"];
 }) {
-  const { view, presentation } = analysis;
-  const { inset, fill, fullscreen } = traits;
+  const view = payload.view;
+  const traits = VIEW_SCENES[scene];
+  const { fill } = traits;
+  const inset = sceneInsetClass(scene);
 
   if (!view.rows.length) {
     // 空态替掉的是整块结果，故在给定高度的场景里与错误态同规居中；
@@ -206,7 +133,7 @@ function ViewBody({
       <div className={`flex flex-col ${fill ? "min-h-0 flex-1" : ""}`}>
         <Kpis
           totals={presentation.totals}
-          fill={fill}
+          scene={scene}
           canOpen={(column) => records?.canOpen(view.id, column) ?? false}
           onOpen={(column) => {
             // 大数的名单沿用它的覆盖期间；派生单行没有期间，退回首行（即唯一一行）的桶。
@@ -227,27 +154,25 @@ function ViewBody({
 
   const canFullscreen = !!actions.requestFullscreen;
   const notices = traits.inlineChrome &&
-    noticesVisible(view, presentation.table.rows.length, fullscreen, canFullscreen) && (
+    noticesVisible(view, presentation.table.rows.length, allRows, canFullscreen) && (
       <div className={`shrink-0 border-pa-line border-t ${inset} py-2`}>
         <Notices
           view={view}
           exportLink={payload.capabilities?.export}
-          exportResource={exportResource}
           rowCount={presentation.table.rows.length}
           actions={actions}
-          fullscreen={fullscreen}
+          allRows={allRows}
         />
       </div>
     );
 
   return (
     <div className={`flex flex-col ${fill ? "min-h-0 flex-1" : ""}`}>
-      {chart ? (
+      {presentation.chart ? (
         <div className={fill ? "flex min-h-0 flex-1 flex-col" : ""}>
           <ViewChartCanvas
-            chart={chart}
-            fill={fill}
-            plot={traits.plot}
+            chart={presentation.chart}
+            scene={scene}
             canOpenPoint={({ column }) => records?.canOpen(view.id, column) ?? false}
             onPointClick={
               records
@@ -259,12 +184,8 @@ function ViewBody({
       ) : (
         <DataTable
           model={presentation.table}
-          fullscreen={fullscreen}
-          fill={fill}
-          countLabel={null}
-          countBar={traits.inlineChrome}
-          tile={traits.tileTable}
-          plot={traits.plot}
+          scene={scene}
+          allRows={allRows}
           canOpenCell={(_row, column) =>
             records?.canOpen(view.id, presentation.table.columns[column].formatKey) ?? false
           }
@@ -311,32 +232,28 @@ export function ViewPageFooter({
   payload,
   presentation,
   actions,
-  exportResource,
   leading,
 }: {
   payload: QueryPayload;
   presentation: PresentationBlock;
   actions: CardActions;
-  exportResource?: ExportResourceLink;
   leading?: React.ReactNode;
 }) {
-  const analysis = analyze(payload, presentation);
-  const { view } = analysis;
-  const count = countStatement(analysis);
+  const view = payload.view;
+  const count = countStatement(view, presentation);
   return (
     <PageFooterBand leading={leading}>
       {/* 右段恒为内容宽度靠右：定占四成会在窄舞台把左槽的时间栏挤到换行 */}
       <div className="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 text-pa-muted text-xs">
-        {view.provenance && <DerivedBadge />}
+        {view.provenance && <Badge>派生</Badge>}
         {count && <span className="font-medium">{count}</span>}
         {view.rows.length > 0 && presentation.type !== "kpi" && (
           <Notices
             view={view}
             exportLink={payload.capabilities?.export}
-            exportResource={exportResource}
             rowCount={presentation.table.rows.length}
             actions={actions}
-            fullscreen
+            allRows
           />
         )}
       </div>
@@ -347,19 +264,14 @@ export function ViewPageFooter({
 export function ViewRenderer({
   payload,
   presentation,
-  exportResource,
   actions,
-  scene = "card",
-  fullscreen,
+  scene,
+  allRows = VIEW_SCENES[scene].allRows,
   records,
 }: ViewRendererProps) {
-  const traits =
-    fullscreen === undefined ? VIEW_SCENES[scene] : { ...VIEW_SCENES[scene], fullscreen };
-  const analysis = analyze(payload, presentation);
-  const { view, titleOf } = analysis;
-  const chart = presentation.chart ?? null;
-
-  const subtitle = headerSubtitle(payload, view, titleOf);
+  const traits = VIEW_SCENES[scene];
+  const view = payload.view;
+  const subtitle = headerSubtitle(payload, presentation);
 
   return (
     <>
@@ -367,9 +279,9 @@ export function ViewRenderer({
         <div className="px-4 pt-3 pb-1.5">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate font-medium text-base text-pa-fg">
-              {cardTitle(payload, view, titleOf)}
+              {cardTitle(payload, presentation)}
             </h2>
-            {view.provenance && <DerivedBadge />}
+            {view.provenance && <Badge>派生</Badge>}
           </div>
           <p className="mt-0.5 text-pa-muted text-xs">
             {[...(subtitle ? [subtitle] : []), freshnessLabel(payload)].join(" · ")}
@@ -379,11 +291,10 @@ export function ViewRenderer({
       <ViewBody
         key={view.id}
         payload={payload}
-        analysis={analysis}
-        chart={chart}
+        presentation={presentation}
         actions={actions}
-        exportResource={exportResource ?? undefined}
-        traits={traits}
+        scene={scene}
+        allRows={allRows}
         records={records}
       />
       {/* 口径带只在答数态常驻 */}

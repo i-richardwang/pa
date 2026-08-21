@@ -1,7 +1,7 @@
 /** 明暗成对取值：light 为序列化 option 的原值，dark 供渲染端按映射翻转 */
 export type TokenPair = { readonly light: string; readonly dark: string };
 
-/** 图表系列色（8 色，与 --pa-chart-1..8 同值同序） */
+/** 图表系列色（8 色）：序列化 option 取 light，渲染端按 CHART_DARK_COLORS 翻到 dark */
 export const CHART_SERIES: readonly TokenPair[] = [
   { light: "#3b6fdb", dark: "#5b8def" },
   { light: "#e0857a", dark: "#e8998f" },
@@ -62,7 +62,6 @@ export const UI_TOKENS: Record<string, TokenPair> = {
   ink: { light: "#191919", dark: "#ededed" },
   "ink-fg": { light: "#ffffff", dark: "#171717" },
   accent: { light: "#3b6fdb", dark: "#5b8def" },
-  "accent-fg": { light: "#ffffff", dark: "#ffffff" },
   "focus-strong": { light: "#7eaff7", dark: "#5b8def" },
   "focus-ring": { light: "rgba(67, 138, 232, 0.15)", dark: "rgba(91, 141, 239, 0.25)" },
   highlight: { light: "#438ae8", dark: "#5b8def" },
@@ -83,8 +82,3 @@ export const UI_TOKENS: Record<string, TokenPair> = {
   avatar: { light: "#e9f1fe", dark: "#24344d" },
   "tooltip-bg": { light: "#191919", dark: "#2e2e2e" },
 };
-
-/** tokens.css 里图表系列变量的镜像（--pa-chart-N），与 CHART_SERIES 同源对表 */
-export const UI_CHART_TOKENS: Record<string, TokenPair> = Object.fromEntries(
-  CHART_SERIES.map((pair, index) => [`chart-${index + 1}`, pair]),
-);

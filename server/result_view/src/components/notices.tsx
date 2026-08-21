@@ -1,5 +1,5 @@
 /**
- * 结果提示：inline 截行引导全屏（环境支持才出入口，经 CardActions 注入；行数与截行
+ * 结果提示：截行时引导全屏（环境支持才出入口，经 CardActions 注入；行数与截行
  * 事实本身由表格行数条陈述，本组件只承载动作与例外提示）；
  * 服务端截断（卡片交付上限触顶）引导下载完整结果。
  * 导出入口 = export 限时票据；环境只注入真实可用的
@@ -7,44 +7,13 @@
  */
 import { useState } from "react";
 import { Check, Download, ExternalLink, Link2, Maximize2 } from "lucide-react";
+import { ActionButton } from "./action_button.js";
+import { Badge } from "./badge.js";
 import { INLINE_ROWS } from "./data_table.js";
 import type { CardActions } from "./view_actions.js";
-import type {
-  ExportLink,
-  ExportResourceLink,
-  ViewBlock,
-} from "../../../src/semantic_core/query_payload.js";
+import type { ExportLink, ViewBlock } from "../../../src/semantic_core/query_payload.js";
 
-function Chip({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center rounded-md border border-pa-line bg-pa-surface px-2 py-0.5 text-pa-muted text-xs">
-      {children}
-    </span>
-  );
-}
-
-function ActionButton({
-  onClick,
-  pending,
-  children,
-}: {
-  onClick: () => void;
-  pending?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={onClick}
-      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-pa-line-strong bg-pa-bg px-2.5 py-1 font-medium text-pa-fg text-xs hover:bg-pa-surface disabled:cursor-default disabled:opacity-50 [&_svg]:size-3.5"
-    >
-      {children}
-    </button>
-  );
-}
-
-/** 浏览器复制导出链接；运行时失败时保留手动复制退路。MCP Preview 不注入此动作。 */
+/** 浏览器复制导出链接；运行时失败时保留手动复制退路。MCP Widget 不注入此动作。 */
 function CopyLinkButton({
   url,
   copyText,
@@ -93,31 +62,29 @@ function CopyLinkButton({
 export function noticesVisible(
   view: ViewBlock,
   rowCount: number,
-  fullscreen: boolean,
+  allRows: boolean,
   canFullscreen: boolean,
 ): boolean {
-  return (!fullscreen && rowCount > INLINE_ROWS && canFullscreen) || !!view.truncated;
+  return (!allRows && rowCount > INLINE_ROWS && canFullscreen) || !!view.truncated;
 }
 
 export function Notices({
   view,
   exportLink,
-  exportResource,
   rowCount,
   actions,
-  fullscreen,
+  allRows,
 }: {
   view: ViewBlock;
   /** 完整结果下载入口（聚合在卡片上限截断时随附） */
   exportLink?: ExportLink;
-  /** Widget 下载使用的 MCP ResourceLink */
-  exportResource?: ExportResourceLink;
   /** 表格实际展示的行数（交叉表转置后少于返回行数） */
   rowCount: number;
   actions: CardActions;
-  fullscreen: boolean;
+  /** 表格已全量渲染；否则截行提示引导全屏 */
+  allRows: boolean;
 }) {
-  const hiddenRows = !fullscreen && rowCount > INLINE_ROWS;
+  const hiddenRows = !allRows && rowCount > INLINE_ROWS;
   const [pendingAction, setPendingAction] = useState<"export" | "fullscreen" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -133,12 +100,12 @@ export function Notices({
     }
   };
 
-  if (!noticesVisible(view, rowCount, fullscreen, !!actions.requestFullscreen)) return null;
+  if (!noticesVisible(view, rowCount, allRows, !!actions.requestFullscreen)) return null;
   return (
     <div className="flex flex-wrap items-center gap-2 text-pa-muted text-xs">
       {hiddenRows && actions.requestFullscreen && (
         <ActionButton
-          pending={pendingAction === "fullscreen"}
+          disabled={pendingAction === "fullscreen"}
           onClick={() => void runAction("fullscreen", actions.requestFullscreen!)}
         >
           <Maximize2 />
@@ -147,7 +114,7 @@ export function Notices({
       )}
       {view.truncated && (
         <>
-          <Chip>{`结果超出上限，已展示前 ${view.rows.length} 行`}</Chip>
+          <Badge>{`结果超出上限，已展示前 ${view.rows.length} 行`}</Badge>
           {!exportLink && <span>可下载完整结果（让助手导出），或缩小查询范围</span>}
         </>
       )}
@@ -155,12 +122,8 @@ export function Notices({
         <>
           {actions.exportAction && (
             <ActionButton
-              pending={pendingAction === "export"}
-              onClick={() =>
-                void runAction("export", () =>
-                  actions.exportAction!.run(exportLink, exportResource),
-                )
-              }
+              disabled={pendingAction === "export"}
+              onClick={() => void runAction("export", () => actions.exportAction!.run(exportLink))}
             >
               {actions.exportAction.kind === "download_file" ? <Download /> : <ExternalLink />}
               {actions.exportAction.kind === "download_file" ? "下载完整结果" : "打开下载链接"}

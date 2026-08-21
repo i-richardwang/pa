@@ -13,6 +13,7 @@ import {
   compileTotalBand,
   renderShapeOfView,
   sensibleForms,
+  structureTitle,
 } from "./view_shape.js";
 
 type Cell = string | number | null;
@@ -1138,5 +1139,157 @@ describe("列声明的小数位随列走", () => {
       titleOf,
     );
     expect(band?.metrics.map((metric) => metric.decimals)).toEqual([0, undefined]);
+  });
+});
+
+describe("structureTitle：度量 · 按分类 · 趋势粒度", () => {
+  const roles = (columns: string[]) =>
+    Object.fromEntries(
+      columns.map((column) => [
+        column,
+        column === "year" || column === "month"
+          ? "time"
+          : column === "organization_name" || column === "job_level_band"
+            ? "dimension"
+            : "measure",
+      ]),
+    ) as ViewBlock["column_roles"];
+  const view = (columns: string[], rows: Cell[][], shares?: ViewBlock["structure_shares"]) =>
+    payload(columns, rows, { roles: roles(columns), shares });
+
+  test("与分子同查的占比列不进标题（它是分子度量的注释）", () => {
+    const v = view(
+      ["job_level_band", "active_employee_count", "active_employee_share"],
+      [["Band B", 40, 0.4]],
+      [{ measure: "active_employee_share", numerator: "active_employee_count" }],
+    );
+    expect(structureTitle(v, titleOf)).toBe("active_employee_count");
+  });
+
+  test("单独查询的占比列照常进标题（无分子可注释）", () => {
+    const v = view(["job_level_band", "active_employee_share"], [["Band B", 40]]);
+    expect(structureTitle(v, titleOf)).toBe("active_employee_share");
+  });
+
+  test("显式指标关系下多组占比都不重复进入标题", () => {
+    const v = view(
+      ["job_level_band", "hires", "hire_mix", "leavers", "leave_mix"],
+      [["Band B", 40, 0.4, 30, 0.3]],
+      [
+        { measure: "hire_mix", numerator: "hires" },
+        { measure: "leave_mix", numerator: "leavers" },
+      ],
+    );
+    expect(structureTitle(v, titleOf)).toBe("hires、leavers");
+  });
+
+  test("多取值分类维度进标题；取值唯一的分类列是过滤回显，不进标题", () => {
+    expect(
+      structureTitle(
+        view(
+          ["job_level_band", "active_employee_count"],
+          [
+            ["Band B", 40],
+            ["Band C", 30],
+          ],
+        ),
+        titleOf,
+      ),
+    ).toBe("active_employee_count · 按job_level_band");
+    expect(
+      structureTitle(
+        view(
+          ["organization_name", "job_level_band", "active_employee_count"],
+          [
+            ["Aurora Labs", "Band B", 40],
+            ["Aurora Labs", "Band C", 30],
+          ],
+        ),
+        titleOf,
+      ),
+    ).toBe("active_employee_count · 按job_level_band");
+  });
+
+  test("双分类维度以 × 连接", () => {
+    const v = view(
+      ["organization_name", "job_level_band", "active_employee_count"],
+      [
+        ["A", "Band B", 40],
+        ["B", "Band C", 30],
+      ],
+    );
+    expect(structureTitle(v, titleOf)).toBe(
+      "active_employee_count · 按organization_name × job_level_band",
+    );
+  });
+
+  test("超过三个度量以「等」收束", () => {
+    const v = view(["a", "b", "c", "d"], [[1, 2, 3, 4]]);
+    expect(structureTitle(v, titleOf)).toBe("a、b、c 等");
+  });
+
+  test("多时点才算趋势：带 month 列即月度、否则年度；单时点是过滤回显", () => {
+    expect(
+      structureTitle(
+        view(
+          ["year", "active_employee_count"],
+          [
+            [2024, 100],
+            [2025, 110],
+          ],
+        ),
+        titleOf,
+      ),
+    ).toBe("active_employee_count · 年度趋势");
+    expect(
+      structureTitle(
+        view(
+          ["year", "month", "active_employee_count"],
+          [
+            [2026, 1, 100],
+            [2026, 2, 110],
+          ],
+        ),
+        titleOf,
+      ),
+    ).toBe("active_employee_count · 月度趋势");
+    expect(
+      structureTitle(
+        view(
+          ["year", "job_level_band", "active_employee_count"],
+          [
+            [2026, "Band B", 40],
+            [2026, "Band C", 30],
+          ],
+        ),
+        titleOf,
+      ),
+    ).toBe("active_employee_count · 按job_level_band");
+  });
+
+  test("时间 × 分类 × 度量三段齐全", () => {
+    const v = view(
+      ["year", "job_level_band", "active_employee_count"],
+      [
+        [2024, "Band B", 40],
+        [2024, "Band C", 30],
+        [2025, "Band B", 45],
+        [2025, "Band C", 35],
+      ],
+    );
+    expect(structureTitle(v, titleOf)).toBe("active_employee_count · 按job_level_band · 年度趋势");
+  });
+
+  test("空结果仍由完整列角色识别指标，不依赖数据嗅探", () => {
+    expect(structureTitle(view(["job_level_band", "active_employee_count"], []), titleOf)).toBe(
+      "active_employee_count",
+    );
+  });
+
+  test("没有度量时只列分类；什么都派生不出时为 null", () => {
+    expect(structureTitle(view(["job_level_band"], [["Band B"], ["Band C"]]), titleOf)).toBe(
+      "job_level_band",
+    );
+    expect(structureTitle(view(["job_level_band"], [["Band B"]]), titleOf)).toBeNull();
   });
 });

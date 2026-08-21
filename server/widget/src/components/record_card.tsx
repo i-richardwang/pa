@@ -1,13 +1,11 @@
 import { ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
+import { ActionButton } from "pa-result-view";
 import type { RecordProjectionPayload } from "@records";
 
 /**
  * MCP 名单卡承载记录属性而非聚合读数；跨宿主复用清单表判据，不导入控制台原语。
  * 题名与结果卡、看板瓦片同一配方：卡的名字字号高于正文一档、字重反而更轻。
  */
-
-const buttonClass =
-  "inline-flex cursor-pointer items-center gap-1 rounded-md border border-pa-line-strong bg-pa-bg px-2.5 py-1 font-medium text-pa-fg text-xs hover:bg-pa-surface disabled:cursor-default disabled:opacity-40 [&_svg]:size-3.5";
 
 export function RecordCard({
   payload,
@@ -53,10 +51,10 @@ export function RecordCard({
             <p className="mt-1 text-pa-muted text-xs">{payload.record_set_description}</p>
           </div>
           {canFullscreen && !fullscreen ? (
-            <button className={buttonClass} onClick={() => void onFullscreen()} type="button">
+            <ActionButton onClick={() => void onFullscreen()}>
               <Maximize2 />
               全屏
-            </button>
+            </ActionButton>
           ) : null}
         </header>
 
@@ -110,24 +108,20 @@ export function RecordCard({
             {status && !loading ? ` · ${status}` : ""}
           </div>
           <div className="flex items-center gap-2">
-            <button
-              className={buttonClass}
+            <ActionButton
               disabled={loading || payload.offset === 0}
               onClick={() => void onPage(previous)}
-              type="button"
             >
               <ChevronLeft />
               上一页
-            </button>
-            <button
-              className={buttonClass}
+            </ActionButton>
+            <ActionButton
               disabled={loading || !payload.has_more}
               onClick={() => void onPage(payload.offset + payload.page_size)}
-              type="button"
             >
               下一页
               <ChevronRight />
-            </button>
+            </ActionButton>
           </div>
         </footer>
       </div>

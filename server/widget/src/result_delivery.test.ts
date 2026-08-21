@@ -77,7 +77,7 @@ describe("result delivery", () => {
     ).toEqual({ ok: false, error: "分析不存在、已过期或无权访问" });
     expect(deliverAnalysisResult({ structuredContent: { view_id: ANALYSIS_ID } })).toEqual({
       ok: false,
-      error: "查询结果不符合预览载荷契约。",
+      error: "查询结果不符合结果卡载荷契约。",
     });
   });
 

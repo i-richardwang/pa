@@ -800,7 +800,7 @@ test("the pill and the round badge are drawn by primitives, not by call sites", 
   expect(avatar?.text, "ui/avatar.tsx no longer emits the round badge").toContain("rounded-full");
 });
 
-const CHIP_CLASS = /function DerivedBadge\(\)[\s\S]*?className="([^"]*)"/;
+const CHIP_CLASS = /function Badge\([\s\S]*?className="([^"]*)"/;
 
 const HEADING_TAG = /<h[12]\s+className="([^"]*)"/g;
 const HEADING_DISPLAY_EXEMPT = "login.tsx";
@@ -893,7 +893,7 @@ test("chrome axes don't borrow the content tiers", async () => {
 
 test("the neutral chip reads the same in every host", async () => {
   const sample =
-    'function DerivedBadge() {\n  return <span className="rounded-sm px-1.5">派生</span>;\n}';
+    'function Badge({ children }) {\n  return <span className="rounded-sm px-1.5">{children}</span>;\n}';
   expect(CHIP_CLASS.exec(sample)?.[1], "chip class probe is stale").toBe("rounded-sm px-1.5");
   expect(
     CHIP_CLASS.exec('<input className="border-pa-line" />')?.[1],
@@ -902,23 +902,23 @@ test("the neutral chip reads the same in every host", async () => {
 
   const badge = (await readSources(CONSOLE_SRC)).find(({ name }) => name.endsWith("ui/badge.tsx"));
   const derived = (await readSources(RESULT_VIEW_SRC)).find(({ name }) =>
-    name.endsWith("components/view_renderer.tsx"),
+    name.endsWith("components/badge.tsx"),
   );
   expect(badge?.text, "console/src/components/ui/badge.tsx not found").toBeString();
-  expect(derived?.text, "result_view/src/components/view_renderer.tsx not found").toBeString();
+  expect(derived?.text, "result_view/src/components/badge.tsx not found").toBeString();
 
   const chip = CHIP_CLASS.exec(derived?.text ?? "")?.[1];
-  expect(chip, "result_view's DerivedBadge no longer matches the probe").toBeString();
+  expect(chip, "result_view's Badge no longer matches the probe").toBeString();
 
   for (const token of NEUTRAL_CHIP) {
     expect(
       badge?.text,
       `ui/badge.tsx no longer carries ${token}; the pinned recipe is stale`,
     ).toContain(token);
-    expect(chip, `result_view's 派生 chip drifted from ui/badge.tsx on ${token}`).toContain(token);
+    expect(chip, `result_view's Badge drifted from ui/badge.tsx on ${token}`).toContain(token);
   }
 
-  expect(chip, "result_view's 派生 chip grew a border; badges carry no outline").not.toContain(
+  expect(chip, "result_view's Badge grew a border; badges carry no outline").not.toContain(
     "border",
   );
 });

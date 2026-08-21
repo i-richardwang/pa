@@ -26,7 +26,7 @@ import {
 
 const state = (over: Partial<RenderState> = {}): RenderState => ({
   dark: false,
-  plot: "compact",
+  scene: "card",
   viewport: { width: 0, height: 0 },
   focused: null,
   pinned: null,
@@ -191,8 +191,8 @@ const padX = (className: string) =>
     .sort();
 
 /** 读数条那一行的类名（`flex shrink-0 flex-wrap` 是它的版式签名） */
-function legendClass(plot: "compact" | "tile" | "page"): string {
-  const html = renderToStaticMarkup(<ViewChartCanvas chart={CHART!} plot={plot} />);
+function legendClass(scene: "card" | "tile" | "page"): string {
+  const html = renderToStaticMarkup(<ViewChartCanvas chart={CHART!} scene={scene} />);
   return html.match(/<div class="(flex shrink-0 flex-wrap[^"]*)"/)?.[1] ?? "";
 }
 
@@ -221,22 +221,24 @@ test("读数条、题名与 plot 框左缘同轴", () => {
       />,
     ).match(/<div class="((?:px|pt|pb)-[^"]*)">\s*<div class="flex min-w-0/)?.[1] ?? "";
   expect(cardTitleBox, "答数态题名块没找到，断言失去着力点").not.toBe("");
-  expect(padX(legendClass("compact"))).toEqual(padX(cardTitleBox));
+  expect(padX(legendClass("card"))).toEqual(padX(cardTitleBox));
 
   // 另两档无出血可还（判据同上），读数条因此不叠第二道
   expect(padX(legendClass("page")), "整页档的读数条叠了第二道横向衬垫").toEqual(["px-0"]);
   expect(padX(legendClass("tile")), "瓦片档的读数条叠了第二道横向衬垫").toEqual(["px-0"]);
 
   // 三档逐一对表：读数条的衬垫就是画布到 plot 框的横向留白，框缘因此钉在题名那条轴上
-  for (const plot of ["compact", "tile", "page"] as const) {
-    const [token, ...extra] = padX(legendClass(plot));
-    expect(extra, `${plot} 档的读数条给了不止一个横向衬垫`).toEqual([]);
-    expect(padPx(token ?? ""), `${plot} 档的读数条与 plot 框不同轴`).toBe(PLOT_PADDING[plot].left);
-    expect(PLOT_PADDING[plot].left, "横向留白左右不对称，框会歪").toBe(PLOT_PADDING[plot].right);
+  for (const scene of ["card", "tile", "page"] as const) {
+    const [token, ...extra] = padX(legendClass(scene));
+    expect(extra, `${scene} 档的读数条给了不止一个横向衬垫`).toEqual([]);
+    expect(padPx(token ?? ""), `${scene} 档的读数条与 plot 框不同轴`).toBe(
+      PLOT_PADDING[scene].left,
+    );
+    expect(PLOT_PADDING[scene].left, "横向留白左右不对称，框会歪").toBe(PLOT_PADDING[scene].right);
   }
 
-  expect(padX(legendClass("compact")).length).toBeGreaterThan(0);
-  expect(PLOT_PADDING.compact.left).toBeGreaterThan(0);
+  expect(padX(legendClass("card")).length).toBeGreaterThan(0);
+  expect(PLOT_PADDING.card.left).toBeGreaterThan(0);
   expect(PLOT_PADDING.tile.left).toBe(0);
 });
 
@@ -265,7 +267,7 @@ test("触屏上图例兼作读数位：末桶的值与桶名随图例交付，�
     tableLayout: TABLE_LAYOUT,
   }).chart;
   if (!trend) throw new Error("趋势图没编译出来，下面全部落空");
-  const html = renderToStaticMarkup(<ViewChartCanvas chart={trend} plot="page" />);
+  const html = renderToStaticMarkup(<ViewChartCanvas chart={trend} scene="page" />);
 
   // 值取自铺开的最后一行本身：140/11 就是画面最右那两个点，不是另算的合计
   expect(html).toContain("140");
@@ -276,7 +278,7 @@ test("触屏上图例兼作读数位：末桶的值与桶名随图例交付，�
     expect(html.slice(Math.max(0, at - 220), at)).toContain("pointer-coarse:block");
   }
 
-  const barHtml = renderToStaticMarkup(<ViewChartCanvas chart={CHART!} plot="page" />);
+  const barHtml = renderToStaticMarkup(<ViewChartCanvas chart={CHART!} scene="page" />);
   expect(barHtml).not.toContain("pointer-coarse:block");
 });
 
@@ -350,12 +352,12 @@ test("钉住期间指针停在被钉的那一格，撤钉即交还给鼠标", ()
 });
 
 test("绘图区那块场地是圆角的，且瓦片档不画框", () => {
-  const slabOf = (plot: "compact" | "tile" | "page") =>
-    renderToStaticMarkup(<ViewChartCanvas chart={CHART!} plot={plot} />).match(
+  const slabOf = (scene: "card" | "tile" | "page") =>
+    renderToStaticMarkup(<ViewChartCanvas chart={CHART!} scene={scene} />).match(
       /<div[^>]*data-slot="plot-surface"[^>]*>/,
     )?.[0] ?? "";
 
-  const card = slabOf("compact");
+  const card = slabOf("card");
   expect(card, "结果卡没铺出绘图场地").not.toBe("");
   expect(card).toContain("border-pa-line");
   // 场地不铺底色：它就是承载面本身，判据见 ui_spec「图表画布」节
@@ -363,15 +365,15 @@ test("绘图区那块场地是圆角的，且瓦片档不画框", () => {
   // 圆角是这块场地的形本身——canvas 画不出它，正是框落到 DOM 的理由
   expect(card).toContain(`border-radius:${PLOT_RADIUS}px`);
   // 位置读的是同一道算式，不是另写的数字
-  expect(card).toContain(`inset-inline-start:${plotRect(CHART!, "compact").left}px`);
+  expect(card).toContain(`inset-inline-start:${plotRect(CHART!, "card").left}px`);
   // 这张是横排条形：类目那一栏叠进来了，场地不是纯场景留白
-  expect(plotRect(CHART!, "compact").left).toBeGreaterThan(PLOT_PADDING.compact.left);
+  expect(plotRect(CHART!, "card").left).toBeGreaterThan(PLOT_PADDING.card.left);
 
   // 瓦片壳自己就是边界，场地在但不画框
   const tile = slabOf("tile");
   expect(tile).not.toContain("border-pa-line");
   expect(tile).not.toContain("border-radius");
-  expect(PLOT_FRAME.compact).not.toBe(PLOT_FRAME.tile);
+  expect(PLOT_FRAME.card).not.toBe(PLOT_FRAME.tile);
   expect(PLOT_RADIUS).toBeGreaterThan(0);
 });
 
@@ -400,7 +402,7 @@ test("排行版式逐行陈述：条长按本屏最大值归一，且不落 echa
   ).chart;
   expect(rank?.layout, "单系列横排条形没走排行版式").toBe("rank");
 
-  const html = renderToStaticMarkup(<ViewChartCanvas chart={rank!} plot="compact" />);
+  const html = renderToStaticMarkup(<ViewChartCanvas chart={rank!} scene="card" />);
   // 类目名与值都是文字，不是画出来的
   for (const text of ["研发", "市场", "120", "30"]) expect(html).toContain(text);
   // 条长之比 = 值之比（30/120 = 25%），最长那条铺满

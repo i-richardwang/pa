@@ -140,7 +140,7 @@ export function ReadoutCard({
           const open = openable && point ? () => onRowClick?.(point) : undefined;
           return (
             <button
-              className={`block w-full rounded-md border-0 bg-transparent p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pa-accent ${
+              className={`block w-full rounded-md border-0 bg-transparent p-0 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring ${
                 open ? "cursor-pointer hover:bg-pa-wash" : ""
               }`.trim()}
               key={`${row.name}-${index}`}

@@ -1,13 +1,17 @@
+/**
+ * 工具结果 → 卡片载荷。App 只接受 MCP 的结构化结果通道：structuredContent 与私有 `_meta`
+ * 各按契约 schema 解析，content 是面向模型/用户的文本退路，只用来取错误说明，
+ * 不承担 iframe 数据协议，也不尝试从宿主包装文本中恢复 JSON。
+ */
 import { isPresentationBlock, PRESENTATION_META_KEY, type PresentationBlock } from "@charts";
 import {
+  EXPORT_RESOURCE_LINK_SCHEMA,
   EXPORT_RESOURCE_META_KEY,
+  FULL_ROWS_BLOCK_SCHEMA,
   FULL_ROWS_META_KEY,
-  isExportResourceLink,
-  isFullRowsBlock,
-  isQueryPayload,
   mergeFullRows,
+  QUERY_PAYLOAD_SCHEMA,
   type ExportResourceLink,
-  type FullRowsBlock,
   type QueryPayload,
 } from "@payload";
 import {
@@ -48,10 +52,6 @@ export function viewIdFrom(value: unknown): string | undefined {
   return typeof viewId === "string" && UUID_PATTERN.test(viewId) ? viewId : undefined;
 }
 
-/**
- * App 只接受 MCP 的结构化结果通道。content 是面向模型/用户的文本退路，
- * 不承担 iframe 数据协议，也不尝试从宿主包装文本中恢复 JSON。
- */
 export function deliverAnalysisResult(result: ToolResult): DeliveredAnalysis {
   if (result.isError) {
     return { ok: false, error: firstText(result.content) ?? "查询失败。" };
@@ -59,31 +59,33 @@ export function deliverAnalysisResult(result: ToolResult): DeliveredAnalysis {
   if (result.structuredContent === undefined) {
     return { ok: false, error: "查询结果缺少结构化载荷。" };
   }
-  if (!isQueryPayload(result.structuredContent)) {
-    return { ok: false, error: "查询结果不符合预览载荷契约。" };
+  const payload = QUERY_PAYLOAD_SCHEMA.safeParse(result.structuredContent);
+  if (!payload.success) {
+    return { ok: false, error: "查询结果不符合结果卡载荷契约。" };
   }
 
-  const payload = result.structuredContent;
-  const fullCandidate = result._meta?.[FULL_ROWS_META_KEY];
-  if (fullCandidate !== undefined && !isFullRowsBlock(fullCandidate, payload)) {
+  // 全量行必须与公共载荷同宽：schema 只管形状，宽度对不对要看这一份 payload
+  const width = payload.data.view.columns.length;
+  const fullRows = FULL_ROWS_BLOCK_SCHEMA.optional().safeParse(result._meta?.[FULL_ROWS_META_KEY]);
+  if (!fullRows.success || fullRows.data?.rows.some((row) => row.length !== width)) {
     return { ok: false, error: "查询结果的全量行数据格式无效。" };
   }
-  const resourceCandidate = result._meta?.[EXPORT_RESOURCE_META_KEY];
-  if (resourceCandidate !== undefined && !isExportResourceLink(resourceCandidate)) {
+  const resource = EXPORT_RESOURCE_LINK_SCHEMA.optional().safeParse(
+    result._meta?.[EXPORT_RESOURCE_META_KEY],
+  );
+  if (!resource.success) {
     return { ok: false, error: "查询结果的下载资源格式无效。" };
   }
 
-  const presentationCandidate = result._meta?.[PRESENTATION_META_KEY];
-  if (!isPresentationBlock(presentationCandidate)) {
+  const presentation = result._meta?.[PRESENTATION_META_KEY];
+  if (!isPresentationBlock(presentation)) {
     return { ok: false, error: "查询结果缺少有效的服务端呈现配置。" };
   }
-  const fullRows = fullCandidate as FullRowsBlock | undefined;
-  const exportResource = (resourceCandidate as ExportResourceLink | undefined) ?? null;
   return {
     ok: true,
-    payload: mergeFullRows(payload, fullRows),
-    presentation: presentationCandidate,
-    exportResource,
+    payload: mergeFullRows(payload.data, fullRows.data),
+    presentation,
+    exportResource: resource.data ?? null,
   };
 }
 

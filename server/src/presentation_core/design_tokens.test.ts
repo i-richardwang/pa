@@ -1,12 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
-import {
-  CHART_CHROME,
-  CHART_SERIES,
-  FONT_FAMILY,
-  UI_CHART_TOKENS,
-  UI_TOKENS,
-} from "./design_tokens.js";
+import { CHART_CHROME, CHART_SERIES, FONT_FAMILY, UI_TOKENS } from "./design_tokens.js";
 import { CHART_DARK_COLORS, SERIES_COLORS } from "./chart_config.js";
 
 const TOKENS_CSS = new URL("./tokens.css", import.meta.url);
@@ -35,18 +29,17 @@ test("tokens.css and design_tokens.ts define the same values", async () => {
   // 图表 chrome 也在同一张表里：它的字面值进序列化 option，与 CSS 侧不得各写一份
   expect(cssTokens.get("faint")).toEqual({ ...CHART_CHROME.axisText });
 
-  const expected = { ...UI_TOKENS, ...UI_CHART_TOKENS };
-  for (const [name, pair] of Object.entries(expected)) {
+  for (const [name, pair] of Object.entries(UI_TOKENS)) {
     expect(cssTokens.get(name), `tokens.css lacks --pa-${name}`).toEqual({ ...pair });
   }
   // 反向：CSS 侧不允许存在 TS 镜像之外的**字面**颜色令牌。
   // 例外都不是颜色：popover-glow 是投影，glass-blur 两档是模糊半径；selected 由 ink
   // 现算（color-mix），没有可镜像的明暗字面值。
-  const extra = [...cssTokens.keys()].filter((name) => !(name in expected));
+  const extra = [...cssTokens.keys()].filter((name) => !(name in UI_TOKENS));
   expect(extra).toEqual(["selected", "glass-blur", "glass-blur-card", "popover-glow"]);
 });
 
-test("chart series stay in sync across css tokens and serialized options", () => {
+test("the series palette feeds serialized options in order", () => {
   expect(CHART_SERIES).toHaveLength(8);
   expect(SERIES_COLORS).toEqual(CHART_SERIES.map((pair) => pair.light));
   // 首色 = 数据蓝，与 --pa-accent 亮值同源

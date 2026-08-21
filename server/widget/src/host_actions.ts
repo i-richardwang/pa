@@ -1,6 +1,6 @@
 /**
  * 宿主下载能力协商：只有宿主明确声明标准下载能力且结果带 resource_link 时，
- * 才向 MCP Preview 注入导出动作；外链导航不是文件下载退路。
+ * 才向结果卡注入导出动作；外链导航不是文件下载退路。
  */
 import type {
   McpUiDownloadFileRequest,

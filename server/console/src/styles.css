@@ -22,15 +22,6 @@
   /* 大舞台弹层投影：设置面与图表设置这类占满视口中央的弹层 */
   --shadow-stage: 0 25px 50px -12px rgb(0 0 0 / 0.25);
   --font-serif: ui-serif, Georgia, "Times New Roman", "Songti SC", "Noto Serif SC", serif;
-  /* 加载标记：条自底边长起。往复由 `.pa-loader-bar` 的 alternate 给，故只写两端。 */
-  @keyframes pa-sweep {
-    from {
-      transform: scaleY(0.3);
-    }
-    to {
-      transform: scaleY(1);
-    }
-  }
   /* toast 进场/出场动效令牌，成功与失败按奇偶项错相。 */
   --animate-toast-success-odd: toast-success-odd 0.32s cubic-bezier(0.5, 1, 0.89, 1);
   --animate-toast-success-even: toast-success-even 0.32s cubic-bezier(0.5, 1, 0.89, 1);
@@ -64,19 +55,9 @@
   }
 }
 
-.pa-loader-bar {
-  display: block;
-  background: currentColor;
-  transform-origin: 0 100%;
-  animation: pa-sweep 0.5s ease-in-out infinite alternate both;
-}
-
 @layer base {
   * {
     @apply border-pa-line outline-pa-focus-strong/50;
-
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--pa-fg) 14%, transparent) transparent;
   }
   body {
 
@@ -132,14 +113,4 @@
 
 .pa-board-editing .react-grid-item.react-draggable-dragging {
   cursor: grabbing;
-}
-
-/* 无障碍动效降级：偏好减少动效时全量关闭。 */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
-  }
 }

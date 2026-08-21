@@ -19,6 +19,7 @@ import {
   compileTotalBand,
   barChartHeight,
   makeTitleOf,
+  structureTitle,
   type BarSpec,
   type CategoryComboSpec,
   type ChartRow,
@@ -127,6 +128,11 @@ export type PresentationBlock = {
   table: TableModel;
   /** 声明式表格布局的实际编译状态；无法忠实成矩阵时才 unavailable。 */
   table_layout: TableLayoutStatus;
+  /**
+   * 结构式标题（`structureTitle`）：度量 · 按分类 · 趋势粒度。与图型判定同源——图上画了什么，
+   * 标题就说什么。结构派生不出任何一段时缺席，渲染端退到通用标题。
+   */
+  structure_title?: string;
   chart?: ViewChart;
 
   totals?: TotalBand;
@@ -451,33 +457,48 @@ function seriesIndexOf(series: { key: string }[], key: string): number | null {
   return index < 0 ? null : index;
 }
 
-export const PLOT_PADDING = {
-  compact: { left: 16, right: 16, top: 0, bottom: 30 },
+/**
+ * 宿主场景：结果面住在哪一种容器里。它是渲染栈唯一的场景词汇——场地留白、画不画框、
+ * chrome 取舍（`VIEW_SCENES`）都按这一个枚举查表。
+ * - `card` MCP 结果卡：答数态，高度由内容撑
+ * - `tile` 看板瓦片：概览态，壳自己就是边界
+ * - `page` 控制台整页查看面：中段裸铺，高度取容器
+ */
+export type ViewScene = "card" | "tile" | "page";
 
+export const PLOT_PADDING: Record<
+  ViewScene,
+  { left: number; right: number; top: number; bottom: number }
+> = {
+  card: { left: 16, right: 16, top: 0, bottom: 30 },
   tile: { left: 0, right: 0, top: 0, bottom: 26 },
-
   page: { left: 0, right: 0, top: 0, bottom: 30 },
-} as const;
+};
 
 /**
  * 结果面场地画不画那圈圆角发丝框，按宿主场景定、不看形态：画布、排行、表格在同一场景下同框。
  * 瓦片壳自己就是边界，故不画。框落在 DOM（`PlotSlab`）而不是 echarts 的 grid：canvas 画不出圆角。
  */
-export const PLOT_FRAME = { compact: true, tile: false, page: true } as const;
+export const PLOT_FRAME: Record<ViewScene, boolean> = { card: true, tile: false, page: true };
 
 export const PLOT_RADIUS = 10;
 
-export function legendRowClass(plot: keyof typeof PLOT_PADDING, withLatest = false): string {
+/**
+ * 场地横向留白对应的内衬类：读数条、空态、提示行与场地框同轴。
+ * 写成字面量：Tailwind 只扫源码里出现过的类名，拼出来的那种扫不到；
+ * 与 `PLOT_PADDING` 的横向档同值，由 echart.test.tsx 逐档对表看住。
+ */
+export function sceneInsetClass(scene: ViewScene): "px-0" | "px-4" {
+  return PLOT_PADDING[scene].left === 0 ? "px-0" : "px-4";
+}
+
+export function legendRowClass(scene: ViewScene, withLatest = false): string {
   // 带末桶读数时，触屏（`pointer-coarse`）铺成两列读数格：每项要放得下名字与值两行。
   // 网格由「带值」触发而不是无条件——不带值的图例在触屏上没有变形的理由。
   const touch = withLatest
     ? " pointer-coarse:grid pointer-coarse:grid-cols-2 pointer-coarse:items-stretch pointer-coarse:gap-x-4 pointer-coarse:gap-y-3"
     : "";
-  // 记号写成字面量：Tailwind 只扫源码里出现过的类名，拼出来的那种扫不到。
-  // 它与 `PLOT_PADDING` 的横向档必须同值，由 echart.test.tsx 逐档对表看住。
-  return `flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 pt-3 pb-2${touch} ${
-    PLOT_PADDING[plot].left === 0 ? "px-0" : "px-4"
-  }`;
+  return `flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 pt-3 pb-2${touch} ${sceneInsetClass(scene)}`;
 }
 
 /**
@@ -495,7 +516,7 @@ export function chartMarkerClass(variant: "row" | "lead" = "row"): string {
 
 /* ---------- option 构建 ---------- */
 
-export const CHART_HEIGHT = { cartesian: 300, pie: 320 } as const;
+const CHART_HEIGHT = { cartesian: 300, pie: 320 } as const;
 
 function cellNumber(value: string | number | null | undefined): number | null {
   return value === undefined ? null : toNumber(value);
@@ -513,8 +534,8 @@ type ResolvedSeries = Omit<SeriesDef, "mark"> & {
 
 /**
  * 系列解析：缺省形态/轴位由图型给，显式声明（`decl.display`）按来源列覆盖，色缺省按序取板。
- * 解析在建 option 之前完成，option 里的每一段样式都按解析结果一次写就——没有「先按缺省建好
- * 再改」的第二遍：第二遍改不到的那几段（面积色、激活态色、末点）就是换色后的残影。
+ * 解析在建 option 之前完成，option 里的每一段样式（线、面积、激活态、末点）都按解析结果
+ * 一次写就，同一条系列的色只有这一个来源。
  */
 function resolveSeries(
   series: SeriesDef[],
@@ -969,7 +990,12 @@ export function compilePresentationBlock(
 ): PresentationBlock {
   const titleOf = makeTitleOf(view);
   const compiledTable = compileTableWithStatus(view, titleOf, decl);
-  const base = { table: compiledTable.table, table_layout: compiledTable.layout };
+  const title = structureTitle(view, titleOf);
+  const base = {
+    table: compiledTable.table,
+    table_layout: compiledTable.layout,
+    ...(title ? { structure_title: title } : {}),
+  };
   if (decl.type === "table") return { type: "table", ...base };
   if (decl.type === "kpi") {
     const totals = canCompileKpi(view) ? compileTotalBand(view, titleOf) : null;
@@ -1107,6 +1133,8 @@ export function isPresentationBlock(value: unknown): value is PresentationBlock 
       return false;
     }
   }
+  if (value.structure_title !== undefined && typeof value.structure_title !== "string")
+    return false;
   if (value.totals !== undefined && !isTotalBand(value.totals)) return false;
 
   if (value.type === "kpi" && value.totals === undefined) return false;

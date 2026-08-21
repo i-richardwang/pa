@@ -1,6 +1,6 @@
 /**
  * 渲染期的 option 派生：编译产物（`chart.option` + `chart.model`）× 此刻的渲染状态
- * （主题、场景档位、视口尺寸、焦点、钉住）→ 可直接 `setOption` 的完整对象。
+ * （主题、宿主场景、视口尺寸、焦点、钉住）→ 可直接 `setOption` 的完整对象。
  *
  * 编译期不知道的事全在这里一次算完：宿主是哪一档留白、画布多宽（符号与标签密度、刻度档数）、
  * 谁在焦点、是否钉住；函数不可序列化，值轴刻度与值标签的格式化器也在此注入。
@@ -18,6 +18,7 @@ import {
   valueLabelPillWidth,
   type ChartModel,
   type ViewChart,
+  type ViewScene,
 } from "../../src/presentation_core/chart_config.js";
 import { formatSeriesValue, formatTick } from "../../src/presentation_core/view_format.js";
 import type { ColumnFormat } from "../../src/semantic_core/query_payload.js";
@@ -61,29 +62,25 @@ export type Viewport = { width: number; height: number };
  */
 export function plotRect(
   chart: ViewChart,
-  plot: keyof typeof PLOT_PADDING,
+  scene: ViewScene,
 ): { left: number; right: number; top: number; bottom: number } {
-  const pad = PLOT_PADDING[plot];
+  const pad = PLOT_PADDING[scene];
   return { ...pad, left: pad.left + (chart.plot_gutter?.left ?? 0) };
 }
 
 /** 数据区 = 场地框 + 框内标签余量：框不因标签开关移动，余量只缩数据区。 */
 export function gridRect(
   chart: ViewChart,
-  plot: keyof typeof PLOT_PADDING,
+  scene: ViewScene,
 ): { left: number; right: number; top: number; bottom: number } {
-  const rect = plotRect(chart, plot);
+  const rect = plotRect(chart, scene);
   const inset = chart.plot_inset ?? {};
   return { ...rect, top: rect.top + (inset.top ?? 0), right: rect.right + (inset.right ?? 0) };
 }
 
 /** 数据区实际尺寸；依赖轴向空间的密度策略统一从这里取值。 */
-export function plotSize(
-  chart: ViewChart,
-  plot: keyof typeof PLOT_PADDING,
-  viewport: Viewport,
-): Viewport {
-  const rect = gridRect(chart, plot);
+export function plotSize(chart: ViewChart, scene: ViewScene, viewport: Viewport): Viewport {
+  const rect = gridRect(chart, scene);
   return {
     width: Math.max(0, viewport.width - rect.left - rect.right),
     height: Math.max(0, viewport.height - rect.top - rect.bottom),
@@ -300,7 +297,7 @@ function applyDarkColors(value: unknown): unknown {
 
 export type RenderState = {
   dark: boolean;
-  plot: keyof typeof PLOT_PADDING;
+  scene: ViewScene;
   viewport: Viewport;
   /** 在焦点的图例单元（系列或切片） */
   focused: number | null;
@@ -332,8 +329,8 @@ export function renderOption(chart: ViewChart, state: RenderState): MutableOptio
   const model = chart.model;
   applyFocus(option, chart, state.focused);
   if (option.grid)
-    option.grid = { ...(option.grid as MutableOption), ...gridRect(chart, state.plot) };
-  const plot = plotSize(chart, state.plot, state.viewport);
+    option.grid = { ...(option.grid as MutableOption), ...gridRect(chart, state.scene) };
+  const plot = plotSize(chart, state.scene, state.viewport);
   applySeriesDensity(option, model, plot.width);
   applyTickDensity(option, plot);
   if (model.pointer === "axis") {

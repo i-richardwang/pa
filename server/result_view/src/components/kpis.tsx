@@ -1,5 +1,6 @@
 import { formatCell, formatSignedDelta } from "../../../src/presentation_core/view_format.js";
 import type { TotalBand, TotalBandMetric } from "../../../src/presentation_core/view_shape.js";
+import { VIEW_SCENES, type ViewScene } from "../scene.js";
 
 const VALUE_SIZE =
   "text-[24px] @min-[224px]:text-[28px] @2xs:text-[36px] @sm:text-[48px] leading-[1.1]";
@@ -22,17 +23,17 @@ function TotalCaption({ metric }: { metric: TotalBandMetric }) {
 
 export function Kpis({
   totals,
-  fill = false,
+  scene,
   canOpen,
   onOpen,
 }: {
   totals: TotalBand;
-  /** 容器给定高度（看板瓦片）：卡面撑满并纵向居中；否则按内容高度加呼吸空间。 */
-  fill?: boolean;
-
+  /** 填充场景（容器给定高度）卡面撑满并纵向居中；答数卡按内容高度加呼吸空间。 */
+  scene: ViewScene;
   canOpen?: (column: string) => boolean;
   onOpen?: (column: string) => void;
 }) {
+  const { fill } = VIEW_SCENES[scene];
   const metrics = totals.metrics;
   const showLabels = metrics.length > 1;
 
@@ -50,7 +51,7 @@ export function Kpis({
             )}
             {metric.value !== null && canOpen?.(metric.column) ? (
               <button
-                className={`block max-w-full cursor-pointer truncate rounded-sm tabular-nums underline-offset-4 hover:text-pa-accent hover:underline focus-visible:text-pa-accent focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pa-accent ${VALUE_SIZE}`}
+                className={`block max-w-full cursor-pointer truncate rounded-sm tabular-nums underline-offset-4 hover:text-pa-accent hover:underline focus-visible:text-pa-accent focus-visible:underline outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring ${VALUE_SIZE}`}
                 onClick={() => onOpen?.(metric.column)}
                 type="button"
               >

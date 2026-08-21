@@ -8,12 +8,11 @@
  */
 import { LoadingMark, type CardActions, ViewRenderer } from "pa-result-view";
 import type { PresentationBlock } from "@charts";
-import type { ExportResourceLink, QueryPayload } from "@payload";
+import type { QueryPayload } from "@payload";
 
 export function ResultCard({
   payload,
   presentation,
-  exportResource,
   status,
   waiting,
   fullscreen,
@@ -22,12 +21,11 @@ export function ResultCard({
   payload: QueryPayload | null;
   /** 服务端确定性编译的完整呈现块。 */
   presentation: PresentationBlock | null;
-  /** MCP Widget 宿主下载用的资源链接；web 环境可不传 */
-  exportResource?: ExportResourceLink | null;
   /** payload 为空时显示的状态文案 */
   status: string;
   /** true = 等待结果中（出加载标记而非状态文案） */
   waiting: boolean;
+  /** 宿主展示模式是全屏：卡面限宽居中，表格放开全量行 */
   fullscreen: boolean;
   actions: CardActions;
 }) {
@@ -49,9 +47,8 @@ export function ResultCard({
         <ViewRenderer
           payload={payload}
           presentation={presentation}
-          exportResource={exportResource}
           actions={actions}
-          fullscreen={fullscreen}
+          allRows={fullscreen}
           scene="card"
         />
       </div>

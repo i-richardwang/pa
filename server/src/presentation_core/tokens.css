@@ -39,7 +39,6 @@
   --pa-selected: color-mix(in srgb, var(--pa-ink) 10%, transparent);
 
   --pa-accent: light-dark(#3b6fdb, #5b8def);
-  --pa-accent-fg: #ffffff;
   /* 聚焦描边：框自己转成这个色，环另叠 pa-focus-ring。全站只有这一对，
      无描边的件（按钮、分段、行）只叠环 */
   --pa-focus-strong: light-dark(#7eaff7, #5b8def);
@@ -84,16 +83,6 @@
 
   /* 悬停提示与 toast 的深面浅字（图表读数卡不在此列，它走玻璃浮层） */
   --pa-tooltip-bg: light-dark(#191919, #2e2e2e);
-
-  --pa-chart-1: light-dark(#3b6fdb, #5b8def);
-  --pa-chart-2: light-dark(#e0857a, #e8998f);
-  --pa-chart-3: light-dark(#3fa08f, #4fb8a5);
-  --pa-chart-4: light-dark(#a97fd4, #b894e0);
-  --pa-chart-5: light-dark(#e0b451, #e8c470);
-  --pa-chart-6: light-dark(#6a9e58, #7fb56c);
-  --pa-chart-7: light-dark(#4d9dc4, #63b0d6);
-  --pa-chart-8: light-dark(#8c7b6b, #a08e7d);
-
 }
 
 @theme inline {
@@ -151,7 +140,6 @@
   --color-pa-ink-fg: var(--pa-ink-fg);
   --color-pa-selected: var(--pa-selected);
   --color-pa-accent: var(--pa-accent);
-  --color-pa-accent-fg: var(--pa-accent-fg);
   --color-pa-focus-strong: var(--pa-focus-strong);
   --color-pa-focus-ring: var(--pa-focus-ring);
   --color-pa-highlight: var(--pa-highlight);
@@ -207,5 +195,46 @@
   /* 读数卡：同料同框，只换模糊那一档 */
   .pa-popup-surface-card {
     --pa-glass-blur: var(--pa-glass-blur-card);
+  }
+}
+
+/*
+ * 两个宿主共用的基线规则。结果视图那批件在控制台与 MCP Widget 里是同一份，
+ * 它们依赖的滚动条、加载标记与减动效基线也只写这一份。
+ */
+@layer base {
+  /* 细、浅的滚动条 */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--pa-fg) 14%, transparent) transparent;
+  }
+}
+
+@layer components {
+  /* 加载标记（LoadingMark）：条自底边长起，往复由 alternate 给，故只写两端。 */
+  @keyframes pa-sweep {
+    from {
+      transform: scaleY(0.3);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  .pa-loader-bar {
+    display: block;
+    background: currentColor;
+    transform-origin: 0 100%;
+    animation: pa-sweep 0.5s ease-in-out infinite alternate both;
+  }
+}
+
+/* 无障碍动效降级：偏好减少动效时全量关闭。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
   }
 }

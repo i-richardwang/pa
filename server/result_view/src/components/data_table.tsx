@@ -1,35 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, ChevronUpIcon, EllipsisIcon } from "lucide-react";
 import { compareCells, formatCell } from "../../../src/presentation_core/view_format.js";
-import type { PLOT_PADDING } from "../../../src/presentation_core/chart_config.js";
 import { shadeCell, type TableShading } from "../../../src/presentation_core/table_shading.js";
 import type { TableColumn, TableModel } from "../../../src/presentation_core/view_shape.js";
+import { observeElementSize } from "../element_size.js";
+import { VIEW_SCENES, type ViewScene } from "../scene.js";
 import { useDarkTheme } from "../use_dark_theme.js";
 import { PlotSlab } from "./plot_slab.js";
 
 export const INLINE_ROWS = 8;
 
-/** 表头行高：任意层级按路径深度叠加，总体带偏移挂载后按量得的实高校正。 */
-const HEAD_ROW_HEIGHT = 36;
+/** 表头一行的高度（px），与 `headCell` 的 `h-8` 同值；总体带的吸顶偏移按层数叠加，挂载后按量得的实高校正。 */
+const HEAD_ROW_HEIGHT = 32;
+/** 文本格的截断上限（px）：超过即省略，悬停出展开钮。 */
+const TEXT_CELL_MAX_WIDTH = 780;
 
 const headCell =
   "h-8 border-pa-line border-b bg-pa-bg px-1 text-left align-middle font-normal text-xs";
-/** 瓦片档只改内衬：密度由留白分，不动字级、线色与底色。 */
-const cellText = "whitespace-nowrap px-2.5 py-2 font-normal";
-const cellTextTile = "whitespace-nowrap px-2 py-1.5 font-normal";
-const bodyCellDefault = `${cellText} border-pa-line border-b`;
-const bodyCellTile = `${cellTextTile} border-pa-line border-b`;
-/**
- * 总体带不复用 bodyCell：两个 border-color 工具类落在同一元素上时，胜者由样式表生成顺序
- * 决定而非书写顺序。这里只用单边工具类，冲突在结构上不可能发生。
- */
-const summaryCellDefault = `${cellText} border-b border-b-pa-line bg-pa-bg font-medium`;
-const summaryCellTile = `${cellTextTile} border-b border-b-pa-line bg-pa-bg font-medium`;
-
+const cellText = "whitespace-nowrap font-normal";
 const frozenCell = "sticky left-0 z-[1] bg-pa-bg group-hover:bg-pa-wash-solid";
 /** 缺席的格。 */
 const EMPTY_CELL = <span className="text-pa-faint">—</span>;
-/** 组边界线：单边工具类，理由同上。 */
+/**
+ * 总体带与组边界线只用单边工具类：两个 border-color 工具类落在同一元素上时，胜者由样式表生成
+ * 顺序决定而非书写顺序；单边类之间冲突在结构上不可能发生。
+ */
 const groupEdge = "border-l border-l-pa-line";
 const shadeText = { ink: "text-pa-ink", inverse: "text-pa-ink-fg" } as const;
 
@@ -103,30 +98,16 @@ function tableHeaderRows(columns: TableColumn[]): HeaderCell[][] {
 
 export function DataTable({
   model,
-  fullscreen,
-  fill = false,
-  countLabel,
-  countBar = true,
-  tile = false,
-  plot,
+  scene,
+  allRows,
   canOpenCell,
   onOpenCell,
 }: {
   model: TableModel;
-  fullscreen: boolean;
-  /** 表格自己拥有滚动：撑满定高容器、溢出内滚、表头吸顶。 */
-  fill?: boolean;
-  /** 行数条右侧的总量文案；缺省按表格自身行数（明细名单等按人计数时由调用方覆盖）。 */
-  countLabel?: string | null;
-  /** 行数条随表常驻；行数陈述由容器页脚承载时关闭（查看面）。 */
-  countBar?: boolean;
-
-  tile?: boolean;
-  /**
-   * 结果面场地档位：给了就把表格铺在与图表同一块场地上（画不画框由场景表定）。
-   * 明细名单等非结果面的清单不给，表格裸铺。
-   */
-  plot?: keyof typeof PLOT_PADDING;
+  /** 宿主场景：场地、密度、行数条与是否自带内滚都由 `VIEW_SCENES[scene]` 定。 */
+  scene: ViewScene;
+  /** 全量渲染；否则只铺前 INLINE_ROWS 行。它是运行态：答数卡在宿主全屏时放开。 */
+  allRows: boolean;
   /**
    * 能否查看构成记录是列的属性，与格里的数值无关——因此不收值参数。
    * row 为该格的原始结果行下标（经 sourceRows 解析），不是表格展示行序。
@@ -134,18 +115,20 @@ export function DataTable({
   canOpenCell?: (row: number, column: number) => boolean;
   onOpenCell?: (row: number, column: number) => void;
 }) {
+  const traits = VIEW_SCENES[scene];
+  const { fill } = traits;
   const [sort, setSort] = useState<{ column: number; dir: 1 | -1 } | null>(null);
   const headerRows = tableHeaderRows(model.columns);
   const headerDepth = headerRows.length;
   /** 首列是坐标才冻结：数值打头的表没有行头，冻住一列数字反而挡住后面的数字。 */
   const frozen = model.columns[0] ? !model.columns[0].numeric : false;
-  const bodyCell = tile ? bodyCellTile : bodyCellDefault;
-  const summaryCell = tile ? summaryCellTile : summaryCellDefault;
+  const bodyCell = `${cellText} ${traits.cellPad} border-pa-line border-b`;
+  const summaryCell = `${cellText} ${traits.cellPad} border-b border-b-pa-line bg-pa-bg font-medium`;
 
   const headRef = useRef<HTMLTableSectionElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [scrollableRight, setScrollableRight] = useState(false);
-  const [headHeight, setHeadHeight] = useState(headerDepth * (tile ? 32 : HEAD_ROW_HEIGHT));
+  const [headHeight, setHeadHeight] = useState(headerDepth * HEAD_ROW_HEIGHT);
   /** 已被用户放开截断上限的列 */
   const [uncapped, setUncapped] = useState<Set<number>>(() => new Set());
   /** 悬停中且确实被截断的格子（展开钮只在这里出现） */
@@ -154,8 +137,8 @@ export function DataTable({
   if (sort) {
     rows.sort((a, b) => compareCells(a.row[sort.column], b.row[sort.column]) * sort.dir);
   }
-  const shown = fullscreen ? rows : rows.slice(0, INLINE_ROWS);
-  const total = countLabel ?? `共 ${rows.length} 行`;
+  const shown = allRows ? rows : rows.slice(0, INLINE_ROWS);
+  const total = `共 ${rows.length} 行`;
   const footer = shown.length < rows.length ? `已显示前 ${shown.length} 行 · ${total}` : total;
 
   /** 右边还有没有列：滚动、容器改尺寸与换模型三处都要重问，答案只有量得出来。 */
@@ -163,24 +146,17 @@ export function DataTable({
     const node = scrollerRef.current;
     setScrollableRight(!!node && node.scrollWidth - node.clientWidth - node.scrollLeft > 1);
   };
+  // 列宽随模型与放开截断变，容器尺寸交给尺寸订阅（订阅即回调一次，首问在此）
   useEffect(() => {
     const node = scrollerRef.current;
     if (!node) return;
-    probeScroll();
-    const observer = new ResizeObserver(probeScroll);
-    observer.observe(node);
-    return () => observer.disconnect();
-    // 列宽随模型与放开截断变，容器尺寸交给 observer
+    return observeElementSize(node, probeScroll);
   }, [model, uncapped, fill]);
 
   useEffect(() => {
     const node = headRef.current;
     if (!fill || !node) return;
-    const measure = () => setHeadHeight(node.offsetHeight);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
+    return observeElementSize(node, () => setHeadHeight(node.offsetHeight));
   }, [fill]);
 
   const toggleSort = (i: number) =>
@@ -260,7 +236,7 @@ export function DataTable({
         cellSource !== null && canOpenCell?.(cellSource, i) ? (
           <button
             aria-label={`查看明细：${col.label} ${text ?? ""}`}
-            className="block w-full cursor-pointer rounded-sm text-right underline-offset-2 hover:text-pa-accent hover:underline focus-visible:text-pa-accent focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pa-accent"
+            className="block w-full cursor-pointer rounded-sm text-right underline-offset-2 outline-none hover:text-pa-accent hover:underline focus-visible:text-pa-accent focus-visible:underline focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring"
             onClick={() => onOpenCell?.(cellSource, i)}
             type="button"
           >
@@ -279,7 +255,12 @@ export function DataTable({
     }
     return (
       <>
-        <div className={uncapped.has(i) ? "" : "max-w-[780px] truncate"}>{text}</div>
+        <div
+          className={uncapped.has(i) ? "" : "truncate"}
+          style={uncapped.has(i) ? undefined : { maxWidth: TEXT_CELL_MAX_WIDTH }}
+        >
+          {text}
+        </div>
         {expandHint?.row === ri && expandHint.col === i && (
           <button
             type="button"
@@ -395,20 +376,10 @@ export function DataTable({
 
   return (
     <div className={fill ? "flex min-h-0 flex-1 flex-col" : ""}>
-      {plot ? (
-        <PlotSlab plot={plot} fill={fill}>
-          {grid}
-        </PlotSlab>
-      ) : (
-        grid
-      )}
-      {countBar && (
+      <PlotSlab scene={scene}>{grid}</PlotSlab>
+      {traits.inlineChrome && (
         <div
-          className={
-            tile
-              ? "flex h-7 shrink-0 items-center justify-end pt-1 font-medium text-pa-faint text-xs leading-4"
-              : "flex h-[30px] shrink-0 items-center justify-end border-pa-line border-t px-2 font-medium text-pa-muted text-xs"
-          }
+          className={`flex shrink-0 items-center justify-end font-medium text-xs ${traits.countBar}`}
         >
           {footer}
         </div>

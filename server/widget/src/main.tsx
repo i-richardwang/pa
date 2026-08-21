@@ -40,11 +40,12 @@ async function bootstrap() {
   ]);
   function HostedAnalysis() {
     const state = host.useHostState();
+    // 下载走的是宿主那侧的 resource_link，在注入时闭包带上；载荷里的导出票据对它没有用处
+    const { exportResource } = state;
     return (
       <ResultCard
         payload={state.payload}
         presentation={state.presentation}
-        exportResource={state.exportResource}
         status={state.status}
         waiting={state.status === host.WAITING_STATUS}
         fullscreen={state.displayMode === "fullscreen"}
@@ -53,7 +54,7 @@ async function bootstrap() {
             ? {
                 exportAction: {
                   kind: state.exportDelivery,
-                  run: (_link, resource) => host.runExport(resource),
+                  run: () => host.runExport(exportResource),
                 },
               }
             : {}),

@@ -13,7 +13,7 @@
 | 色值与语义色 | `server/src/presentation_core/tokens.css`、`design_tokens.ts` |
 | 阴影、圆角、字体与主题变量 | `server/console/src/styles.css` |
 | 图表常量与绘图区 | `server/src/presentation_core/chart_config.ts` |
-| 渲染宿主取舍 | `server/result_view/src/components/view_renderer.tsx` |
+| 渲染宿主取舍 | `server/result_view/src/scene.ts` |
 | 看板栅格与瓦片尺寸 | `server/console/src/dashboard/boards/tile_sizing.ts` |
 | 结果形态声明与编译 | `docs/presentation_contract.md` |
 | 时间桶与差值 | `docs/time_contract.md` |

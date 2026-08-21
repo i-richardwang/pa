@@ -7,6 +7,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DataTable, INLINE_ROWS } from "./data_table.js";
+import type { ViewScene } from "../scene.js";
 import type { TableModel } from "../../../src/presentation_core/view_shape.js";
 
 const column = (label: string, formatKey: string, numeric: boolean, group?: string) => ({
@@ -44,13 +45,9 @@ const grouped: TableModel = {
   rows: [["研发", 120, 122, 3, 4]],
 };
 
-const render = (model: TableModel, options: { fullscreen?: boolean; fill?: boolean } = {}) =>
+const render = (model: TableModel, options: { allRows?: boolean; scene?: ViewScene } = {}) =>
   renderToStaticMarkup(
-    <DataTable
-      model={model}
-      fullscreen={options.fullscreen ?? true}
-      fill={options.fill ?? false}
-    />,
+    <DataTable model={model} scene={options.scene ?? "card"} allRows={options.allRows ?? true} />,
   );
 
 const count = (html: string, needle: string) => html.split(needle).length - 1;
@@ -87,7 +84,7 @@ test("表体语言：明细常规字重、空值出破折号、文本列带截�
   expect(count(html, "—")).toBe(2);
   expect(html).toContain('class="text-pa-faint">—');
   // 文本列内容包在截断包装里，数值列裸渲染；空格没有内容可截，不进包装
-  expect(count(html, "max-w-[780px]")).toBe(1);
+  expect(count(html, 'class="truncate" style="max-width:')).toBe(1);
 });
 
 test("两层表头：分组行 colSpan 覆盖组宽，独立列 rowSpan 跨两行", () => {
@@ -205,8 +202,8 @@ test("记录格按 sourceRows 回指原始结果行；无来源的空格不出�
   const html = renderToStaticMarkup(
     <DataTable
       model={pivot}
-      fullscreen
-      fill={false}
+      scene="card"
+      allRows
       canOpenCell={(row, column) => {
         asked.push([row, column]);
         return true;
@@ -253,8 +250,8 @@ test("可点性由列决定：零值照样出记录入口，空格没有数字�
   const html = renderToStaticMarkup(
     <DataTable
       model={withZero}
-      fullscreen
-      fill={false}
+      scene="card"
+      allRows
       // 平均周期无记录明细绑定；事件数有——判据只看列，不看格里的数
       canOpenCell={(_row, column) => column === 1}
     />,
@@ -272,8 +269,8 @@ test("无 sourceRows 的长表：记录投影行号即模型行序", () => {
   renderToStaticMarkup(
     <DataTable
       model={flat}
-      fullscreen
-      fill={false}
+      scene="card"
+      allRows
       canOpenCell={(row) => {
         asked.push(row);
         return true;
@@ -289,15 +286,9 @@ test("行数条常驻：全量陈述总行数，截行时陈述已显示行数",
     columns: flat.columns,
     rows: Array.from({ length: INLINE_ROWS + 5 }, (_, i) => [`组织${i}`, i]),
   };
-  expect(render(many, { fullscreen: false })).toContain(
+  expect(render(many, { allRows: false })).toContain(
     `已显示前 ${INLINE_ROWS} 行 · 共 ${many.rows.length} 行`,
   );
-  // 名单等按人计数的调用方可覆盖总量文案
-  const custom = renderToStaticMarkup(
-    <DataTable model={flat} fullscreen fill={false} countLabel="共 2 人" />,
-  );
-  expect(custom).toContain("共 2 人");
-  expect(custom).not.toContain("共 2 行");
 });
 
 test("总体成带吸在表头下沿，不计入明细行数与记录投影", () => {
@@ -305,8 +296,8 @@ test("总体成带吸在表头下沿，不计入明细行数与记录投影", ()
   const html = renderToStaticMarkup(
     <DataTable
       model={{ ...flat, summaryRows: [["总体", 165]] }}
-      fullscreen
-      fill
+      scene="page"
+      allRows
       canOpenCell={(row) => {
         asked.push(row);
         return true;
@@ -326,13 +317,12 @@ test("总体成带吸在表头下沿，不计入明细行数与记录投影", ()
   expect(html).toContain("<button");
   expect(band).not.toContain("<button");
   expect(html).toContain("总体");
-  expect(html).toContain("共 2 行");
   expect(asked).toEqual([0, 1]);
 });
 
 test("字色分两档：维度格取 muted，数值格与总体行取本色", () => {
   const html = renderToStaticMarkup(
-    <DataTable model={{ ...flat, summaryRows: [["总体", 165]] }} fullscreen fill={false} />,
+    <DataTable model={{ ...flat, summaryRows: [["总体", 165]] }} scene="card" allRows />,
   );
   const cellOf = (text: string) =>
     html.match(new RegExp(`<td[^>]*>(?:(?!</td>).)*?${text}`))?.[0] ?? "";
@@ -344,7 +334,7 @@ test("字色分两档：维度格取 muted，数值格与总体行取本色", ()
 });
 
 test("表尾不封口：末行不留行线，下边界由行数条交代", () => {
-  const html = render(flat, { fullscreen: true });
+  const html = render(flat, { allRows: true });
   const body = html.match(/<tbody class="[^"]*">[\s\S]*$/)?.[0] ?? "";
   expect(body).toContain("[&amp;&gt;tr:last-child&gt;td]:border-b-0");
   expect(body).toContain("border-pa-line border-b");
@@ -352,7 +342,7 @@ test("表尾不封口：末行不留行线，下边界由行数条交代", () =>
 
 test("总体带不吸顶时不占位：非 fill 表格无 sticky 与偏移", () => {
   const html = renderToStaticMarkup(
-    <DataTable model={{ ...flat, summaryRows: [["总体", 165]] }} fullscreen fill={false} />,
+    <DataTable model={{ ...flat, summaryRows: [["总体", 165]] }} scene="card" allRows />,
   );
   const band = html.match(/<tbody aria-label="总体"[\s\S]*?<\/tbody>/)?.[0] ?? "";
   // 吸顶与否只看带本身：格里的 sticky 是冻结的坐标列，与纵向无关
@@ -370,30 +360,30 @@ test("非全屏截断到 INLINE_ROWS，全屏渲染全部行", () => {
     columns: flat.columns,
     rows: Array.from({ length: INLINE_ROWS + 5 }, (_, i) => [`组织${i}`, i]),
   };
-  expect(countTag(render(many, { fullscreen: false }), "tr")).toBe(1 + INLINE_ROWS);
-  expect(countTag(render(many, { fullscreen: true }), "tr")).toBe(1 + many.rows.length);
+  expect(countTag(render(many, { allRows: false }), "tr")).toBe(1 + INLINE_ROWS);
+  expect(countTag(render(many, { allRows: true }), "tr")).toBe(1 + many.rows.length);
 });
 
 test("fill 时表格自带内滚且表头吸顶；非 fill 时都不挂", () => {
   // 吸顶挂在 thead 上；格里的 sticky 是横向冻结的坐标列，两档都有，不参与这条判定
   const head = (html: string) => html.match(/<thead class="[^"]*"/)?.[0] ?? "";
-  const filled = render(flat, { fill: true });
+  const filled = render(flat, { scene: "page" });
   expect(filled).toContain("overflow-auto");
   expect(head(filled)).toContain("sticky");
 
-  const plain = render(flat, { fill: false });
+  const plain = render(flat, { scene: "card" });
   expect(plain).not.toContain("overflow-auto");
   expect(head(plain)).not.toContain("sticky");
 });
 
 test("右缘渐隐只在可横向滚动时显示", () => {
   // 恒亮的遮罩会被当成表格自己的一道浅边；服务端渲染时容器尺寸未知，此时一律不出
-  expect(render(flat, { fill: true })).not.toContain("bg-linear-to-r");
-  expect(render(flat, { fill: false })).not.toContain("bg-linear-to-r");
+  expect(render(flat, { scene: "page" })).not.toContain("bg-linear-to-r");
+  expect(render(flat, { scene: "card" })).not.toContain("bg-linear-to-r");
 });
 
 test("坐标列横向冻结：首列是维度才冻，数值打头的表不冻", () => {
-  const html = render(flat, { fill: true });
+  const html = render(flat, { scene: "page" });
   const cells = [...html.matchAll(/<t[dh] class="([^"]*)"/g)].map((match) => match[1]);
   // 表头、明细两处的首列都冻，其余列一个不冻
   expect(cells.filter((cls) => cls.includes("sticky left-0")).length).toBe(1 + flat.rows.length);
@@ -404,8 +394,8 @@ test("坐标列横向冻结：首列是维度才冻，数值打头的表不冻",
 
   const numericFirst = renderToStaticMarkup(
     <DataTable
-      fill
-      fullscreen
+      scene="page"
+      allRows
       model={{
         columns: [flat.columns[1], flat.columns[0]],
         rows: flat.rows.map(([name, value]) => [value, name]),
@@ -424,9 +414,9 @@ const nonSpacing = (className: string) =>
     .filter((name) => name && !SPACING_CLASS.test(name))
     .sort();
 
-const renderDensity = (tile: boolean) =>
+const renderDensity = (scene: ViewScene) =>
   renderToStaticMarkup(
-    <DataTable fill fullscreen model={{ ...flat, summaryRows: [["总体", 165]] }} tile={tile} />,
+    <DataTable allRows model={{ ...flat, summaryRows: [["总体", 165]] }} scene={scene} />,
   );
 
 const classOf = (html: string, pattern: RegExp) => html.match(pattern)?.[1] ?? "";
@@ -439,8 +429,8 @@ test("瓦片密度档只改内衬：字级、线色、底色三样与默认档�
     "spacing filter would pass a re-tinted row line",
   ).not.toEqual(nonSpacing("px-2.5 py-2 border-pa-line-subtle"));
 
-  const tile = renderDensity(true);
-  const wide = renderDensity(false);
+  const tile = renderDensity("tile");
+  const wide = renderDensity("page");
   const sites: Array<[string, RegExp]> = [
     ["表头格", /<th class="([^"]*)"/],
     ["总体格", /aria-label="总体"[\s\S]*?<td class="([^"]*)"/],
@@ -457,9 +447,9 @@ test("瓦片密度档只改内衬：字级、线色、底色三样与默认档�
 });
 
 test("吸顶的带铺实体底：表头与总体格都取卡面/带底色，不留透明", () => {
-  for (const tile of [true, false]) {
-    const html = renderDensity(tile);
-    expect(classOf(html, /<th class="([^"]*)"/), `tile=${tile} 表头透明会让明细透出来`) //
+  for (const scene of ["tile", "page"] as const) {
+    const html = renderDensity(scene);
+    expect(classOf(html, /<th class="([^"]*)"/), `${scene} 表头透明会让明细透出来`) //
       .toContain("bg-pa-bg");
     // tbody 与每个 td 都铺卡面色：滚动内容不得从任一处透出
     expect(html).toContain('aria-label="总体" class="sticky z-10 bg-pa-bg"');
@@ -468,9 +458,10 @@ test("吸顶的带铺实体底：表头与总体格都取卡面/带底色，不�
 });
 
 test("行数条不另立字级：两档同为 text-xs，差别只在高度与字色", () => {
-  const bar = (html: string) => html.match(/<div class="(flex h-[^"]*)"/)?.[1] ?? "";
-  const tile = bar(renderDensity(true));
-  const wide = bar(renderDensity(false));
+  const bar = (html: string) =>
+    html.match(/<div class="(flex shrink-0 items-center justify-end[^"]*)"/)?.[1] ?? "";
+  const tile = bar(renderDensity("tile"));
+  const wide = bar(renderDensity("card"));
   expect(tile, "行数条没匹配到——选择器过期").not.toBe("");
   expect(tile).toContain("text-xs");
   expect(wide).toContain("text-xs");

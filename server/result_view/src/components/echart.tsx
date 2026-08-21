@@ -5,7 +5,6 @@ import {
   GraphicComponent,
   GridComponent,
   MarkPointComponent,
-  TitleComponent,
   TooltipComponent,
 } from "echarts/components";
 import { SVGRenderer } from "echarts/renderers";
@@ -17,12 +16,12 @@ import { PlotSlab } from "./plot_slab.js";
 import { RankRows } from "./rank_rows.js";
 import { ReadoutCard } from "./readout_card.js";
 import { observeElementSize } from "../element_size.js";
+import { VIEW_SCENES, type ViewScene } from "../scene.js";
 import { formatSeriesValue } from "../../../src/presentation_core/view_format.js";
 import {
   chartMarkerClass,
   focusedColor,
   legendRowClass,
-  type PLOT_PADDING,
   themedColor,
   type ViewChart,
 } from "../../../src/presentation_core/chart_config.js";
@@ -33,7 +32,6 @@ echarts.use([
   GraphicComponent,
   GridComponent,
   MarkPointComponent,
-  TitleComponent,
   TooltipComponent,
   SVGRenderer,
 ]);
@@ -132,13 +130,13 @@ export function subscribeReadout(
 function LegendRow({
   chart,
   dark,
-  plot = "compact",
+  scene,
   focused,
   onFocus,
 }: {
   chart: ViewChart;
   dark: boolean;
-  plot?: keyof typeof PLOT_PADDING;
+  scene: ViewScene;
   /** 焦点归画布层：图例色点与画布系列是同一个状态的两个消费点 */
   focused: number | null;
   onFocus: (index: number | null) => void;
@@ -152,7 +150,7 @@ function LegendRow({
   const dotColor = (item: { color: string }, i: number) =>
     themedColor(focusedColor(item.color, i, focused), dark);
   return (
-    <div className={legendRowClass(plot, latest !== undefined)}>
+    <div className={legendRowClass(scene, latest !== undefined)}>
       {/* 末桶名占满一行：值是那一桶的读数，不说是哪一桶就成了没有出处的数。
           桌面档 hidden 不占位，故这一行不影响既有版式。 */}
       {latest && (
@@ -163,7 +161,7 @@ function LegendRow({
       {/* 图例项是真按钮：它的作为就是把那条系列提到前面来，键盘聚焦与鼠标悬停同效 */}
       {items.map((item, i) => (
         <button
-          className="flex min-w-0 items-start gap-1.5 rounded-sm border-0 bg-transparent p-0 text-left text-pa-muted text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pa-accent"
+          className="flex min-w-0 items-start gap-1.5 rounded-sm border-0 bg-transparent p-0 text-left text-pa-muted text-xs outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring"
           key={`${item.name}-${i}`}
           onBlur={() => onFocus(null)}
           onFocus={() => onFocus(i)}
@@ -288,16 +286,13 @@ function ReadoutLayer({
 
 export function ViewChartCanvas({
   chart,
-  fill = false,
-  plot = "compact",
+  scene,
   onPointClick,
   canOpenPoint,
 }: {
   chart: ViewChart;
-  /** 高度取容器而非 chart.height；需容器给定确定高度。 */
-  fill?: boolean;
-  /** plot 留白档位（`PLOT_PADDING` 的键）：编译期不知道宿主是哪一档，整页宿主换到 page。 */
-  plot?: keyof typeof PLOT_PADDING;
+  /** 宿主场景：场地留白与框按它查表；填充场景高度取容器而非 chart.height。 */
+  scene: ViewScene;
   /** 下钻：钉住读数卡后点卡内那一行开明细，画布本身不接管点击。 */
   onPointClick?: (point: { row: number; column: string }) => void;
   /** 该格能不能开明细：可点的样子由它决定，缺省即有投影就能开。 */
@@ -309,6 +304,7 @@ export function ViewChartCanvas({
   const [viewport, setViewport] = useState<Viewport>({ width: 0, height: 0 });
   const [bounds, setBounds] = useState({ width: 0, height: 0 });
   const dark = useDarkTheme();
+  const { fill } = VIEW_SCENES[scene];
   // 焦点有两个来源、各持各的：图例上的悬停/键盘焦点，钉住卡片上的行悬停。
   // 谁说了算由「卡有没有钉住」定——钉住期间卡在台前，图例的那份退到幕后；撤钉即换回来。
   const [legendFocus, setLegendFocus] = useState<number | null>(null);
@@ -353,13 +349,13 @@ export function ViewChartCanvas({
     const current = instance.current;
     if (!current) return;
     current.setOption(
-      renderOption(chart, { dark, plot, viewport, focused, pinned: pinnedIndex }) as Parameters<
+      renderOption(chart, { dark, scene, viewport, focused, pinned: pinnedIndex }) as Parameters<
         echarts.ECharts["setOption"]
       >[0],
       { notMerge: true },
     );
     applyPin(current, chart, pinnedIndex);
-  }, [chart, dark, plot, viewport, focused, pinnedIndex]);
+  }, [chart, dark, scene, viewport, focused, pinnedIndex]);
 
   useEffect(() => subscribeReadout(instance.current, chart, setIndex), [chart]);
 
@@ -388,7 +384,7 @@ export function ViewChartCanvas({
     setPointer({ x: event.clientX - rect.left, y: event.clientY - rect.top });
   };
 
-  const rect = plotRect(chart, plot);
+  const rect = plotRect(chart, scene);
 
   if (chart.layout === "rank") {
     return (
@@ -396,7 +392,7 @@ export function ViewChartCanvas({
         className={fill ? "relative h-full min-h-0 w-full" : "relative w-full"}
         style={fill ? undefined : { height: chart.height }}
       >
-        <PlotSlab plot={plot} rect={rect}>
+        <PlotSlab scene={scene} rect={rect}>
           <RankRows
             chart={chart}
             dark={dark}
@@ -412,13 +408,19 @@ export function ViewChartCanvas({
       ref={block}
       className={`relative ${fill ? "flex h-full min-h-0 w-full flex-col" : "w-full"}`}
     >
-      <LegendRow chart={chart} dark={dark} onFocus={setLegendFocus} focused={focused} plot={plot} />
+      <LegendRow
+        chart={chart}
+        dark={dark}
+        onFocus={setLegendFocus}
+        focused={focused}
+        scene={scene}
+      />
 
       <div
         className={`relative ${fill ? "min-h-0 w-full flex-1" : "w-full"}`}
         style={fill ? undefined : { height: chart.height }}
       >
-        <PlotSlab plot={plot} rect={rect} />
+        <PlotSlab scene={scene} rect={rect} />
         {/* 点一下钉住，再点一下撤下：钉住期间指针停着不走，落点也就无处可换 */}
         {/* biome-ignore lint/a11y/noStaticElementInteractions: 这一层是 echarts 的画布，图形不是控件；安上控件语义等于向读屏器报出一件它按不动的东西 */}
         {/* biome-ignore lint/a11y/useKeyWithClickEvents: 悬停与钉住是鼠标增强，同一份结果在键盘上的读法是它的表形态与导出，不在这一层 */}
