@@ -1,3 +1,7 @@
+/**
+ * 壳的挂载面：页面把题条动作、面包屑与右栏交给壳排版，壳负责位置，页面负责内容。
+ * 三个槽各自独立，每槽一个写入 hook、一个读出 hook；写入 hook 卸载即清空。
+ */
 import {
   createContext,
   useCallback,
@@ -19,15 +23,53 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-type ListChromeValue = {
-  actions: React.ReactNode | null;
-  setActions: (actions: React.ReactNode | null) => void;
-};
+type Slot<T> = { value: T; set: (next: T) => void };
 
-const ListChromeContext = createContext<ListChromeValue>({
-  actions: null,
-  setActions: () => {},
+function useSlotState<T>(empty: T): Slot<T> {
+  const [value, setValue] = useState<T>(empty);
+  const set = useCallback((next: T) => setValue(() => next), []);
+  return useMemo(() => ({ value, set }), [value, set]);
+}
+
+/** 写入 hook 的公共身体：工厂按 deps 记忆，挂上即写、卸下即清。 */
+function useSlotWriter<T>(slot: Slot<T>, factory: () => T, deps: DependencyList, empty: T): void {
+  const next = useMemo(factory, deps);
+  useEffect(() => {
+    slot.set(next);
+    return () => slot.set(empty);
+  }, [next, slot.set, empty]);
+}
+
+/* ---- 题条动作 ---- */
+
+const TitlebarActionsContext = createContext<Slot<React.ReactNode | null>>({
+  value: null,
+  set: () => {},
 });
+
+/**
+ * 题条动作的登记处。壳为主区题条开一处；设置弹层为自己的题条另开一处，
+ * 弹层里的页面登记到离它最近的那一处。
+ */
+export function TitlebarActionsProvider({ children }: { children: React.ReactNode }) {
+  const slot = useSlotState<React.ReactNode | null>(null);
+  return <TitlebarActionsContext.Provider value={slot}>{children}</TitlebarActionsContext.Provider>;
+}
+
+/** 题条右侧的动作位：印出最近一处登记处里登记的节点。 */
+export function TitlebarActionsOutlet(): React.ReactNode {
+  return useContext(TitlebarActionsContext).value;
+}
+
+/** 页面把动作（「+ 新建」、详情页的保存/更多）挂到所属题条右侧。 */
+export function useSetTitlebarActions(
+  factory: () => React.ReactNode | null,
+  deps: DependencyList,
+): void {
+  useSlotWriter(useContext(TitlebarActionsContext), factory, deps, null);
+}
+
+/* ---- 详情面包屑 ---- */
 
 /** 详情页挂到主区 titlebar 的面包屑：与列表页同槽，父级可点、当前页不可点。 */
 export type DetailCrumb = {
@@ -36,27 +78,31 @@ export type DetailCrumb = {
   current: string;
 };
 
-type DetailChromeValue = {
-  crumb: DetailCrumb | null;
-  setCrumb: (crumb: DetailCrumb | null) => void;
-  /** 详情题条右侧动作。 */
-  actions: React.ReactNode | null;
-  setActions: (actions: React.ReactNode | null) => void;
-};
-
-const DetailChromeContext = createContext<DetailChromeValue>({
-  crumb: null,
-  setCrumb: () => {},
-  actions: null,
-  setActions: () => {},
+const DetailCrumbContext = createContext<Slot<DetailCrumb | null>>({
+  value: null,
+  set: () => {},
 });
+
+export function useDetailCrumb(): DetailCrumb | null {
+  return useContext(DetailCrumbContext).value;
+}
+
+/**
+ * 详情页把 `父级 / 当前` 挂到与列表页同槽的 titlebar。
+ * 定位由 titlebar 承担，内容区不重复标题与返回链。
+ */
+export function useSetDetailCrumb(factory: () => DetailCrumb | null, deps: DependencyList): void {
+  useSlotWriter(useContext(DetailCrumbContext), factory, deps, null);
+}
+
+/* ---- 工作台右栏 ---- */
 
 export type StageAside = {
   node: React.ReactNode;
   /** 这栏是拿来调的还是拿来读的——壳据此取宽度那一档。 */
   face: StageAsideFace;
-
-  dismiss: (() => void) | null;
+  /** 同一个「收起」动作：壳在 Esc、窄屏 Sheet 的背景点击上调用它，开关仍握在页面手里。 */
+  dismiss: () => void;
 };
 
 type StageAsideFace = "settings" | "profile";
@@ -67,162 +113,47 @@ type StageAsideFace = "settings" | "profile";
  */
 export const STAGE_ASIDE_WIDTH = { settings: 320, profile: 380 } as const;
 
-type StageAsideValue = {
-  aside: StageAside | null;
-  setAside: (aside: StageAside | null) => void;
-};
-
-const StageAsideContext = createContext<StageAsideValue>({
-  aside: null,
-  setAside: () => {},
+const StageAsideContext = createContext<Slot<StageAside | null>>({
+  value: null,
+  set: () => {},
 });
-
-export type MainSurface = "card" | "canvas";
-
-type MainSurfaceValue = {
-  surface: MainSurface;
-  setSurface: (surface: MainSurface) => void;
-};
-
-const MainSurfaceContext = createContext<MainSurfaceValue>({
-  surface: "card",
-  setSurface: () => {},
-});
-
-export function ListChromeProvider({ children }: { children: React.ReactNode }) {
-  const [actions, setActionsState] = useState<React.ReactNode | null>(null);
-  const [crumb, setCrumbState] = useState<DetailCrumb | null>(null);
-  const [detailActions, setDetailActionsState] = useState<React.ReactNode | null>(null);
-  const [stageAside, setStageAsideState] = useState<StageAside | null>(null);
-  const [mainSurface, setMainSurfaceState] = useState<MainSurface>("card");
-  const setActions = useCallback((next: React.ReactNode | null) => {
-    setActionsState(next);
-  }, []);
-  const setCrumb = useCallback((next: DetailCrumb | null) => {
-    setCrumbState(next);
-  }, []);
-  const setDetailActions = useCallback((next: React.ReactNode | null) => {
-    setDetailActionsState(next);
-  }, []);
-  const setAside = useCallback((next: StageAside | null) => {
-    setStageAsideState(next);
-  }, []);
-  const setSurface = useCallback((next: MainSurface) => {
-    setMainSurfaceState(next);
-  }, []);
-  const listValue = useMemo(() => ({ actions, setActions }), [actions, setActions]);
-  const detailValue = useMemo(
-    () => ({ crumb, setCrumb, actions: detailActions, setActions: setDetailActions }),
-    [crumb, setCrumb, detailActions, setDetailActions],
-  );
-  const stageValue = useMemo(() => ({ aside: stageAside, setAside }), [stageAside, setAside]);
-  const surfaceValue = useMemo(
-    () => ({ surface: mainSurface, setSurface }),
-    [mainSurface, setSurface],
-  );
-  return (
-    <ListChromeContext.Provider value={listValue}>
-      <DetailChromeContext.Provider value={detailValue}>
-        <StageAsideContext.Provider value={stageValue}>
-          <MainSurfaceContext.Provider value={surfaceValue}>{children}</MainSurfaceContext.Provider>
-        </StageAsideContext.Provider>
-      </DetailChromeContext.Provider>
-    </ListChromeContext.Provider>
-  );
-}
-
-export function useListChromeActions(): React.ReactNode | null {
-  return useContext(ListChromeContext).actions;
-}
-
-export function useDetailCrumb(): DetailCrumb | null {
-  return useContext(DetailChromeContext).crumb;
-}
-
-export function useDetailChromeActions(): React.ReactNode | null {
-  return useContext(DetailChromeContext).actions;
-}
 
 /** 壳读取：有值时 MAIN 改为「左题条+内容 | 右栏通高」，窄屏改为底部 Sheet。 */
 export function useStageAside(): StageAside | null {
-  return useContext(StageAsideContext).aside;
-}
-
-export function useMainSurface(): MainSurface {
-  return useContext(MainSurfaceContext).surface;
-}
-
-export function useSetMainSurface(surface: MainSurface): void {
-  const { setSurface } = useContext(MainSurfaceContext);
-  useEffect(() => {
-    setSurface(surface);
-    return () => setSurface("card");
-  }, [surface, setSurface]);
+  return useContext(StageAsideContext).value;
 }
 
 /**
- * 工作台挂右栏（右栏顶到白卡顶）。
- * 收起时传 null，壳恢复整宽 titlebar。
- *
- * `dismiss` 是同一个「收起」动作：窄屏上壳把这栏摆成底部 Sheet，背景点击与 Esc 得能关它，
- * 而开关握在调用方手里。它经 ref 转交，故不进 effect 依赖——换个闭包不该让栏重挂。
+ * 工作台挂右栏（右栏顶到白卡顶）。收起时工厂返回 null，壳恢复整宽 titlebar。
+ * `dismiss` 经 ref 转交，不进依赖——换个闭包不该让栏重挂。
  */
 export function useSetStageAside(
   factory: () => React.ReactNode | null,
   deps: DependencyList,
-  dismiss?: () => void,
+  dismiss: () => void,
   face: StageAsideFace = "settings",
 ): void {
-  const { setAside } = useContext(StageAsideContext);
+  const slot = useContext(StageAsideContext);
   const node = useMemo(factory, deps);
   const dismissRef = useRef(dismiss);
   dismissRef.current = dismiss;
   useEffect(() => {
-    setAside(node ? { node, face, dismiss: () => dismissRef.current?.() } : null);
-    return () => setAside(null);
-  }, [node, face, setAside]);
+    slot.set(node ? { node, face, dismiss: () => dismissRef.current() } : null);
+    return () => slot.set(null);
+  }, [node, face, slot.set]);
 }
 
-/** 页面把「+ 新建」挂到主区 titlebar 右侧。 */
-export function useSetListChromeActions(
-  factory: () => React.ReactNode,
-  deps: DependencyList,
-): void {
-  const { setActions } = useContext(ListChromeContext);
-  const node = useMemo(factory, deps);
-  useEffect(() => {
-    setActions(node);
-    return () => setActions(null);
-  }, [node, setActions]);
-}
-
-/**
- * 详情页把动作挂到主区 titlebar 右侧。
- * 与面包屑同槽同高（`Titlebar` 基线），不另起内容区题条。
- */
-export function useSetDetailChromeActions(
-  factory: () => React.ReactNode | null,
-  deps: DependencyList,
-): void {
-  const { setActions } = useContext(DetailChromeContext);
-  const node = useMemo(factory, deps);
-  useEffect(() => {
-    setActions(node);
-    return () => setActions(null);
-  }, [node, setActions]);
-}
-
-/**
- * 详情页把 `父级 / 当前` 挂到与列表页同槽的 titlebar。
- * 定位由 titlebar 承担，内容区不重复标题与返回链。
- */
-export function useSetDetailCrumb(factory: () => DetailCrumb | null, deps: DependencyList): void {
-  const { setCrumb } = useContext(DetailChromeContext);
-  const next = useMemo(factory, deps);
-  useEffect(() => {
-    setCrumb(next);
-    return () => setCrumb(null);
-  }, [next, setCrumb]);
+/** 壳给主区套的一整组挂载面。 */
+export function ShellChromeProvider({ children }: { children: React.ReactNode }) {
+  const crumb = useSlotState<DetailCrumb | null>(null);
+  const aside = useSlotState<StageAside | null>(null);
+  return (
+    <TitlebarActionsProvider>
+      <DetailCrumbContext.Provider value={crumb}>
+        <StageAsideContext.Provider value={aside}>{children}</StageAsideContext.Provider>
+      </DetailCrumbContext.Provider>
+    </TitlebarActionsProvider>
+  );
 }
 
 export const MAIN_CARD_BODY_INSET = "px-4 pt-0 pb-4" as const;

@@ -11,10 +11,11 @@ import {
   AutocompleteTrigger,
 } from "@/components/ui/autocomplete";
 import { toastManager } from "@/components/ui/toast";
+import { LoadingMark } from "pa-result-view";
 import { ApiError } from "../api";
 import { useAddReportToBoard, useBoards, useCreateBoard } from "../dashboard_queries";
 import { HeaderTextAction } from "../layout/view_chrome";
-import { boardHash } from "../router";
+import { boardHash, navigateTo } from "../router";
 
 /** 文档 + 加号图标：lucide 里没有对位，手绘一份。 */
 function AddToBoardIcon() {
@@ -85,7 +86,7 @@ export function AddToBoardAction({ reportId }: { reportId: string }) {
         type: "success",
         title: result.added ? `已新建并加入「${board.name}」` : `已在「${board.name}」中`,
       });
-      window.location.hash = boardHash(board.id);
+      navigateTo(boardHash(board.id));
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) return;
       toastManager.add({
@@ -129,11 +130,13 @@ export function AddToBoardAction({ reportId }: { reportId: string }) {
         <AutocompleteSearch aria-label="搜索看板" placeholder="搜索" />
         {/* Empty 的根必须常挂着，读屏靠它播报结果条数的变化；变的只是它的孩子。 */}
         <AutocompleteEmpty>
-          {rows === null
-            ? "载入中…"
-            : rows.length === 0
-              ? "还没有看板，点「新建」创建"
-              : "没有匹配的看板"}
+          {rows === null ? (
+            <LoadingMark size="small" />
+          ) : rows.length === 0 ? (
+            "还没有看板，点「新建」创建"
+          ) : (
+            "没有匹配的看板"
+          )}
         </AutocompleteEmpty>
         <AutocompleteList className="max-h-56">
           {(board: BoardRow) => (

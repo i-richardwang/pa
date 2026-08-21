@@ -69,7 +69,7 @@ import {
   ListControlSearch,
   ListPageBody,
   ListScrollBody,
-  useSetListChromeActions,
+  useSetTitlebarActions,
   useSetStageAside,
 } from "../layout/layout_chrome";
 import { HeaderTextAction, ProfileAside } from "../layout/view_chrome";
@@ -152,7 +152,7 @@ export function CatalogPage() {
     (facet === "domains" && !(data?.metric_domains.length ?? 0));
 
   // 主操作在 titlebar：管理员登记词条与「+ 新建」同槽。
-  useSetListChromeActions(
+  useSetTitlebarActions(
     () =>
       isAdmin ? (
         <HeaderTextAction onClick={() => setEditing("new")}>
@@ -182,16 +182,6 @@ export function CatalogPage() {
     },
     [data],
   );
-
-  // 右栏档案开时 Esc 关闭（与能力地图检查器同出口）
-  useEffect(() => {
-    if (!detail) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDetail(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [detail]);
 
   // 与工作台配置栏同槽：推挤列表、通高顶到 MAIN 白卡顶，不是 Sheet 罩层
   useSetStageAside(

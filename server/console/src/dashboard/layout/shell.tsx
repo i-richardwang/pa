@@ -1,6 +1,6 @@
 /**
  * 控制台外壳：shadcn SidebarProvider + 画布灰、栏头工作区菜单、收起钮 hover 显隐。
- * 全局键位：⌘/Ctrl+K 命令面板、⌘/Ctrl+. 与官方 ⌘/Ctrl+B 折叠侧栏、? 快捷键一览。
+ * 全局键位：⌘/Ctrl+K 命令面板、⌘/Ctrl+. 与官方 ⌘/Ctrl+B 折叠侧栏、? 快捷键一览、Esc 收起工作台右栏。
  * 侧栏开合恒由用户手动决定，偏好记 localStorage——没有任何页面会替用户收起主导航。
  */
 import { useEffect, useRef, useState } from "react";
@@ -36,20 +36,21 @@ import { useOpenerFocus } from "@/components/ui/command";
 import { CommandPalette } from "./command_palette";
 import type { NavEntry } from "./navigation";
 import {
-  ListChromeProvider,
+  ShellChromeProvider,
   STAGE_ASIDE_WIDTH,
   type StageAside,
-  useDetailChromeActions,
+  TitlebarActionsOutlet,
   useDetailCrumb,
-  useListChromeActions,
-  useMainSurface,
   useStageAside,
 } from "./layout_chrome";
 import { cn } from "@/lib/utils";
 import { Titlebar } from "@/components/ui/titlebar";
-import { SettingsDialog, type SettingsTab } from "../admin/settings_page";
+import { SettingsDialog } from "../admin/settings_page";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { isEditableTarget } from "@/lib/keyboard";
+
+/** 主区白面的两种底：清单与工作台坐白卡，看板坐画布灰。 */
+export type MainSurface = "card" | "canvas";
 
 type NavItem = NavEntry & { adminOnly: boolean };
 
@@ -87,15 +88,13 @@ function navGroups(isAdmin: boolean): NavMainGroup[] {
   ].filter((g) => g.items.length > 0);
 }
 
-/** 主区顶栏短名：与侧栏条目同文案；设置不在导航表里单独补 */
+/** 主区顶栏短名：与侧栏条目同文案。 */
 function routeTitle(route: RouteKey, items: readonly NavItem[]): string {
-  if (route === "settings") return "设置";
   return items.find((n) => n.key === route)?.label ?? "我的报告";
 }
 
-/** 设置对所有登录用户开放；非管理员的 admin 路由归一到默认页。 */
+/** 非管理员的 admin 路由归一到默认页。 */
 export function resolveRoute(route: RouteKey, isAdmin: boolean): RouteKey {
-  if (route === "settings") return route;
   return visibleNav(isAdmin).some((n) => n.key === route) ? route : "reports";
 }
 
@@ -136,8 +135,8 @@ export function DashboardShell({
   navigate,
   onSignOut,
   listChrome = false,
+  mainSurface = "card",
   settingsOpen = false,
-  settingsTab = "account",
   onSettingsOpenChange,
   children,
 }: {
@@ -147,10 +146,9 @@ export function DashboardShell({
   onSignOut: () => void;
   /** 清单骨架：titlebar 恒显页名 + 可选「+ 新建」。详情/表单页勿开。 */
   listChrome?: boolean;
+  mainSurface?: MainSurface;
   /** 个人设置：居中弹层，不占路由页。 */
   settingsOpen?: boolean;
-  /** 深链落在成员上时直接开在那一节。 */
-  settingsTab?: SettingsTab;
   onSettingsOpenChange?: (open: boolean) => void;
   children: React.ReactNode;
 }) {
@@ -200,7 +198,7 @@ export function DashboardShell({
   return (
     <ToastProvider>
       <TooltipProvider>
-        <ListChromeProvider>
+        <ShellChromeProvider>
           <SidebarProvider className="h-svh overflow-hidden" onOpenChange={setOpen} open={open}>
             <AppSidebar
               groups={groups}
@@ -211,7 +209,7 @@ export function DashboardShell({
               onSignOut={onSignOut}
               route={route}
             />
-            <ShellInset>
+            <SidebarInset className={cn("min-h-0", mainSurface === "canvas" && "bg-pa-canvas")}>
               <MainColumn
                 open={open}
                 listChrome={listChrome}
@@ -220,7 +218,7 @@ export function DashboardShell({
               >
                 {children}
               </MainColumn>
-            </ShellInset>
+            </SidebarInset>
           </SidebarProvider>
           <CommandPalette
             open={paletteOpen}
@@ -232,52 +230,59 @@ export function DashboardShell({
           />
           <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
           {onSettingsOpenChange ? (
-            <SettingsDialog
-              me={me}
-              onOpenChange={onSettingsOpenChange}
-              open={settingsOpen}
-              tab={settingsTab}
-            />
+            <SettingsDialog me={me} onOpenChange={onSettingsOpenChange} open={settingsOpen} />
           ) : null}
-        </ListChromeProvider>
+        </ShellChromeProvider>
       </TooltipProvider>
     </ToastProvider>
   );
 }
 
-function ShellInset({ children }: { children: React.ReactNode }) {
-  const surface = useMainSurface();
-  return (
-    <SidebarInset className={cn("min-h-0", surface === "canvas" && "bg-pa-canvas")}>
-      {children}
-    </SidebarInset>
-  );
+/** 会把焦点收进自己身体里的浮层：它开着时 Esc 归它。 */
+const POPUP_SELECTOR = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
+
+/**
+ * Esc 收起工作台右栏，桌面推挤栏与窄屏 Sheet 同一条规则。
+ * 右栏是最外一层：输入框里的 Esc 归输入法，浮层里的 Esc 归那层浮层；
+ * 只有键落在浮层之外，或落在承载右栏的那个 Sheet 自身时，才算给右栏的。
+ * 听在 document 捕获阶段：Sheet 原语没有触发件，不接管 Esc，也不保证事件冒得出来。
+ */
+function useStageAsideEscape(
+  aside: StageAside | null,
+  rootRef: React.RefObject<HTMLElement | null>,
+): void {
+  useEffect(() => {
+    if (!aside) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || isEditableTarget(event.target)) return;
+      const target = event.target instanceof Element ? event.target : null;
+      const popup = target?.closest(POPUP_SELECTOR) ?? null;
+      if (popup && popup !== rootRef.current) return;
+      aside.dismiss();
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [aside, rootRef]);
 }
 
-function StageAsideSheet({ aside }: { aside: StageAside }) {
+function StageAsideSheet({
+  aside,
+  popupRef,
+}: {
+  aside: StageAside;
+  popupRef: React.Ref<HTMLDivElement>;
+}) {
   const { capture, finalFocus } = useOpenerFocus();
   const captured = useRef(false);
-  const popupRef = useRef<HTMLDivElement | null>(null);
   if (!captured.current) {
     captured.current = true;
     capture();
   }
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      const popup = popupRef.current;
-      if (!popup || !popup.contains(event.target as Node)) return;
-      aside.dismiss?.();
-    };
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, [aside]);
   return (
     <Sheet
       open
       onOpenChange={(next) => {
-        if (!next) aside.dismiss?.();
+        if (!next) aside.dismiss();
       }}
     >
       <SheetPopup
@@ -316,6 +321,8 @@ function MainColumn({
 }) {
   const stageAside = useStageAside();
   const isMobile = useIsMobile();
+  const asideRootRef = useRef<HTMLDivElement | null>(null);
+  useStageAsideEscape(stageAside, asideRootRef);
   return (
     <div className="flex min-h-0 flex-1 flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -339,6 +346,7 @@ function MainColumn({
         <div
           className="flex h-full min-h-0 w-(--pa-stage-aside) shrink-0 flex-col border-pa-line border-l-[0.5px]"
           data-slot="chart-stage-aside"
+          ref={asideRootRef}
           style={
             { "--pa-stage-aside": `${STAGE_ASIDE_WIDTH[stageAside.face]}px` } as React.CSSProperties
           }
@@ -346,15 +354,17 @@ function MainColumn({
           {stageAside.node}
         </div>
       ) : null}
-      {stageAside && isMobile ? <StageAsideSheet aside={stageAside} /> : null}
+      {stageAside && isMobile ? (
+        <StageAsideSheet aside={stageAside} popupRef={asideRootRef} />
+      ) : null}
     </div>
   );
 }
 
 /**
  * 清单 / 详情同槽 titlebar：
- * - 列表：页名 +「+ 新建」
- * - 详情：`父级 / 当前` 面包屑（与列表页名同一位置，一脉相承）
+ * - 列表：页名 + 页面登记的动作（「+ 新建」）
+ * - 详情：`父级 / 当前` 面包屑（与列表页名同一位置，一脉相承）+ 页面登记的动作
  * - 其它：仅侧栏收起时显示 Trigger + 短名 + 搜索
  *
  * 三种载荷同高（`Titlebar` 基线）：收侧栏时若换一档矮条，页内容会随开合上下跳。
@@ -371,9 +381,7 @@ function ShellTitlebar({
   title: string;
   onOpenSearch: () => void;
 }) {
-  const listActions = useListChromeActions();
   const detailCrumb = useDetailCrumb();
-  const detailActions = useDetailChromeActions();
   const isMobile = useIsMobile();
   /**
    * 窄屏侧栏是抽屉（Sheet），只能从这条题条的汉堡钮拉开——抽屉自身那个钮在抽屉里面，
@@ -413,8 +421,7 @@ function ShellTitlebar({
         )}
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        {detailCrumb ? detailActions : null}
-        {listChrome && !detailCrumb ? listActions : null}
+        <TitlebarActionsOutlet />
         {showTrigger ? <SidebarSearchButton onClick={onOpenSearch} /> : null}
       </div>
     </Titlebar>

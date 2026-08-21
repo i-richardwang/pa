@@ -1,5 +1,6 @@
 import { PanelRightIcon } from "lucide-react";
 import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
+import { LoadingMark } from "pa-result-view";
 import { HeaderIconButton } from "../layout/view_chrome";
 import { Titlebar } from "@/components/ui/titlebar";
 import { ReportQueryRail } from "./report_query_rail";
@@ -38,7 +39,7 @@ export function ReportInspector({
       </Titlebar>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {!draft ? (
-          <p className="px-4 pt-3 text-sm text-pa-muted leading-5">正在载入配置…</p>
+          <LoadingMark className="py-6" />
         ) : (
           <ReportQueryRail
             catalog={catalog}

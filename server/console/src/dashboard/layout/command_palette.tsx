@@ -5,6 +5,7 @@
  * 数据首开时拉取并缓存本次会话；任一数据源失败只缺该源不整体失败。
  */
 import { useEffect, useMemo, useState } from "react";
+import { LoadingMark } from "pa-result-view";
 import {
   ArrowRightIcon,
   BookOpenIcon,
@@ -38,13 +39,20 @@ import {
   useReportsList,
 } from "../dashboard_queries";
 import { DiamondFilled, DiamondOutline } from "../analyses/member_picker";
-import { analysisHash, analysisNewHash, boardHash, reportHash, type RouteKey } from "../router";
+import {
+  analysisHash,
+  analysisNewHash,
+  boardHash,
+  navigateTo,
+  reportHash,
+  type RouteKey,
+} from "../router";
 import type { NavEntry } from "./navigation";
 
 export type PaletteItem =
-  /** 动作项：目标不是一个已存在的资产，故不进「最近打开」。 */
   | { kind: "action"; label: string; hash: string }
   | { kind: "nav"; key: RouteKey; label: string }
+  | { kind: "settings" }
   | { kind: "board"; id: string; name: string }
   | { kind: "report"; id: string; name: string }
   | { kind: "analysis"; id: string; title: string }
@@ -54,8 +62,6 @@ export type PaletteItem =
 
 type PaletteGroup = { value: string; items: PaletteItem[] };
 
-const RECENTS_KEY = "pa.palette.recents";
-const RECENTS_MAX = 6;
 /** 指标字典页读后即清，见 catalog_page 的 keyword 初始化。 */
 export const CATALOG_PREFILL_KEY = "pa.catalog.q";
 
@@ -65,6 +71,8 @@ function itemText(item: PaletteItem): string {
       return item.label;
     case "nav":
       return item.label;
+    case "settings":
+      return "设置";
     case "board":
       return item.name;
     case "report":
@@ -93,6 +101,8 @@ function itemKey(item: PaletteItem): string {
       return `action:${item.hash}`;
     case "nav":
       return `nav:${item.key}`;
+    case "settings":
+      return "settings";
     case "board":
       return `board:${item.id}`;
     case "report":
@@ -113,7 +123,9 @@ function itemIcon(item: PaletteItem): React.ReactElement {
     case "action":
       return <PlusIcon />;
     case "nav":
-      return item.key === "settings" ? <SettingsIcon /> : <ArrowRightIcon />;
+      return <ArrowRightIcon />;
+    case "settings":
+      return <SettingsIcon />;
     case "board":
       return <LayoutDashboardIcon />;
     case "report":
@@ -134,6 +146,7 @@ function itemHint(item: PaletteItem): string {
     case "action":
       return "新建";
     case "nav":
+    case "settings":
       return "页面";
     case "board":
       return "看板";
@@ -148,23 +161,6 @@ function itemHint(item: PaletteItem): string {
     case "business_term":
       return "业务术语";
   }
-}
-
-function readRecents(): PaletteItem[] {
-  try {
-    const raw = localStorage.getItem(RECENTS_KEY);
-    return raw ? (JSON.parse(raw) as PaletteItem[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function pushRecent(item: PaletteItem): void {
-  const next = [item, ...readRecents().filter((r) => itemKey(r) !== itemKey(item))].slice(
-    0,
-    RECENTS_MAX,
-  );
-  localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
 }
 
 export function CommandPalette({
@@ -182,8 +178,8 @@ export function CommandPalette({
   /** 已按角色过滤的主导航（设置项由本组件补充）。 */
   navItems: readonly NavEntry[];
   navigate: (r: RouteKey) => void;
-  /** 设置走弹层，不占 `#/settings` 整页。 */
-  onOpenSettings?: () => void;
+  /** 设置是壳上的弹层，由壳打开。 */
+  onOpenSettings: () => void;
 }) {
   const [q, setQ] = useState("");
   // 首开拉取并缓存本次会话；任一数据源失败只缺该分组（isError → 空组），面板保持可用不整体失败。
@@ -260,7 +256,7 @@ export function CommandPalette({
   ];
   const navGroup: PaletteItem[] = [
     ...navItems.map((n): PaletteItem => ({ kind: "nav", key: n.key, label: n.label })),
-    { kind: "nav", key: "settings", label: "设置" },
+    { kind: "settings" },
   ];
 
   const idle = q.trim() === "";
@@ -282,28 +278,24 @@ export function CommandPalette({
 
   function pick(item: PaletteItem) {
     onOpenChange(false);
-    // 动作没有「打开过」的语义，不进最近列表。
-    if (item.kind === "action") {
-      window.location.hash = item.hash;
-      return;
-    }
-    pushRecent(item);
     switch (item.kind) {
+      case "action":
+        navigateTo(item.hash);
+        break;
       case "nav":
-        if (item.key === "settings" && onOpenSettings) {
-          onOpenSettings();
-          break;
-        }
         navigate(item.key);
         break;
+      case "settings":
+        onOpenSettings();
+        break;
       case "board":
-        window.location.hash = boardHash(item.id);
+        navigateTo(boardHash(item.id));
         break;
       case "report":
-        window.location.hash = reportHash(item.id);
+        navigateTo(reportHash(item.id));
         break;
       case "analysis":
-        window.location.hash = analysisHash(item.id);
+        navigateTo(analysisHash(item.id));
         break;
       case "member":
       case "metric_domain":
@@ -317,7 +309,9 @@ export function CommandPalette({
     }
   }
 
-  const loading = !idle && (boards === null || catalog === null || terms === null);
+  // 任一数据源还没回来就算在等：搜索面覆盖的每一源都算数。
+  const loading =
+    !idle && [boards, reports, analyses, catalog, terms].some((source) => source === null);
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
@@ -332,7 +326,9 @@ export function CommandPalette({
           {/* 空态只有输入行 + 脚注；有查询字才展开结果区 */}
           {!idle ? (
             <CommandPanel>
-              <CommandEmpty>{loading ? "载入中…" : "没有匹配的结果"}</CommandEmpty>
+              <CommandEmpty>
+                {loading ? <LoadingMark size="small" /> : "没有匹配的结果"}
+              </CommandEmpty>
               <CommandList>
                 {(group: PaletteGroup) => (
                   <CommandGroup key={group.value} items={group.items}>

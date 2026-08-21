@@ -65,13 +65,9 @@ import {
   type BoardEditState,
 } from "./board_draft";
 import { HeaderTextAction } from "../layout/view_chrome";
-import {
-  useSetDetailChromeActions,
-  useSetDetailCrumb,
-  useSetMainSurface,
-} from "../layout/layout_chrome";
+import { useSetDetailCrumb, useSetTitlebarActions } from "../layout/layout_chrome";
 import { CodeCopyButton } from "../kit/copy_button";
-import { boardHash, useLeaveBlocker } from "../router";
+import { boardHash, navigateTo, useLeaveBlocker } from "../router";
 import {
   RecordProjectionDialog,
   type RecordProjectionDialogRequest,
@@ -168,7 +164,7 @@ export function BoardPage({
   const saveBoard = useSaveBoard(id);
   const setTime = useCallback(
     (next: TimeIntent | null) => {
-      window.location.hash = boardHash(id, next).slice(1);
+      navigateTo(boardHash(id, next));
     },
     [id],
   );
@@ -192,8 +188,6 @@ export function BoardPage({
     }),
     [editing, draft?.name, data?.name],
   );
-
-  useSetMainSurface("canvas");
 
   const enterEdit = useCallback(() => {
     if (!data) return;
@@ -271,7 +265,7 @@ export function BoardPage({
    * 编辑态题条只放「取消」+「完成」；「重命名」沉到卡内 hero（仍开同一对话，不挤题条）。
    * 板级时间设置入口亦在 hero。
    */
-  useSetDetailChromeActions(() => {
+  useSetTitlebarActions(() => {
     if (editing) {
       return (
         <>

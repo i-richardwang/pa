@@ -47,8 +47,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RowBadge, useSetSettingsActions } from "../kit/settings_kit";
-import { ListControlBar, ListControlCategory, ListControlSearch } from "../layout/layout_chrome";
+import { RowBadge } from "../kit/settings_kit";
+import {
+  ListControlBar,
+  ListControlCategory,
+  ListControlSearch,
+  useSetTitlebarActions,
+} from "../layout/layout_chrome";
 import { HeaderTextAction } from "../layout/view_chrome";
 import { RowMenu, SortableHead, useTableSort } from "../kit/table_kit";
 import {
@@ -128,7 +133,7 @@ export function UsersPage({ me }: { me: MePayload }) {
   }, [users, roleFacet, query]);
   const { rows, sort, toggle } = useTableSort(users ? matched : undefined, USER_SORT);
 
-  useSetSettingsActions(
+  useSetTitlebarActions(
     () => (
       <HeaderTextAction onClick={() => setShowCreate(true)}>
         <PlusIcon aria-hidden="true" />

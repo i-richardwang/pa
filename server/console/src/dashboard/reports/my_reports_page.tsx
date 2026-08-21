@@ -1,6 +1,6 @@
 /**
  * 我的报告清单：titlebar + 灰控制条 + 全宽裸铺表。
- * 「报告 / 查询记录」进控制条分面片（hash 分面）；「新建分析」挂 titlebar。
+ * 「报告 / 查询记录」是控制条分面；「新建分析」挂 titlebar。
  */
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -34,23 +34,25 @@ import {
   ListControlSearch,
   ListPageBody,
   ListScrollBody,
-  ListSegment,
-  ListSegmentGroup,
-  useSetListChromeActions,
+  useSetTitlebarActions,
 } from "../layout/layout_chrome";
 import { HeaderTextAction } from "../layout/view_chrome";
 import { PRESENTATION_TYPE_LABELS } from "../analyses/presentation_labels";
 import { QueryHistoryTab } from "./query_history_tab";
-import { analysisNewHash, reportHash, reportsHash, reportsHistoryHash } from "../router";
+import { analysisNewHash, type ReportsFacet, reportHash, reportsHash } from "../router";
 import {
   DaysRangeChips,
+  ListFacets,
   ResourceName,
   RowMenu,
   SortableHead,
   useTableSort,
 } from "../kit/table_kit";
 
-export type ReportsTab = "reports" | "history";
+const REPORTS_FACETS: ReadonlyArray<{ value: ReportsFacet; label: string; hash: string }> = [
+  { value: "reports", label: "报告", hash: reportsHash("reports") },
+  { value: "history", label: "查询记录", hash: reportsHash("history") },
+];
 
 const REPORT_SORT: Record<
   "name" | "type" | "updated",
@@ -61,12 +63,12 @@ const REPORT_SORT: Record<
   updated: (row) => row.updated_at,
 };
 
-export function MyReportsPage({ tab }: { tab: ReportsTab }) {
+export function MyReportsPage({ facet }: { facet: ReportsFacet }) {
   const [days, setDays] = useState<number>(30);
   const [offset, setOffset] = useState(0);
   const [query, setQuery] = useState("");
 
-  useSetListChromeActions(
+  useSetTitlebarActions(
     () => (
       <HeaderTextAction render={<a href={analysisNewHash()} />}>
         <PlusIcon aria-hidden="true" />
@@ -79,29 +81,10 @@ export function MyReportsPage({ tab }: { tab: ReportsTab }) {
   return (
     <ListPageBody>
       <ListControlBar
-        left={
-          <ListSegmentGroup label="看哪一批">
-            <ListSegment
-              selected={tab === "reports"}
-              onClick={() => {
-                window.location.hash = reportsHash();
-              }}
-            >
-              报告
-            </ListSegment>
-            <ListSegment
-              selected={tab === "history"}
-              onClick={() => {
-                window.location.hash = reportsHistoryHash();
-              }}
-            >
-              查询记录
-            </ListSegment>
-          </ListSegmentGroup>
-        }
+        left={<ListFacets label="看哪一批" options={REPORTS_FACETS} value={facet} />}
         right={
           <>
-            {tab === "history" && (
+            {facet === "history" && (
               <DaysRangeChips
                 days={days}
                 onDays={(next) => {
@@ -110,14 +93,14 @@ export function MyReportsPage({ tab }: { tab: ReportsTab }) {
                 }}
               />
             )}
-            {tab === "reports" && (
+            {facet === "reports" && (
               <ListControlSearch aria-label="搜索报告" value={query} onValueChange={setQuery} />
             )}
           </>
         }
       />
       <ListScrollBody>
-        {tab === "reports" ? (
+        {facet === "reports" ? (
           <ReportsList query={query} />
         ) : (
           <div className="mt-5">

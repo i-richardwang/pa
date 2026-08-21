@@ -13,6 +13,7 @@ import {
 import { POPUP_ROW } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import { PRESENTATION_TYPE_LABELS } from "../analyses/presentation_labels";
+import { LoadingMark } from "pa-result-view";
 import { errorText, useReportsList } from "../dashboard_queries";
 
 const FOOTER_ACTION_CLASS = cn(
@@ -68,7 +69,7 @@ export function AddBoardWidget({
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
           {/* Empty 的根必须常挂着，读屏靠它播报结果条数的变化；变的只是它的孩子。 */}
           <AutocompleteEmpty className="not-empty:px-2.5 not-empty:py-6 text-center text-sm text-pa-faint">
-            {error ?? (reports === null ? "载入中…" : "没有匹配的报告")}
+            {error ?? (reports === null ? <LoadingMark size="small" /> : "没有匹配的报告")}
           </AutocompleteEmpty>
           <AutocompleteList className="not-empty:p-0">
             {(report: ReportRow) => {

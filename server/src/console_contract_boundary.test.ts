@@ -712,6 +712,47 @@ test("the spin is an escort to words, never a second waiting mark", async () => 
   }
 });
 
+/** 区域等内容时印出来的话：一行字不是等待标记。 */
+const WAITING_WORDS = /(?:正在)?(?:载入|加载)中|正在(?:载入|加载)/g;
+
+const LOADING_MARK_TAG = /<LoadingMark\b[^>]*>/g;
+
+/** 只看会印到界面上的字：注释里提一句、LoadingMark 自己念给读屏的名字都不算。 */
+function waitingWords(text: string): string[] {
+  return [...text.replace(COMMENT, "").replace(LOADING_MARK_TAG, "").matchAll(WAITING_WORDS)].map(
+    ([hit]) => hit,
+  );
+}
+
+test("region loading renders LoadingMark, never a line of waiting words", async () => {
+  expect(waitingWords('<p className="text-sm">载入中…</p>'), "探测器失灵").toHaveLength(1);
+  expect(
+    waitingWords('{pending ? "正在加载数据" : rows}'),
+    "探测器漏掉了表达式里的字",
+  ).toHaveLength(1);
+  expect(waitingWords("{pending ? <LoadingMark /> : rows}"), "探测器把标记本身算成了字").toEqual(
+    [],
+  );
+  expect(
+    waitingWords('<LoadingMark label="正在载入" />'),
+    "探测器把标记念给读屏的名字算成了界面上的字",
+  ).toEqual([]);
+  expect(waitingWords("// 载入中显示的名字\nconst a = 1;"), "探测器把注释也算了进来").toEqual([]);
+  expect(waitingWords("<Alert>加载失败</Alert>"), "探测器把别的加载话术也算了进来").toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  expect(
+    sources.some(({ text }) => text.includes("<LoadingMark")),
+    "控制台已无 LoadingMark，规则落空",
+  ).toBe(true);
+  for (const { name, text } of sources) {
+    expect(
+      waitingWords(text),
+      `console/src/${name} 用一行字顶替等待标记；区域等内容印 LoadingMark`,
+    ).toEqual([]);
+  }
+});
+
 const PIXEL_TYPOGRAPHY = /\b(?:text|leading)-\[\d+px\]|\bfont-\[\d+\]/g;
 const HAND_WRITTEN_RADIUS = /\brounded(?:-[a-z]+)?-\[(?!inherit\])[^\]]+\]/g;
 const DISPLAY_RAMP = "components/kpis.tsx";

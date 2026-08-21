@@ -80,9 +80,14 @@ export async function parseJsonResponse<T>(res: Response, schema: JsonSchema<T>)
 
 const request = parseJsonResponse;
 
-/** ISO 时间转本地简短显示（日志均为 UTC 存储） */
-export function formatAt(iso: string): string {
-  return new Date(iso).toLocaleString("zh-CN", {
+/**
+ * 控制台时间戳的唯一拼法：本地时区、年月日时分、数字等宽。
+ * 年带上是因为同一张表里既有上周的记录也有一年后的到期日；没有值印一道破折号。
+ */
+export function formatAt(at: string | Date | null | undefined): string {
+  if (!at) return "—";
+  return new Date(at).toLocaleString("zh-CN", {
+    year: "2-digit",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",

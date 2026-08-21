@@ -20,6 +20,7 @@ import type {
   PublicCatalogDocument as CatalogPayload,
 } from "@contracts/catalog_contract";
 import type { ReplayPayload } from "@contracts/replay_contract";
+import { LoadingMark } from "pa-result-view";
 import type { SemanticPercentOfTotalCalculation, SemanticQueryView } from "@semantic-analysis";
 import { makeTitleOf } from "@shape";
 import { Button } from "@/components/ui/button";
@@ -554,9 +555,11 @@ export function ReportQueryRail({
         <InspectorBody>
           {leading}
           <section className={INSPECTOR_SECTION_CLASS}>
-            <p className="px-2 text-sm/4.5 text-pa-muted">
-              {queryView ? "正在载入可用字段…" : "该分析仅支持调整呈现。"}
-            </p>
+            {queryView ? (
+              <LoadingMark className="py-6" />
+            ) : (
+              <p className="px-2 text-sm/4.5 text-pa-muted">该分析仅支持调整呈现。</p>
+            )}
           </section>
           {children}
         </InspectorBody>

@@ -1,9 +1,10 @@
 /**
  * 控制台清单页行文法：
- * - ResourceName：图标 + 名称，整块即行内链接
+ * - ListFacets：控制条左侧的分面片，切的是「看哪一批」
+ * - DaysRangeChips：控制条右侧的时间窗，筛的是「看多久之内」
+ * - ResourceName：行内名字格，整块即链接
  * - RowMenu：行尾 `…`
  * - useTableSort + SortableHead：客户端整表排序
- * - DaysRangeChips：查询记录时间窗（落在控制条右侧）
  */
 import { useMemo, useState } from "react";
 import { ChevronDownIcon, ChevronUpIcon, EllipsisIcon } from "lucide-react";
@@ -12,14 +13,40 @@ import { Menu, MenuPopup, MenuTrigger } from "@/components/ui/menu";
 import { TableHead } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { ListSegment, ListSegmentGroup } from "../layout/layout_chrome";
-
-/** 日志类清单的时间窗档位——我的报告「查询记录」与使用日志共用同一组档位。 */
-export const DAYS_RANGES = [7, 30, 90] as const;
+import { navigateTo } from "../router";
 
 /**
- * 时间窗分面：单选组，恒有一档选中。放在清单控制条右侧。
- * 时间窗只筛「看多久之内」，不改变看的是哪批东西，故不入 hash、不用 Tabs。
+ * 控制条上两类档位只有一条分界：分面改变看的是哪批东西，是页面的一个落点，
+ * 走 hash、可书签、可前进后退；筛选只收窄同一批东西的范围，留在页内状态。
+ * 两者同用分面片这一种控件，区别只在值落在哪。
  */
+export function ListFacets<T extends string>({
+  label,
+  value,
+  options,
+}: {
+  label: string;
+  value: T;
+  options: ReadonlyArray<{ value: T; label: string; hash: string }>;
+}): React.ReactElement {
+  return (
+    <ListSegmentGroup label={label}>
+      {options.map((option) => (
+        <ListSegment
+          key={option.value}
+          onClick={() => navigateTo(option.hash)}
+          selected={option.value === value}
+        >
+          {option.label}
+        </ListSegment>
+      ))}
+    </ListSegmentGroup>
+  );
+}
+
+const DAYS_RANGES = [7, 30, 90] as const;
+
+/** 日志类清单的时间窗：单选组，恒有一档选中。 */
 export function DaysRangeChips({
   days,
   onDays,

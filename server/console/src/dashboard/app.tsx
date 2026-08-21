@@ -1,8 +1,9 @@
 /**
- * 控制台应用壳：拉取 /api/me，套应用壳（AppBar + 侧栏导航，见 layout/shell.tsx），按 hash 路由渲染分页。
+ * 控制台应用：拉取 /api/me，套应用壳（侧栏导航 + 主区，见 layout/shell.tsx），按 hash 路由渲染分页。
  * 导航按角色分层（见 layout/shell.tsx），但访问边界始终是各端点的服务端守卫。
+ * 个人设置是壳上的居中弹层，由侧栏与命令面板打开，不占路由。
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { LoadingMark } from "pa-result-view";
 import { authClient } from "../auth_client";
 import { errorText, useMe } from "./dashboard_queries";
@@ -15,10 +16,38 @@ import { AnalysisNewPage } from "./analyses/analysis_new_page";
 import { AnalysisPage } from "./analyses/analysis_page";
 import { ReportPage } from "./reports/report_page";
 import { DataCapabilityMapPage } from "./catalog/data_capability_map_page";
-import { useHashRoute } from "./router";
+import { type Route, type RouteKey, useHashRoute } from "./router";
 import { DashboardShell, resolveRoute } from "./layout/shell";
 import { FeedbackPage } from "./admin/feedback_page";
 import { UsagePage } from "./admin/usage_page";
+
+/**
+ * 详情页是列表的带参子页：导航高亮与角色守卫都落在对应列表项上；
+ * 报告、查询记录与分析详情同属「我的报告」这一个导航项。
+ */
+function navKeyOf(route: Route): RouteKey {
+  switch (route.page) {
+    case "board":
+    case "board_report_edit":
+      return "boards";
+    case "report":
+    case "analysis":
+    case "analysis_new":
+      return "reports";
+    default:
+      return route.page;
+  }
+}
+
+function isDetailRoute(route: Route): boolean {
+  return (
+    route.page === "board" ||
+    route.page === "board_report_edit" ||
+    route.page === "report" ||
+    route.page === "analysis" ||
+    route.page === "analysis_new"
+  );
+}
 
 export function DashboardApp() {
   const meQuery = useMe();
@@ -26,21 +55,10 @@ export function DashboardApp() {
   const error = errorText(meQuery.error);
   const [route, navigate] = useHashRoute();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const settingsTab = route.page === "users" ? "users" : "account";
 
   async function signOut() {
     await authClient.signOut();
     window.location.assign("/login");
-  }
-
-  // `#/settings` 与 `#/users` 深链都打开弹层；关闭后回到报告列表，不把设置当整页。
-  useEffect(() => {
-    if (route.page === "settings" || route.page === "users") setSettingsOpen(true);
-  }, [route.page]);
-
-  function onSettingsOpenChange(open: boolean) {
-    setSettingsOpen(open);
-    if (!open && (route.page === "settings" || route.page === "users")) navigate("reports");
   }
 
   if (error) {
@@ -58,35 +76,9 @@ export function DashboardApp() {
     );
   }
 
-  // 详情页是列表的带参子页：导航高亮与角色守卫都落在对应列表项上；
-  // 报告、查询记录与分析详情同属「我的报告」这一个导航项。
-  const board = route.page === "board" ? route.id : null;
-  const boardReportEdit = route.page === "board_report_edit" ? route : null;
-  const report = route.page === "report" ? route.id : null;
-  const analysis = route.page === "analysis" ? route.id : null;
-  const analysisNew = route.page === "analysis_new";
-  const active = resolveRoute(
-    route.page === "board" || route.page === "board_report_edit"
-      ? "boards"
-      : route.page === "report" ||
-          route.page === "reports_history" ||
-          route.page === "analysis" ||
-          route.page === "analysis_new"
-        ? "reports"
-        : route.page === "settings" || route.page === "users"
-          ? "reports"
-          : route.page,
-    me.is_admin,
-  );
-  const isDetail = Boolean(board || boardReportEdit || report || analysis || analysisNew);
-  const listChrome =
-    !isDetail &&
-    (active === "boards" ||
-      active === "reports" ||
-      active === "catalog" ||
-      active === "model" ||
-      active === "usage" ||
-      active === "feedback");
+  const active = resolveRoute(navKeyOf(route), me.is_admin);
+  // 角色守卫把路由归一到默认页时，页面也按归一后的导航项渲染。
+  const page: Route = navKeyOf(route) === active ? route : { page: "reports", facet: "reports" };
 
   return (
     <DashboardShell
@@ -94,39 +86,33 @@ export function DashboardApp() {
       route={active}
       navigate={navigate}
       onSignOut={signOut}
-      listChrome={listChrome}
+      listChrome={!isDetailRoute(page)}
+      mainSurface={page.page === "board" ? "canvas" : "card"}
       settingsOpen={settingsOpen}
-      settingsTab={settingsTab}
-      onSettingsOpenChange={onSettingsOpenChange}
+      onSettingsOpenChange={setSettingsOpen}
     >
-      {boardReportEdit && active === "boards" ? (
-        <BoardReportEditPage
-          boardId={boardReportEdit.boardId}
-          reportId={boardReportEdit.reportId}
-        />
-      ) : board && active === "boards" ? (
-        <BoardPage
-          me={me}
-          id={board}
-          timeOverride={route.page === "board" ? (route.time ?? null) : null}
-        />
-      ) : report && active === "reports" ? (
-        <ReportPage id={report} />
-      ) : analysisNew && active === "reports" ? (
+      {page.page === "board_report_edit" ? (
+        <BoardReportEditPage boardId={page.boardId} reportId={page.reportId} />
+      ) : page.page === "board" ? (
+        <BoardPage me={me} id={page.id} timeOverride={page.time ?? null} />
+      ) : page.page === "report" ? (
+        <ReportPage id={page.id} />
+      ) : page.page === "analysis_new" ? (
         <AnalysisNewPage />
-      ) : analysis && active === "reports" ? (
-        <AnalysisPage id={analysis} />
+      ) : page.page === "analysis" ? (
+        <AnalysisPage id={page.id} />
+      ) : page.page === "boards" ? (
+        <BoardsPage me={me} />
+      ) : page.page === "reports" ? (
+        <MyReportsPage facet={page.facet} />
+      ) : page.page === "catalog" ? (
+        <CatalogPage />
+      ) : page.page === "model" ? (
+        <DataCapabilityMapPage />
+      ) : page.page === "usage" ? (
+        <UsagePage facet={page.facet} />
       ) : (
-        <>
-          {active === "boards" && <BoardsPage me={me} />}
-          {active === "reports" && (
-            <MyReportsPage tab={route.page === "reports_history" ? "history" : "reports"} />
-          )}
-          {active === "catalog" && <CatalogPage />}
-          {active === "model" && me.is_admin && <DataCapabilityMapPage />}
-          {active === "usage" && me.is_admin && <UsagePage />}
-          {active === "feedback" && me.is_admin && <FeedbackPage />}
-        </>
+        <FeedbackPage />
       )}
     </DashboardShell>
   );

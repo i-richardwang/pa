@@ -15,6 +15,7 @@ import { ReportHistoryDialog } from "./report_history_dialog";
 import { useArchiveReport, useReportResource } from "../editor_queries";
 import { useAnalysisEditSession } from "../analyses/use_analysis_edit_session";
 import { HeaderMenu } from "../layout/view_chrome";
+import { navigateTo, reportsHash } from "../router";
 import { AddToBoardAction } from "./add_to_board_picker";
 import { useRecordProjection } from "./use_record_projection";
 
@@ -60,7 +61,7 @@ export function ReportPage({ id }: { id: string }) {
     queryClient.setQueryData<ReportsPayload>(dashboardKeys.reports, (current) =>
       current ? { ...current, rows: current.rows.filter((row) => row.id !== reportId) } : current,
     );
-    window.location.hash = "/reports";
+    navigateTo(reportsHash());
     performUndoable({
       title: `已归档「${name}」`,
       failureTitle: "归档失败",

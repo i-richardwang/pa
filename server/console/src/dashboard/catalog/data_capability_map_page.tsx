@@ -1,12 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -42,6 +34,7 @@ import type {
   DataCapabilityMapDimensionGroup,
 } from "@data-capability-map";
 import { PLOT_RADIUS } from "@charts";
+import { LoadingMark } from "pa-result-view";
 import { Button } from "@/components/ui/button";
 import { InspectorProfileCard, InspectorRow, InspectorSection } from "@/components/ui/inspector";
 import { ProfileAside } from "../layout/view_chrome";
@@ -66,14 +59,6 @@ import {
   type LaneKey,
   type ListedMember,
 } from "./data_capability_map";
-
-const CapabilityMapContext = createContext<DataCapabilityMapData | null>(null);
-
-function useCapabilityMapData(): DataCapabilityMapData {
-  const data = useContext(CapabilityMapContext);
-  if (!data) throw new Error("数据能力地图缺少运行时语义包上下文");
-  return data;
-}
 
 function factsByName(data: DataCapabilityMapData): Map<string, DataCapabilityMapFact> {
   return new Map(data.facts.map((fact) => [fact.name, fact]));
@@ -101,6 +86,8 @@ const HANDLE_STYLE = {
 
 type CapabilityNodeData = {
   ref: CapabilityNodeRef;
+  /** 节点副行，装配节点时算好：节点件只画自己拿到的数据。 */
+  summary: string;
   dimmed: boolean;
   active: boolean;
 };
@@ -137,7 +124,6 @@ function nodeSummary(ref: CapabilityNodeRef, data: DataCapabilityMapData): strin
 
 function CapabilityNode({ data }: NodeProps<CapabilityFlowNode>) {
   const { ref } = data;
-  const capabilityMap = useCapabilityMapData();
   return (
     <div
       className={cn(
@@ -181,9 +167,7 @@ function CapabilityNode({ data }: NodeProps<CapabilityFlowNode>) {
         </span>
         <div className="min-w-0 flex-1 truncate font-medium text-sm">{nodeTitle(ref)}</div>
       </header>
-      <div className="px-3 pt-1 pb-2.5 text-pa-muted text-xs">
-        {nodeSummary(ref, capabilityMap)}
-      </div>
+      <div className="px-3 pt-1 pb-2.5 text-pa-muted text-xs">{data.summary}</div>
     </div>
   );
 }
@@ -312,8 +296,13 @@ function domainTitlesOfGroup(
  * 头卡：这一条构件本身是什么——名字、口径，以及它在图上那几根线读不出名字的去向。
  * 物理表名与语义 id 不进这里：控制台只说业务的话。
  */
-function CapabilityProfileCard({ nodeRef }: { nodeRef: CapabilityNodeRef }) {
-  const capabilityMap = useCapabilityMapData();
+function CapabilityProfileCard({
+  nodeRef,
+  capabilityMap,
+}: {
+  nodeRef: CapabilityNodeRef;
+  capabilityMap: DataCapabilityMapData;
+}) {
   const relations: { label: string; names: string[] }[] = [];
   let description: string | null = null;
   if (nodeRef.kind === "fact") {
@@ -350,8 +339,13 @@ function CapabilityProfileCard({ nodeRef }: { nodeRef: CapabilityNodeRef }) {
   );
 }
 
-function FactInspectorBody({ fact }: { fact: DataCapabilityMapFact }) {
-  const capabilityMap = useCapabilityMapData();
+function FactInspectorBody({
+  fact,
+  capabilityMap,
+}: {
+  fact: DataCapabilityMapFact;
+  capabilityMap: DataCapabilityMapData;
+}) {
   // 被属性组认领的维度归属左列组节点，事实本体清单只列剩余内容。
   const grouped = groupedNamesOf(capabilityMap, fact.name);
   const own = listedMembers(
@@ -378,8 +372,13 @@ function FactInspectorBody({ fact }: { fact: DataCapabilityMapFact }) {
   );
 }
 
-function DimensionGroupInspectorBody({ group }: { group: DataCapabilityMapDimensionGroup }) {
-  const capabilityMap = useCapabilityMapData();
+function DimensionGroupInspectorBody({
+  group,
+  capabilityMap,
+}: {
+  group: DataCapabilityMapDimensionGroup;
+  capabilityMap: DataCapabilityMapData;
+}) {
   const factByName = factsByName(capabilityMap);
   const members = group.members.flatMap((name): ListedMember[] => {
     for (const binding of group.bindings) {
@@ -410,8 +409,13 @@ function DimensionGroupInspectorBody({ group }: { group: DataCapabilityMapDimens
 }
 
 /** 指标域展示规范指标、共同分析维度与正式指标图解析出的物理事实血缘。 */
-function MetricDomainInspectorBody({ topic }: { topic: DataCapabilityMapMetricDomain }) {
-  const capabilityMap = useCapabilityMapData();
+function MetricDomainInspectorBody({
+  topic,
+  capabilityMap,
+}: {
+  topic: DataCapabilityMapMetricDomain;
+  capabilityMap: DataCapabilityMapData;
+}) {
   const factByName = factsByName(capabilityMap);
   const metrics: ListedMember[] = topic.metrics.map((metric) => ({
     name: metric.name,
@@ -445,19 +449,28 @@ function MetricDomainInspectorBody({ topic }: { topic: DataCapabilityMapMetricDo
   );
 }
 
+/** 档案由壳渲染在本页树之外，所以它读的地图数据随节点一起以 props 交出去。 */
 function CapabilityInspector({
   nodeRef,
+  capabilityMap,
   onClose,
 }: {
   nodeRef: CapabilityNodeRef;
+  capabilityMap: DataCapabilityMapData;
   onClose: () => void;
 }) {
   return (
     <ProfileAside closeLabel="关闭详情" label="能力档案" onClose={onClose}>
-      <CapabilityProfileCard nodeRef={nodeRef} />
-      {nodeRef.kind === "fact" && <FactInspectorBody fact={nodeRef.fact} />}
-      {nodeRef.kind === "dimension_group" && <DimensionGroupInspectorBody group={nodeRef.group} />}
-      {nodeRef.kind === "metric_domain" && <MetricDomainInspectorBody topic={nodeRef.topic} />}
+      <CapabilityProfileCard capabilityMap={capabilityMap} nodeRef={nodeRef} />
+      {nodeRef.kind === "fact" && (
+        <FactInspectorBody capabilityMap={capabilityMap} fact={nodeRef.fact} />
+      )}
+      {nodeRef.kind === "dimension_group" && (
+        <DimensionGroupInspectorBody capabilityMap={capabilityMap} group={nodeRef.group} />
+      )}
+      {nodeRef.kind === "metric_domain" && (
+        <MetricDomainInspectorBody capabilityMap={capabilityMap} topic={nodeRef.topic} />
+      )}
     </ProfileAside>
   );
 }
@@ -480,8 +493,7 @@ function MapCameraControls() {
   );
 }
 
-function DataCapabilityMapContent() {
-  const capabilityMap = useCapabilityMapData();
+function DataCapabilityMapContent({ capabilityMap }: { capabilityMap: DataCapabilityMapData }) {
   const [selected, setSelected] = useState<string | null>(null);
   const { fitView } = useReactFlow();
 
@@ -498,16 +510,6 @@ function DataCapabilityMapContent() {
     ],
     [columns],
   );
-
-  // Esc 与点空白、关闭钮同义：清除选中（检查器随之收起）
-  useEffect(() => {
-    if (!selected) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSelected(null);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selected]);
 
   const cameraReady = useRef(false);
   useEffect(() => {
@@ -548,13 +550,14 @@ function DataCapabilityMapContent() {
         height: NODE_HEIGHT,
         data: {
           ref,
+          summary: nodeSummary(ref, capabilityMap),
           dimmed: highlight ? !highlight.nodes.has(id) : false,
           active: selected === id,
         },
       };
     });
     return [...laneNodes, ...capabilityNodes];
-  }, [highlight, layout, refs, selected]);
+  }, [capabilityMap, highlight, layout, refs, selected]);
 
   const edges = useMemo<CapabilityFlowEdge[]>(
     () =>
@@ -589,16 +592,14 @@ function DataCapabilityMapContent() {
 
   const clearSelection = useCallback(() => setSelected(null), []);
 
-  /*
-    档案由壳渲染，落在本页的 Provider 之外——语义包上下文要随节点一起交出去，
-    否则档案里读上下文的那几处会当场抛「缺少运行时语义包上下文」。
-  */
   useSetStageAside(
     () =>
       selectedRef ? (
-        <CapabilityMapContext.Provider value={capabilityMap}>
-          <CapabilityInspector nodeRef={selectedRef} onClose={clearSelection} />
-        </CapabilityMapContext.Provider>
+        <CapabilityInspector
+          capabilityMap={capabilityMap}
+          nodeRef={selectedRef}
+          onClose={clearSelection}
+        />
       ) : null,
     [capabilityMap, selectedRef, clearSelection],
     clearSelection,
@@ -644,21 +645,17 @@ function DataCapabilityMapContent() {
 
 export function DataCapabilityMapPage() {
   const query = useCapabilityMapQuery();
-  if (query.isPending) {
-    return <div className="p-6 text-pa-muted text-sm">正在加载数据能力地图…</div>;
-  }
+  if (query.isPending) return <LoadingMark />;
   if (!query.data) {
     return (
-      <div className="p-6 text-pa-danger text-sm" role="alert">
+      <div className="p-6 text-pa-danger-fg text-sm" role="alert">
         {errorText(query.error) ?? "数据能力地图不可用"}
       </div>
     );
   }
   return (
-    <CapabilityMapContext.Provider value={query.data}>
-      <ReactFlowProvider>
-        <DataCapabilityMapContent />
-      </ReactFlowProvider>
-    </CapabilityMapContext.Provider>
+    <ReactFlowProvider>
+      <DataCapabilityMapContent capabilityMap={query.data} />
+    </ReactFlowProvider>
   );
 }

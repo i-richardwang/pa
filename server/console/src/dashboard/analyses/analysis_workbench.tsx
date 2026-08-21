@@ -24,7 +24,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import {
-  useSetDetailChromeActions,
+  useSetTitlebarActions,
   useSetDetailCrumb,
   useSetStageAside,
 } from "../layout/layout_chrome";
@@ -75,7 +75,7 @@ export function AnalysisWorkbench({
     () => ({ parentHref: crumb.href, parentLabel: crumb.label, current }),
     [crumb.href, crumb.label, current],
   );
-  useSetDetailChromeActions(
+  useSetTitlebarActions(
     () => (
       <>
         {actions}

@@ -20,6 +20,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { LoadingMark } from "pa-result-view";
 import { ApiError, formatAt } from "../api";
 import { useReportRevisions, useUpdateReport } from "../editor_queries";
 
@@ -76,7 +77,7 @@ export function ReportHistoryDialog({
                 <AlertTitle>{error}</AlertTitle>
               </Alert>
             )}
-            {!data && !error && <p className="text-pa-muted text-sm">载入中…</p>}
+            {!data && !error && <LoadingMark className="py-6" />}
             {data?.rows.length === 0 && <EmptyPanel text="尚无历史版本" />}
             {data?.rows.map((row) => (
               <div key={row.revision} className="flex items-center gap-3 rounded-md border p-3">

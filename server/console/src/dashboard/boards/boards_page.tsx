@@ -46,7 +46,7 @@ import {
   ListScrollBody,
   ListSegment,
   ListSegmentGroup,
-  useSetListChromeActions,
+  useSetTitlebarActions,
 } from "../layout/layout_chrome";
 import { HeaderTextAction } from "../layout/view_chrome";
 import { ApiError, formatAt } from "../api";
@@ -92,7 +92,7 @@ export function BoardsPage({ me }: { me: MePayload }) {
   }, [data?.rows, query, owner, me.email]);
   const { rows, sort, toggle } = useTableSort(filtered, BOARD_SORT);
 
-  useSetListChromeActions(
+  useSetTitlebarActions(
     () => (
       <HeaderTextAction onClick={() => setShowCreate(true)}>
         <PlusIcon aria-hidden="true" />

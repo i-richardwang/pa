@@ -15,6 +15,7 @@ import {
   CommandList,
   CommandPanel,
 } from "@/components/ui/command";
+import { LoadingMark } from "pa-result-view";
 import { formatAt } from "../api";
 import { errorText, useMyAnalyses } from "../dashboard_queries";
 
@@ -45,7 +46,12 @@ export function AddFromAnalysisDialog({
           <CommandInput placeholder="搜索查询记录…" />
           <CommandPanel>
             <CommandEmpty>
-              {error ?? (rows === null ? "载入中…" : `近 ${LOOKBACK_DAYS} 天没有匹配的分析`)}
+              {error ??
+                (rows === null ? (
+                  <LoadingMark size="small" />
+                ) : (
+                  `近 ${LOOKBACK_DAYS} 天没有匹配的分析`
+                ))}
             </CommandEmpty>
             <CommandList>
               {(row: MyAnalysisRow) => (

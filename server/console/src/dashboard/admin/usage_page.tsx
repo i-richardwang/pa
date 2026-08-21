@@ -24,15 +24,10 @@ import {
 } from "@/components/ui/table";
 import { formatAt } from "../api";
 import { errorText, useUsage } from "../dashboard_queries";
-import {
-  ListControlBar,
-  ListPageBody,
-  ListScrollBody,
-  ListSegment,
-  ListSegmentGroup,
-} from "../layout/layout_chrome";
+import { ListControlBar, ListPageBody, ListScrollBody } from "../layout/layout_chrome";
 import { EmptyPanel } from "../kit/empty_panel";
-import { DaysRangeChips } from "../kit/table_kit";
+import { DaysRangeChips, ListFacets } from "../kit/table_kit";
+import { type UsageFacet, usageHash } from "../router";
 import { TablePager } from "../kit/table_pager";
 
 const TOOL_LABELS: Record<string, string> = {
@@ -50,12 +45,15 @@ const TOOL_LABELS: Record<string, string> = {
   feedback: "反馈",
 };
 
-type UsageTab = "titles" | "stats" | "unanswered";
+const USAGE_FACETS: ReadonlyArray<{ value: UsageFacet; label: string; hash: string }> = [
+  { value: "titles", label: "业务问题", hash: usageHash("titles") },
+  { value: "stats", label: "调用统计", hash: usageHash("stats") },
+  { value: "unanswered", label: "未答信号", hash: usageHash("unanswered") },
+];
 
-export function UsagePage() {
+export function UsagePage({ facet }: { facet: UsageFacet }) {
   const [days, setDays] = useState<number>(30);
   const [offset, setOffset] = useState(0);
-  const [tab, setTab] = useState<UsageTab>("titles");
 
   const usageQuery = useUsage(days, offset);
   const data = usageQuery.data ?? null;
@@ -65,19 +63,7 @@ export function UsagePage() {
   return (
     <ListPageBody>
       <ListControlBar
-        left={
-          <ListSegmentGroup label="看哪一批">
-            <ListSegment selected={tab === "titles"} onClick={() => setTab("titles")}>
-              业务问题
-            </ListSegment>
-            <ListSegment selected={tab === "stats"} onClick={() => setTab("stats")}>
-              调用统计
-            </ListSegment>
-            <ListSegment selected={tab === "unanswered"} onClick={() => setTab("unanswered")}>
-              未答信号
-            </ListSegment>
-          </ListSegmentGroup>
-        }
+        left={<ListFacets label="看哪一批" options={USAGE_FACETS} value={facet} />}
         right={
           <DaysRangeChips
             days={days}
@@ -100,16 +86,16 @@ export function UsagePage() {
           {data && (
             <div className={loading ? "space-y-6 opacity-60" : "space-y-6"}>
               <OverviewCards overview={data.overview} />
-              {tab === "titles" && (
+              {facet === "titles" && (
                 <TitlesCard titles={data.titles} offset={offset} onOffset={setOffset} />
               )}
-              {tab === "stats" && (
+              {facet === "stats" && (
                 <div className="space-y-6">
                   <VolumeCard overview={data.overview} />
                   <CallersCard overview={data.overview} />
                 </div>
               )}
-              {tab === "unanswered" && (
+              {facet === "unanswered" && (
                 <div className="space-y-6">
                   <ZeroHitsCard unanswered={data.unanswered} />
                   <ErrorsCard unanswered={data.unanswered} />

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
   CheckIcon,
   CircleAlertIcon,
@@ -69,8 +69,10 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { Titlebar } from "@/components/ui/titlebar";
+import { formatAt } from "../api";
 import { RowMenu } from "../kit/table_kit";
-import { RowBadge, SettingsChromeContext } from "../kit/settings_kit";
+import { RowBadge } from "../kit/settings_kit";
+import { TitlebarActionsOutlet, TitlebarActionsProvider } from "../layout/layout_chrome";
 import { UsersPage } from "./users_page";
 import {
   type ApiKeyRow,
@@ -89,32 +91,27 @@ export function SettingsDialog({
   me,
   open,
   onOpenChange,
-  tab: initialTab = "account",
 }: {
   me: MePayload;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 每次开启都回到这一节：弹层不留上次停在哪的记忆。 */
-  tab?: SettingsTab;
 }) {
-  const [tab, setTab] = useState<SettingsTab>(initialTab);
-  const [actions, setActions] = useState<ReactNode | null>(null);
-  const chrome = useMemo(() => ({ setActions }), []);
-
+  // 每次开启都回到账户一节：弹层不留上次停在哪的记忆。
+  const [tab, setTab] = useState<SettingsTab>("account");
   useEffect(() => {
-    if (open) setTab(initialTab);
-  }, [initialTab, open]);
+    if (open) setTab("account");
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPopup showCloseButton={false} variant="stage">
         <DialogTitle className="sr-only">设置</DialogTitle>
-        <SettingsChromeContext.Provider value={chrome}>
+        <TitlebarActionsProvider>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:h-full md:flex-row">
             <SettingsAside me={me} onSelect={setTab} tab={tab} />
             <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
               <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1">
-                {actions}
+                <TitlebarActionsOutlet />
                 <DialogClose aria-label="关闭" render={<OverlayCloseButton />}>
                   <XIcon aria-hidden="true" />
                 </DialogClose>
@@ -138,7 +135,7 @@ export function SettingsDialog({
               </InspectorBody>
             </section>
           </div>
-        </SettingsChromeContext.Provider>
+        </TitlebarActionsProvider>
       </DialogPopup>
     </Dialog>
   );
@@ -286,17 +283,6 @@ const EXPIRY_OPTIONS: readonly { label: string; seconds: number | null }[] = [
   { label: "1 年", seconds: 365 * DAY },
 ];
 
-function fmt(d: string | Date | null | undefined): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleString("zh-CN", {
-    year: "2-digit",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function KeysPage() {
   const keysQuery = useApiKeys();
   const revokeKey = useRevokeApiKey();
@@ -374,10 +360,10 @@ function KeysPage() {
                     </div>
                   </TableCell>
                   <TableCell className="hidden text-pa-muted text-sm md:table-cell">
-                    {fmt(k.createdAt)}
+                    {formatAt(k.createdAt)}
                   </TableCell>
                   <TableCell className="hidden text-pa-muted text-sm md:table-cell">
-                    {fmt(k.lastRequest)}
+                    {formatAt(k.lastRequest)}
                   </TableCell>
                   <TableCell className="text-sm">
                     {k.expiresAt == null ? (
@@ -385,7 +371,7 @@ function KeysPage() {
                     ) : expired ? (
                       <Badge variant="warning">已过期</Badge>
                     ) : (
-                      <span className="text-pa-muted">{fmt(k.expiresAt)}</span>
+                      <span className="text-pa-muted">{formatAt(k.expiresAt)}</span>
                     )}
                   </TableCell>
                   <TableCell className="py-0 text-right">

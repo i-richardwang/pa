@@ -197,8 +197,8 @@ test("配置栏在草稿落地前就已在场：栏是壳的一列，不是结�
   const seeded = renderToStaticMarkup(
     <ReportInspector catalog={catalog} onCollapse={() => {}} session={session({})} />,
   );
-  expect(markup).toContain("正在载入配置…");
-  expect(seeded).not.toContain("正在载入配置…");
+  expect(markup).toContain('aria-label="正在加载"');
+  expect(seeded).not.toContain('aria-label="正在加载"');
 });
 
 test("同一栏里没有两个同名节题", () => {

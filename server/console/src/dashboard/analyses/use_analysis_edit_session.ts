@@ -30,7 +30,7 @@ import {
   type AnalysisEditState,
 } from "./analysis_draft";
 import { reportKeys, useDraftPreview, useRunDraft, useUpdateReport } from "../editor_queries";
-import { reportHash, useLeaveBlocker } from "../router";
+import { navigateTo, reportHash, useLeaveBlocker } from "../router";
 
 export type AnalysisEditorSeed = {
   name: string;
@@ -203,7 +203,7 @@ export function useAnalysisEditSession({
       const viewId = await materialize(draft);
       if (!viewId) return false;
       const report = await createReport.mutateAsync({ view_id: viewId, name: draft.name });
-      window.location.hash = reportHash(report.id).slice(1);
+      navigateTo(reportHash(report.id));
       toastManager.add({ type: "success", title: `已保存「${report.name}」` });
       return true;
     } catch (reason) {
@@ -234,7 +234,7 @@ export function useAnalysisEditSession({
       const viewId = await materialize(draft);
       if (!viewId) return false;
       const report = await createReport.mutateAsync({ view_id: viewId, name: draft.name });
-      window.location.hash = reportHash(report.id).slice(1);
+      navigateTo(reportHash(report.id));
       toastManager.add({ type: "success", title: `已另存为「${report.name}」` });
       return true;
     } catch (reason) {
