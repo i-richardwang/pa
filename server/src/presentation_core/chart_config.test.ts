@@ -17,54 +17,23 @@ import {
   type ChartModel,
   type ViewChart,
 } from "./chart_config.js";
-import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
+import type { ViewBlock } from "../semantic_core/query_payload.js";
+import { type Cell, viewBlock } from "../test_support/view_block.js";
 import type { ChartDecl, SeriesDisplay } from "./chart_decl.js";
 import { compileChart, makeTitleOf } from "./view_shape.js";
-
-type Cell = string | number | null;
 
 const completeDecl = (decl: Omit<ChartDecl, "tableLayout">): ChartDecl => ({
   ...decl,
   tableLayout: { rows: [], columns: [] },
 });
 
-function view(
-  columns: string[],
-  rows: Cell[][],
-  extras: {
-    formats?: Record<string, ColumnFormat>;
-    shares?: ViewBlock["structure_shares"];
-    roles?: ViewBlock["column_roles"];
-    decimals?: Record<string, number>;
-  } = {},
-): ViewBlock {
-  const defaultRoles = Object.fromEntries(
-    columns.map((column, index) => {
-      if (column === "year" || column === "month") return [column, "time"];
-      const values = rows.map((row) => row[index]).filter((value) => value !== null);
-      return [
-        column,
-        values.length && values.every((value) => Number.isFinite(Number(value)))
-          ? "measure"
-          : "dimension",
-      ];
-    }),
-  ) as ViewBlock["column_roles"];
-  return {
-    id: "result",
-    columns,
-    column_roles: extras.roles ?? defaultRoles,
-    rows,
-    row_count: rows.length,
-    query_notes: [
-      { member: "active_employee_count", title: "在职人数", text: "" },
-      { member: "ytd_primary_event_rate", title: "YTD主要事件率", text: "" },
-    ],
-    ...(extras.formats ? { column_formats: extras.formats } : {}),
-    ...(extras.decimals ? { column_decimals: extras.decimals } : {}),
-    ...(extras.shares ? { structure_shares: extras.shares } : {}),
-  };
-}
+const QUERY_NOTES = [
+  { member: "active_employee_count", title: "在职人数", text: "" },
+  { member: "ytd_primary_event_rate", title: "YTD主要事件率", text: "" },
+];
+
+const view = (...args: Parameters<typeof viewBlock>): ViewBlock =>
+  viewBlock(args[0], args[1], { queryNotes: QUERY_NOTES, ...args[2] });
 
 /** 真系列：折线的垫层追加在它们之后，形态断言只看前几条 */
 function realSeries<T>(chart: ViewChart): T[] {
@@ -727,6 +696,22 @@ describe("堆叠条形（双分类构成）", () => {
 });
 
 describe("无图形态与回答级块", () => {
+  test("编译产物带结构标题；标题只认字符串", () => {
+    const block = compilePresentationBlock(
+      view(
+        ["month", "active_employee_count"],
+        [
+          ["2026-01", 100],
+          ["2026-02", 102],
+        ],
+      ),
+      completeDecl({ type: "table", y: [] }),
+    );
+    expect(block.structure_title).toBe("在职人数");
+    expect(isPresentationBlock({ ...block, structure_title: 3 })).toBe(false);
+    expect(isPresentationBlock({ ...block, structure_title: undefined })).toBe(true);
+  });
+
   test("指标卡 / 空结果 → null", () => {
     expect(
       buildViewChart(view(["active_employee_count"], [[12345]]), { type: "kpi", y: [] }),

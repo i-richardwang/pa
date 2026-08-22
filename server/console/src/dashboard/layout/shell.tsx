@@ -31,7 +31,7 @@ import {
 import { Sheet, SheetPopup } from "@/components/ui/sheet";
 import { ToastProvider } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { RouteKey } from "../router";
+import type { RouteKey, SettingsTab } from "../router";
 import { useOpenerFocus } from "@/components/ui/command";
 import { CommandPalette } from "./command_palette";
 import type { NavEntry } from "./navigation";
@@ -47,7 +47,7 @@ import { cn } from "@/lib/utils";
 import { Titlebar } from "@/components/ui/titlebar";
 import { SettingsDialog } from "../admin/settings_page";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { isEditableTarget } from "@/lib/keyboard";
+import { escapeClaimsAside, isEditableTarget } from "@/lib/keyboard";
 
 /** 主区白面的两种底：清单与工作台坐白卡，看板坐画布灰。 */
 type MainSurface = "card" | "canvas";
@@ -137,6 +137,7 @@ export function DashboardShell({
   listChrome = false,
   mainSurface = "card",
   settingsOpen = false,
+  settingsTab,
   onSettingsOpenChange,
   children,
 }: {
@@ -149,6 +150,7 @@ export function DashboardShell({
   mainSurface?: MainSurface;
   /** 个人设置：居中弹层，不占路由页。 */
   settingsOpen?: boolean;
+  settingsTab?: SettingsTab;
   onSettingsOpenChange?: (open: boolean) => void;
   children: React.ReactNode;
 }) {
@@ -230,7 +232,12 @@ export function DashboardShell({
           />
           <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
           {onSettingsOpenChange ? (
-            <SettingsDialog me={me} onOpenChange={onSettingsOpenChange} open={settingsOpen} />
+            <SettingsDialog
+              me={me}
+              onOpenChange={onSettingsOpenChange}
+              open={settingsOpen}
+              tab={settingsTab}
+            />
           ) : null}
         </ShellChromeProvider>
       </TooltipProvider>
@@ -238,14 +245,9 @@ export function DashboardShell({
   );
 }
 
-/** 会把焦点收进自己身体里的浮层：它开着时 Esc 归它。 */
-const POPUP_SELECTOR = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
-
 /**
  * Esc 收起档案面右栏（`face: "profile"`）：它随一次选中而开，Esc 就是放下这条记录。
  * 配置面右栏是工作台的开关件，不随 Esc 收起。桌面推挤栏与窄屏 Sheet 同一条规则。
- * 右栏是最外一层：输入框里的 Esc 归输入法，浮层里的 Esc 归那层浮层；
- * 只有键落在浮层之外，或落在承载右栏的那个 Sheet 自身时，才算给右栏的。
  * 听在 document 捕获阶段：Sheet 原语没有触发件，不接管 Esc，也不保证事件冒得出来。
  */
 function useStageAsideEscape(
@@ -255,11 +257,7 @@ function useStageAsideEscape(
   useEffect(() => {
     if (aside?.face !== "profile") return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || isEditableTarget(event.target)) return;
-      const target = event.target instanceof Element ? event.target : null;
-      const popup = target?.closest(POPUP_SELECTOR) ?? null;
-      if (popup && popup !== rootRef.current) return;
-      aside.dismiss();
+      if (escapeClaimsAside(event, rootRef.current)) aside.dismiss();
     };
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);

@@ -33,6 +33,7 @@ function navKeyOf(route: Route): RouteKey {
     case "report":
     case "analysis":
     case "analysis_new":
+    case "settings":
       return "reports";
     default:
       return route.page;
@@ -55,6 +56,12 @@ export function DashboardApp() {
   const error = errorText(meQuery.error);
   const [route, navigate] = useHashRoute();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 深链打开的设置弹层关上即回报告列表：设置不是一页，hash 不停在它上面。
+  const settingsRoute = route.page === "settings" ? route : null;
+  function onSettingsOpenChange(open: boolean) {
+    setSettingsOpen(open);
+    if (!open && settingsRoute) navigate("reports");
+  }
 
   async function signOut() {
     await authClient.signOut();
@@ -78,7 +85,10 @@ export function DashboardApp() {
 
   const active = resolveRoute(navKeyOf(route), me.is_admin);
   // 角色守卫把路由归一到默认页时，页面也按归一后的导航项渲染。
-  const page: Route = navKeyOf(route) === active ? route : { page: "reports", facet: "reports" };
+  const page: Route =
+    navKeyOf(route) === active && route.page !== "settings"
+      ? route
+      : { page: "reports", facet: "reports" };
 
   return (
     <DashboardShell
@@ -88,8 +98,9 @@ export function DashboardApp() {
       onSignOut={signOut}
       listChrome={!isDetailRoute(page)}
       mainSurface={page.page === "board" ? "canvas" : "card"}
-      settingsOpen={settingsOpen}
-      onSettingsOpenChange={setSettingsOpen}
+      settingsOpen={settingsOpen || settingsRoute !== null}
+      settingsTab={settingsRoute?.tab}
+      onSettingsOpenChange={onSettingsOpenChange}
     >
       {page.page === "board_report_edit" ? (
         <BoardReportEditPage boardId={page.boardId} reportId={page.reportId} />

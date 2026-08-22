@@ -11,6 +11,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type { PresentedAccessScope } from "@contracts/access_scope";
+import type { SettingsTab } from "../router";
 import type { MePayload } from "@contracts/session_contract";
 import { LoadingMark } from "pa-result-view";
 import { useCopyToClipboard } from "@/hooks/use_copy_text";
@@ -82,8 +83,6 @@ import {
   useRevokeApiKey,
 } from "../dashboard_queries";
 
-type SettingsTab = "account" | "api" | "users";
-
 /** 表单类分节居中一栏读；清单类分节（成员表）铺满。 */
 const FORM_COLUMN_CLASS = "md:mx-auto md:max-w-2xl";
 
@@ -91,16 +90,18 @@ export function SettingsDialog({
   me,
   open,
   onOpenChange,
+  tab = "account",
 }: {
   me: MePayload;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** 开启时落在哪一节；缺省账户。弹层不留上次停在哪的记忆。 */
+  tab?: SettingsTab;
 }) {
-  // 每次开启都回到账户一节：弹层不留上次停在哪的记忆。
-  const [tab, setTab] = useState<SettingsTab>("account");
+  const [current, setCurrent] = useState<SettingsTab>(tab);
   useEffect(() => {
-    if (open) setTab("account");
-  }, [open]);
+    if (open) setCurrent(tab);
+  }, [tab, open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -108,7 +109,7 @@ export function SettingsDialog({
         <DialogTitle className="sr-only">设置</DialogTitle>
         <TitlebarActionsProvider>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:h-full md:flex-row">
-            <SettingsAside me={me} onSelect={setTab} tab={tab} />
+            <SettingsAside me={me} onSelect={setCurrent} tab={current} />
             <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
               <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1">
                 <TitlebarActionsOutlet />
@@ -121,12 +122,12 @@ export function SettingsDialog({
                 <div
                   className={cn(
                     "px-6 py-6 md:w-full md:px-8 md:py-12",
-                    tab === "users" ? "md:max-w-none" : FORM_COLUMN_CLASS,
+                    current === "users" ? "md:max-w-none" : FORM_COLUMN_CLASS,
                   )}
                 >
-                  {tab === "account" ? (
+                  {current === "account" ? (
                     <AccountPage me={me} />
-                  ) : tab === "users" ? (
+                  ) : current === "users" ? (
                     <UsersPage me={me} />
                   ) : (
                     <KeysPage />

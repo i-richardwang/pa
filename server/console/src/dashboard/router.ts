@@ -3,7 +3,8 @@
  * hash 路由无需服务端 catch-all，且保留浏览器前进后退与书签能力。
  * 看板与报告详情使用带参路由，使资产可被保存为书签和直接转发。
  * 页面分面（看哪一批东西）各占一个 hash 段，切分面同样可书签、可前进后退；
- * 筛选（看多大范围）留在页内状态。
+ * 筛选（看多大范围）留在页内状态。设置是浮在当前页上的弹层，`#/settings`、`#/users`
+ * 两个深链落在报告列表之上打开它。
  * 非法或空 hash 归一到默认页（reports，业务首屏）。
  */
 import { useEffect, useRef, useState } from "react";
@@ -13,12 +14,14 @@ import { TIME_INTENT_INPUT, type TimeIntent } from "@time";
 export type RouteKey = "boards" | "reports" | "catalog" | "model" | "usage" | "feedback";
 
 export type ReportsFacet = "reports" | "history";
+export type SettingsTab = "account" | "api" | "users";
 export type UsageFacet = "titles" | "stats" | "unanswered";
 
 export type Route =
   | { page: "boards" | "catalog" | "model" | "feedback" }
   | { page: "reports"; facet: ReportsFacet }
   | { page: "usage"; facet: UsageFacet }
+  | { page: "settings"; tab: SettingsTab }
   | { page: "board"; id: string; time?: TimeIntent }
   | { page: "board_report_edit"; boardId: string; reportId: string }
   | { page: "report"; id: string }
@@ -37,6 +40,7 @@ const BOARD_HASH = /^board\/([^/]+)$/;
 const BOARD_REPORT_EDIT_HASH = /^board\/([^/]+)\/report\/([^/]+)\/edit$/;
 const REPORTS_HASH = /^reports(?:\/(history))?$/;
 const USAGE_HASH = /^usage(?:\/(stats|unanswered))?$/;
+const SETTINGS_HASH = /^(settings|users)$/;
 const REPORT_HASH = /^report\/([^/]+)$/;
 /** `new` 是 analysis 命名空间下的保留段，必须先于 `analysis/:id` 匹配，否则会被当成分析 id */
 const ANALYSIS_NEW_HASH = /^analysis\/new$/;
@@ -86,6 +90,11 @@ export function usageHash(facet: UsageFacet = "titles"): string {
   return facet === "titles" ? "#/usage" : `#/usage/${facet}`;
 }
 
+/** 设置弹层的深链；成员页有自己的入口 `#/users`。 */
+export function settingsHash(tab: SettingsTab = "account"): string {
+  return tab === "users" ? "#/users" : "#/settings";
+}
+
 /** 空白新建分析页的 hash：尚未铸出快照，故以保留段 `new` 占位于 analysis/ 命名空间 */
 export function analysisNewHash(): string {
   return "#/analysis/new";
@@ -96,8 +105,9 @@ export function analysisHash(id: string): string {
   return `#/analysis/${id}`;
 }
 
-function parseHash(): Route {
-  const raw = window.location.hash.replace(/^#\/?/, "");
+/** hash（含或不含 `#/`）到路由：非法或空归默认页。 */
+export function parseRoute(hash: string): Route {
+  const raw = hash.replace(/^#\/?/, "");
   const [path, query = ""] = raw.split("?");
   const params = new URLSearchParams(query);
   const boardReportEdit = BOARD_REPORT_EDIT_HASH.exec(path);
@@ -113,6 +123,8 @@ function parseHash(): Route {
   if (reports) return { page: "reports", facet: reports[1] ? "history" : "reports" };
   const usage = USAGE_HASH.exec(path);
   if (usage) return { page: "usage", facet: (usage[1] as UsageFacet | undefined) ?? "titles" };
+  const settings = SETTINGS_HASH.exec(path);
+  if (settings) return { page: "settings", tab: settings[1] === "users" ? "users" : "account" };
   const report = REPORT_HASH.exec(path);
   if (report) return { page: "report", id: report[1] };
   if (ANALYSIS_NEW_HASH.test(path)) return { page: "analysis_new" };
@@ -155,7 +167,7 @@ export function useLeaveBlocker(active: boolean, confirm: () => Promise<boolean>
 }
 
 export function useHashRoute(): [Route, (r: RouteKey) => void] {
-  const [route, setRoute] = useState<Route>(parseHash);
+  const [route, setRoute] = useState<Route>(() => parseRoute(window.location.hash));
   // 当前生效的 hash：回滚拦截时不更新它，使回滚触发的 hashchange 回声被早退吞掉
   const currentRef = useRef<string>(window.location.hash);
   useEffect(() => {
@@ -175,7 +187,7 @@ export function useHashRoute(): [Route, (r: RouteKey) => void] {
         return;
       }
       currentRef.current = to;
-      setRoute(parseHash());
+      setRoute(parseRoute(to));
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);

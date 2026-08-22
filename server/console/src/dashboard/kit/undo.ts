@@ -37,10 +37,15 @@ export function performUndoable({
       void commit().catch((reason: unknown) => {
         revert();
         if (reason instanceof ApiError && reason.status === 401) return;
+        const conflict = reason instanceof ApiError && reason.status === 409;
         toastManager.add({
           type: "error",
-          title: failureTitle,
-          description: reason instanceof Error ? reason.message : String(reason),
+          title: conflict ? "对象已被其他操作更新" : failureTitle,
+          description: conflict
+            ? "请刷新后重试。"
+            : reason instanceof Error
+              ? reason.message
+              : String(reason),
         });
       });
     },
