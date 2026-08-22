@@ -242,7 +242,8 @@ export function DashboardShell({
 const POPUP_SELECTOR = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
 
 /**
- * Esc 收起工作台右栏，桌面推挤栏与窄屏 Sheet 同一条规则。
+ * Esc 收起档案面右栏（`face: "profile"`）：它随一次选中而开，Esc 就是放下这条记录。
+ * 配置面右栏是工作台的开关件，不随 Esc 收起。桌面推挤栏与窄屏 Sheet 同一条规则。
  * 右栏是最外一层：输入框里的 Esc 归输入法，浮层里的 Esc 归那层浮层；
  * 只有键落在浮层之外，或落在承载右栏的那个 Sheet 自身时，才算给右栏的。
  * 听在 document 捕获阶段：Sheet 原语没有触发件，不接管 Esc，也不保证事件冒得出来。
@@ -252,7 +253,7 @@ function useStageAsideEscape(
   rootRef: React.RefObject<HTMLElement | null>,
 ): void {
   useEffect(() => {
-    if (!aside) return;
+    if (aside?.face !== "profile") return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || isEditableTarget(event.target)) return;
       const target = event.target instanceof Element ? event.target : null;

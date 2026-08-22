@@ -81,7 +81,7 @@ const POPUP_SURFACE_CSS = new URL("./presentation_core/tokens.css", import.meta.
 const POPUP_SURFACE_CLASS = "pa-popup-surface";
 const POPUP_SURFACE_INGREDIENT =
   /\bbg-pa-glass(?:-popover)?\b|\bbackdrop-blur(?:-[a-z0-9[\]()-]+)?\b/g;
-const GLASS_TIERS = ["card", "popup", "stage"];
+const GLASS_TIERS = ["card", "popup"];
 
 test("the glass surface has exactly one spelling, with its blur tiered in tokens", async () => {
   expect(
@@ -112,13 +112,12 @@ test("the glass surface has exactly one spelling, with its blur tiered in tokens
       new RegExp(`--pa-glass-blur-${tier}:\\s*\\d+px;`),
     );
   }
-  for (const modifier of ["card", "stage"]) {
-    expect(css, `tokens.css lost the ${modifier} surface modifier`).toMatch(
-      new RegExp(
-        `\\.pa-popup-surface-${modifier}\\s*\\{[^}]*--pa-glass-blur:\\s*var\\(--pa-glass-blur-${modifier}\\)`,
-      ),
-    );
-  }
+  expect(css, "tokens.css lost the card surface modifier").toMatch(
+    /\.pa-popup-surface-card\s*\{[^}]*--pa-glass-blur:\s*var\(--pa-glass-blur-card\)/,
+  );
+  expect(css, "tokens.css lost the stage surface modifier").toMatch(
+    /\.pa-popup-surface-stage\s*\{[^}]*background-color:\s*var\(--pa-glass\)/,
+  );
 
   const sources = [
     ...(await readSources(CONSOLE_SRC)),

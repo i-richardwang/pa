@@ -66,11 +66,10 @@
   /* 玻璃浮层面：命令面这类大舞台走 glass，菜单与锚定选择器走 glass-popover */
   --pa-glass: light-dark(rgba(255, 255, 255, 0.8), rgba(38, 38, 38, 0.8));
   --pa-glass-popover: light-dark(rgba(255, 255, 255, 0.75), rgba(38, 38, 38, 0.75));
-  /* 玻璃的模糊按构件分三档：读数卡盖住的是数据本身，同一档会把底下的线糊成一片色，
-     故取最轻；菜单盖住的是版面，糊掉正好；命令面占满视口中央，底下整页都在动，取最重 */
+  /* 玻璃的模糊分两档：读数卡盖住的是数据本身，同一档会把底下的线糊成一片色，故取轻；
+     菜单与命令面盖住的是版面，糊掉正好 */
   --pa-glass-blur-card: 8px;
   --pa-glass-blur-popup: 16px;
-  --pa-glass-blur-stage: 24px;
   /* 玻璃浮层的外投影 + 双层内高光：只与玻璃底同用，独用会在实底上显出一圈假边。
      内高光必须随明暗换档——暗面上留着亮面那道 50% 白边，浮层就镶了一圈会先于内容被看见的亮线 */
   --pa-popover-glow:
@@ -198,7 +197,6 @@
   }
 
   .pa-popup-surface-stage {
-    --pa-glass-blur: var(--pa-glass-blur-stage);
     background-color: var(--pa-glass);
   }
 }
