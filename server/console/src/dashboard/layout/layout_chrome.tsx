@@ -14,6 +14,7 @@ import {
 import type { DependencyList } from "react";
 import { SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { InspectorFace } from "@/components/ui/inspector";
 import {
   Select,
   SelectItem,
@@ -100,12 +101,10 @@ export function useSetDetailCrumb(factory: () => DetailCrumb | null, deps: Depen
 export type StageAside = {
   node: React.ReactNode;
   /** 这栏是拿来调的还是拿来读的——壳据此取宽度那一档。 */
-  face: StageAsideFace;
+  face: InspectorFace;
   /** 同一个「收起」动作：壳在 Esc、窄屏 Sheet 的背景点击上调用它，开关仍握在页面手里。 */
   dismiss: () => void;
 };
-
-type StageAsideFace = "settings" | "profile";
 
 /**
  * 右栏宽度单源，按栏的用途分两档：配置面摆控件，档案面摆记录本身、行更长也更该摊开。
@@ -131,7 +130,7 @@ export function useSetStageAside(
   factory: () => React.ReactNode | null,
   deps: DependencyList,
   dismiss: () => void,
-  face: StageAsideFace = "settings",
+  face: InspectorFace = "settings",
 ): void {
   const slot = useContext(StageAsideContext);
   const node = useMemo(factory, deps);

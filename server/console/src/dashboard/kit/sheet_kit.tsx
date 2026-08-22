@@ -13,7 +13,7 @@ export function SheetSection({
   className?: string;
 }): React.ReactElement {
   return (
-    <section className={cn("flex flex-col gap-2 rounded-md border p-6", className)}>
+    <section className={cn("flex flex-col gap-2 rounded-md border border-pa-line p-6", className)}>
       {title && (
         <div className="flex items-center justify-between gap-2">
           <h4 className="font-medium text-pa-muted text-sm">{title}</h4>

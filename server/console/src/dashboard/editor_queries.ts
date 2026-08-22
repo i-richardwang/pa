@@ -145,7 +145,7 @@ const MATERIALIZED_VIEW_SCHEMA = z
   })
   .strict();
 
-export type DraftRunInput = {
+type DraftRunInput = {
   analysis: AnalysisDefinition;
   view: SemanticViewIntent;
   view_preferences: ViewPreferences;

@@ -9,7 +9,7 @@ import type { ViewScene } from "../../src/presentation_core/chart_config.js";
 
 export type { ViewScene };
 
-export type SceneTraits = {
+type SceneTraits = {
   /** 空态纵向呼吸 */
   emptyPad: string;
   /** 高度取容器而非内容：图表撑满、表格自带内滚、指标卡纵向居中——需容器给定确定高度 */

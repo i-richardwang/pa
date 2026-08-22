@@ -41,8 +41,7 @@ export type ViewRendererProps = {
   /** 宿主场景；chrome 取舍见 VIEW_SCENES。 */
   scene: ViewScene;
   /**
-   * 表格全量渲染。它是**运行态**不是场景属性：MCP 结果卡在宿主全屏时才放开，
-   * 同一个 card 场景两种取值都合法。缺省跟场景默认档。
+   * 表格全量渲染，运行态：MCP 结果卡在宿主全屏时放开。缺省跟场景默认档。
    */
   allRows?: boolean;
   /** 浏览器报告页注入的格子明细能力；MCP Widget 不注入，因而没有明细请求入口。 */

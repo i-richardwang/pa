@@ -7,21 +7,21 @@ import { cn } from "@/lib/utils";
 import { BlockedHint, Hint } from "@/components/ui/hint";
 import { SECTION_TITLE_TEXT } from "@/components/ui/surface";
 
-/** 两档密度由 InspectorBody 定在栏上，段与行各自认领（两面的判据见 ui_spec「侧栏系统」）。 */
+/** 两面由 InspectorBody 定在栏上，段与行各自认领（判据见 ui_spec「侧栏系统」）。 */
 export const INSPECTOR_SECTION_CLASS =
   "border-b-[0.5px] border-pa-line px-3 py-2.5 last:border-b-0 md:px-2.5 md:py-2 " +
-  "group-data-[density=reading]/inspector:border-b-0 group-data-[density=reading]/inspector:p-4 " +
-  "group-data-[density=reading]/inspector:pb-0";
+  "group-data-[face=profile]/inspector:border-b-0 group-data-[face=profile]/inspector:p-4 " +
+  "group-data-[face=profile]/inspector:pb-0";
 
 const INSPECTOR_SECTION_HEADER_CLASS =
   "group/panel-section-header flex h-11 items-center justify-between gap-2.5 pl-2.5 md:h-8 md:pl-2";
 /** 档案面里行与段题左缘对齐：段题统辖的就是这些行。 */
 const INSPECTOR_SECTION_CONTENT_CLASS =
-  "px-2.5 pt-1 md:px-2 group-data-[density=reading]/inspector:px-0";
+  "px-2.5 pt-1 md:px-2 group-data-[face=profile]/inspector:px-0";
 /** 档案面的段间分界：内缩两格、只隔不框——框会把每一段读成一个控件组。 */
 const INSPECTOR_SECTION_RULE_CLASS =
   "mx-2 hidden border-pa-line border-b-[0.5px] pt-4 " +
-  "group-data-[density=reading]/inspector:group-[&:not(:last-child)]/section:block";
+  "group-data-[face=profile]/inspector:group-[&:not(:last-child)]/section:block";
 
 /** 行里图标槽的宽：图标 4 格加与名字之间的 2.5 格。无图标的行缩这一段，名字与带图标的行同起点。 */
 export const INSPECTOR_ROW_INDENT_CLASS = "ml-6.5";
@@ -122,15 +122,16 @@ export function InspectorSection({
   );
 }
 
-/**
- * 每条右栏都从这里开正文：密度是「这栏是拿来读的还是拿来调的」，属于栏，不属于每一段。
- */
+/** 右栏的面：配置面拿来调，档案面拿来读。面属于栏，不属于每一段；壳的 `StageAside.face` 同此枚举。 */
+export type InspectorFace = "settings" | "profile";
+
+/** 每条右栏都从这里开正文。 */
 export function InspectorBody({
-  density = "settings",
+  face = "settings",
   children,
   className,
 }: {
-  density?: "settings" | "reading";
+  face?: InspectorFace;
   children: React.ReactNode;
   className?: string;
 }): React.ReactElement {
@@ -140,7 +141,7 @@ export function InspectorBody({
         "group/inspector flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pb-8",
         className,
       )}
-      data-density={density}
+      data-face={face}
       data-slot="inspector-body"
     >
       {children}
@@ -231,7 +232,7 @@ export function InspectorRow({
         className={cn(
           "min-w-0 truncate leading-5",
           // 配置面的名字是控件的名字，次于控件；档案面的名字就是内容本身。
-          blocked ? "text-pa-faint" : "group-data-[density=settings]/inspector:text-pa-muted",
+          blocked ? "text-pa-faint" : "group-data-[face=settings]/inspector:text-pa-muted",
         )}
         title={typeof label === "string" ? label : undefined}
       >
@@ -249,7 +250,9 @@ export function InspectorRow({
       )}
     >
       {typeof children === "string" ? (
-        <span className="min-w-0 truncate text-pa-muted text-xs">{children}</span>
+        <span className="min-w-0 truncate text-pa-muted text-xs" title={children}>
+          {children}
+        </span>
       ) : (
         children
       )}
@@ -268,7 +271,7 @@ export function InspectorRow({
   );
   return (
     <div
-      className="flex min-w-0 items-center gap-0.5 group-data-[density=reading]/inspector:py-0.5"
+      className="flex min-w-0 items-center gap-0.5 group-data-[face=profile]/inspector:py-0.5"
       data-slot="inspector-row"
     >
       {inner}

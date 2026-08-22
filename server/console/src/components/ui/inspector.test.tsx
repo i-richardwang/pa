@@ -13,8 +13,8 @@ import {
   InspectorSection,
 } from "./inspector";
 
-const READING = "group-data-[density=reading]/inspector:";
-const SETTINGS = "group-data-[density=settings]/inspector:";
+const PROFILE = "group-data-[face=profile]/inspector:";
+const SETTINGS = "group-data-[face=settings]/inspector:";
 
 test("头卡把名字、口径与事实行收在同一张卡里", () => {
   const markup = renderToStaticMarkup(
@@ -37,7 +37,7 @@ test("头卡把名字、口径与事实行收在同一张卡里", () => {
 test("值给字符串就按值排版，给节点就照放；记号槽可放勾选框", () => {
   const text = renderToStaticMarkup(<InspectorRow label="格式">百分比</InspectorRow>);
   // 字符串是一个值：次一档、单行截断，调用处不必也不该自己写这套。
-  expect(text).toMatch(/truncate text-pa-muted text-xs">百分比/);
+  expect(text).toMatch(/truncate text-pa-muted text-xs" title="百分比">百分比/);
   // 右槽有上限，长值不会把名字挤没。
   expect(text).toContain("max-w-3/5");
 
@@ -80,29 +80,29 @@ test("行外的动作不占右槽，名字只在配置面让位", () => {
 
 test("档案密度由栏发出、由段与行认领", () => {
   const markup = renderToStaticMarkup(
-    <InspectorBody density="reading">
+    <InspectorBody face="profile">
       <InspectorSection title="指标">
         <InspectorRow label="入职人数" />
       </InspectorSection>
     </InspectorBody>,
   );
-  expect(markup).toContain('data-density="reading"');
+  expect(markup).toContain('data-face="profile"');
   expect(markup).toContain("group/inspector");
   // 段与行各自带着这一档的写法，否则栏发了信号也没人接。
-  expect(markup).toContain(`${READING}p-4`);
+  expect(markup).toContain(`${PROFILE}p-4`);
   expect(markup).toContain('data-slot="inspector-section-rule"');
-  // 行与段题左缘对齐（内容不再多缩一格），行间留一口气。
-  expect(markup).toContain(`${READING}px-0`);
-  expect(markup).toContain(`${READING}py-0.5`);
+  // 行与段题左缘对齐，行间留一口气。
+  expect(markup).toContain(`${PROFILE}px-0`);
+  expect(markup).toContain(`${PROFILE}py-0.5`);
   // 段题走 semibold（PA 的 520 一档）。
   expect(markup).toContain("font-semibold");
 
-  // 反向：配置面是默认档，栏上不留 reading 标记。
+  // 反向：配置面是默认档，栏上不留 profile 标记。
   const settings = renderToStaticMarkup(
     <InspectorBody>
       <InspectorSection title="指标" />
     </InspectorBody>,
   );
-  expect(settings).toContain('data-density="settings"');
-  expect(settings).not.toContain('data-density="reading"');
+  expect(settings).toContain('data-face="settings"');
+  expect(settings).not.toContain('data-face="profile"');
 });

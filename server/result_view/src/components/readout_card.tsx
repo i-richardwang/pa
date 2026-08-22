@@ -5,7 +5,7 @@ import { chartMarkerClass, themedColor } from "../../../src/presentation_core/ch
 
 /**
  * 读数卡：指针落在哪一格，这张卡就读哪一格。壳与菜单、Popover 同一张（`.pa-popup-surface`），
- * 模糊换到卡那一档（`.pa-popup-surface-card`，缘由见 tokens.css）。
+ * 模糊取卡那一档（`.pa-popup-surface-card`）。
  *
  * 单系列以值为主、系列名为次：只有一个数时先读数，再读它是什么。多系列走「色点 / 名 / 值」
  * 三栏，一栏排到 17 行才另起一栏、至多四栏，栏宽随栏数成档——否则一条长清单会顶穿画布。

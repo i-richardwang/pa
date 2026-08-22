@@ -117,7 +117,7 @@ export function SettingsDialog({
                 </DialogClose>
               </div>
               {/* 设置页是拿来读的：事实行按档案密度排。 */}
-              <InspectorBody className="overscroll-auto" density="reading">
+              <InspectorBody className="overscroll-auto" face="profile">
                 <div
                   className={cn(
                     "px-6 py-6 md:w-full md:px-8 md:py-12",

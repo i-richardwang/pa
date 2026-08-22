@@ -309,7 +309,7 @@ export function BoardPage({
     finishEdit,
   ]);
 
-  /** 布局变更回写草稿：只认桌面（lg）坐标，移动端单列堆叠不落库；无实变化则跳过避免自激。 */
+  /** 布局变更回写草稿：只认桌面（lg）坐标，移动端单列堆叠不落库；无实变化不回写。 */
   function applyLayout(_current: Layout, all: ResponsiveLayouts<GridBreakpoint>) {
     const lg = all.lg;
     if (!lg) return;

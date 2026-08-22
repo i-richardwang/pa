@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { ReplayPayload } from "@contracts/replay_contract";
+import { monthRangeLabel } from "@format";
 import type { TimeIntent } from "@time";
 import type { ViewRendererProps } from "pa-result-view";
 import { toastManager } from "@/components/ui/toast";
@@ -19,14 +20,6 @@ type RecordProjectionInput = {
   disabled: boolean;
   onRequest: (request: RecordProjectionDialogRequest) => void;
 };
-
-function formatTimeLabel(from: string, to: string): string {
-  const label = (month: string) => {
-    const [year, part] = month.split("-");
-    return `${year}年${Number(part)}月`;
-  };
-  return from === to ? label(from) : `${label(from)} – ${label(to)}`;
-}
 
 /** 报告与看板共用的格点记录投影绑定；访问作用域只决定请求目标，不改变坐标推导。 */
 export function useRecordProjection({
@@ -95,7 +88,7 @@ export function useRecordProjection({
               title: titleByDimensionId.get(coordinate.dimension_id) ?? coordinate.dimension_id,
               value: coordinate.value,
             })),
-            time_label: formatTimeLabel(timeCoordinate.from, timeCoordinate.to),
+            time_label: monthRangeLabel(timeCoordinate.from, timeCoordinate.to),
           },
         });
       },

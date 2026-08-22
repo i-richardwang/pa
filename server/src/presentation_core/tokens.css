@@ -31,7 +31,7 @@
 
   --pa-wash-solid: light-dark(#fafafa, #1f1f1f);
 
-  /* 墨色：主动作实底、筛选片选中底、Tabs 下划线、看板编辑态描边与落位框——动作色是墨不是品牌色 */
+  /* 墨色：主动作实底、筛选片选中底、看板编辑态描边与落位框 */
   --pa-ink: light-dark(#191919, #ededed);
   --pa-ink-fg: light-dark(#ffffff, #171717);
 
@@ -144,8 +144,6 @@
   --color-pa-highlight: var(--pa-highlight);
   --color-pa-highlight-bg: var(--pa-highlight-bg);
   --color-pa-dimmer: var(--pa-dimmer);
-  --color-pa-glass: var(--pa-glass);
-  --color-pa-glass-popover: var(--pa-glass-popover);
   --color-pa-avatar: var(--pa-avatar);
   --color-pa-login-input-border: var(--pa-login-input-border);
   --color-pa-login-label: var(--pa-login-label);
@@ -177,9 +175,8 @@
 /*
  * 浮层的玻璃壳：菜单、Popover、Select 下拉、字段选择面、图表读数卡与命令面同料。
  *
- * 它落在 CSS 里而不是一串工具类，是因为消费方跨了两个包：控制台的浮层原语与结果视图的
- * 读数卡各自成包，谁也不引谁。同一张壳若两边各拼一次，浮层常彼此叠着开，差异当场可见。
- * 写在 components 层，件仍可用工具类改圆角与宽度。模糊档由修饰类换，面料随档走。
+ * 消费方跨控制台与结果视图两个包，壳只在这里拼一次；写在 components 层，件仍可用工具类改
+ * 圆角与宽度。模糊档由修饰类换，面料随档走。
  */
 @layer components {
   .pa-popup-surface {

@@ -10,6 +10,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type React from "react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const TOAST_ICONS = {
@@ -98,8 +99,14 @@ function Toasts(): React.ReactElement {
                   )}
                   <Toast.Close
                     aria-label="关闭"
-                    className="pa-focus flex size-7 shrink-0 items-center justify-center rounded-md text-pa-muted hover:bg-pa-surface hover:text-pa-fg"
                     data-slot="toast-close"
+                    render={
+                      <Button
+                        className="shrink-0 text-pa-muted hover:text-pa-fg"
+                        size="icon-sm"
+                        variant="subtle"
+                      />
+                    }
                   >
                     <XIcon className="size-4" />
                   </Toast.Close>

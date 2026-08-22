@@ -12,6 +12,15 @@ const FORBIDDEN = [
   },
 ];
 
+/** 内联 style 只认设计令牌：它绕开了编译产物那道门，所以在源码上看。 */
+const INLINE_STYLE = /style=\{\{[^}]*\}\}/g;
+const FOREIGN_INLINE_VAR = /var\(\s*--(?!pa-)[\w-]+/g;
+function foreignInlineVars(source: string): string[] {
+  return [...source.matchAll(INLINE_STYLE)].flatMap((block) =>
+    [...block[0].matchAll(FOREIGN_INLINE_VAR)].map((match) => match[0]),
+  );
+}
+
 function isProductSource(name: string): boolean {
   if (!name.endsWith(".ts") && !name.endsWith(".tsx")) return false;
   return !name.endsWith(".test.ts") && !name.endsWith(".test.tsx");
@@ -42,6 +51,15 @@ test("console components style themselves only through design tokens", async () 
   const bad =
     'className="text-[#767676] border-[rgba(0,0,0,0.09)] hover:bg-black/[0.04] text-white/70 bg-white"';
   const good = 'className="text-pa-muted border-pa-line hover:bg-pa-surface [color-scheme:dark]"';
+  expect(foreignInlineVars('style={{ fill: "var(--card)", stroke: "var( --primary )" }}')).toEqual([
+    "var(--card",
+    "var( --primary",
+  ]);
+  expect(
+    foreignInlineVars(
+      'style={{ color: "var(--pa-ink)" }} className="max-h-[var(--available-height)]"',
+    ),
+  ).toEqual([]);
   for (const { name, pattern } of FORBIDDEN) {
     expect([...bad.matchAll(pattern)].length, `${name} matcher is stale`).toBeGreaterThan(0);
     expect(
@@ -55,6 +73,10 @@ test("console components style themselves only through design tokens", async () 
 
   for (const name of names) {
     const source = await readFile(new URL(name, CONSOLE_SRC), "utf8");
+    expect(
+      foreignInlineVars(source),
+      `console/src/${name} inline style reaches outside the pa-* tokens`,
+    ).toEqual([]);
     for (const { name: kind, pattern } of FORBIDDEN) {
       const found = [...source.matchAll(pattern)].map((match) => match[0]);
       expect(found, `console/src/${name} carries ${kind} literals: ${found.join(", ")}`).toEqual(

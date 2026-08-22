@@ -3,7 +3,7 @@ import { ActionButton } from "pa-result-view";
 import type { RecordProjectionPayload } from "@records";
 
 /**
- * MCP 名单卡承载记录属性而非聚合读数；跨宿主复用清单表判据，不导入控制台原语。
+ * MCP 名单卡承载记录属性；清单表判据与控制台同源，本包只引 pa-result-view。
  * 题名与结果卡、看板瓦片同一配方：卡的名字字号高于正文一档、字重反而更轻。
  */
 

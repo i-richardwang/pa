@@ -11,6 +11,7 @@ import {
   isRateFormat,
   isTimeColumn,
   toNumber,
+  monthRangeLabel,
 } from "./view_format.js";
 import { memberShortName } from "../semantic_core/member_name.js";
 import type { PresentationType } from "../semantic_core/presentation_type.js";
@@ -367,10 +368,9 @@ function overlayPeriods(time: ResultTime | undefined): CoordinatePeriod[] | null
 /** 期间图例名：整年落在同一日历年时用年份，跨年窗口用完整起止。 */
 function periodLabel(period: { from: string; to: string }): string {
   const year = (month: string) => Number(month.slice(0, 4));
-  const label = (month: string) => `${year(month)}年${Number(month.slice(5, 7))}月`;
   return year(period.from) === year(period.to)
     ? `${year(period.from)}年`
-    : `${label(period.from)}—${label(period.to)}`;
+    : monthRangeLabel(period.from, period.to);
 }
 
 /**

@@ -24,6 +24,7 @@ import {
 } from "@time";
 import { CalendarIcon, GitCompareArrowsIcon } from "lucide-react";
 import { useState } from "react";
+import { monthLabel, monthRangeLabel } from "@format";
 import { DEFAULT_TIME_WINDOW } from "./analysis_draft";
 
 type WindowChoice =
@@ -60,9 +61,6 @@ const validMonth = (value: string | undefined): value is string =>
 export const withCurrent = (choices: readonly number[], current: number): number[] =>
   choices.includes(current) ? [...choices] : [current, ...choices];
 
-const formatMonth = (month: string) =>
-  `${Number(month.slice(0, 4))}年${Number(month.slice(5, 7))}月`;
-
 /**
  * 观察窗口一句话。它也是题名副行的全部内容——**只出窗口，不出粒度与对比**：
  * 副行答的是「这张图看的是哪一段时间」，粒度与对比答的是「怎么切、跟谁比」，
@@ -71,13 +69,13 @@ const formatMonth = (month: string) =>
 export function windowSummary(time: TimeIntent): string {
   const { window } = time;
   if (window.kind === "current_month") {
-    return window.month ? formatMonth(window.month) : "最新月份";
+    return window.month ? monthLabel(window.month) : "最新月份";
   }
   if (window.kind === "year_to_date") return "今年至今";
   if (window.kind === "trailing") {
     return `最近 ${window.count} ${window.unit === "month" ? "个月" : "年"}`;
   }
-  return `${formatMonth(window.from)}—${formatMonth(window.to)}`;
+  return monthRangeLabel(window.from, window.to);
 }
 
 function comparisonChoice(time: TimeIntent): ComparisonChoice {
@@ -186,8 +184,7 @@ function coordinateRanges(time: TimeIntent, latest: string) {
   return { primary, comparisons };
 }
 
-const rangeLabel = ({ from, to }: { from: string; to: string }) =>
-  from === to ? formatMonth(from) : `${formatMonth(from)}—${formatMonth(to)}`;
+const rangeLabel = ({ from, to }: { from: string; to: string }) => monthRangeLabel(from, to);
 
 export function summarizeResolvedTime(
   time: TimeIntent,
@@ -362,7 +359,7 @@ export function WindowPopup({
             selected={!!month}
             trailing={popoverListCheck(!!month)}
           >
-            {month ? formatMonth(month) : "固定到某个月"}
+            {month ? monthLabel(month) : "固定到某个月"}
           </PopoverListRow>
         </PopupSection>
       ) : null}
@@ -572,8 +569,8 @@ export function ComparisonPopup({
 /** 已选对照期间在行上直接读出来——它是这一档的取值，不该只藏在弹层里。 */
 function customComparisonSummary(window: CustomComparisonWindow): string {
   return window.kind === "current_month"
-    ? formatMonth(window.month)
-    : `${formatMonth(window.from)}—${formatMonth(window.to)}`;
+    ? monthLabel(window.month)
+    : monthRangeLabel(window.from, window.to);
 }
 
 /** 哪一处在等月份选择：三处各自的默认值与落值口径不同，不能共用一个开关。 */
@@ -713,7 +710,7 @@ export function TimeBar({
           </TooltipTrigger>
           <TooltipPopup>
             {summarizeResolvedTime(timeIntent, latest, capabilities, grouped)} · 数据截至{" "}
-            {formatMonth(latest)}
+            {monthLabel(latest)}
           </TooltipPopup>
         </Tooltip>
         <PopoverPopup width="list">

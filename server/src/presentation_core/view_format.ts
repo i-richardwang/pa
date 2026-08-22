@@ -127,3 +127,13 @@ export function compareCells(a: string | number | null, b: string | number | nul
   if (na !== null && nb !== null) return na - nb;
   return String(a).localeCompare(String(b), "zh-CN");
 }
+
+/** 月份 `YYYY-MM` 的业务写法：`2026年8月`。 */
+export function monthLabel(month: string): string {
+  return `${Number(month.slice(0, 4))}年${Number(month.slice(5, 7))}月`;
+}
+
+/** 月份闭区间的业务写法；单月不画区间。 */
+export function monthRangeLabel(from: string, to: string): string {
+  return from === to ? monthLabel(from) : `${monthLabel(from)}—${monthLabel(to)}`;
+}

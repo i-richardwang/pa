@@ -958,7 +958,7 @@ describe("服务端物理呈现声明", () => {
         borderColor?: string;
       };
     }[];
-    // 值标签：浅灰底片上的 14px 系列色数字——颜色覆盖后标签跟着换色（同源 pa.legend）
+    // 值标签：浅灰底片上的 14px 系列色数字——颜色覆盖后标签跟着换色（同源 model.legend）
     expect(series[0]).toMatchObject({
       type: "bar",
       itemStyle: { color: "#123abc" },
@@ -1069,7 +1069,7 @@ describe("服务端物理呈现声明", () => {
     expect(buildViewChart(trendView, { type: "table", y: [] })).toBeNull();
   });
 
-  test("声明 pie：环形图不出外标和引线、不设悬停态，身份进 pa.legend，环比 48/80", () => {
+  test("声明 pie：环形图不出外标和引线、不设悬停态，身份进 model.legend，环比 48/80", () => {
     const chart = buildViewChart(
       view(
         ["organization_name", "active_employee_count"],

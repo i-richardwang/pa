@@ -88,7 +88,7 @@ export function ViewPageError({ message }: { message: string }) {
   );
 }
 
-/** 档案栏的壳：通高一条栏，栏顶只有一枚关闭钮，栏身是档案密度的可滚正文。 */
+/** 档案栏的壳：通高一条栏，栏顶只有一枚关闭钮，栏身是档案面的可滚正文。 */
 export function ProfileAside({
   label,
   closeLabel,
@@ -112,7 +112,7 @@ export function ProfileAside({
           <PanelRightIcon aria-hidden="true" />
         </HeaderIconButton>
       </Titlebar>
-      <InspectorBody density="reading">{children}</InspectorBody>
+      <InspectorBody face="profile">{children}</InspectorBody>
     </aside>
   );
 }
