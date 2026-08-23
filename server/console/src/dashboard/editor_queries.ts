@@ -157,7 +157,7 @@ type DraftRunInput = {
 };
 
 /** 把草稿跑成一份带不可变 Analysis/View 身份的重放载荷。 */
-async function runDraft(input: DraftRunInput): Promise<ReplayPayload> {
+export async function runDraft(input: DraftRunInput): Promise<ReplayPayload> {
   const { analysis, view, view_preferences, base } = input;
   if (!base) {
     return postJson(
