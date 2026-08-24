@@ -29,12 +29,13 @@ export type CubeGatewayConfig = {
   accessScopeId: string;
   serviceContext: CubeSecurityContext;
   timeSources: TimeSourceRegistry;
-  /** 单次 Cube HTTP 往返的上限；Continue wait 的总轮数由查询循环另行约束。 */
+  /** 单次 HTTP 往返上限；省略即取本模块默认值。Continue wait 的总轮数由查询循环另行约束。 */
   requestTimeoutMs?: number;
 };
 
 const TOKEN_TTL_S = 3600;
 const META_TTL_MS = 5 * 60 * 1000;
+/** 单次 Cube HTTP 往返上限的默认值；PA_CUBE_REQUEST_TIMEOUT_MS 未设置时生效。 */
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 type CubeGatewayState = {
@@ -159,7 +160,7 @@ const CUBE_HIERARCHY_SCHEMA = z.object({
   levels: z.array(z.string()),
 });
 
-/** 只有 public view 进目录：先按 type 分流，再对 view 严格解析——非 view 的 cube 不看内部结构。 */
+/** 只有 public view 进目录：先按 type 分流，再对 view 严格解析。 */
 const META_SCHEMA = z.object({
   cubes: z.array(z.object({ type: z.string() }).passthrough()),
 });
@@ -449,12 +450,8 @@ async function fetchTimeContext(state: CubeGatewayState): Promise<TimeContext> {
 }
 
 export function createCubeGateway(config: CubeGatewayConfig): CubeGateway {
-  const requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-  if (!Number.isFinite(requestTimeoutMs) || requestTimeoutMs <= 0) {
-    throw new Error("Cube 请求超时必须是正数毫秒值");
-  }
   const state: CubeGatewayState = {
-    config: { ...config, requestTimeoutMs },
+    config: { ...config, requestTimeoutMs: config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS },
     tokenCache: new Map(),
     metaCache: new Map(),
     timeContextCache: null,

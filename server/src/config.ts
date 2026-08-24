@@ -14,8 +14,10 @@ function parsePort(raw: string | undefined): number {
   return port;
 }
 
-function parsePositiveInteger(name: string, raw: string | undefined, fallback: number): number {
-  const value = Number(raw ?? fallback);
+/** 未设置时返回 undefined，由消费方决定默认值——默认值只归它一处。 */
+function optionalPositiveInteger(name: string, raw: string | undefined): number | undefined {
+  if (!raw?.trim()) return undefined;
+  const value = Number(raw);
   if (!Number.isInteger(value) || value <= 0) throw new Error(`${name} 必须是正整数：${raw}`);
   return value;
 }
@@ -45,10 +47,9 @@ function parseBaseUrl(raw: string | undefined): string {
 export const config = {
   cubeUrl: process.env.CUBE_URL ?? "http://localhost:4000",
   apiSecret: required("CUBEJS_API_SECRET"),
-  cubeRequestTimeoutMs: parsePositiveInteger(
+  cubeRequestTimeoutMs: optionalPositiveInteger(
     "PA_CUBE_REQUEST_TIMEOUT_MS",
     process.env.PA_CUBE_REQUEST_TIMEOUT_MS,
-    30_000,
   ),
   port: parsePort(process.env.PORT),
   /** Node 监听地址；Docker 宿主侧暴露地址另由 PA_SERVER_BIND_IP 控制。 */

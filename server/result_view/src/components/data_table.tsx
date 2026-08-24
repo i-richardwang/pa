@@ -176,11 +176,11 @@ export function DataTable({
   }, [fill]);
 
   const columns = model.columns;
+  /** 依赖只认列身份：列语义不变时保住排序、展开与悬停状态，模型对象换引用不影响。 */
   useEffect(() => {
     setSort((previous) => resolveTableSort(previous, columns));
     setUncapped((previous) => (previous.size ? new Set() : previous));
     setExpandHint(null);
-    // 只认列身份：模型对象换引用但列语义没变时，悬停与展开状态不该被清掉。
   }, [columnSchemaKey]);
 
   const toggleSort = (i: number) =>

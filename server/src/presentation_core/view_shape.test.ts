@@ -56,7 +56,7 @@ describe("analyzeResultShape", () => {
   });
 });
 
-describe("compileTable", () => {
+describe("compileTableWithStatus", () => {
   test("年度 × 组织：默认布局把组织放行轴、年份与指标放列轴", () => {
     const view = payload(
       ["year", "organization_name", "active_employee_count"],
