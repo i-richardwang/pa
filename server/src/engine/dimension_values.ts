@@ -5,8 +5,7 @@
  *
  * 公开字符串维度天然可翻；数值/时间维度只有显式声明 dimension_kind: categorical 才可翻。
  * 受控记录字段属于 internal 成员，在进入本模块前已从公开目录剥离。
- * 成员权限由 Cube /meta 的 access_policy 裁剪结果承担（无权维度不可见即不可翻）；
- * 行权限由 /load 的同一 access_policy 执行（受限账号只能翻到授权范围内出现的值）。
+ * 成员与行权限都由 Cube access_policy 承担：无权维度不可见即不可翻，翻出的值也只在授权范围内。
  */
 import type { CubeMember, CubeQuery, CubeView } from "../ports/cube_gateway.js";
 import { memberDisplayTitle } from "./member_presentation.js";

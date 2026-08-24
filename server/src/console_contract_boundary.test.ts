@@ -1014,3 +1014,21 @@ test("the popup search row is drawn in one place", async () => {
     /export function AutocompleteSearch\b/,
   );
 });
+
+const DIRECTIONAL_COLOR = /\b(?:text|bg|border)-pa-(?:success|danger)\b/g;
+
+test("差值只带符号不带涨跌色", async () => {
+  const bad = '<span className="text-pa-success-fg tabular-nums">{row.delta}</span>';
+  expect([...bad.matchAll(DIRECTIONAL_COLOR)], "涨跌色探测器失灵").toHaveLength(1);
+  const good = '<span className="text-pa-muted-fg tabular-nums">{row.delta}</span>';
+  expect([...good.matchAll(DIRECTIONAL_COLOR)], "探测器把中性色也算了进来").toEqual([]);
+
+  const sources = (await readSources(RESULT_VIEW_SRC)).filter(({ text }) => /delta/i.test(text));
+  expect(sources.length, "result_view 里已经没有渲染差值的件，本条规则已经落空").toBeGreaterThan(0);
+  for (const { name, text } of sources) {
+    expect(
+      [...text.matchAll(DIRECTIONAL_COLOR)],
+      `result_view/src/${name} 给差值染了涨跌色；模型层没有指标方向声明，绿涨红跌会把流失类指标读反`,
+    ).toEqual([]);
+  }
+});

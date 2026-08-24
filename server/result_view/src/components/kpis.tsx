@@ -5,10 +5,7 @@ import { VIEW_SCENES, type ViewScene } from "../scene.js";
 const VALUE_SIZE =
   "text-[24px] @min-[224px]:text-[28px] @2xs:text-[36px] @sm:text-[48px] leading-[1.1]";
 
-/**
- * 大数的注脚：覆盖期间与各对照差值；全部缺席时不占行。
- * 差值恒中性色——模型层没有指标方向声明，涨跌染色会把流失类指标读反。
- */
+/** 大数的注脚：覆盖期间与各对照差值；全部缺席时不占行。 */
 function TotalCaption({ metric }: { metric: TotalBandMetric }) {
   const parts = [
     ...(metric.period ? [metric.period.label] : []),

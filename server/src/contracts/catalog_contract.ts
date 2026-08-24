@@ -1,3 +1,8 @@
+/**
+ * 指标字典的语义消费面契约（对外唯一投影）；只含语义身份与允许公开给已授权 PA 用户的模型字段。
+ * Agent 教学字段（ai_context、查询契约）也在白名单内——业务方核对 AI 行为的依据；
+ * 成员物理绑定不进此面；指标域只承担业务导航，不要求客户端选择物理查询来源。
+ */
 import { z } from "zod";
 import { ACCESS_SCOPE_DEFINITION_SCHEMA, type AccessScopeDefinition } from "./access_scope.js";
 import {
@@ -8,12 +13,6 @@ import { TIME_CAPABILITIES_INPUT, type TimeCapabilities } from "../semantic_core
 import type { ReportCalculationKind } from "../semantic_core/report_calculation.js";
 
 export type CatalogDimensionKind = "categorical" | "overlapping";
-
-/**
- * 指标字典的语义消费面契约（对外唯一投影）；只含语义身份与允许公开给已授权 PA 用户的模型字段。
- * Agent 教学字段（ai_context、查询契约）也在白名单内——业务方核对 AI 行为的依据；
- * 成员物理绑定不进此面；指标域只承担业务导航，不要求客户端选择物理查询来源。
- */
 
 /**
  * 率指标公式的分子分母，已解析为中文标题（人读公式不读成员名）。

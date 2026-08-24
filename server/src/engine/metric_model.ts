@@ -131,8 +131,8 @@ function virtualMember(
 }
 
 /**
- * 把正式指标图叠加到权限裁剪后的 Cube 元数据。只有全部组件可见时才暴露复合指标；
- * 因而权限仍由叶子指标和 Cube access policy 决定，PA 层不另造授权规则。
+ * 把正式指标图叠加到权限裁剪后的 Cube 元数据：只有全部组件可见时才暴露复合指标。
+ * PA 层不另造授权规则。
  */
 export function applyFormalMetricModel(
   views: CubeView[],

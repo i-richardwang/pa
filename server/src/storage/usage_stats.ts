@@ -69,8 +69,8 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
   }
 
   /**
-   * 本人分析记录：按 caller 精确匹配锁定到单个身份，只取成功且带 title 的分析执行（口径同 titles）。
-   * caller 已由 Application 从 Principal 派生，故此处按等值过滤即纵向可见、不泄他人。
+   * 本人分析记录：只取成功且带 title 的分析执行（口径同 titles）。
+   * caller 出自 Principal 而非调用方入参，等值过滤即锁定到单个身份。
    */
   async function mine(
     caller: string,

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   AuthzError,
   CUBE_ACCESS_GROUP,
+  DATA_ROLES,
   SERVICE_CUBE_CONTEXT,
   cubeSecurityContext,
 } from "./cube_security.js";
@@ -61,6 +62,13 @@ describe("Cube securityContext 映射", () => {
       groups: [CUBE_ACCESS_GROUP.scoped],
       accessScope: { kind: "limited", values: ["Aurora Labs", "Harbor Works"] },
     });
+  });
+
+  test("数据角色只有 user 与 admin，策略组因此只按数据范围分", () => {
+    expect(
+      [...DATA_ROLES].sort(),
+      "新增了数据角色：cubeSecurityContext 只按数据范围映射策略组，前提是所有数据角色在列权限上等价——新角色若不等价，它拿到的会是别人的列",
+    ).toEqual(["admin", "user"]);
   });
 
   test("多角色不叠加策略，当前等价角色仍只产生一个组", () => {

@@ -12,6 +12,9 @@ import { admin, mcp } from "better-auth/plugins";
 import { isAllowedOrigin } from "./engine/origins.js";
 import type { SqliteDatabase } from "./sqlite.js";
 
+/** apiKey 插件的 key 前缀；/mcp 据此把 API key 与 OAuth access token 分流。 */
+export const API_KEY_PREFIX = "pa_";
+
 export type AuthConfig = {
   baseUrl: string;
   secret: string;
@@ -50,7 +53,7 @@ function authOptions(cfg: AuthConfig, db: SqliteDatabase) {
     plugins: [
       mcp({ loginPage: "/login" }),
       admin(),
-      apiKey({ defaultPrefix: "pa_", rateLimit: { enabled: true } }),
+      apiKey({ defaultPrefix: API_KEY_PREFIX, rateLimit: { enabled: true } }),
     ],
   } satisfies BetterAuthOptions;
 }

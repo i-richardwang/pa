@@ -12,7 +12,6 @@ export const MAX_BOARD_TEXT_LENGTH = 4000;
 export const BOARD_ID_SCHEMA = z.string().uuid();
 export const BOARD_NAME_SCHEMA = z.string().trim().min(1).max(MAX_BOARD_NAME_LENGTH);
 
-/** 看板读取受成员权限约束，编辑仅限创建者。 */
 export type BoardRow = {
   id: string;
   name: string;

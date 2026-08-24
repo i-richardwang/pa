@@ -5,7 +5,7 @@ import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { cors } from "hono/cors";
 import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins";
 import { principalFromAttributes, type Principal } from "./contracts/principal.js";
-import { buildAuth, initializeAuthSchema, type Auth } from "./auth.js";
+import { API_KEY_PREFIX, buildAuth, initializeAuthSchema, type Auth } from "./auth.js";
 import { createApplication } from "./composition/application.js";
 import { config } from "./config.js";
 import { createCubeGateway } from "./adapters/cube_gateway.js";
@@ -197,10 +197,8 @@ app.use("/mcp", async (c, next) => {
   }
   const enabledAuth = auth;
   const bearer = c.req.header("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
-  // 只对形如 API key 的 bearer 走 apiKey 校验（前缀 = apiKey 插件 defaultPrefix）：
-  // OAuth 客户端的 access token 也走 Bearer，不加此闸会对每个 OAuth 请求空跑一次
-  // verifyApiKey 并被其抛错刷屏日志；OAuth token 无该前缀，直接落到下面的 session 校验。
-  if (bearer?.startsWith("pa_")) {
+  // OAuth access token 也走 Bearer：无此前缀则跳过 verifyApiKey，直接落到下面的 session 校验。
+  if (bearer?.startsWith(API_KEY_PREFIX)) {
     const verified = await enabledAuth.api
       .verifyApiKey({ body: { key: bearer } })
       .catch(() => null);

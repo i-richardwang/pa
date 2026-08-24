@@ -11,15 +11,13 @@ export const CUBE_ACCESS_GROUP = {
   service: "pa_service",
 } as const;
 
-const DATA_ROLES = new Set(["user", "admin"]);
+/** 有数据访问权的角色；新增角色前先看 cubeSecurityContext 的策略组映射是否还成立。 */
+export const DATA_ROLES = new Set(["user", "admin"]);
 
 /** 身份属性本身无有效授权时的产品级错误；数据授权拒绝仍由 Cube 返回。 */
 export class AuthzError extends Error {}
 
-/**
- * 当前角色在列权限上等价，故只按数据范围映射到一个策略组。
- * 未知角色、空数据范围不签发任何可访问数据的上下文，先给调用者明确错误。
- */
+/** 无数据角色、空数据范围都不签发可访问数据的上下文，先给调用者明确错误。 */
 export function cubeSecurityContext(principal: Principal): CubeSecurityContext {
   if (!principal.roles.some((role) => DATA_ROLES.has(role))) {
     throw new AuthzError("当前账号没有数据访问角色，请联系管理员开通");

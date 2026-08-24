@@ -1,9 +1,8 @@
 /**
- * 文本瓦片查看态的 Markdown 渲染：react-markdown + remark-gfm（标题/列表/加粗/链接/代码/表格）。
- * 安全硬约束：不引 rehype-raw、不开 raw HTML——看板分享给成员，创建者的 md 在成员浏览器渲染，
- * 开 raw HTML 即对成员的存储型 XSS。react-markdown 默认不渲染原生 HTML（转义为文本），
- * 默认 urlTransform 净化 URL（挡 javascript:），保持默认即安全。链接一律新窗口 + noopener。
- * 排版走 Tailwind 语义令牌、明暗随宿主，不硬编码颜色；不 import `@/` 别名以便 headless 测试直渲。
+ * 文本瓦片查看态的 Markdown 渲染：react-markdown + remark-gfm。
+ * 看板分享给成员，创建者的 md 在成员浏览器里渲染：开 raw HTML 即对成员的存储型 XSS。
+ * react-markdown 默认转义原生 HTML、默认 urlTransform 挡 javascript:，保持默认即安全——不引 rehype-raw。
+ * 不 import `@/` 别名，以便 headless 测试直渲。
  */
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";

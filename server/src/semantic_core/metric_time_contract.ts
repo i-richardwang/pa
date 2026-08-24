@@ -5,10 +5,10 @@ export const METRIC_TIME_WINDOWS = ["selected", "year_to_date"] as const;
 
 /**
  * 指标侧的时间合同：字段语义、典型映射与能力卡投影见 docs/time_contract.md §2。查询时间不在
- * 指标上复制；year_to_date 仅标识当前仍由 Cube rolling measure 计算的固定年初窗口。
+ * 指标上复制；year_to_date 标识由 Cube rolling measure 计算的固定年初窗口。
  *
- * `window: year_to_date` 与 `grain: month` 在合同入口 fail-closed（为什么互斥见同一节）：
- * 两族降级各自成立的前提正是这对声明不并存（totalPeriodOf）。
+ * `window: year_to_date` 与 `grain: month` 在合同入口 fail-closed：totalPeriodOf 的两族降级
+ * 各自成立，前提正是这对声明不并存。
  */
 export const METRIC_TIME_CONTRACT_SCHEMA = z
   .object({

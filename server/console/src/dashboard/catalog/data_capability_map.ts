@@ -15,10 +15,7 @@ const COLUMN_GAP = 176;
 const NODE_GAP = 32;
 const LANE_LABEL_OFFSET = 48;
 
-/**
- * 上图的事实：有业务名，且有公开成员。读者念不出名字的构件，地图上没有它能说的话——
- * 这条由类型带着走，于是节点标题、档案与关系行都无处回落到物理名。
- */
+/** 业务名由类型带着走：节点标题、档案与关系行都无处回落到物理名。 */
 export type CanvasFact = DataCapabilityMapFact & { title: string };
 
 export type CapabilityNodeRef =

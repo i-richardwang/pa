@@ -2,8 +2,7 @@
  * 指针落格 → 读数行：行只出自 `chart.model` 的图例单元，不碰 echarts option。
  * 卡内只做两步呈现算术（切片占比、对照差值），「谁减谁」由编译期写在 `legend[].baseline`。
  *
- * 差值恒中性、恒带符号，与整窗读数的注脚同一套读法：模型层没有指标方向声明，涨跌染色会把
- * 流失类指标读反。
+ * 差值恒带符号、恒中性色，与整窗读数的注脚同一套读法（见 view_format.formatSignedDelta）。
  */
 import type { ChartModel, ViewChart } from "../../src/presentation_core/chart_config.js";
 import { formatSeriesValue, formatSignedDelta } from "../../src/presentation_core/view_format.js";
