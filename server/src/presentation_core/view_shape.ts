@@ -1031,18 +1031,21 @@ export type TotalBand = {
   metrics: TotalBandMetric[];
 };
 
-function isWholeWindowResult(view: ViewBlock): boolean {
+function isWholeWindowResult(view: ViewBlock, shape: ResultShape): boolean {
   if (view.rows.length !== 1) return false;
-  const { roles } = analyzeResultShape(view);
-  return roles.timeIdx.length === 0 && roles.measureIdx.length === view.columns.length;
+  return shape.roles.timeIdx.length === 0 && shape.roles.measureIdx.length === view.columns.length;
 }
 
 /**
  * 派生结果没有业务时间轴，因而没有整窗合计供给。它若已收敛为单行纯指标，那一行本身
  * 就是整窗单值——来源查询已按合计粒度求过值，这里只是换个读法，不做任何算术。
  */
-function singleRowBand(view: ViewBlock, titleOf: (c: string) => string): TotalBand | null {
-  if (!isWholeWindowResult(view)) return null;
+function singleRowBand(
+  view: ViewBlock,
+  titleOf: (c: string) => string,
+  shape: ResultShape,
+): TotalBand | null {
+  if (!isWholeWindowResult(view, shape)) return null;
   return {
     metrics: view.columns.map((column, index) => ({
       column,
@@ -1058,9 +1061,10 @@ function singleRowBand(view: ViewBlock, titleOf: (c: string) => string): TotalBa
 export function compileTotalBand(
   view: ViewBlock,
   titleOf: (c: string) => string,
+  shape: ResultShape = analyzeResultShape(view),
 ): TotalBand | null {
   const coordinates = view.time?.coordinates;
-  if (!view.totals || !coordinates) return singleRowBand(view, titleOf);
+  if (!view.totals || !coordinates) return singleRowBand(view, titleOf, shape);
   const metrics = view.totals.metrics.map((metric): TotalBandMetric => {
     const format = columnFormat(metric.column, view.column_formats);
     const rate = isRateFormat(format);
@@ -1361,7 +1365,8 @@ function declaredChart(
   return null;
 }
 
-type ResultShape = {
+export type ResultShape = {
+  detected: Roles;
   roles: Roles;
   temporal: boolean;
 };
@@ -1373,7 +1378,7 @@ export function analyzeResultShape(view: ViewBlock): ResultShape {
     ...detected,
     measureIdx: primaryMeasureIndices(view, detected.measureIdx),
   };
-  return { roles, temporal: roles.timePoints.length >= 2 };
+  return { detected, roles, temporal: roles.timePoints.length >= 2 };
 }
 
 /** 表格确定性编译：只执行输入边界已归一的布局；内部裸调用按原始长表忠实交付。 */
@@ -1381,8 +1386,9 @@ export function compileTableWithStatus(
   view: ViewBlock,
   titleOf: (c: string) => string,
   decl?: ChartDecl,
+  shape: ResultShape = analyzeResultShape(view),
 ): TableCompilation {
-  const roles = detectRoles(view);
+  const roles = shape.detected;
   const compiled = decl
     ? compileTableLayout(view, roles, titleOf, decl.tableLayout)
     : {
@@ -1439,17 +1445,21 @@ export function compileChart(
   view: ViewBlock,
   titleOf: (c: string) => string,
   decl: ChartRenderDecl,
+  shape: ResultShape = analyzeResultShape(view),
 ): ChartSpec | null {
   if (decl.type === "table" || decl.type === "kpi" || !view.rows.length) return null;
-  return declaredChart(view, detectRoles(view), titleOf, decl);
+  return declaredChart(view, shape.detected, titleOf, decl);
 }
 
 /**
  * KPI 运行时守卫：整窗读数可成、1–4 个指标、无业务分组。分组结果不成 KPI——把分组合起来
  * 只剩一个数，等于把用户要的那件事丢掉；时间序列则无妨，大数字读的正是它的整窗合计。
  */
-export function canCompileKpi(view: ViewBlock): boolean {
-  const band = compileTotalBand(view, (column) => column);
+export function canCompileKpi(
+  view: ViewBlock,
+  shape: ResultShape = analyzeResultShape(view),
+): boolean {
+  const band = compileTotalBand(view, (column) => column, shape);
   if (!band || band.metrics.length > 4) return false;
   return !view.columns.some((column) => view.column_roles[column] === "dimension");
 }
@@ -1457,11 +1467,8 @@ export function canCompileKpi(view: ViewBlock): boolean {
 export type SensibleForm = PresentationType;
 
 export function sensibleForms(view: ViewBlock): SensibleForm[] {
-  const detected = detectRoles(view);
-  const roles = {
-    ...detected,
-    measureIdx: primaryMeasureIndices(view, detected.measureIdx),
-  };
+  const shape = analyzeResultShape(view);
+  const { roles } = shape;
   const measures = roles.measureIdx.map((index) => view.columns[index]);
   const categories = roles.catIdx.map((index) => view.columns[index]);
   const candidates: Array<{
@@ -1498,18 +1505,20 @@ export function sensibleForms(view: ViewBlock): SensibleForm[] {
   const titleOf = makeTitleOf(view);
   return [
     "table",
-    ...(canCompileKpi(view) ? (["kpi"] as const) : []),
+    ...(canCompileKpi(view, shape) ? (["kpi"] as const) : []),
     ...candidates.flatMap(({ form, decl }) => {
-      return compileChart(view, titleOf, decl) ? [form] : [];
+      return compileChart(view, titleOf, decl, shape) ? [form] : [];
     }),
   ];
 }
 
 export function renderShapeOfView(view: ViewBlock, decl: ChartDecl): RenderShape | null {
   if (!view.rows.length) return null;
-  if (decl.type === "kpi" && canCompileKpi(view)) return "kpi";
-  const chart = compileChart(view, makeTitleOf(view), decl);
+  const shape = analyzeResultShape(view);
+  if (decl.type === "kpi" && canCompileKpi(view, shape)) return "kpi";
+  const titleOf = makeTitleOf(view);
+  const chart = compileChart(view, titleOf, decl, shape);
   if (chart) return chart.kind === "category_combo" ? "bar" : chart.kind;
-  const table = compileTable(view, makeTitleOf(view), decl);
+  const table = compileTableWithStatus(view, titleOf, decl, shape).table;
   return table.columns.some((column) => column.headerPath.length > 1) ? "crosstab" : "table";
 }

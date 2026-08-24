@@ -6,7 +6,7 @@
  */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { DataTable, INLINE_ROWS } from "./data_table.js";
+import { DataTable, INLINE_ROWS, resolveTableSort } from "./data_table.js";
 import type { ViewScene } from "../scene.js";
 import type { TableModel } from "../../../src/presentation_core/view_shape.js";
 
@@ -65,6 +65,22 @@ test("单层表头：每列一个 th，数值列头与体都右对齐", () => {
   expect(count(html, "text-right")).toBe(flat.rows.length + 1);
   // 右对齐列的排序 Chevron 反位到文字左侧：仅数值列头
   expect(count(html, "flex-row-reverse")).toBe(1);
+});
+
+test("换模型后旧排序列必须仍指向同一语义列才保留", () => {
+  const active = {
+    column: 1,
+    columnKey: JSON.stringify([
+      flat.columns[1].formatKey,
+      flat.columns[1].headerPath.map(({ key }) => key),
+    ]),
+    dir: 1 as const,
+  };
+  expect(resolveTableSort(active, flat.columns)).toEqual(active);
+  expect(resolveTableSort(active, flat.columns.slice(0, 1))).toBeNull();
+  expect(
+    resolveTableSort(active, [flat.columns[0], column("离职人数", "hr.turnover_count", true)]),
+  ).toBeNull();
 });
 
 test("表体语言：明细常规字重、空值出破折号、文本列带截断上限", () => {

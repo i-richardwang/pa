@@ -6,6 +6,7 @@ import {
   type RecordProjectionRequestBody,
 } from "@contracts/record_projection_contract";
 import type { TimeIntent } from "@time";
+import { canonicalJson } from "@canonical-json";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -52,6 +53,13 @@ export type RecordProjectionDialogRequest = Omit<
 
 const PAGE_SIZE = 50;
 
+export function projectionPageOffset(
+  page: { requestKey: string | null; offset: number },
+  requestKey: string | null,
+): number {
+  return page.requestKey === requestKey ? page.offset : 0;
+}
+
 function CoordinateBar({ display }: { display: RecordProjectionCoordinateDisplay }) {
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="records-coordinate-bar">
@@ -74,22 +82,28 @@ export function RecordProjectionDialog({
   request: RecordProjectionDialogRequest | null;
   onClose: () => void;
 }) {
-  const [offset, setOffset] = useState(0);
   const [data, setData] = useState<RecordProjectionPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedRow, setSelectedRow] = useState<(string | number | null)[] | null>(null);
+  const requestKey = request ? canonicalJson(request) : null;
+  const [page, setPage] = useState<{ requestKey: string | null; offset: number }>({
+    requestKey,
+    offset: 0,
+  });
+  const offset = projectionPageOffset(page, requestKey);
 
   useEffect(() => {
-    setOffset(0);
+    setPage({ requestKey, offset: 0 });
     setData(null);
     setError(null);
+    setLoading(false);
     setSelectedRow(null);
-  }, [request]);
+  }, [requestKey]);
 
   useEffect(() => {
     if (!request) return;
-    let cancelled = false;
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
     const { target, display: _display, ...body } = request;
@@ -101,16 +115,18 @@ export function RecordProjectionDialog({
               ? `?time=${encodeURIComponent(JSON.stringify(target.time_override))}`
               : ""
           }`;
-    postJson(endpoint, { ...body, offset, limit: PAGE_SIZE }, RECORD_PROJECTION_PAYLOAD_SCHEMA)
-      .then((payload) => !cancelled && setData(payload))
+    postJson(endpoint, { ...body, offset, limit: PAGE_SIZE }, RECORD_PROJECTION_PAYLOAD_SCHEMA, {
+      signal: controller.signal,
+    })
+      .then((payload) => !controller.signal.aborted && setData(payload))
       .catch((reason: unknown) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+        if (!controller.signal.aborted) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
       })
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [request, offset]);
+      .finally(() => !controller.signal.aborted && setLoading(false));
+    return () => controller.abort();
+  }, [request, requestKey, offset]);
 
   const start = data && data.rows.length ? data.offset + 1 : 0;
   const end = data ? data.offset + data.rows.length : 0;
@@ -132,13 +148,13 @@ export function RecordProjectionDialog({
                 ) : null}
                 <HeaderTextAction
                   disabled={offset === 0 || loading}
-                  onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                  onClick={() => setPage({ requestKey, offset: Math.max(0, offset - PAGE_SIZE) })}
                 >
                   上一页
                 </HeaderTextAction>
                 <HeaderTextAction
                   disabled={!data?.has_more || loading}
-                  onClick={() => setOffset(offset + PAGE_SIZE)}
+                  onClick={() => setPage({ requestKey, offset: offset + PAGE_SIZE })}
                 >
                   下一页
                 </HeaderTextAction>

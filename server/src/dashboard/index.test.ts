@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { BusinessTermInputError } from "../application/business_term_registry.js";
 import { createFeedbackService } from "../application/feedback_service.js";
+import { InvalidRequestError } from "../application/errors.js";
 import { cubeSecurityContext } from "../engine/cube_security.js";
 import {
   PUBLIC_CATALOG_DOCUMENT_SCHEMA as CATALOG_PAYLOAD_SCHEMA,
@@ -10,7 +10,6 @@ import { ME_PAYLOAD_SCHEMA } from "../contracts/session_contract.js";
 import { MY_ANALYSES_PAYLOAD_SCHEMA } from "../contracts/analysis_contract.js";
 import { USAGE_OVERVIEW_PAYLOAD_SCHEMA } from "../contracts/usage_contract.js";
 import {
-  CatalogInputError,
   buildDashboardApp as buildApp,
   createFeedbackStore,
   createTestAppDatabase,
@@ -202,7 +201,7 @@ describe("dashboard app routes and access control", () => {
               throw new Error("不应调用");
             },
             dimensionValues: async () => {
-              throw new CatalogInputError("未开放值清单");
+              throw new InvalidRequestError("未开放值清单");
             },
           },
         },
@@ -443,8 +442,7 @@ describe("dashboard app routes and access control", () => {
               return [publicRow];
             },
             create: async (principal, input) => {
-              if (input.canonical_term === "重复")
-                throw new BusinessTermInputError("术语叫法已存在");
+              if (input.canonical_term === "重复") throw new InvalidRequestError("术语叫法已存在");
               writes.push({ action: "create", input });
               logged.push({ tool: "business_term_admin", title: "新建业务术语：「Band C+」" });
               expect(principal.email).toBe("admin@x");

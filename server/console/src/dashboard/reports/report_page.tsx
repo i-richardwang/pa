@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArchiveIcon, HistoryIcon } from "lucide-react";
 import type { ReportsPayload } from "@contracts/report_contract";
@@ -52,8 +52,6 @@ export function ReportPage({ id }: { id: string }) {
     disabled: !edit.showingSavedReplay,
     onRequest: setRecordProjectionRequest,
   });
-  useEffect(() => setRecordProjectionRequest(null), [id]);
-
   /** 归档回到清单：清单先撤下这一行，回执关闭才提交；撤销把它放回清单。 */
   function archive() {
     if (!report) return;

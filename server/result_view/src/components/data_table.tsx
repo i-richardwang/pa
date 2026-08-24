@@ -69,6 +69,18 @@ type HeaderCell = {
   leaf: boolean;
 };
 
+export type TableSort = { column: number; columnKey: string; dir: 1 | -1 };
+
+const tableColumnKey = (column: TableColumn): string =>
+  JSON.stringify([column.formatKey, column.headerPath.map(({ key }) => key)]);
+
+/** 模型切换时旧下标只有仍指向同一语义列才有效；首个新模型渲染就先裁掉陈旧状态。 */
+export function resolveTableSort(sort: TableSort | null, columns: TableColumn[]): TableSort | null {
+  if (!sort) return null;
+  const column = columns[sort.column];
+  return column && tableColumnKey(column) === sort.columnKey ? sort : null;
+}
+
 /** 相邻叶子列的共同路径前缀合并成表头格；headerPath 是分组结构的唯一事实源。 */
 function tableHeaderRows(columns: TableColumn[]): HeaderCell[][] {
   const depth = Math.max(1, ...columns.map((column) => column.headerPath.length));
@@ -117,7 +129,9 @@ export function DataTable({
 }) {
   const traits = VIEW_SCENES[scene];
   const { fill } = traits;
-  const [sort, setSort] = useState<{ column: number; dir: 1 | -1 } | null>(null);
+  const [sort, setSort] = useState<TableSort | null>(null);
+  const activeSort = resolveTableSort(sort, model.columns);
+  const columnSchemaKey = JSON.stringify(model.columns.map(tableColumnKey));
   const headerRows = tableHeaderRows(model.columns);
   const headerDepth = headerRows.length;
   /** 首列是坐标才冻结：数值打头的表没有行头，冻住一列数字反而挡住后面的数字。 */
@@ -134,8 +148,10 @@ export function DataTable({
   /** 悬停中且确实被截断的格子（展开钮只在这里出现） */
   const [expandHint, setExpandHint] = useState<{ row: number; col: number } | null>(null);
   const rows = model.rows.map((row, source) => ({ row, source }));
-  if (sort) {
-    rows.sort((a, b) => compareCells(a.row[sort.column], b.row[sort.column]) * sort.dir);
+  if (activeSort) {
+    rows.sort(
+      (a, b) => compareCells(a.row[activeSort.column], b.row[activeSort.column]) * activeSort.dir,
+    );
   }
   const shown = allRows ? rows : rows.slice(0, INLINE_ROWS);
   const total = `共 ${rows.length} 行`;
@@ -159,9 +175,17 @@ export function DataTable({
     return observeElementSize(node, () => setHeadHeight(node.offsetHeight));
   }, [fill]);
 
+  useEffect(() => {
+    setSort((previous) => resolveTableSort(previous, model.columns));
+    setUncapped((previous) => (previous.size ? new Set() : previous));
+    setExpandHint(null);
+  }, [columnSchemaKey, model.columns]);
+
   const toggleSort = (i: number) =>
     setSort(
-      sort?.column === i ? { column: i, dir: sort.dir === 1 ? -1 : 1 } : { column: i, dir: 1 },
+      activeSort?.column === i
+        ? { ...activeSort, dir: activeSort.dir === 1 ? -1 : 1 }
+        : { column: i, columnKey: tableColumnKey(model.columns[i]), dir: 1 },
     );
 
   const uncap = (col: number) => {
@@ -182,13 +206,13 @@ export function DataTable({
       type="button"
       title={col.label}
       className={`inline-flex max-w-full cursor-pointer select-none appearance-none items-center gap-1 rounded-sm border-0 px-2 py-1 font-normal text-pa-muted hover:bg-pa-surface hover:text-pa-fg ${
-        sort?.column === i ? "bg-pa-surface text-pa-fg" : "bg-transparent"
+        activeSort?.column === i ? "bg-pa-surface text-pa-fg" : "bg-transparent"
       } ${col.numeric ? "flex-row-reverse" : ""}`}
       onClick={() => toggleSort(i)}
     >
       <span className="truncate">{col.label}</span>
-      {sort?.column === i &&
-        (sort.dir === 1 ? (
+      {activeSort?.column === i &&
+        (activeSort.dir === 1 ? (
           <ChevronUpIcon aria-hidden="true" className="size-2.5 shrink-0" />
         ) : (
           <ChevronDownIcon aria-hidden="true" className="size-2.5 shrink-0" />

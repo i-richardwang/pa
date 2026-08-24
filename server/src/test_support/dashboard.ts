@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestAppDatabase } from "./app_database.js";
-import { CatalogInputError } from "../application/catalog_service.js";
 import { dashboardRoutes } from "../dashboard/index.js";
 import { createFeedbackStore } from "../storage/feedback.js";
 import type { AnalysisSpec, ExprNode } from "../semantic_core/analysis_spec.js";
@@ -36,15 +35,7 @@ import type { CubeView, TimeContext } from "../ports/cube_gateway.js";
 import { cubeSecurityContext } from "../engine/cube_security.js";
 import type { ExecutionPlan } from "../semantic_core/execution_plan.js";
 
-export {
-  CatalogInputError,
-  createBoardRepository,
-  createFeedbackStore,
-  createReports,
-  createUsageLog,
-  createUsageStats,
-  dashboardRoutes,
-};
+export { createBoardRepository, createFeedbackStore, createReports, dashboardRoutes };
 
 export function createTestUsage(db: SqliteDatabase) {
   return createUsageService({ log: createUsageLog(db), statistics: createUsageStats(db) });

@@ -3,7 +3,8 @@
  * 各按契约 schema 解析，content 是面向模型/用户的文本退路，只用来取错误说明，
  * 不承担 iframe 数据协议，也不尝试从宿主包装文本中恢复 JSON。
  */
-import { isPresentationBlock, PRESENTATION_META_KEY, type PresentationBlock } from "@charts";
+import { PRESENTATION_META_KEY, type PresentationBlock } from "@charts";
+import { isPresentationBlock } from "@presentation-guard";
 import {
   EXPORT_RESOURCE_LINK_SCHEMA,
   EXPORT_RESOURCE_META_KEY,

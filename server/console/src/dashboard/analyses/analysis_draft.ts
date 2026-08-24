@@ -9,6 +9,7 @@ import {
   type AnalysisDefinition,
 } from "@semantic-analysis";
 import type { ViewPreferences } from "@view-preferences";
+import { canonicalJson } from "@canonical-json";
 import {
   compileTimeIntent,
   resolveTimeOutputGrain,
@@ -31,7 +32,9 @@ export type AnalysisEditState = {
   previewed_view_preferences: ViewPreferences | null;
 };
 
-const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+const clone = <T>(value: T): T => structuredClone(value);
+const sameJson = (left: unknown, right: unknown): boolean =>
+  canonicalJson(left) === canonicalJson(right);
 
 /**
  * 各种窗口的默认取值：空白分析、换窗口种类、看板时间覆盖都从这里取。
@@ -119,21 +122,21 @@ export function beginAnalysisEdit(
 }
 
 export function hasAnalysisChanges(draft: AnalysisEditState): boolean {
-  return JSON.stringify(draft.analysis) !== JSON.stringify(draft.baseline_analysis);
+  return !sameJson(draft.analysis, draft.baseline_analysis);
 }
 
 export function hasViewChanges(draft: AnalysisEditState): boolean {
   return (
-    JSON.stringify(draft.view) !== JSON.stringify(draft.baseline_view) ||
-    JSON.stringify(draft.view_preferences) !== JSON.stringify(draft.baseline_view_preferences)
+    !sameJson(draft.view, draft.baseline_view) ||
+    !sameJson(draft.view_preferences, draft.baseline_view_preferences)
   );
 }
 
 export function isPreviewCurrent(draft: AnalysisEditState): boolean {
   return (
-    JSON.stringify(draft.previewed_analysis) === JSON.stringify(draft.analysis) &&
-    JSON.stringify(draft.previewed_view) === JSON.stringify(draft.view) &&
-    JSON.stringify(draft.previewed_view_preferences) === JSON.stringify(draft.view_preferences)
+    sameJson(draft.previewed_analysis, draft.analysis) &&
+    sameJson(draft.previewed_view, draft.view) &&
+    sameJson(draft.previewed_view_preferences, draft.view_preferences)
   );
 }
 
@@ -167,9 +170,9 @@ export function settlePreview(draft: AnalysisEditState, replay: ReplayPayload): 
 export function isAnalysisEditDirty(draft: AnalysisEditState): boolean {
   return (
     draft.name !== draft.baseline_name ||
-    JSON.stringify(draft.analysis) !== JSON.stringify(draft.baseline_analysis) ||
-    JSON.stringify(draft.view) !== JSON.stringify(draft.baseline_view) ||
-    JSON.stringify(draft.view_preferences) !== JSON.stringify(draft.baseline_view_preferences)
+    !sameJson(draft.analysis, draft.baseline_analysis) ||
+    !sameJson(draft.view, draft.baseline_view) ||
+    !sameJson(draft.view_preferences, draft.baseline_view_preferences)
   );
 }
 

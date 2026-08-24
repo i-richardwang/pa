@@ -3,9 +3,9 @@ import { createBusinessTermRepository } from "../storage/business_term_repositor
 import { createTestAppDatabase } from "../test_support/app_database.js";
 import type { Principal } from "../contracts/principal.js";
 import type { PublicCatalogMember } from "../contracts/catalog_contract.js";
-import { BusinessTermInputError, createBusinessTermRegistry } from "./business_term_registry.js";
+import { createBusinessTermRegistry } from "./business_term_registry.js";
 import { createBusinessTermService } from "./business_term_service.js";
-import { ForbiddenError } from "./errors.js";
+import { ForbiddenError, InvalidRequestError } from "./errors.js";
 
 const members: PublicCatalogMember[] = [
   {
@@ -74,7 +74,7 @@ describe("business term application boundary", () => {
         aliases: [],
         related_member_ids: ["physical.category_level"],
       }),
-    ).rejects.toBeInstanceOf(BusinessTermInputError);
+    ).rejects.toBeInstanceOf(InvalidRequestError);
     await service.create(admin, {
       canonical_term: "Level C+",
       definition: "Level C 及以上的示例分类范围。",
@@ -134,7 +134,7 @@ describe("business term application boundary", () => {
         aliases: ["Ｌｅｖｅｌ Ｃ+"],
         related_member_ids: [],
       }),
-    ).rejects.toBeInstanceOf(BusinessTermInputError);
+    ).rejects.toBeInstanceOf(InvalidRequestError);
     db.close();
   });
 });

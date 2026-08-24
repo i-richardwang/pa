@@ -17,6 +17,10 @@ export default defineConfig({
         "../src/contracts/record_projection_contract.ts",
       ),
       "@charts": path.resolve(import.meta.dirname, "../src/presentation_core/chart_config.ts"),
+      "@presentation-guard": path.resolve(
+        import.meta.dirname,
+        "../src/presentation_core/presentation_guard.ts",
+      ),
       "@product": path.resolve(import.meta.dirname, "../src/contracts/product_metadata.ts"),
     },
   },

@@ -36,6 +36,11 @@ export function ReportHistoryDialog({
   const data = revisions.data;
   const error = revisions.error ?? actionError;
 
+  const changeOpen = (next: boolean) => {
+    if (!next) setActionError(null);
+    onOpenChange(next);
+  };
+
   const restoreTarget =
     restoreReport.isPending && restoreReport.variables?.action.type === "restore"
       ? restoreReport.variables.action.revision
@@ -49,7 +54,7 @@ export function ReportHistoryDialog({
         if_revision: currentRevision,
       });
       await onRestored(report);
-      onOpenChange(false);
+      changeOpen(false);
       toastManager.add({ title: `已恢复版本 ${revision}` });
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) return;
@@ -58,7 +63,7 @@ export function ReportHistoryDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogPopup className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>版本历史</DialogTitle>

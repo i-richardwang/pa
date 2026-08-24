@@ -35,8 +35,6 @@ import type { BusinessTermRegistry } from "./business_term_registry.js";
 import type { CubeSecurityContext, TimeContext } from "../ports/cube_gateway.js";
 import { InvalidRequestError, UnavailableError } from "./errors.js";
 
-export class CatalogInputError extends InvalidRequestError {}
-
 /**
  * 用户入口只暴露稳定的可恢复状态；完整模型装配诊断保留在 cause 与服务端日志中。
  * 这道边界覆盖 MCP、控制台与所有复用 CatalogService 的应用服务。
@@ -192,17 +190,17 @@ export function createCatalogService(deps: {
       // 入参只接受语义 member id；服务端解析成物理绑定后翻值，物理成员名从不上线。
       const semantic = catalogMember(compiler, memberId, "dimension");
       if (!semantic) {
-        throw new CatalogInputError(`维度 ${memberId} 不在当前目录中`);
+        throw new InvalidRequestError(`维度 ${memberId} 不在当前目录中`);
       }
       const physical = semantic.available_in[0]?.member;
       if (!physical) {
-        throw new CatalogInputError(`维度「${semantic.title}」当前没有可翻值的数据来源`);
+        throw new InvalidRequestError(`维度「${semantic.title}」当前没有可翻值的数据来源`);
       }
       let dimension: ReturnType<typeof findSearchableDimension>;
       try {
         dimension = findSearchableDimension(views, physical);
       } catch (error) {
-        throw new CatalogInputError(error instanceof Error ? error.message : String(error));
+        throw new InvalidRequestError(error instanceof Error ? error.message : String(error));
       }
       const response = await deps.cube.load(dimensionValuesQuery(physical, contains), context);
       const raw = response.data

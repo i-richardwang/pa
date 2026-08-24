@@ -14,6 +14,12 @@ function parsePort(raw: string | undefined): number {
   return port;
 }
 
+function parsePositiveInteger(name: string, raw: string | undefined, fallback: number): number {
+  const value = Number(raw ?? fallback);
+  if (!Number.isInteger(value) || value <= 0) throw new Error(`${name} 必须是正整数：${raw}`);
+  return value;
+}
+
 function parseHost(raw: string | undefined): string {
   const host = raw?.trim() || "127.0.0.1";
   if (/[/\s]/.test(host)) throw new Error(`PA_BIND_HOST 无效：${raw}`);
@@ -39,6 +45,11 @@ function parseBaseUrl(raw: string | undefined): string {
 export const config = {
   cubeUrl: process.env.CUBE_URL ?? "http://localhost:4000",
   apiSecret: required("CUBEJS_API_SECRET"),
+  cubeRequestTimeoutMs: parsePositiveInteger(
+    "PA_CUBE_REQUEST_TIMEOUT_MS",
+    process.env.PA_CUBE_REQUEST_TIMEOUT_MS,
+    30_000,
+  ),
   port: parsePort(process.env.PORT),
   /** Node 监听地址；Docker 宿主侧暴露地址另由 PA_SERVER_BIND_IP 控制。 */
   bindHost: parseHost(process.env.PA_BIND_HOST),

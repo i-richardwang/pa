@@ -23,6 +23,7 @@ services:
     environment:
       CUBE_URL: http://cube:4000
       CUBEJS_API_SECRET: ${CUBEJS_API_SECRET:?请在 .env 设置}
+      PA_CUBE_REQUEST_TIMEOUT_MS: ${PA_CUBE_REQUEST_TIMEOUT_MS:-30000}
       PORT: 8788
       PA_BIND_HOST: ${PA_BIND_HOST:-0.0.0.0}
       # 鉴权基座（Better Auth）：设置 PA_AUTH_SECRET 即启用 OAuth 与 API key 两条接入通道；

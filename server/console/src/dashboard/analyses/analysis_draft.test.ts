@@ -169,6 +169,38 @@ describe("analysis draft 三层状态", () => {
     expect(hasViewChanges(renamed)).toBe(false);
   });
 
+  test("对象键顺序不制造伪变更，数组顺序仍属于语义", () => {
+    const base = begin();
+    const samePreferences = {
+      value_labels: "all" as const,
+      series: { "measure:active_employee_count": { color: "#509ee3" } },
+    };
+    const reorderedPreferences = {
+      series: { "measure:active_employee_count": { color: "#509ee3" } },
+      value_labels: "all" as const,
+    };
+    const reordered = {
+      ...base,
+      view_preferences: samePreferences,
+      baseline_view_preferences: reorderedPreferences,
+    };
+    expect(hasViewChanges(reordered)).toBe(false);
+    expect(isAnalysisEditDirty(reordered)).toBe(false);
+
+    const reversedSeries = {
+      ...base,
+      view: {
+        ...base.view,
+        series: ["measure:active_employee_count", "measure:new_hire_count"],
+      },
+      baseline_view: {
+        ...base.view,
+        series: ["measure:new_hire_count", "measure:active_employee_count"],
+      },
+    };
+    expect(hasViewChanges(reversedSeries)).toBe(true);
+  });
+
   test("保存落定三层基线，预览身份只由预览结果落定", () => {
     const changed = setSemanticViewIntent(begin(), { type: "table" }, catalog);
     expect(isPreviewCurrent(changed)).toBe(false);

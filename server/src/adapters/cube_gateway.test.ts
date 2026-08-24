@@ -7,7 +7,7 @@ import {
   normalizeSqlResponse,
   resolveTimeSourceAnchors,
 } from "./cube_gateway.js";
-import type { CubeView } from "../ports/cube_gateway.js";
+import { CubeGatewayError, type CubeView } from "../ports/cube_gateway.js";
 import { buildTimeSourceRegistry } from "../semantic_core/time_source.js";
 
 const GENERIC_TIME_SOURCES = buildTimeSourceRegistry([
@@ -34,6 +34,28 @@ const GENERIC_TIME_SOURCES = buildTimeSourceRegistry([
     comparison_policy: "explicit_only",
   },
 ]);
+
+const TEST_CONTEXT = {
+  subject: "service",
+  groups: ["pa_service"],
+  accessScope: { kind: "all" as const },
+};
+
+const testGateway = (requestTimeoutMs = 30_000) =>
+  createCubeGateway({
+    cubeUrl: "http://cube.test",
+    apiSecret: "test-secret",
+    accessScopeId: "region",
+    serviceContext: TEST_CONTEXT,
+    timeSources: GENERIC_TIME_SOURCES,
+    requestTimeoutMs,
+  });
+
+const jsonResponse = (body: unknown) =>
+  new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
 
 test("通用授权范围只以 data_scope 投影到 Cube JWT", async () => {
   const authorizations: string[] = [];
@@ -106,6 +128,108 @@ test("内部成员只保留在服务端契约解析面", () => {
   expect(normalized.internalDimensions?.map(({ name }) => name)).toEqual([
     "test_people_metrics.employee_id",
   ]);
+});
+
+test("Cube meta 与 load 的内部结构在 HTTP 边界 fail-closed", async () => {
+  const fetchMock = spyOn(globalThis, "fetch");
+  try {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ cubes: [{ type: "view", name: "broken", title: "Broken" }] }),
+    );
+    await expect(testGateway().meta(TEST_CONTEXT)).rejects.toBeInstanceOf(CubeGatewayError);
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ data: [null], annotation: { measures: {}, dimensions: {} } }),
+    );
+    await expect(testGateway().load({}, TEST_CONTEXT)).rejects.toBeInstanceOf(CubeGatewayError);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ results: [null] }));
+    await expect(testGateway().loadMulti({}, TEST_CONTEXT)).rejects.toBeInstanceOf(
+      CubeGatewayError,
+    );
+  } finally {
+    fetchMock.mockRestore();
+  }
+});
+
+test("Cube load 只把通过合同的行与 annotation 交给应用层", async () => {
+  const fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(
+    jsonResponse({
+      data: [{ "sales.revenue": 12 }],
+      annotation: {
+        measures: { "sales.revenue": { title: "Revenue", description: "Booked revenue" } },
+        dimensions: {},
+        segments: { ignored: true },
+      },
+    }),
+  );
+  try {
+    await expect(testGateway().load({}, TEST_CONTEXT)).resolves.toEqual({
+      data: [{ "sales.revenue": 12 }],
+      annotation: {
+        measures: { "sales.revenue": { title: "Revenue", description: "Booked revenue" } },
+        dimensions: {},
+      },
+    });
+  } finally {
+    fetchMock.mockRestore();
+  }
+});
+
+test("单次 Cube HTTP 往返超时后以稳定网关错误结束", async () => {
+  const fetchMock = spyOn(globalThis, "fetch").mockImplementation((async (_input, init) => {
+    const signal = init?.signal;
+    if (!signal) throw new Error("missing abort signal");
+    return {
+      ok: true,
+      status: 200,
+      text: () =>
+        new Promise<string>((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+    } as Response;
+  }) as typeof fetch);
+  try {
+    await expect(testGateway(5).meta(TEST_CONTEXT)).rejects.toMatchObject({
+      name: "CubeGatewayError",
+      message: "数据引擎暂时不可用，请稍后重试",
+    });
+  } finally {
+    fetchMock.mockRestore();
+  }
+});
+
+test("时间上下文拒绝 Cube 返回的非法年月", async () => {
+  const fetchMock = spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(
+      jsonResponse({
+        cubes: [
+          {
+            type: "view",
+            name: "sales_execution",
+            title: "Sales execution",
+            meta: {
+              query_surface: "metric_source",
+              time_source: "sales_actual",
+              time_anchor_measure: "revenue",
+            },
+            measures: [{ name: "sales_execution.revenue", title: "Revenue", type: "number" }],
+            dimensions: [],
+          },
+        ],
+      }),
+    )
+    .mockResolvedValueOnce(
+      jsonResponse({
+        data: [{ "sales_execution.year": "2026", "sales_execution.month": "13" }],
+        annotation: { measures: {}, dimensions: {} },
+      }),
+    );
+  try {
+    await expect(testGateway().timeContext()).rejects.toBeInstanceOf(CubeGatewayError);
+  } finally {
+    fetchMock.mockRestore();
+  }
 });
 
 test("非 HR 数据时钟从包注册表和执行 View 元数据解析", () => {

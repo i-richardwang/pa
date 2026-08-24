@@ -1,0 +1,50 @@
+import { expect, test } from "bun:test";
+import { resolveBetterAuthPrincipal } from "./better_auth_principal.js";
+
+const ACCESS_SCOPE = { id: "organization", title: "组织" };
+
+test("认证用户实时属性解析保留角色与数据范围", async () => {
+  const principal = await resolveBetterAuthPrincipal(
+    {
+      findUserById: async () => ({
+        email: "alice@example.com",
+        role: "user",
+        access_scope: JSON.stringify({
+          scope_id: "organization",
+          kind: "limited",
+          values: ["研发"],
+        }),
+      }),
+    },
+    "user-1",
+    ACCESS_SCOPE,
+  );
+  expect(principal).toEqual({
+    email: "alice@example.com",
+    roles: ["user"],
+    accessScope: { kind: "limited", values: ["研发"] },
+  });
+});
+
+test("用户已删除时保持 fail-closed，回查故障则保留原始异常", async () => {
+  await expect(
+    resolveBetterAuthPrincipal({ findUserById: async () => null }, "deleted-user", ACCESS_SCOPE),
+  ).resolves.toEqual({
+    email: "deleted-user",
+    roles: [],
+    accessScope: { kind: "limited", values: [] },
+  });
+
+  const failure = new Error("auth database unavailable");
+  await expect(
+    resolveBetterAuthPrincipal(
+      {
+        findUserById: async () => {
+          throw failure;
+        },
+      },
+      "user-1",
+      ACCESS_SCOPE,
+    ),
+  ).rejects.toBe(failure);
+});

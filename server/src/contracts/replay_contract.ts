@@ -1,9 +1,6 @@
 import { z } from "zod";
-import {
-  isPresentationBlock,
-  type PresentationBlock,
-  type PresentationFallback,
-} from "../presentation_core/chart_config.js";
+import type { PresentationBlock, PresentationFallback } from "../presentation_core/chart_config.js";
+import { isPresentationBlock } from "../presentation_core/presentation_guard.js";
 import {
   QUERY_PAYLOAD_SCHEMA,
   VIEW_BLOCK_SCHEMA,

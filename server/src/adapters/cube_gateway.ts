@@ -5,6 +5,7 @@ import { parseKnownTimeSourceId, type TimeSourceRegistry } from "../semantic_cor
 import { CubeGatewayError } from "../ports/cube_gateway.js";
 import type {
   CubeGateway,
+  CubeHierarchy,
   CubeMember,
   CubeQuery,
   CubeSecurityContext,
@@ -28,13 +29,16 @@ export type CubeGatewayConfig = {
   accessScopeId: string;
   serviceContext: CubeSecurityContext;
   timeSources: TimeSourceRegistry;
+  /** 单次 Cube HTTP 往返的上限；Continue wait 的总轮数由查询循环另行约束。 */
+  requestTimeoutMs?: number;
 };
 
 const TOKEN_TTL_S = 3600;
 const META_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 type CubeGatewayState = {
-  config: CubeGatewayConfig;
+  config: CubeGatewayConfig & { requestTimeoutMs: number };
   tokenCache: Map<string, { token: string; expiresAt: number }>;
   metaCache: Map<string, { views: CubeView[]; fetchedAt: number }>;
   timeContextCache: { value: TimeContext; fetchedAt: number } | null;
@@ -82,19 +86,30 @@ async function request(
   init?: RequestInit,
 ): Promise<unknown> {
   let res: Response;
+  let text: string;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), state.config.requestTimeoutMs);
   try {
     res = await fetch(`${state.config.cubeUrl}/cubejs-api/v1${path}`, {
       ...init,
+      signal: controller.signal,
       headers: {
         Authorization: await token(state, context),
         "Content-Type": "application/json",
         ...init?.headers,
       },
     });
+    text = await res.text();
   } catch (e) {
-    throw unavailable(`Cube 引擎不可达：${state.config.cubeUrl}`, e);
+    throw unavailable(
+      controller.signal.aborted
+        ? `Cube 请求超过 ${state.config.requestTimeoutMs}ms：${path}`
+        : `Cube 引擎不可达：${state.config.cubeUrl}`,
+      e,
+    );
+  } finally {
+    clearTimeout(timeout);
   }
-  const text = await res.text();
   let body: unknown;
   try {
     body = JSON.parse(text);
@@ -126,6 +141,114 @@ export function normalizeMetaViews(cubes: (CubeView & { type: string })[]): Cube
     }));
 }
 
+function optionalString(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+): string | undefined {
+  const value = record[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") throw unavailable(`${label}.${key} 字段格式异常`);
+  return value;
+}
+
+function optionalMeta(
+  record: Record<string, unknown>,
+  label: string,
+): Record<string, unknown> | undefined {
+  const value = record.meta;
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw unavailable(`Cube /meta ${label}.meta 字段格式异常`);
+  return value;
+}
+
+function parseCubeMember(value: unknown, label: string): CubeMember {
+  if (!isRecord(value)) throw unavailable(`Cube /meta ${label} 成员格式异常`);
+  if (
+    typeof value.name !== "string" ||
+    typeof value.title !== "string" ||
+    typeof value.type !== "string"
+  ) {
+    throw unavailable(`Cube /meta ${label} 成员缺少 name/title/type`);
+  }
+  const shortTitle = optionalString(value, "shortTitle", `Cube /meta ${label}`);
+  const description = optionalString(value, "description", `Cube /meta ${label}`);
+  const aggType = optionalString(value, "aggType", `Cube /meta ${label}`);
+  const format = optionalString(value, "format", `Cube /meta ${label}`);
+  const aliasMember = optionalString(value, "aliasMember", `Cube /meta ${label}`);
+  const meta = optionalMeta(value, label);
+  return {
+    name: value.name,
+    title: value.title,
+    type: value.type,
+    ...(shortTitle !== undefined ? { shortTitle } : {}),
+    ...(description !== undefined ? { description } : {}),
+    ...(aggType !== undefined ? { aggType } : {}),
+    ...(format !== undefined ? { format } : {}),
+    ...(aliasMember !== undefined ? { aliasMember } : {}),
+    ...(meta !== undefined ? { meta } : {}),
+  };
+}
+
+function parseCubeHierarchy(value: unknown, label: string): CubeHierarchy {
+  if (!isRecord(value) || typeof value.name !== "string" || !Array.isArray(value.levels)) {
+    throw unavailable(`Cube /meta ${label} 层级格式异常`);
+  }
+  if (!value.levels.every((level) => typeof level === "string")) {
+    throw unavailable(`Cube /meta ${label}.levels 字段格式异常`);
+  }
+  const title = optionalString(value, "title", `Cube /meta ${label}`);
+  return {
+    name: value.name,
+    levels: value.levels,
+    ...(title !== undefined ? { title } : {}),
+  };
+}
+
+function parseMetaViews(cubes: unknown[]): CubeView[] {
+  const views: (CubeView & { type: string })[] = [];
+  cubes.forEach((cube, index) => {
+    if (!isRecord(cube) || typeof cube.type !== "string") {
+      throw unavailable(`Cube /meta cubes[${index}] 格式异常`);
+    }
+    if (cube.type !== "view") return;
+    if (
+      typeof cube.name !== "string" ||
+      typeof cube.title !== "string" ||
+      !Array.isArray(cube.measures) ||
+      !Array.isArray(cube.dimensions)
+    ) {
+      throw unavailable(`Cube /meta view cubes[${index}] 缺少 name/title/measures/dimensions`);
+    }
+    if (cube.hierarchies !== undefined && !Array.isArray(cube.hierarchies)) {
+      throw unavailable(`Cube /meta view ${cube.name}.hierarchies 字段格式异常`);
+    }
+    const description = optionalString(cube, "description", `Cube /meta view ${cube.name}`);
+    const meta = optionalMeta(cube, cube.name);
+    views.push({
+      type: cube.type,
+      name: cube.name,
+      title: cube.title,
+      measures: cube.measures.map((member, memberIndex) =>
+        parseCubeMember(member, `${cube.name}.measures[${memberIndex}]`),
+      ),
+      dimensions: cube.dimensions.map((member, memberIndex) =>
+        parseCubeMember(member, `${cube.name}.dimensions[${memberIndex}]`),
+      ),
+      ...(description !== undefined ? { description } : {}),
+      ...(meta !== undefined ? { meta } : {}),
+      ...(Array.isArray(cube.hierarchies)
+        ? {
+            hierarchies: cube.hierarchies.map((hierarchy, hierarchyIndex) =>
+              parseCubeHierarchy(hierarchy, `${cube.name}.hierarchies[${hierarchyIndex}]`),
+            ),
+          }
+        : {}),
+    });
+  });
+  return normalizeMetaViews(views);
+}
+
 async function fetchMeta(
   state: CubeGatewayState,
   context: CubeSecurityContext,
@@ -138,7 +261,7 @@ async function fetchMeta(
   const body = raw;
   if (body.error) throw unavailable(`Cube /meta 错误：${String(body.error)}`);
   if (!Array.isArray(body.cubes)) throw unavailable("Cube /meta 应答缺少 cubes");
-  const views = normalizeMetaViews(body.cubes as (CubeView & { type: string })[]);
+  const views = parseMetaViews(body.cubes);
   state.metaCache.set(key, { views, fetchedAt: Date.now() });
   return views;
 }
@@ -167,16 +290,50 @@ async function loadRaw(
 }
 
 /** /v1/load：带 Continue wait 重试。 */
+function parseAnnotationMembers(
+  value: unknown,
+  label: string,
+): Record<string, { title: string; description?: string }> {
+  if (!isRecord(value)) throw unavailable(`Cube /load annotation.${label} 字段格式异常`);
+  return Object.fromEntries(
+    Object.entries(value).map(([member, annotation]) => {
+      if (!isRecord(annotation) || typeof annotation.title !== "string") {
+        throw unavailable(`Cube /load annotation.${label}.${member} 字段格式异常`);
+      }
+      const description = optionalString(
+        annotation,
+        "description",
+        `Cube /load annotation.${label}.${member}`,
+      );
+      return [
+        member,
+        { title: annotation.title, ...(description !== undefined ? { description } : {}) },
+      ];
+    }),
+  );
+}
+
+function parseLoadResponse(value: unknown, label: string): LoadResponse {
+  if (!isRecord(value) || !Array.isArray(value.data) || !isRecord(value.annotation)) {
+    throw unavailable(`Cube ${label} 应答缺少 data/annotation`);
+  }
+  if (!value.data.every(isRecord)) throw unavailable(`Cube ${label} data 行格式异常`);
+  return {
+    data: value.data,
+    annotation: {
+      measures: parseAnnotationMembers(value.annotation.measures, "measures"),
+      dimensions: parseAnnotationMembers(value.annotation.dimensions, "dimensions"),
+    },
+  };
+}
+
 async function fetchLoad(
   state: CubeGatewayState,
   query: CubeQuery,
   context: CubeSecurityContext,
 ): Promise<LoadResponse> {
   const body = await loadRaw(state, query, {}, context);
-  if (!Array.isArray(body.data) || typeof body.annotation !== "object" || !body.annotation) {
-    throw unavailable("Cube /load 应答缺少 data/annotation");
-  }
-  return body as unknown as LoadResponse;
+  return parseLoadResponse(body, "/load");
 }
 
 /**
@@ -190,12 +347,7 @@ async function fetchLoadMulti(
 ): Promise<LoadResponse[]> {
   const body = await loadRaw(state, query, { queryType: "multi" }, context);
   if (!Array.isArray(body.results)) throw unavailable("Cube /load 多窗应答缺少 results");
-  return (body.results as Record<string, unknown>[]).map((r) => {
-    if (!Array.isArray(r.data) || typeof r.annotation !== "object" || !r.annotation) {
-      throw unavailable("Cube /load 多窗应答缺少 data/annotation");
-    }
-    return r as unknown as LoadResponse;
-  });
+  return body.results.map((result, index) => parseLoadResponse(result, `/load results[${index}]`));
 }
 
 function isSqlParameter(value: unknown): value is SqlParameter {
@@ -317,8 +469,22 @@ async function latestMonth(
     state.config.serviceContext,
   );
   const row = res.data[0];
-  if (!row) throw new Error(`无法确定 ${view}.${measure} 的可用月份`);
-  return `${row[`${view}.year`]}-${String(row[`${view}.month`]).padStart(2, "0")}`;
+  if (!row) throw unavailable(`无法确定 ${view}.${measure} 的可用月份`);
+  const integer = (value: unknown, label: string, from: number, to: number): number => {
+    const parsed =
+      typeof value === "number"
+        ? value
+        : typeof value === "string" && /^\d+$/.test(value.trim())
+          ? Number(value)
+          : Number.NaN;
+    if (!Number.isInteger(parsed) || parsed < from || parsed > to) {
+      throw unavailable(`${view}.${measure} 返回无效的 ${label}`);
+    }
+    return parsed;
+  };
+  const year = integer(row[`${view}.year`], "year", 1_000, 9_999);
+  const month = integer(row[`${view}.month`], "month", 1, 12);
+  return `${year}-${String(month).padStart(2, "0")}`;
 }
 
 /**
@@ -369,8 +535,12 @@ async function fetchTimeContext(state: CubeGatewayState): Promise<TimeContext> {
 }
 
 export function createCubeGateway(config: CubeGatewayConfig): CubeGateway {
+  const requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  if (!Number.isFinite(requestTimeoutMs) || requestTimeoutMs <= 0) {
+    throw new Error("Cube 请求超时必须是正数毫秒值");
+  }
   const state: CubeGatewayState = {
-    config,
+    config: { ...config, requestTimeoutMs },
     tokenCache: new Map(),
     metaCache: new Map(),
     timeContextCache: null,

@@ -14,8 +14,6 @@ import type {
 } from "../ports/business_term_repository.js";
 import { InvalidRequestError } from "./errors.js";
 
-export class BusinessTermInputError extends InvalidRequestError {}
-
 export type VisibleCatalogMember = Pick<PublicCatalogMember, "id" | "kind" | "title">;
 
 export function createBusinessTermRegistry(deps: { repository: BusinessTermRepository }) {
@@ -25,21 +23,21 @@ export function createBusinessTermRegistry(deps: { repository: BusinessTermRepos
   const validate = (input: BusinessTermContentInput, members: VisibleCatalogMember[]) => {
     const parsed = BUSINESS_TERM_CONTENT_INPUT.safeParse(input);
     if (!parsed.success) {
-      throw new BusinessTermInputError(parsed.error.issues[0]?.message ?? "业务术语输入无效");
+      throw new InvalidRequestError(parsed.error.issues[0]?.message ?? "业务术语输入无效");
     }
     const normalized = parsed.data;
     const labels = [normalized.canonical_term, ...normalized.aliases].map(normalizeBusinessTerm);
     if (new Set(labels).size !== labels.length) {
-      throw new BusinessTermInputError("规范术语与其他叫法不能在归一后重复");
+      throw new InvalidRequestError("规范术语与其他叫法不能在归一后重复");
     }
     const ids = normalized.related_member_ids;
     if (new Set(ids).size !== ids.length) {
-      throw new BusinessTermInputError("相关数据成员不能重复");
+      throw new InvalidRequestError("相关数据成员不能重复");
     }
     const visible = memberMap(members);
     const invalid = ids.filter((id) => !visible.has(id));
     if (invalid.length) {
-      throw new BusinessTermInputError(`相关数据成员不在当前可见目录：${invalid.join("、")}`);
+      throw new InvalidRequestError(`相关数据成员不在当前可见目录：${invalid.join("、")}`);
     }
     return {
       canonical_term: normalized.canonical_term,

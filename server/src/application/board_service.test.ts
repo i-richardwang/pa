@@ -1,12 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { BoardRecord, BoardRepository } from "../ports/board_repository.js";
 import type { ReportDocument, ReportService } from "./report_service.js";
-import {
-  BoardForbiddenError,
-  BoardNotFoundError,
-  BoardRequestError,
-  createBoardService,
-} from "./board_service.js";
+import { createBoardService } from "./board_service.js";
+import { ForbiddenError, InvalidRequestError, NotFoundError } from "./errors.js";
 import { ReportNotFoundError } from "../ports/report_repository.js";
 import type { Principal } from "../contracts/principal.js";
 
@@ -152,10 +148,10 @@ describe("board application service", () => {
     const { service, runCalls } = harness();
     await expect(
       service.update(bob, "11111111-1111-4111-8111-111111111111", { name: "越权" }, 1),
-    ).rejects.toBeInstanceOf(BoardForbiddenError);
+    ).rejects.toBeInstanceOf(ForbiddenError);
     await expect(
       service.runReport(bob, "11111111-1111-4111-8111-111111111111", report.id),
-    ).rejects.toBeInstanceOf(BoardNotFoundError);
+    ).rejects.toBeInstanceOf(NotFoundError);
     expect(runCalls).toEqual([]);
   });
 
@@ -168,7 +164,7 @@ describe("board application service", () => {
     };
     await expect(
       harness().service.update(alice, "11111111-1111-4111-8111-111111111111", { tiles: [tile] }, 1),
-    ).rejects.toBeInstanceOf(BoardRequestError);
+    ).rejects.toBeInstanceOf(InvalidRequestError);
 
     const storageError = new Error("SQLITE_BUSY");
     await expect(

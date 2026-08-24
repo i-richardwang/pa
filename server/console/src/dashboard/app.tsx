@@ -107,7 +107,7 @@ export function DashboardApp() {
       ) : page.page === "board" ? (
         <BoardPage me={me} id={page.id} timeOverride={page.time ?? null} />
       ) : page.page === "report" ? (
-        <ReportPage id={page.id} />
+        <ReportPage key={page.id} id={page.id} />
       ) : page.page === "analysis_new" ? (
         <AnalysisNewPage />
       ) : page.page === "analysis" ? (

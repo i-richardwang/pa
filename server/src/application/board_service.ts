@@ -25,11 +25,6 @@ import { ConflictError, ForbiddenError, InvalidRequestError, NotFoundError } fro
 import { ReportNotFoundError } from "../ports/report_repository.js";
 import type { UsageService } from "./usage_service.js";
 
-export class BoardRequestError extends InvalidRequestError {}
-export class BoardNotFoundError extends NotFoundError {}
-export class BoardForbiddenError extends ForbiddenError {}
-export class BoardRevisionConflictError extends ConflictError {}
-
 type BoardReportService = Pick<ReportService, "get" | "ensureOwned" | "summary" | "runShared">;
 
 /** 看板用例边界：属主、成员关系、报告引用、版本写入和载荷装配只在这里编排。 */
@@ -63,20 +58,20 @@ export function createBoardService(deps: {
   }
 
   function assertId(id: string): void {
-    if (!BOARD_ID_SCHEMA.safeParse(id).success) throw new BoardRequestError("无效的看板 id");
+    if (!BOARD_ID_SCHEMA.safeParse(id).success) throw new InvalidRequestError("无效的看板 id");
   }
 
   function boardName(name: string): string {
     const parsed = BOARD_NAME_SCHEMA.safeParse(name);
     if (!parsed.success) {
-      throw new BoardRequestError(`看板名称不能为空且最长 ${MAX_BOARD_NAME_LENGTH} 个字符`);
+      throw new InvalidRequestError(`看板名称不能为空且最长 ${MAX_BOARD_NAME_LENGTH} 个字符`);
     }
     return parsed.data;
   }
 
   function assertRevision(revision: number): void {
     if (!Number.isInteger(revision) || revision < 1) {
-      throw new BoardRequestError("if_revision 应为正整数");
+      throw new InvalidRequestError("if_revision 应为正整数");
     }
   }
 
@@ -92,7 +87,7 @@ export function createBoardService(deps: {
         await deps.reports.ensureOwned(principal, reportId);
       } catch (error) {
         if (error instanceof ReportNotFoundError) {
-          throw new BoardRequestError(`报告不存在或无权访问：${reportId}`);
+          throw new InvalidRequestError(`报告不存在或无权访问：${reportId}`);
         }
         throw error;
       }
@@ -112,9 +107,9 @@ export function createBoardService(deps: {
   async function owned(id: string, principal: Principal): Promise<BoardRecord> {
     assertId(id);
     const board = await deps.boards.get(id);
-    if (!board) throw new BoardNotFoundError("看板不存在");
+    if (!board) throw new NotFoundError("看板不存在");
     if (board.created_by !== principal.email) {
-      throw new BoardForbiddenError("只有创建者可以修改这个看板");
+      throw new ForbiddenError("只有创建者可以修改这个看板");
     }
     return board;
   }
@@ -138,7 +133,7 @@ export function createBoardService(deps: {
       return await deps.boards.update(id, patch, ifRevision);
     } catch (error) {
       if (error instanceof BoardConflictError) {
-        throw new BoardRevisionConflictError(error.message);
+        throw new ConflictError(error.message);
       }
       throw error;
     }
@@ -157,7 +152,7 @@ export function createBoardService(deps: {
   async function get(id: string): Promise<BoardPayload> {
     assertId(id);
     const board = await deps.boards.get(id);
-    if (!board) throw new BoardNotFoundError("看板不存在");
+    if (!board) throw new NotFoundError("看板不存在");
     return document(board);
   }
 
@@ -183,7 +178,7 @@ export function createBoardService(deps: {
       },
       ifRevision,
     );
-    if (!updated) throw new BoardNotFoundError("看板不存在");
+    if (!updated) throw new NotFoundError("看板不存在");
     await log(principal.email, `修改看板：${updated.name}`);
     return document(updated);
   }
@@ -198,7 +193,7 @@ export function createBoardService(deps: {
     const board = await owned(input.id, input.principal);
     const reportId = input.reportId.trim();
     if (!REPORT_ID_SCHEMA.safeParse(reportId).success) {
-      throw new BoardRequestError("报告标识无效");
+      throw new InvalidRequestError("报告标识无效");
     }
     if (board.tiles.some((tile) => tile.kind === "report" && tile.report_id === reportId)) {
       return { added: false, board: await document(board) };
@@ -207,7 +202,7 @@ export function createBoardService(deps: {
       await deps.reports.ensureOwned(input.principal, reportId);
     } catch (error) {
       if (error instanceof ReportNotFoundError) {
-        throw new BoardRequestError(`报告不存在或无权访问：${reportId}`);
+        throw new InvalidRequestError(`报告不存在或无权访问：${reportId}`);
       }
       throw error;
     }
@@ -223,7 +218,7 @@ export function createBoardService(deps: {
       { tiles: [...board.tiles, tile] },
       input.ifRevision,
     );
-    if (!updated) throw new BoardNotFoundError("看板不存在");
+    if (!updated) throw new NotFoundError("看板不存在");
     await log(input.principal.email, `加入看板：${updated.name}`);
     return { added: true, board: await document(updated) };
   }
@@ -244,7 +239,7 @@ export function createBoardService(deps: {
     const linked = board?.tiles.some(
       (tile) => tile.kind === "report" && tile.report_id === reportId,
     );
-    if (!linked) throw new BoardNotFoundError("看板或报告不存在");
+    if (!linked) throw new NotFoundError("看板或报告不存在");
     return deps.reports.runShared(principal, reportId, timeOverride);
   }
 

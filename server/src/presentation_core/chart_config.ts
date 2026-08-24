@@ -13,6 +13,7 @@
  * CHART_DARK_COLORS 映射翻转。本文件只做数据编排与样式声明，零度量算术（engine_boundary 守护）。
  */
 import {
+  analyzeResultShape,
   canCompileKpi,
   compileChart,
   compileTableWithStatus,
@@ -25,6 +26,7 @@ import {
   type ChartRow,
   type ChartSourceRow,
   type PieSpec,
+  type ResultShape,
   type SeriesDef,
   type TableLayoutStatus,
   type TableModel,
@@ -35,7 +37,6 @@ import type { ChartDecl, ChartRenderDecl, SeriesDisplay } from "./chart_decl.js"
 import { formatSeriesValue, toNumber } from "./view_format.js";
 import { CHART_CHROME, CHART_SERIES, FONT_FAMILY } from "./design_tokens.js";
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
-import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
 import type { PresentationSpec } from "./presentation_spec.js";
 
 const MOTION = {
@@ -969,18 +970,22 @@ function pieOption(spec: PieSpec): ViewChart {
 }
 
 /** 按显式声明编译图表配置；不声明图表的 table/kpi 直接返回 null。 */
-export function buildViewChart(view: ViewBlock, decl: ChartRenderDecl): ViewChart | null {
-  const shape = compileChart(view, makeTitleOf(view), decl);
-  if (!shape) return null;
-  switch (shape.kind) {
+export function buildViewChart(
+  view: ViewBlock,
+  decl: ChartRenderDecl,
+  resultShape: ResultShape = analyzeResultShape(view),
+): ViewChart | null {
+  const chart = compileChart(view, makeTitleOf(view), decl, resultShape);
+  if (!chart) return null;
+  switch (chart.kind) {
     case "line":
-      return trendOption(shape, decl);
+      return trendOption(chart, decl);
     case "bar":
-      return barOption(shape, decl);
+      return barOption(chart, decl);
     case "category_combo":
-      return categoryComboOption(shape, decl);
+      return categoryComboOption(chart, decl);
     case "pie":
-      return pieOption(shape);
+      return pieOption(chart);
   }
 }
 
@@ -989,7 +994,8 @@ export function compilePresentationBlock(
   decl: PresentationSpec,
 ): PresentationBlock {
   const titleOf = makeTitleOf(view);
-  const compiledTable = compileTableWithStatus(view, titleOf, decl);
+  const resultShape = analyzeResultShape(view);
+  const compiledTable = compileTableWithStatus(view, titleOf, decl, resultShape);
   const title = structureTitle(view, titleOf);
   const base = {
     table: compiledTable.table,
@@ -998,152 +1004,11 @@ export function compilePresentationBlock(
   };
   if (decl.type === "table") return { type: "table", ...base };
   if (decl.type === "kpi") {
-    const totals = canCompileKpi(view) ? compileTotalBand(view, titleOf) : null;
+    const totals = canCompileKpi(view, resultShape)
+      ? compileTotalBand(view, titleOf, resultShape)
+      : null;
     return totals ? { type: "kpi", ...base, totals } : { type: "table", ...base };
   }
-  const chart = buildViewChart(view, decl);
+  const chart = buildViewChart(view, decl, resultShape);
   return chart ? { type: decl.type, ...base, chart } : { type: "table", ...base };
-}
-
-type JsonRecord = Record<string, unknown>;
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** 宿主边界校验：图表块属不可信输入，渲染端只接受完整结构（option 内容交给 echarts） */
-export function isViewChart(value: unknown): value is ViewChart {
-  return (
-    isRecord(value) &&
-    (value.form === "line" || value.form === "bar" || value.form === "pie") &&
-    typeof value.height === "number" &&
-    Number.isFinite(value.height) &&
-    value.height > 0 &&
-    isRecord(value.option) &&
-    isRecord(value.model) &&
-    Array.isArray(value.model.categories) &&
-    Array.isArray(value.model.legend)
-  );
-}
-
-function isCell(value: unknown): value is string | number | null {
-  return (
-    value === null ||
-    typeof value === "string" ||
-    (typeof value === "number" && Number.isFinite(value))
-  );
-}
-
-function isTableModel(value: unknown): value is TableModel {
-  if (!isRecord(value) || !Array.isArray(value.columns) || !Array.isArray(value.rows)) return false;
-  const columns = value.columns;
-  if (
-    !columns.every(
-      (column) =>
-        isRecord(column) &&
-        typeof column.label === "string" &&
-        typeof column.formatKey === "string" &&
-        typeof column.numeric === "boolean" &&
-        Array.isArray(column.headerPath) &&
-        column.headerPath.length > 0 &&
-        column.headerPath.every(
-          (part) =>
-            isRecord(part) && typeof part.key === "string" && typeof part.label === "string",
-        ),
-    )
-  ) {
-    return false;
-  }
-  const validRows = (rows: unknown) =>
-    Array.isArray(rows) &&
-    rows.every(
-      (row) =>
-        Array.isArray(row) && row.length === columns.length && row.every((cell) => isCell(cell)),
-    );
-  if (!validRows(value.rows)) return false;
-  if (value.summaryRows !== undefined && !validRows(value.summaryRows)) return false;
-  if (
-    value.sourceRows !== undefined &&
-    (!Array.isArray(value.sourceRows) ||
-      !value.sourceRows.every(
-        (row) =>
-          Array.isArray(row) &&
-          row.length === columns.length &&
-          row.every(
-            (source) => source === null || (typeof source === "number" && Number.isInteger(source)),
-          ),
-      ))
-  ) {
-    return false;
-  }
-  return true;
-}
-
-function isTotalBand(value: unknown): value is TotalBand {
-  if (!isRecord(value) || !Array.isArray(value.metrics) || !value.metrics.length) return false;
-  const isFormat = (format: unknown) =>
-    format === "number" || format === "percent" || format === "percentage_point";
-  return value.metrics.every(
-    (metric) =>
-      isRecord(metric) &&
-      typeof metric.column === "string" &&
-      typeof metric.label === "string" &&
-      isCell(metric.value) &&
-      isFormat(metric.format) &&
-      (metric.period === undefined ||
-        (isRecord(metric.period) &&
-          typeof metric.period.label === "string" &&
-          typeof metric.period.from === "string" &&
-          typeof metric.period.to === "string")) &&
-      Array.isArray(metric.comparisons) &&
-      metric.comparisons.every(
-        (comparison) =>
-          isRecord(comparison) &&
-          typeof comparison.label === "string" &&
-          isCell(comparison.value) &&
-          isFormat(comparison.format),
-      ),
-  );
-}
-
-/** 宿主边界校验：浏览器只接受服务端完整编译的呈现块。 */
-export function isPresentationBlock(value: unknown): value is PresentationBlock {
-  if (
-    !isRecord(value) ||
-    !PRESENTATION_TYPE_SCHEMA.safeParse(value.type).success ||
-    !isTableModel(value.table) ||
-    !isRecord(value.table_layout)
-  ) {
-    return false;
-  }
-  const layout = value.table_layout;
-  if (
-    (layout.state !== "applied" && layout.state !== "unavailable") ||
-    typeof layout.leafColumns !== "number" ||
-    !Number.isInteger(layout.leafColumns) ||
-    layout.leafColumns < 0
-  ) {
-    return false;
-  }
-  if (layout.state === "unavailable") {
-    if (
-      !["duplicate_coordinate", "resource_limit", "missing_axis"].includes(String(layout.reason)) ||
-      typeof layout.message !== "string"
-    ) {
-      return false;
-    }
-  }
-  if (value.structure_title !== undefined && typeof value.structure_title !== "string")
-    return false;
-  if (value.totals !== undefined && !isTotalBand(value.totals)) return false;
-
-  if (value.type === "kpi" && value.totals === undefined) return false;
-  if (value.chart === undefined) {
-    return value.type === "table" || value.type === "kpi";
-  }
-  return (
-    (value.type === "line" || value.type === "bar" || value.type === "pie") &&
-    isViewChart(value.chart) &&
-    value.chart.form === value.type
-  );
 }

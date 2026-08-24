@@ -9,6 +9,7 @@
  * 入参先过 canonical AnalysisDefinition 校验；定义无效（含物理 view 限定成员名）返回 undefined。
  */
 import { createHash } from "node:crypto";
+import { canonicalJson } from "../semantic_core/canonical_json.js";
 import {
   isSemanticDerivedView,
   parseAnalysisDefinition,
@@ -19,19 +20,6 @@ import {
 } from "../semantic_core/semantic_analysis.js";
 
 export const QUERY_FINGERPRINT_PATTERN = /^q-[0-9a-f]{10}$/;
-
-/** 值的稳定序列化：对象键排序，数组保序（调用方对需要排序的数组自行先排） */
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`);
-    return `{${entries.join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
 
 /** 规格无效（归一失败）时返回 undefined：报错调用没有可统计的分析规格。 */
 export function queryFingerprint(input: unknown): string | undefined {
@@ -68,12 +56,12 @@ export function queryFingerprint(input: unknown): string | undefined {
     return {
       measures: s.measures ?? [],
       dimensions: s.dimensions ?? [],
-      filters: (s.filters ?? []).map(canonical).sort(),
+      filters: (s.filters ?? []).map(canonicalJson).sort(),
       ...(s.time ? { time: s.time } : {}),
       ...(s.group_sort ? { group_sort: s.group_sort } : {}),
     };
   });
-  const digest = createHash("sha256").update(canonical({ views })).digest("hex");
+  const digest = createHash("sha256").update(canonicalJson({ views })).digest("hex");
   return `q-${digest.slice(0, 10)}`;
 }
 

@@ -16,8 +16,13 @@ export async function getJson<T>(path: string, schema: JsonSchema<T>): Promise<T
   return request(await fetch(path, { headers: { Accept: "application/json" } }), schema);
 }
 
-export async function postJson<T>(path: string, body: unknown, schema: JsonSchema<T>): Promise<T> {
-  return sendJson("POST", path, schema, body);
+export async function postJson<T>(
+  path: string,
+  body: unknown,
+  schema: JsonSchema<T>,
+  options: { signal?: AbortSignal } = {},
+): Promise<T> {
+  return sendJson("POST", path, schema, body, options);
 }
 
 export async function patchJson<T>(path: string, body: unknown, schema: JsonSchema<T>): Promise<T> {
@@ -37,10 +42,12 @@ async function sendJson<T>(
   path: string,
   schema: JsonSchema<T>,
   body?: unknown,
+  options: { signal?: AbortSignal } = {},
 ): Promise<T> {
   return request(
     await fetch(path, {
       method,
+      signal: options.signal,
       headers: {
         Accept: "application/json",
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),

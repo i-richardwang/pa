@@ -16,6 +16,7 @@
       "@format": ["../src/presentation_core/view_format.ts"],
       "@member": ["../src/semantic_core/member_name.ts"],
       "@time": ["../src/semantic_core/time_contract.ts"],
+      "@canonical-json": ["../src/semantic_core/canonical_json.ts"],
       "@semantic-analysis": ["../src/semantic_core/semantic_analysis.ts"],
       "@view-preferences": ["../src/presentation_core/view_preferences.ts"],
       "@data-capability-map": ["../src/presentation_core/data_capability_map.ts"]

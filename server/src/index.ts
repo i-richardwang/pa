@@ -10,6 +10,7 @@ import { createApplication } from "./composition/application.js";
 import { config } from "./config.js";
 import { createCubeGateway } from "./adapters/cube_gateway.js";
 import { createBetterAuthUserAccountAdministration } from "./adapters/better_auth_user_account_administration.js";
+import { resolveBetterAuthPrincipal } from "./adapters/better_auth_principal.js";
 import { SERVICE_CUBE_CONTEXT } from "./engine/cube_security.js";
 import { withFormalMetricModel } from "./engine/formal_metric_gateway.js";
 import { dashboardRoutes } from "./dashboard/index.js";
@@ -48,6 +49,7 @@ const visibilityCube = withFormalMetricModel(
     accessScopeId: semanticPackage.access_scope.id,
     serviceContext: SERVICE_CUBE_CONTEXT,
     timeSources: semanticPackage.time_sources,
+    requestTimeoutMs: config.cubeRequestTimeoutMs,
   }),
   semanticPackage.formal_metrics,
 );
@@ -184,20 +186,7 @@ if (config.authSecret) {
 // 不缓存：角色与数据范围可被管理员随时调整，鉴权正确性优先于按请求省一次查库（与 key 校验同理）。
 async function resolvePrincipal(a: Auth, userId: string): Promise<Principal> {
   const ctx = await a.$context;
-  const user = (await ctx.internalAdapter.findUserById(userId).catch(() => null)) as {
-    email?: string;
-    role?: string;
-    access_scope?: string;
-  } | null;
-  const email = user?.email ?? userId;
-  return principalFromAttributes(
-    {
-      email,
-      role: user?.role,
-      access_scope: user?.access_scope,
-    },
-    semanticPackage.access_scope,
-  );
+  return resolveBetterAuthPrincipal(ctx.internalAdapter, userId, semanticPackage.access_scope);
 }
 
 // /mcp 鉴权：Bearer 先按 API key 校验（apiKey 插件，key 绑用户），再落 OAuth session；

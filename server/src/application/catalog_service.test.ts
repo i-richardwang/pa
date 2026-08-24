@@ -7,11 +7,8 @@ import {
   buildCatalogDocument as buildRawCatalogDocument,
   toCompilerCatalog,
 } from "../engine/catalog_document.js";
-import {
-  CatalogInputError,
-  createCatalogService,
-  SemanticModelUnavailableError,
-} from "./catalog_service.js";
+import { createCatalogService, SemanticModelUnavailableError } from "./catalog_service.js";
+import { InvalidRequestError } from "./errors.js";
 import {
   TEST_SEMANTIC_TAXONOMY,
   TEST_TIME_SOURCE_REGISTRY,
@@ -275,7 +272,7 @@ describe("CatalogService", () => {
       },
     });
     expect(service.dimensionValues(principal, dimId("年龄"))).rejects.toBeInstanceOf(
-      CatalogInputError,
+      InvalidRequestError,
     );
   });
 
