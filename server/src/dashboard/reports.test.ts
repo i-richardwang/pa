@@ -572,6 +572,28 @@ describe("dashboard report routes", () => {
       total: 0,
     });
     expect((await app.request(`/api/reports/${report.id}`)).status).toBe(200);
+
+    // 归档面按 archived=1 单独取，撤销归档走 unarchive：界面不必替用户攥着未提交的归档。
+    const archivedList = REPORTS_PAYLOAD_SCHEMA.parse(
+      await (await app.request("/api/reports?archived=1")).json(),
+    );
+    expect(archivedList.rows.map((row) => row.id)).toEqual([report.id]);
+
+    const unarchived = await app.request(`/api/reports/${report.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: { type: "unarchive" }, if_revision: 5 }),
+    });
+    expect(unarchived.status).toBe(200);
+    expect(
+      REPORTS_PAYLOAD_SCHEMA.parse(await (await app.request("/api/reports")).json()).rows.map(
+        (row) => row.id,
+      ),
+    ).toEqual([report.id]);
+    expect(
+      REPORTS_PAYLOAD_SCHEMA.parse(await (await app.request("/api/reports?archived=1")).json())
+        .rows,
+    ).toEqual([]);
   });
 
   test("AnalysisView 和报告严格按属主隔离", async () => {

@@ -9,7 +9,7 @@ import { TIME_INTENT_INPUT, type TimeIntent } from "@time";
 /** 侧栏导航项，也是各清单页的 hash 首段。 */
 export type RouteKey = "boards" | "reports" | "catalog" | "model" | "usage" | "feedback";
 
-export type ReportsFacet = "reports" | "history";
+export type ReportsFacet = "reports" | "history" | "archived";
 export type SettingsTab = "account" | "api" | "users";
 export type UsageFacet = "titles" | "stats" | "unanswered";
 
@@ -34,7 +34,7 @@ const PLAIN_PAGES: ReadonlyArray<"boards" | "catalog" | "model" | "feedback"> = 
 /** 形似看板 id 即进看板页；id 有效性由服务端裁决。 */
 const BOARD_HASH = /^board\/([^/]+)$/;
 const BOARD_REPORT_EDIT_HASH = /^board\/([^/]+)\/report\/([^/]+)\/edit$/;
-const REPORTS_HASH = /^reports(?:\/(history))?$/;
+const REPORTS_HASH = /^reports(?:\/(history|archived))?$/;
 const USAGE_HASH = /^usage(?:\/(stats|unanswered))?$/;
 const SETTINGS_HASH = /^(settings|users)$/;
 const REPORT_HASH = /^report\/([^/]+)$/;
@@ -73,7 +73,7 @@ export function reportHash(id: string): string {
 
 /** 我的报告页；默认分面「报告」不占 hash 段。 */
 export function reportsHash(facet: ReportsFacet = "reports"): string {
-  return facet === "reports" ? "#/reports" : "#/reports/history";
+  return facet === "reports" ? "#/reports" : `#/reports/${facet}`;
 }
 
 export function reportsHistoryHash(): string {
@@ -113,7 +113,9 @@ export function parseRoute(hash: string): Route {
     return time ? { page: "board", id: board[1], time } : { page: "board", id: board[1] };
   }
   const reports = REPORTS_HASH.exec(path);
-  if (reports) return { page: "reports", facet: reports[1] ? "history" : "reports" };
+  if (reports) {
+    return { page: "reports", facet: (reports[1] as ReportsFacet | undefined) ?? "reports" };
+  }
   const usage = USAGE_HASH.exec(path);
   if (usage) return { page: "usage", facet: (usage[1] as UsageFacet | undefined) ?? "titles" };
   const settings = SETTINGS_HASH.exec(path);

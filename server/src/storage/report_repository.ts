@@ -5,6 +5,7 @@ import { inTransaction } from "./app_database.js";
 import {
   ReportConflictError,
   ReportNotFoundError,
+  type ReportListScope,
   type ReportRecord,
   type ReportRepository,
   type ReportRevision,
@@ -73,11 +74,12 @@ export function createReportRepository(db: SqliteDatabase): ReportRepository {
   async function listOwned(
     owner: string,
     query?: string,
-    includeArchived = false,
+    scope: ReportListScope = "active",
   ): Promise<ReportRecord[]> {
     const clauses = ["owner = ?"];
     const params: string[] = [owner.trim()];
-    if (!includeArchived) clauses.push("archived_at IS NULL");
+    if (scope === "active") clauses.push("archived_at IS NULL");
+    if (scope === "archived") clauses.push("archived_at IS NOT NULL");
     if (query?.trim()) {
       clauses.push("name LIKE ? ESCAPE '!'");
       params.push(`%${query.trim().replace(/[!%_]/g, "!$&")}%`);

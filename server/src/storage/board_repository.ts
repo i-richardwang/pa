@@ -32,6 +32,7 @@ export function createBoardRepository(db: SqliteDatabase): BoardRepository {
     name: string;
     tiles: string;
     created_by: string;
+    archived_at: string | null;
     revision: number;
     created_at: string;
     updated_at: string;
@@ -51,6 +52,7 @@ export function createBoardRepository(db: SqliteDatabase): BoardRepository {
       name,
       tiles: [],
       created_by: createdBy,
+      archived_at: null,
       revision: 1,
       created_at: now,
       updated_at: now,
@@ -64,10 +66,11 @@ export function createBoardRepository(db: SqliteDatabase): BoardRepository {
     return rows[0] ? toRecord(rows[0]) : null;
   }
 
-  async function list(): Promise<BoardRecord[]> {
-    const rows = db.prepare("SELECT * FROM board ORDER BY updated_at DESC").all() as Parameters<
-      typeof toRecord
-    >[0][];
+  async function list(scope: "active" | "all" = "active"): Promise<BoardRecord[]> {
+    const where = scope === "active" ? "WHERE archived_at IS NULL" : "";
+    const rows = db
+      .prepare(`SELECT * FROM board ${where} ORDER BY updated_at DESC`)
+      .all() as Parameters<typeof toRecord>[0][];
     return rows.map(toRecord);
   }
 
@@ -111,9 +114,19 @@ export function createBoardRepository(db: SqliteDatabase): BoardRepository {
     return { ...existing, name, tiles, revision: ifRevision + 1, updated_at: now };
   }
 
-  async function remove(id: string): Promise<boolean> {
-    return Number(db.prepare("DELETE FROM board WHERE id = ?").run(id).changes) === 1;
+  async function archive(id: string): Promise<boolean> {
+    const result = db
+      .prepare("UPDATE board SET archived_at = ? WHERE id = ? AND archived_at IS NULL")
+      .run(new Date().toISOString(), id);
+    return Number(result.changes) === 1;
   }
 
-  return { create, get, list, update, remove };
+  async function restore(id: string): Promise<boolean> {
+    const result = db
+      .prepare("UPDATE board SET archived_at = NULL WHERE id = ? AND archived_at IS NOT NULL")
+      .run(id);
+    return Number(result.changes) === 1;
+  }
+
+  return { create, get, list, update, archive, restore };
 }

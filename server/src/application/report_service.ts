@@ -15,6 +15,7 @@ import { REPORT_UPDATE_ACTION, type ReportUpdateAction } from "../contracts/repo
 import { REPORT_NAME_SCHEMA } from "../contracts/report_identity.js";
 import {
   ReportNotFoundError,
+  type ReportListScope,
   type ReportRecord,
   type ReportRepository,
   type ReportRevision,
@@ -89,10 +90,10 @@ export function createReportService(deps: {
   async function listOwned(
     principal: Principal,
     query?: string,
-    includeArchived = false,
+    scope: ReportListScope = "active",
   ): Promise<ReportDocument[]> {
     return Promise.all(
-      (await deps.reports.listOwned(principal.email, query, includeArchived)).map(
+      (await deps.reports.listOwned(principal.email, query, scope)).map(
         async (report) => (await resolve(report)).report,
       ),
     );
@@ -185,15 +186,9 @@ export function createReportService(deps: {
         )
       ).report;
     } else {
+      const archivedAt = normalizedAction.type === "archive" ? new Date().toISOString() : null;
       report = (
-        await resolve(
-          await deps.reports.update(
-            id,
-            principal.email,
-            { archivedAt: new Date().toISOString() },
-            ifRevision,
-          ),
-        )
+        await resolve(await deps.reports.update(id, principal.email, { archivedAt }, ifRevision))
       ).report;
     }
     await deps.usage.log({

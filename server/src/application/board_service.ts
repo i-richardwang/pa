@@ -104,10 +104,16 @@ export function createBoardService(deps: {
     );
   }
 
-  async function owned(id: string, principal: Principal): Promise<BoardRecord> {
+  /** 已删除的看板对读写两路都等同不存在；只有恢复用例可以够到它。 */
+  async function live(id: string): Promise<BoardRecord> {
     assertId(id);
     const board = await deps.boards.get(id);
-    if (!board) throw new NotFoundError("看板不存在");
+    if (!board || board.archived_at !== null) throw new NotFoundError("看板不存在");
+    return board;
+  }
+
+  async function owned(id: string, principal: Principal): Promise<BoardRecord> {
+    const board = await live(id);
     if (board.created_by !== principal.email) {
       throw new ForbiddenError("只有创建者可以修改这个看板");
     }
@@ -150,10 +156,7 @@ export function createBoardService(deps: {
   }
 
   async function get(id: string): Promise<BoardPayload> {
-    assertId(id);
-    const board = await deps.boards.get(id);
-    if (!board) throw new NotFoundError("看板不存在");
-    return document(board);
+    return document(await live(id));
   }
 
   async function create(principal: Principal, name: string): Promise<BoardPayload> {
@@ -225,8 +228,21 @@ export function createBoardService(deps: {
 
   async function remove(principal: Principal, id: string): Promise<void> {
     const board = await owned(id, principal);
-    await deps.boards.remove(board.id);
+    await deps.boards.archive(board.id);
     await log(principal.email, `删除看板：${board.name}`);
+  }
+
+  /** 删除的逆操作：撤销即调它，界面不必替用户攥着尚未提交的删除。 */
+  async function restore(principal: Principal, id: string): Promise<BoardPayload> {
+    assertId(id);
+    const board = await deps.boards.get(id);
+    if (!board) throw new NotFoundError("看板不存在");
+    if (board.created_by !== principal.email) {
+      throw new ForbiddenError("只有创建者可以恢复这个看板");
+    }
+    await deps.boards.restore(board.id);
+    await log(principal.email, `恢复看板：${board.name}`);
+    return document({ ...board, archived_at: null });
   }
 
   async function runReport(
@@ -236,14 +252,14 @@ export function createBoardService(deps: {
     timeOverride?: TimeIntent,
   ) {
     const board = await deps.boards.get(boardId);
-    const linked = board?.tiles.some(
-      (tile) => tile.kind === "report" && tile.report_id === reportId,
-    );
+    const linked =
+      board?.archived_at === null &&
+      board.tiles.some((tile) => tile.kind === "report" && tile.report_id === reportId);
     if (!linked) throw new NotFoundError("看板或报告不存在");
     return deps.reports.runShared(principal, reportId, timeOverride);
   }
 
-  return { list, get, create, update, addReport, remove, runReport };
+  return { list, get, create, update, addReport, remove, restore, runReport };
 }
 
 export type BoardService = ReturnType<typeof createBoardService>;

@@ -14,7 +14,8 @@ import { POPUP_ROW } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import { PRESENTATION_TYPE_LABELS } from "../analyses/presentation_labels";
 import { LoadingMark } from "pa-result-view";
-import { errorText, useReportsList } from "../dashboard_queries";
+import { errorText } from "../api";
+import { useReportsList } from "../dashboard_queries";
 
 const FOOTER_ACTION_CLASS = cn(
   POPUP_ROW,

@@ -38,7 +38,10 @@ export function createBusinessTermRepository(db: SqliteDatabase): BusinessTermRe
   async function list(): Promise<StoredBusinessTerm[]> {
     return (
       db
-        .prepare("SELECT * FROM business_term ORDER BY canonical_term COLLATE NOCASE, id")
+        .prepare(
+          `SELECT * FROM business_term WHERE archived_at IS NULL
+             ORDER BY canonical_term COLLATE NOCASE, id`,
+        )
         .all() as TermRow[]
     ).map(toStored);
   }
@@ -51,7 +54,11 @@ export function createBusinessTermRepository(db: SqliteDatabase): BusinessTermRe
   }
 
   async function create(input: NormalizedBusinessTermContent): Promise<StoredBusinessTerm> {
-    const term: StoredBusinessTerm = { id: randomUUID(), ...storedContent(input) };
+    const term: StoredBusinessTerm = {
+      id: randomUUID(),
+      archived_at: null,
+      ...storedContent(input),
+    };
     db.prepare(
       `INSERT INTO business_term
          (id, canonical_term, definition, context, aliases, related_member_ids)
@@ -71,12 +78,12 @@ export function createBusinessTermRepository(db: SqliteDatabase): BusinessTermRe
     id: string,
     input: NormalizedBusinessTermContent,
   ): Promise<StoredBusinessTerm> {
-    const next: StoredBusinessTerm = { id, ...storedContent(input) };
+    const next: StoredBusinessTerm = { id, archived_at: null, ...storedContent(input) };
     const result = db
       .prepare(
         `UPDATE business_term
          SET canonical_term = ?, definition = ?, context = ?, aliases = ?, related_member_ids = ?
-         WHERE id = ?`,
+         WHERE id = ? AND archived_at IS NULL`,
       )
       .run(
         next.canonical_term,
@@ -90,12 +97,15 @@ export function createBusinessTermRepository(db: SqliteDatabase): BusinessTermRe
     return next;
   }
 
-  async function remove(id: string): Promise<StoredBusinessTerm> {
+  async function setArchivedAt(id: string, archivedAt: string | null): Promise<StoredBusinessTerm> {
     const current = await get(id);
     if (!current) throw new BusinessTermNotFoundError("业务术语不存在");
-    db.prepare("DELETE FROM business_term WHERE id = ?").run(id);
-    return current;
+    db.prepare("UPDATE business_term SET archived_at = ? WHERE id = ?").run(archivedAt, id);
+    return { ...current, archived_at: archivedAt };
   }
 
-  return { list, get, create, replace, remove };
+  const archive = (id: string) => setArchivedAt(id, new Date().toISOString());
+  const restore = (id: string) => setArchivedAt(id, null);
+
+  return { list, get, create, replace, archive, restore };
 }

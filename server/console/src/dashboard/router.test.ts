@@ -12,6 +12,7 @@ import {
 test("各 *Hash() 拼出的串都能被 parseRoute 读回同一路由", () => {
   expect(parseRoute(reportsHash())).toEqual({ page: "reports", facet: "reports" });
   expect(parseRoute(reportsHash("history"))).toEqual({ page: "reports", facet: "history" });
+  expect(parseRoute(reportsHash("archived"))).toEqual({ page: "reports", facet: "archived" });
   expect(parseRoute(usageHash("stats"))).toEqual({ page: "usage", facet: "stats" });
   expect(parseRoute(analysisHash("v1"))).toEqual({ page: "analysis", id: "v1" });
   expect(parseRoute(analysisNewHash())).toEqual({ page: "analysis_new" });

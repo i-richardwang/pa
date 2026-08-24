@@ -61,4 +61,8 @@ export function registerCatalogRoutes(
     await businessTerms.remove(c.get("principal"), c.req.param("id"));
     return c.json({ ok: true });
   });
+
+  dashboard.post("/api/admin/business_terms/:id/restore", requireAdmin, async (c) => {
+    return c.json(await businessTerms.restore(c.get("principal"), c.req.param("id")));
+  });
 }

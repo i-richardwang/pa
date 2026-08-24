@@ -459,6 +459,12 @@ describe("dashboard app routes and access control", () => {
               expect(principal.email).toBe("admin@x");
               return publicRow;
             },
+            restore: async (principal, termId) => {
+              writes.push({ action: "restore", termId });
+              logged.push({ tool: "business_term_admin", title: "恢复业务术语：「Band C+」" });
+              expect(principal.email).toBe("admin@x");
+              return publicRow;
+            },
           },
         },
       );
@@ -501,12 +507,21 @@ describe("dashboard app routes and access control", () => {
     expect(
       (await admin.request(`/api/admin/business_terms/${id}`, { method: "DELETE" })).status,
     ).toBe(200);
+    // 删除可逆：撤销走恢复端点，删除本身在点下时就已落库。
+    expect(
+      (await admin.request(`/api/admin/business_terms/${id}/restore`, { method: "POST" })).status,
+    ).toBe(200);
+    expect(
+      (await user.request(`/api/admin/business_terms/${id}/restore`, { method: "POST" })).status,
+    ).toBe(403);
     expect(writes.map((write) => (write as { action: string }).action)).toEqual([
       "create",
       "update",
       "delete",
+      "restore",
     ]);
     expect(logged.map((record) => record.tool)).toEqual([
+      "business_term_admin",
       "business_term_admin",
       "business_term_admin",
       "business_term_admin",

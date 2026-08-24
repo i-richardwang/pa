@@ -1,7 +1,12 @@
 import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { ArchiveIcon, ChartBarIcon, CircleAlertIcon, PlusIcon } from "lucide-react";
-import type { ReportRow, ReportsPayload } from "@contracts/report_contract";
+import {
+  ArchiveIcon,
+  ArchiveRestoreIcon,
+  ChartBarIcon,
+  CircleAlertIcon,
+  PlusIcon,
+} from "lucide-react";
+import type { ReportRow } from "@contracts/report_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import {
@@ -20,10 +25,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatAt } from "../api";
-import { dashboardKeys, errorText, useReportsList } from "../dashboard_queries";
-import { useArchiveReport } from "../editor_queries";
-import { performUndoable } from "../kit/undo";
+import { errorText, formatAt } from "../api";
+import { useArchivedReportsList, useReportsList } from "../dashboard_queries";
+import { useArchiveReport, useUnarchiveReport } from "../editor_queries";
+import { toastWithUndo } from "../kit/undo";
 import {
   ListCategoryPill,
   ListControlBar,
@@ -48,6 +53,7 @@ import {
 const REPORTS_FACETS: ReadonlyArray<{ value: ReportsFacet; label: string; hash: string }> = [
   { value: "reports", label: "报告", hash: reportsHash("reports") },
   { value: "history", label: "查询记录", hash: reportsHash("history") },
+  { value: "archived", label: "已归档", hash: reportsHash("archived") },
 ];
 
 const REPORT_SORT: Record<
@@ -89,28 +95,30 @@ export function MyReportsPage({ facet }: { facet: ReportsFacet }) {
                 }}
               />
             )}
-            {facet === "reports" && (
+            {facet !== "history" && (
               <ListControlSearch aria-label="搜索报告" value={query} onValueChange={setQuery} />
             )}
           </>
         }
       />
       <ListScrollBody>
-        {facet === "reports" ? (
-          <ReportsList query={query} />
-        ) : (
+        {facet === "history" ? (
           <div className="mt-5">
             <QueryHistoryTab days={days} offset={offset} onOffset={setOffset} />
           </div>
+        ) : (
+          <ReportsList archived={facet === "archived"} query={query} />
         )}
       </ListScrollBody>
     </ListPageBody>
   );
 }
 
-function ReportsList({ query }: { query: string }) {
-  const queryClient = useQueryClient();
-  const reportsQuery = useReportsList();
+/** 归档面与在架面共用一张表：差别只在取哪一批、行上给哪一个动作。 */
+function ReportsList({ archived, query }: { archived: boolean; query: string }) {
+  const activeQuery = useReportsList(!archived);
+  const archivedQuery = useArchivedReportsList(archived);
+  const reportsQuery = archived ? archivedQuery : activeQuery;
   const data = reportsQuery.data ?? null;
   const error = errorText(reportsQuery.error);
   const filtered = useMemo(() => {
@@ -125,17 +133,23 @@ function ReportsList({ query }: { query: string }) {
   const { rows, sort, toggle } = useTableSort(filtered, REPORT_SORT);
 
   const archiveReport = useArchiveReport();
+  const unarchiveReport = useUnarchiveReport();
+
+  function restore(row: ReportRow) {
+    unarchiveReport.mutate({ id: row.id, ifRevision: row.revision });
+  }
 
   function archive(row: ReportRow) {
-    queryClient.setQueryData<ReportsPayload>(dashboardKeys.reports, (current) =>
-      current ? { ...current, rows: current.rows.filter((r) => r.id !== row.id) } : current,
+    archiveReport.mutate(
+      { id: row.id, ifRevision: row.revision },
+      {
+        onSuccess: (archived) =>
+          toastWithUndo({
+            title: `已归档「${row.name}」`,
+            undo: () => unarchiveReport.mutateAsync({ id: row.id, ifRevision: archived.revision }),
+          }),
+      },
     );
-    performUndoable({
-      title: `已归档「${row.name}」`,
-      failureTitle: "归档失败",
-      revert: () => void queryClient.invalidateQueries({ queryKey: dashboardKeys.reports }),
-      commit: () => archiveReport.mutateAsync({ id: row.id, ifRevision: row.revision }),
-    });
   }
 
   if (error) {
@@ -161,8 +175,12 @@ function ReportsList({ query }: { query: string }) {
             <EmptyMedia variant="icon">
               <ChartBarIcon />
             </EmptyMedia>
-            <EmptyTitle>还没有保存的报告</EmptyTitle>
-            <EmptyDescription>在「查询记录」里把分析保存为报告后，会显示在这里。</EmptyDescription>
+            <EmptyTitle>{archived ? "没有归档的报告" : "还没有保存的报告"}</EmptyTitle>
+            <EmptyDescription>
+              {archived
+                ? "归档的报告会留在这里，随时可以恢复。"
+                : "在「查询记录」里把分析保存为报告后，会显示在这里。"}
+            </EmptyDescription>
           </EmptyHeader>
         </Empty>
       </div>
@@ -208,7 +226,11 @@ function ReportsList({ query }: { query: string }) {
           {rows.map((row) => (
             <TableRow key={row.id}>
               <TableCell>
-                <ResourceName href={reportHash(row.id)}>{row.name}</ResourceName>
+                {archived ? (
+                  <span className="text-pa-muted">{row.name}</span>
+                ) : (
+                  <ResourceName href={reportHash(row.id)}>{row.name}</ResourceName>
+                )}
               </TableCell>
               <TableCell>
                 <ListCategoryPill className="pointer-events-none cursor-default">
@@ -220,10 +242,17 @@ function ReportsList({ query }: { query: string }) {
               </TableCell>
               <TableCell className="relative p-2 text-right">
                 <RowMenu label="报告操作">
-                  <MenuItem onClick={() => archive(row)}>
-                    <ArchiveIcon aria-hidden="true" />
-                    归档
-                  </MenuItem>
+                  {archived ? (
+                    <MenuItem onClick={() => restore(row)}>
+                      <ArchiveRestoreIcon aria-hidden="true" />
+                      恢复
+                    </MenuItem>
+                  ) : (
+                    <MenuItem onClick={() => archive(row)}>
+                      <ArchiveIcon aria-hidden="true" />
+                      归档
+                    </MenuItem>
+                  )}
                 </RowMenu>
               </TableCell>
             </TableRow>

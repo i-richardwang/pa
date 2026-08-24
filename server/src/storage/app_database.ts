@@ -74,6 +74,7 @@ const SCHEMA_DDL = `
 
     CREATE TABLE business_term (
       id TEXT PRIMARY KEY,
+      archived_at TEXT,
       canonical_term TEXT NOT NULL,
       definition TEXT NOT NULL,
       context TEXT,
@@ -136,6 +137,7 @@ const SCHEMA_DDL = `
       name TEXT NOT NULL,
       tiles TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(tiles) AND json_type(tiles) = 'array'),
       created_by TEXT NOT NULL,
+      archived_at TEXT,
       revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL

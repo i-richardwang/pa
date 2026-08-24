@@ -59,7 +59,7 @@ export function createBusinessTermService(deps: {
 
   async function remove(principal: Principal, id: string) {
     assertAdmin(principal);
-    const row = await deps.registry.remove(id);
+    const row = await deps.registry.archive(id);
     await deps.usage.log({
       caller: principal.email,
       tool: "business_term_admin",
@@ -70,5 +70,19 @@ export function createBusinessTermService(deps: {
     return row;
   }
 
-  return { listPublic, listAdmin, create, update, remove };
+  /** 删除的逆操作：撤销即调它，删除本身在用户点下时就已落库。 */
+  async function restore(principal: Principal, id: string) {
+    assertAdmin(principal);
+    const row = await deps.registry.restore(id);
+    await deps.usage.log({
+      caller: principal.email,
+      tool: "business_term_admin",
+      title: `恢复业务术语：「${row.canonical_term}」`,
+      outcome: "ok",
+      duration_ms: 0,
+    });
+    return row;
+  }
+
+  return { listPublic, listAdmin, create, update, remove, restore };
 }

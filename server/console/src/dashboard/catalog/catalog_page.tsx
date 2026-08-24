@@ -5,12 +5,7 @@ import type {
   PublicCatalogDocument as CatalogPayload,
   PublicMetricDomain as MetricDomainPayload,
 } from "@contracts/catalog_contract";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  BUSINESS_TERM_LIMITS,
-  type BusinessTermsPayload,
-  type PublicBusinessTerm,
-} from "@contracts/business_term_contract";
+import { BUSINESS_TERM_LIMITS, type PublicBusinessTerm } from "@contracts/business_term_contract";
 import { isSearchableCatalogDimension } from "@contracts/catalog_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
@@ -48,19 +43,19 @@ import {
 } from "@/components/ui/table";
 import { toastManager } from "@/components/ui/toast";
 import { Textarea } from "@/components/ui/textarea";
+import { errorText } from "../api";
 import {
-  dashboardKeys,
-  errorText,
   useAdminBusinessTerms,
   useBusinessTerms,
   useCatalogQuery,
   useCreateBusinessTerm,
   useDeleteBusinessTerm,
   useMe,
+  useRestoreBusinessTerm,
   useUpdateBusinessTerm,
 } from "../dashboard_queries";
 import { CatalogValuesDialog, type ValuesTarget } from "./catalog_values_dialog";
-import { performUndoable } from "../kit/undo";
+import { toastWithUndo } from "../kit/undo";
 import { CATALOG_PREFILL_KEY } from "../layout/command_palette";
 import {
   ListCategoryPill,
@@ -118,27 +113,20 @@ export function CatalogPage() {
   const [valuesTarget, setValuesTarget] = useState<ValuesTarget | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [editing, setEditing] = useState<PublicBusinessTerm | "new" | null>(null);
-  const queryClient = useQueryClient();
   const removeTerm = useDeleteBusinessTerm();
+  const restoreTerm = useRestoreBusinessTerm();
 
   const terms: TermRow[] = isAdmin
     ? (adminTermsQuery.data?.rows ?? [])
     : (termsQuery.data?.rows ?? []);
 
-  /** 术语先从两份清单缓存撤下，回执关闭才提交删除；撤销重取清单即还原。 */
   function deleteTerm(term: PublicBusinessTerm) {
-    const withoutTerm = (current: BusinessTermsPayload | undefined) =>
-      current ? { ...current, rows: current.rows.filter((row) => row.id !== term.id) } : current;
-    queryClient.setQueryData<BusinessTermsPayload>(dashboardKeys.adminBusinessTerms, withoutTerm);
-    queryClient.setQueryData<BusinessTermsPayload>(dashboardKeys.businessTerms, withoutTerm);
-    performUndoable({
-      title: `已删除「${term.canonical_term}」`,
-      failureTitle: "删除失败",
-      revert: () => {
-        void queryClient.invalidateQueries({ queryKey: dashboardKeys.businessTerms });
-        void queryClient.invalidateQueries({ queryKey: dashboardKeys.adminBusinessTerms });
-      },
-      commit: () => removeTerm.mutateAsync(term.id),
+    removeTerm.mutate(term.id, {
+      onSuccess: () =>
+        toastWithUndo({
+          title: `已删除「${term.canonical_term}」`,
+          undo: () => restoreTerm.mutateAsync(term.id),
+        }),
     });
   }
   const found = useMemo(() => filterCatalog(data, terms, keyword), [data, terms, keyword]);

@@ -49,8 +49,8 @@ import { AddFromAnalysisDialog } from "./add_from_analysis_dialog";
 import { BoardTimeOverride } from "./board_time_override";
 import { BoardTile } from "./board_tile";
 import { TextTile } from "./text_tile";
-import { ApiError } from "../api";
-import { errorText, useBoard, useCatalogQuery, useSaveBoard } from "../dashboard_queries";
+import { ApiError, errorText } from "../api";
+import { useBoard, useCatalogQuery, useSaveBoard } from "../dashboard_queries";
 import {
   addBoardReport,
   applyBoardLayout,

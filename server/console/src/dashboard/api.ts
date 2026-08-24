@@ -88,6 +88,12 @@ export async function parseJsonResponse<T>(res: Response, schema: JsonSchema<T>)
 const request = parseJsonResponse;
 
 /** 控制台时间戳的唯一拼法：本地时区、年月日时分、数字等宽。 */
+/** 已登录整页跳转由 getJson 处理，401 在此不作为可展示错误。 */
+export function errorText(error: unknown): string | null {
+  if (!error || (error instanceof ApiError && error.status === 401)) return null;
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function formatAt(at: string | Date | null | undefined): string {
   if (!at) return "—";
   return new Date(at).toLocaleString("zh-CN", {

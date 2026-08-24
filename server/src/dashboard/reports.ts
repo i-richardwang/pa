@@ -35,9 +35,10 @@ export function registerReportRoutes(
   };
 
   dashboard.get("/api/reports", async (c) => {
-    const rows = (await reportService.listOwned(c.get("principal"), c.req.query("query"))).map(
-      reportRow,
-    );
+    const scope = c.req.query("archived") === "1" ? "archived" : "active";
+    const rows = (
+      await reportService.listOwned(c.get("principal"), c.req.query("query"), scope)
+    ).map(reportRow);
     return c.json({ rows, total: rows.length });
   });
 

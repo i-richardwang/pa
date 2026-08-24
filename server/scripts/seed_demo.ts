@@ -205,7 +205,7 @@ try {
   const analyses = createAnalysisRepository(appDb);
   const reports = createReportRepository(appDb);
   const existing = new Map(
-    (await reports.listOwned(owner, undefined, true)).map((report) => [report.name, report]),
+    (await reports.listOwned(owner, undefined, "all")).map((report) => [report.name, report]),
   );
   const reportIds = new Map<string, string>();
   for (const demo of demos) {
@@ -239,10 +239,12 @@ try {
   });
   const boards = createBoardRepository(appDb);
   const boardName = "公开 Demo 总览";
-  const previousBoard = (await boards.list()).find(
+  // 认领含已删除的同名看板：删除可逆，重复播种不该在旁边再造一块。
+  const previousBoard = (await boards.list("all")).find(
     (board) => board.name === boardName && board.created_by === owner,
   );
   if (previousBoard) {
+    if (previousBoard.archived_at !== null) await boards.restore(previousBoard.id);
     await boards.update(previousBoard.id, { tiles }, previousBoard.revision);
   } else {
     const board = await boards.create(boardName, owner);

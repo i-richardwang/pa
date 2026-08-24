@@ -12,6 +12,7 @@ import {
   REPORT_REVISIONS_PAYLOAD_SCHEMA,
   type ReportDetail,
   type ReportRevisionsPayload,
+  type ReportsPayload,
   type UpdateReportBody,
 } from "@contracts/report_contract";
 import {
@@ -21,8 +22,9 @@ import {
 } from "@semantic-analysis";
 import { VIEW_PREFERENCES_INPUT, type ViewPreferences } from "@view-preferences";
 import { RECORD_PROJECTION_BINDINGS_SCHEMA } from "@contracts/record_projection_contract";
-import { getJson, patchJson, postJson } from "./api";
-import { dashboardKeys, errorText } from "./dashboard_queries";
+import { errorText, getJson, patchJson, postJson } from "./api";
+import { dashboardKeys, withoutRow } from "./dashboard_queries";
+import { toastMutationFailure } from "./kit/undo";
 
 export const reportKeys = {
   detail: (id: string) => ["report", id] as const,
@@ -122,11 +124,57 @@ export function useArchiveReport() {
         { action: { type: "archive" }, if_revision: ifRevision } satisfies UpdateReportBody,
         REPORT_DETAIL_SCHEMA,
       ),
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey: dashboardKeys.reports });
+      const previous = queryClient.getQueryData<ReportsPayload>(dashboardKeys.reports);
+      queryClient.setQueryData<ReportsPayload>(dashboardKeys.reports, (current) =>
+        withoutRow(current, id),
+      );
+      return { previous };
+    },
+    onError: (reason, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(dashboardKeys.reports, context.previous);
+      toastMutationFailure("归档失败", reason);
+    },
     onSuccess: (_updated, { id }) => {
-      void queryClient.invalidateQueries({ queryKey: dashboardKeys.reports });
       queryClient.removeQueries({ queryKey: reportKeys.detail(id) });
       queryClient.removeQueries({ queryKey: reportKeys.replay(id) });
       queryClient.removeQueries({ queryKey: reportKeys.revisions(id) });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.reports });
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.archivedReports });
+    },
+  });
+}
+
+/** 归档的逆操作：回执上的「撤销」与归档面的「恢复」都调它。 */
+export function useUnarchiveReport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ifRevision }: { id: string; ifRevision: number }) =>
+      patchJson(
+        `/dashboard/api/reports/${encodeURIComponent(id)}`,
+        { action: { type: "unarchive" }, if_revision: ifRevision } satisfies UpdateReportBody,
+        REPORT_DETAIL_SCHEMA,
+      ),
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey: dashboardKeys.archivedReports });
+      const previous = queryClient.getQueryData<ReportsPayload>(dashboardKeys.archivedReports);
+      queryClient.setQueryData<ReportsPayload>(dashboardKeys.archivedReports, (current) =>
+        withoutRow(current, id),
+      );
+      return { previous };
+    },
+    onError: (reason, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(dashboardKeys.archivedReports, context.previous);
+      }
+      toastMutationFailure("恢复失败", reason);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.reports });
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.archivedReports });
     },
   });
 }

@@ -19,12 +19,16 @@ export const RESTORE_REPORT_ACTION = z
 
 export const ARCHIVE_REPORT_ACTION = z.object({ type: z.literal("archive") }).strict();
 
+/** 归档的逆操作：撤销归档走它，界面无需把「已归档」这件事扣在自己手里等待提交。 */
+export const UNARCHIVE_REPORT_ACTION = z.object({ type: z.literal("unarchive") }).strict();
+
 /** 应用服务的完整领域动作；各呈现面只从这些成员组装自己的公开子集。 */
 export const REPORT_UPDATE_ACTION = z.discriminatedUnion("type", [
   RENAME_REPORT_ACTION,
   REPLACE_REPORT_VIEW_ACTION,
   RESTORE_REPORT_ACTION,
   ARCHIVE_REPORT_ACTION,
+  UNARCHIVE_REPORT_ACTION,
 ]);
 export type ReportUpdateAction = z.infer<typeof REPORT_UPDATE_ACTION>;
 

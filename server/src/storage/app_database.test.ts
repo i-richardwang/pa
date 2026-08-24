@@ -64,6 +64,7 @@ describe("app database", () => {
     expect(persistedColumns).not.toContain("payload");
     expect(names(db, "business_term")).toEqual([
       "id",
+      "archived_at",
       "canonical_term",
       "definition",
       "context",

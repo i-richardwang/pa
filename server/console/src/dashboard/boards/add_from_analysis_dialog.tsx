@@ -12,8 +12,8 @@ import {
   CommandPanel,
 } from "@/components/ui/command";
 import { LoadingMark } from "pa-result-view";
-import { formatAt } from "../api";
-import { errorText, useMyAnalyses } from "../dashboard_queries";
+import { errorText, formatAt } from "../api";
+import { useMyAnalyses } from "../dashboard_queries";
 
 /** 选材窗口覆盖近三个月本人分析；更早记录可从「我的报告 · 查询记录」保存。 */
 const LOOKBACK_DAYS = 90;

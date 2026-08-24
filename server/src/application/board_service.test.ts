@@ -40,6 +40,7 @@ function harness(initialTiles: BoardRecord["tiles"] = [], reportAccessError?: Er
     name: "人委会看板",
     tiles: initialTiles,
     created_by: "alice@x",
+    archived_at: null,
     revision: 1,
     created_at: "2026-08-13T00:00:00.000Z",
     updated_at: "2026-08-13T00:00:00.000Z",
@@ -51,7 +52,7 @@ function harness(initialTiles: BoardRecord["tiles"] = [], reportAccessError?: Er
   const repository: BoardRepository = {
     create: async () => board!,
     get: async (id) => (board?.id === id ? board : null),
-    list: async () => (board ? [board] : []),
+    list: async () => (board && board.archived_at === null ? [board] : []),
     update: async (_id, patch, revision) => {
       updates.push({ patch, revision });
       if (!board) return null;
@@ -63,8 +64,14 @@ function harness(initialTiles: BoardRecord["tiles"] = [], reportAccessError?: Er
       };
       return board;
     },
-    remove: async () => {
-      board = null;
+    archive: async () => {
+      if (!board || board.archived_at !== null) return false;
+      board = { ...board, archived_at: "2026-08-24T00:00:00.000Z" };
+      return true;
+    },
+    restore: async () => {
+      if (!board || board.archived_at === null) return false;
+      board = { ...board, archived_at: null };
       return true;
     },
   };
@@ -153,6 +160,40 @@ describe("board application service", () => {
       service.runReport(bob, "11111111-1111-4111-8111-111111111111", report.id),
     ).rejects.toBeInstanceOf(NotFoundError);
     expect(runCalls).toEqual([]);
+  });
+
+  test("删除后看板对读写两路都等同不存在，恢复即原样回来", async () => {
+    const tile = {
+      kind: "report" as const,
+      tile_id: "22222222-2222-4222-8222-222222222222",
+      report_id: report.id,
+      place: { x: 0, y: 0, w: 24, h: 6 },
+    };
+    const { service, runCalls } = harness([tile]);
+    const id = "11111111-1111-4111-8111-111111111111";
+    await service.remove(alice, id);
+
+    expect(await service.list()).toEqual([]);
+    await expect(service.get(id)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.update(alice, id, { name: "改名" }, 1)).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+    await expect(service.runReport(alice, id, report.id)).rejects.toBeInstanceOf(NotFoundError);
+    expect(runCalls).toEqual([]);
+
+    expect(await service.restore(alice, id)).toMatchObject({
+      id,
+      tiles: [{ report_id: report.id }],
+    });
+    expect(await service.list()).toMatchObject([{ id }]);
+    await expect(service.get(id)).resolves.toMatchObject({ id });
+  });
+
+  test("只有创建者能恢复自己删除的看板", async () => {
+    const { service } = harness();
+    const id = "11111111-1111-4111-8111-111111111111";
+    await service.remove(alice, id);
+    await expect(service.restore(bob, id)).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   test("报告引用归属在应用边界校验，基础设施异常不伪装成输入错误", async () => {

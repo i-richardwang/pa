@@ -17,7 +17,8 @@ import {
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { errorText, useDimensionValues } from "../dashboard_queries";
+import { errorText } from "../api";
+import { useDimensionValues } from "../dashboard_queries";
 
 export type ValuesTarget = { member: string; title: string };
 

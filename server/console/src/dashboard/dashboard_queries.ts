@@ -7,11 +7,13 @@ import {
   ADD_BOARD_ITEM_PAYLOAD_SCHEMA,
   BOARD_PAYLOAD_SCHEMA,
   BOARDS_PAYLOAD_SCHEMA,
+  type BoardsPayload,
   type UpdateBoardBody,
 } from "@contracts/board_contract";
 import {
   BUSINESS_TERM_SCHEMA,
   BUSINESS_TERMS_PAYLOAD_SCHEMA,
+  type BusinessTermsPayload,
   type CreateBusinessTermBody,
   type UpdateBusinessTermBody,
 } from "@contracts/business_term_contract";
@@ -48,7 +50,8 @@ import {
 } from "@contracts/user_administration_contract";
 import type { TimeIntent } from "@time";
 import { authClient } from "../auth_client";
-import { ApiError, deleteJson, getJson, patchJson, postJson, putJson } from "./api";
+import { toastMutationFailure } from "./kit/undo";
+import { deleteJson, getJson, patchJson, postJson, putJson } from "./api";
 import { authErrorText } from "./better_auth_adapter";
 import { DATA_CAPABILITY_MAP_SCHEMA } from "@data-capability-map";
 
@@ -61,6 +64,7 @@ export const dashboardKeys = {
   dimensionValues: (member: string, contains: string) =>
     ["dimension_values", member, contains] as const,
   reports: ["reports"] as const,
+  archivedReports: ["reports", "archived"] as const,
   myAnalyses: (days: number, limit: number, offset: number) =>
     ["my_analyses", days, limit, offset] as const,
   analysisReplay: (id: string) => ["analysis_replay", id] as const,
@@ -76,10 +80,17 @@ export const dashboardKeys = {
   usage: (days: number, offset: number) => ["usage", days, offset] as const,
 };
 
-/** 已登录整页跳转由 getJson 处理，401 在此不作为可展示错误。 */
-export function errorText(error: unknown): string | null {
-  if (!error || (error instanceof ApiError && error.status === 401)) return null;
-  return error instanceof Error ? error.message : String(error);
+/**
+ * 清单里撤下一行的乐观补丁。移除动作在点击时就已发出，界面只是不等回执先撤下；
+ * 失败由调用它的 mutation 用 onMutate 存下的快照整份回滚。
+ */
+export function withoutRow<T extends { rows: Array<{ id: string }> }>(
+  payload: T | undefined,
+  id: string,
+): T | undefined {
+  if (!payload) return payload;
+  const rows = payload.rows.filter((row) => row.id !== id);
+  return "total" in payload ? { ...payload, rows, total: rows.length } : { ...payload, rows };
 }
 
 export function useMe() {
@@ -148,8 +159,44 @@ export function useUpdateBusinessTerm() {
 }
 
 export function useDeleteBusinessTerm() {
+  const queryClient = useQueryClient();
+  const termKeys = [dashboardKeys.businessTerms, dashboardKeys.adminBusinessTerms] as const;
+  return useMutation({
+    mutationFn: (id: string) =>
+      deleteJson(
+        `/dashboard/api/admin/business_terms/${encodeURIComponent(id)}`,
+        OK_PAYLOAD_SCHEMA,
+      ),
+    onMutate: async (id) => {
+      await Promise.all(termKeys.map((key) => queryClient.cancelQueries({ queryKey: key })));
+      const previous = termKeys.map(
+        (key) => [key, queryClient.getQueryData<BusinessTermsPayload>(key)] as const,
+      );
+      for (const key of termKeys) {
+        queryClient.setQueryData<BusinessTermsPayload>(key, (current) => withoutRow(current, id));
+      }
+      return { previous };
+    },
+    onError: (reason, _id, context) => {
+      for (const [key, payload] of context?.previous ?? []) {
+        if (payload) queryClient.setQueryData(key, payload);
+      }
+      toastMutationFailure("删除失败", reason);
+    },
+    onSettled: () => {
+      for (const key of termKeys) void queryClient.invalidateQueries({ queryKey: key });
+    },
+  });
+}
+
+/** 删除的逆操作：回执上的「撤销」调它。 */
+export function useRestoreBusinessTerm() {
   return useBusinessTermMutation((id: string) =>
-    deleteJson(`/dashboard/api/admin/business_terms/${encodeURIComponent(id)}`, OK_PAYLOAD_SCHEMA),
+    postJson(
+      `/dashboard/api/admin/business_terms/${encodeURIComponent(id)}/restore`,
+      {},
+      BUSINESS_TERM_SCHEMA,
+    ),
   );
 }
 
@@ -176,6 +223,15 @@ export function useReportsList(enabled = true) {
     queryKey: dashboardKeys.reports,
     enabled,
     queryFn: () => getJson("/dashboard/api/reports", REPORTS_PAYLOAD_SCHEMA),
+  });
+}
+
+/** 已归档的报告：归档可逆，恢复入口就在这张清单上。 */
+export function useArchivedReportsList(enabled = true) {
+  return useQuery({
+    queryKey: dashboardKeys.archivedReports,
+    enabled,
+    queryFn: () => getJson("/dashboard/api/reports?archived=1", REPORTS_PAYLOAD_SCHEMA),
   });
 }
 
@@ -302,7 +358,31 @@ export function useDeleteBoard() {
   return useMutation({
     mutationFn: (id: string) =>
       deleteJson(`/dashboard/api/boards/${encodeURIComponent(id)}`, OK_PAYLOAD_SCHEMA),
-    onSuccess: () => {
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: dashboardKeys.boards });
+      const previous = queryClient.getQueryData<BoardsPayload>(dashboardKeys.boards);
+      queryClient.setQueryData<BoardsPayload>(dashboardKeys.boards, (current) =>
+        withoutRow(current, id),
+      );
+      return { previous };
+    },
+    onError: (reason, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(dashboardKeys.boards, context.previous);
+      toastMutationFailure("删除失败", reason);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.boards });
+    },
+  });
+}
+
+/** 删除的逆操作：回执上的「撤销」调它。 */
+export function useRestoreBoard() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      postJson(`/dashboard/api/boards/${encodeURIComponent(id)}/restore`, {}, BOARD_PAYLOAD_SCHEMA),
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: dashboardKeys.boards });
     },
   });

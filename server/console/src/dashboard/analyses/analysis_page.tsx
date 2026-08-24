@@ -3,7 +3,8 @@
  * 名字即题名块里的可编辑标题，保存前改名是同一个动作。
  */
 import { AnalysisWorkbench } from "./analysis_workbench";
-import { errorText, useAnalysisReplay, useCatalogQuery } from "../dashboard_queries";
+import { errorText } from "../api";
+import { useAnalysisReplay, useCatalogQuery } from "../dashboard_queries";
 import { navigateTo, reportHash, reportsHistoryHash } from "../router";
 import { useAnalysisEditSession } from "./use_analysis_edit_session";
 

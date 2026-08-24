@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 import { createTestAppDatabase } from "../test_support/app_database.js";
 import { createBusinessTermRepository } from "./business_term_repository.js";
@@ -18,6 +19,7 @@ describe("business term repository", () => {
     expect(await repository.list()).toEqual([
       {
         id: created.id,
+        archived_at: null,
         canonical_term: "Band C+",
         definition: "Band C及以上的示例职级范围。",
         context: null,
@@ -47,6 +49,7 @@ describe("business term repository", () => {
 
     expect(updated).toEqual({
       id: created.id,
+      archived_at: null,
       canonical_term: "组织",
       definition: "默认指公司一级组织，与部门树不同。",
       context: "组织分析",
@@ -57,7 +60,7 @@ describe("business term repository", () => {
     db.close();
   });
 
-  test("删除术语会移除整条聚合", async () => {
+  test("删除只把术语撤下词典，聚合仍在且可恢复", async () => {
     const db = createTestAppDatabase();
     const repository = createBusinessTermRepository(db);
     const created = await repository.create({
@@ -67,10 +70,16 @@ describe("business term repository", () => {
       related_member_ids: ["dimension:organization_name"],
     });
 
-    expect(await repository.remove(created.id)).toEqual(created);
+    const archived = await repository.archive(created.id);
+    expect(archived.archived_at).not.toBeNull();
     expect(await repository.list()).toEqual([]);
-    expect(db.prepare("SELECT COUNT(*) AS n FROM business_term").get()).toEqual({ n: 0 });
-    await expect(repository.remove(created.id)).rejects.toBeInstanceOf(BusinessTermNotFoundError);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM business_term").get()).toEqual({ n: 1 });
+
+    expect(await repository.restore(created.id)).toEqual(created);
+    expect(await repository.list()).toEqual([created]);
+    await expect(repository.archive(randomUUID())).rejects.toBeInstanceOf(
+      BusinessTermNotFoundError,
+    );
     db.close();
   });
 });

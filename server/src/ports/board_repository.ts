@@ -10,6 +10,8 @@ export type BoardRecord = {
   name: string;
   tiles: StoredTile[];
   created_by: string;
+  /** 删除是可逆的：置时间戳即从清单撤下，置回 null 即复原，记录本身不销毁。 */
+  archived_at: string | null;
   revision: number;
   created_at: string;
   updated_at: string;
@@ -25,11 +27,13 @@ export class BoardConflictError extends Error {
 export type BoardRepository = {
   create(name: string, createdBy: string): Promise<BoardRecord>;
   get(id: string): Promise<BoardRecord | null>;
-  list(): Promise<BoardRecord[]>;
+  /** `all` 只给播种这类需要连已删除的一起认领的场合；界面恒取 active。 */
+  list(scope?: "active" | "all"): Promise<BoardRecord[]>;
   update(
     id: string,
     patch: { name?: string; tiles?: StoredTile[] },
     ifRevision: number,
   ): Promise<BoardRecord | null>;
-  remove(id: string): Promise<boolean>;
+  archive(id: string): Promise<boolean>;
+  restore(id: string): Promise<boolean>;
 };

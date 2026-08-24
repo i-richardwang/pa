@@ -73,6 +73,10 @@ export function registerBoardRoutes(
     return c.json({ ok: true });
   });
 
+  dashboard.post("/api/boards/:id/restore", async (c) => {
+    return c.json(await boardService.restore(c.get("principal"), c.req.param("id")));
+  });
+
   dashboard.get("/api/boards/:id/items/:reportId/replay", async (c) => {
     const time = timeOverride(c);
     if (time instanceof Response) return time;

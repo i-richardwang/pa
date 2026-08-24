@@ -143,7 +143,7 @@ describe("report aggregate", () => {
     const archived = await service.update(principal("alice@x"), saved.id, { type: "archive" }, 2);
     expect(archived.archived_at).not.toBeNull();
     expect(await reports.listOwned("alice@x")).toEqual([]);
-    expect(await reports.listOwned("alice@x", undefined, true)).toHaveLength(1);
+    expect(await reports.listOwned("alice@x", undefined, "all")).toHaveLength(1);
   });
 
   test("报告重放只解析一次 Analysis/View 身份", async () => {

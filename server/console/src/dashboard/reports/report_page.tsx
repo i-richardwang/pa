@@ -1,14 +1,12 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { ArchiveIcon, HistoryIcon } from "lucide-react";
-import type { ReportsPayload } from "@contracts/report_contract";
 import { MenuItem } from "@/components/ui/menu";
 import { toastManager } from "@/components/ui/toast";
 import { AnalysisWorkbench } from "../analyses/analysis_workbench";
-import { dashboardKeys, useCatalogQuery } from "../dashboard_queries";
-import { performUndoable } from "../kit/undo";
+import { useCatalogQuery } from "../dashboard_queries";
+import { toastWithUndo } from "../kit/undo";
 import { ReportHistoryDialog } from "./report_history_dialog";
-import { useArchiveReport, useReportResource } from "../editor_queries";
+import { useArchiveReport, useReportResource, useUnarchiveReport } from "../editor_queries";
 import { useAnalysisEditSession } from "../analyses/use_analysis_edit_session";
 import { HeaderMenu } from "../layout/view_chrome";
 import { navigateTo, reportHash, reportsHash } from "../router";
@@ -17,8 +15,8 @@ import { AddToBoardAction } from "./add_to_board_picker";
 export function ReportPage({ id }: { id: string }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const { report, savedReplay, reportError, replayError } = useReportResource(id);
-  const queryClient = useQueryClient();
   const archiveReport = useArchiveReport();
+  const unarchiveReport = useUnarchiveReport();
   const catalog = useCatalogQuery().data ?? null;
 
   const seed = report
@@ -42,16 +40,18 @@ export function ReportPage({ id }: { id: string }) {
   function archive() {
     if (!report) return;
     const { id: reportId, name, revision } = report;
-    queryClient.setQueryData<ReportsPayload>(dashboardKeys.reports, (current) =>
-      current ? { ...current, rows: current.rows.filter((row) => row.id !== reportId) } : current,
+    archiveReport.mutate(
+      { id: reportId, ifRevision: revision },
+      {
+        onSuccess: (archived) =>
+          toastWithUndo({
+            title: `已归档「${name}」`,
+            undo: () =>
+              unarchiveReport.mutateAsync({ id: reportId, ifRevision: archived.revision }),
+          }),
+      },
     );
     navigateTo(reportsHash());
-    performUndoable({
-      title: `已归档「${name}」`,
-      failureTitle: "归档失败",
-      revert: () => void queryClient.invalidateQueries({ queryKey: dashboardKeys.reports }),
-      commit: () => archiveReport.mutateAsync({ id: reportId, ifRevision: revision }),
-    });
   }
 
   return (

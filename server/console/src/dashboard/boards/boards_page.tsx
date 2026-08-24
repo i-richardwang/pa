@@ -1,8 +1,7 @@
 /** 删除只对创建者开放；看板码仅在详情页展示。 */
 import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { CircleAlertIcon, PackageIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import type { BoardRow, BoardsPayload } from "@contracts/board_contract";
+import type { BoardRow } from "@contracts/board_contract";
 import type { MePayload } from "@contracts/session_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
@@ -46,17 +45,11 @@ import {
   useSetTitlebarActions,
 } from "../layout/layout_chrome";
 import { HeaderTextAction } from "../layout/view_chrome";
-import { ApiError, formatAt } from "../api";
-import {
-  dashboardKeys,
-  errorText,
-  useBoards,
-  useCreateBoard,
-  useDeleteBoard,
-} from "../dashboard_queries";
+import { ApiError, errorText, formatAt } from "../api";
+import { useBoards, useCreateBoard, useDeleteBoard, useRestoreBoard } from "../dashboard_queries";
 import { boardHash } from "../router";
 import { ResourceName, RowMenu, SortableHead, useTableSort } from "../kit/table_kit";
-import { performUndoable } from "../kit/undo";
+import { toastWithUndo } from "../kit/undo";
 
 const BOARD_SORT: Record<
   "name" | "creator" | "updated" | "count",
@@ -73,9 +66,9 @@ export function BoardsPage({ me }: { me: MePayload }) {
   const [query, setQuery] = useState("");
   /** 归属分面：控制条左半恒有一组档位。 */
   const [owner, setOwner] = useState<"all" | "mine">("all");
-  const queryClient = useQueryClient();
   const boardsQuery = useBoards();
   const deleteBoard = useDeleteBoard();
+  const restoreBoard = useRestoreBoard();
   const data = boardsQuery.data ?? null;
   const error = errorText(boardsQuery.error);
   const filtered = useMemo(() => {
@@ -99,17 +92,13 @@ export function BoardsPage({ me }: { me: MePayload }) {
     [],
   );
 
-  const reloadBoards = () => void queryClient.invalidateQueries({ queryKey: dashboardKeys.boards });
-
   function removeBoard(row: BoardRow) {
-    queryClient.setQueryData<BoardsPayload>(dashboardKeys.boards, (current) =>
-      current ? { ...current, rows: current.rows.filter((r) => r.id !== row.id) } : current,
-    );
-    performUndoable({
-      title: `已删除「${row.name}」`,
-      failureTitle: "删除失败",
-      revert: reloadBoards,
-      commit: () => deleteBoard.mutateAsync(row.id),
+    deleteBoard.mutate(row.id, {
+      onSuccess: () =>
+        toastWithUndo({
+          title: `已删除「${row.name}」`,
+          undo: () => restoreBoard.mutateAsync(row.id),
+        }),
     });
   }
 

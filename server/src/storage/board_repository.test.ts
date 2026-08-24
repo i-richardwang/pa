@@ -92,19 +92,27 @@ describe("boards 存取", () => {
     expect(
       await boards.update("00000000-0000-0000-0000-000000000000", { name: "x" }, 1),
     ).toBeNull();
-    expect(await boards.remove("00000000-0000-0000-0000-000000000000")).toBe(false);
-    expect(await boards.remove(created.id)).toBe(true);
-    expect(await boards.get(created.id)).toBeNull();
+    expect(await boards.archive("00000000-0000-0000-0000-000000000000")).toBe(false);
+    expect(await boards.archive(created.id)).toBe(true);
+    expect((await boards.list()).map((row) => row.id)).not.toContain(created.id);
   });
 
-  test("删板只删除看板，引用的报告继续保留", async () => {
+  test("删板只从清单撤下：瓦片与引用的报告都还在，恢复后原样回来", async () => {
     const { boards, reports, reportIds } = await setup();
     const created = await boards.create("看板", "alice@x");
-    await boards.update(created.id, { tiles: [reportTile(reportIds[0])] }, created.revision);
+    const tiles = [reportTile(reportIds[0])];
+    await boards.update(created.id, { tiles }, created.revision);
 
-    expect(await boards.remove(created.id)).toBe(true);
-    expect(await boards.get(created.id)).toBeNull();
+    expect(await boards.archive(created.id)).toBe(true);
+    expect(await boards.list()).toEqual([]);
+    expect((await boards.get(created.id))?.archived_at).not.toBeNull();
     expect(await reports.get(reportIds[0])).not.toBeNull();
+
+    expect(await boards.restore(created.id)).toBe(true);
+    expect(await boards.restore(created.id)).toBe(false);
+    const revived = await boards.get(created.id);
+    expect(revived).toMatchObject({ id: created.id, tiles, archived_at: null });
+    expect((await boards.list()).map((row) => row.id)).toEqual([created.id]);
   });
 
   test("读取时拒绝损坏的持久瓦片", async () => {

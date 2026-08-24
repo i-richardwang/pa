@@ -40,7 +40,8 @@ import { InspectorProfileCard, InspectorRow, InspectorSection } from "@/componen
 import { ProfileAside } from "../layout/view_chrome";
 import { cn } from "@/lib/utils";
 import { ListCategoryPill, MAIN_CARD_BODY_INSET, useSetStageAside } from "../layout/layout_chrome";
-import { errorText, useCapabilityMapQuery } from "../dashboard_queries";
+import { errorText } from "../api";
+import { useCapabilityMapQuery } from "../dashboard_queries";
 import {
   NODE_HEIGHT,
   NODE_WIDTH,

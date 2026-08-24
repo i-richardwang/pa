@@ -3,7 +3,8 @@
  * 不把别人的身份挂到自己名下。
  */
 import { AnalysisWorkbench } from "../analyses/analysis_workbench";
-import { errorText, useBoard, useBoardReportReplay, useCatalogQuery } from "../dashboard_queries";
+import { errorText } from "../api";
+import { useBoard, useBoardReportReplay, useCatalogQuery } from "../dashboard_queries";
 import { boardHash, navigateTo, reportHash } from "../router";
 import { useAnalysisEditSession } from "../analyses/use_analysis_edit_session";
 

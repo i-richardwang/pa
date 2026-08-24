@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { LoadingMark } from "pa-result-view";
 import { authClient } from "../auth_client";
-import { errorText, useMe } from "./dashboard_queries";
+import { errorText } from "./api";
+import { useMe } from "./dashboard_queries";
 import { BoardPage } from "./boards/board_page";
 import { BoardReportEditPage } from "./boards/board_report_edit_page";
 import { CatalogPage } from "./catalog/catalog_page";

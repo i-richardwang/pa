@@ -105,11 +105,15 @@ export function createBusinessTermRegistry(deps: { repository: BusinessTermRepos
     return projector(members, true)(await deps.repository.replace(id, validate(input, members)));
   }
 
-  async function remove(id: string) {
-    return projector([], true)(await deps.repository.remove(id));
+  async function archive(id: string) {
+    return projector([], true)(await deps.repository.archive(id));
   }
 
-  return { listPublic, listAdmin, resolve, create, update, remove };
+  async function restore(id: string) {
+    return projector([], true)(await deps.repository.restore(id));
+  }
+
+  return { listPublic, listAdmin, resolve, create, update, archive, restore };
 }
 
 export type BusinessTermRegistry = ReturnType<typeof createBusinessTermRegistry>;

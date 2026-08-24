@@ -30,8 +30,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { MenuItem } from "@/components/ui/menu";
 import { toastManager } from "@/components/ui/toast";
+import { errorText } from "../api";
 import {
-  errorText,
   useCreateUser,
   useResetUserPassword,
   useUpdateUserAuthorization,

@@ -17,8 +17,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatAt } from "../api";
-import { errorText, useMyAnalyses } from "../dashboard_queries";
+import { errorText, formatAt } from "../api";
+import { useMyAnalyses } from "../dashboard_queries";
 import { analysisHash } from "../router";
 import { SaveReportDialog, type SaveReportTarget } from "./save_report_dialog";
 import { RowMenu } from "../kit/table_kit";
