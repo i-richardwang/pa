@@ -1,4 +1,3 @@
-/** 层级补全纯函数单测（completeWithChains）；引擎交互路径由 scripts/smoke.ts 端到端覆盖 */
 import { describe, expect, test } from "bun:test";
 import { completeWithChains } from "./hierarchy.js";
 type CubeQuery = import("../ports/cube_gateway.js").CubeQuery;

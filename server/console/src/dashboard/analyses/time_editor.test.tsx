@@ -242,11 +242,9 @@ test("对比浮层：会撞桶的对照档点击前就灰，可用的照常", ()
     if (!match) throw new Error(`找不到行「${label}」`);
     return match[1] ?? "";
   };
-  // 近 5 年对去年同期：无论按年按月都撞桶 → 灰；上一等长期间不撞 → 可用。
   const years = html({ window: { kind: "trailing", count: 5, unit: "year" } });
   expect(rowAttrs(years, "去年同期")).toContain('aria-disabled="true"');
   expect(rowAttrs(years, "上一等长期间")).not.toContain("aria-disabled");
-  // 今年至今对去年同期不撞 → 可用。
   const ytd = html({ window: { kind: "year_to_date" } });
   expect(rowAttrs(ytd, "去年同期")).not.toContain("aria-disabled");
 });
@@ -318,7 +316,6 @@ test("显示方式取档：点别的档显式写入，再点已指定的档剥�
     display: "year",
   });
   expect(toggleDisplayChoice({ ...single, display: "year" }, "year", "year")).toEqual(single);
-  // 未显式指定、按窗口推导为按月：再点按月没有可撤回的东西。
   expect(toggleDisplayChoice(single, "month", "month")).toBeUndefined();
 });
 
@@ -369,7 +366,6 @@ test("off-menu 的近 N 值注入档位列表，触发器不留空白且档位�
   // agent 写的 last:{months:9}/years:7 不在预设档位，须补进列表头供触发器匹配显示。
   expect(withCurrent([6, 12, 24, 36], 9)).toEqual([9, 6, 12, 24, 36]);
   expect(withCurrent([2, 3, 4, 5, 6], 7)).toEqual([7, 2, 3, 4, 5, 6]);
-  // 档位内的值不重复注入。
   expect(withCurrent([6, 12, 24, 36], 12)).toEqual([6, 12, 24, 36]);
 });
 

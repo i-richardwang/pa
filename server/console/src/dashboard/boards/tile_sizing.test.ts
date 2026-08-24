@@ -13,7 +13,7 @@ import {
 } from "./tile_sizing";
 
 test("栅格常量：格子几何与瓦片间距同出一处，横纵同值", () => {
-  // 间距判据见 tile_sizing.ts 头注与 ui_spec「卡容器」
+  // 间距判据见 tile_sizing.ts 头注
   expect(GRID_MARGIN).toEqual([16, 16]);
   expect(MOBILE_GRID_MARGIN).toEqual([16, 16]);
   // 格子几何本身不动——它决定坐标语义，改了会让已存看板的 place 换位

@@ -19,8 +19,8 @@ export function normalizeBusinessTerm(value: string): string {
 const labelsOf = (term: MatchableBusinessTerm): string[] => [term.canonical_term, ...term.aliases];
 
 /**
- * 精确标签优先；否则只允许输入包含完整标签，并取最长标签。禁止反向包含，避免短标签命中扩展标签。
- * 单字标签只做精确匹配，防止在普通句子中泛滥命中。
+ * 精确标签优先；否则只允许输入包含完整标签并取最长标签，禁止反向包含。
+ * 单字标签只做精确匹配。
  */
 export function matchBusinessTerms(
   inputs: string[],

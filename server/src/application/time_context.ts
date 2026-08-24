@@ -20,7 +20,7 @@ export function publicTimeContext(
   const bySource = new Map<string, PublicTimeContext[number]>();
   for (const view of views) {
     const key = view.time_source;
-    // 内部 source key 去重：重复标题不会互相覆盖，因为身份是 source key 而不是标题。
+    // 去重身份是 source key，不是标题。
     if (!key || bySource.has(key)) continue;
     const source = context.sources[key];
     if (!source) continue;

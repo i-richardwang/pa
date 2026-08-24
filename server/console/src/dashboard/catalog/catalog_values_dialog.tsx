@@ -1,8 +1,6 @@
 /**
- * 维度真实值弹窗：以浏览者身份现查 /dashboard/api/catalog/values（与 MCP values_of 同一条
- * 路径、同一套分类与个体粒度守卫）。每次打开重取、不缓存——值集合随行权限与数据
- * 刷新变化，缓存会让当前权限下可见的分类值过期。关键词交给服务端过滤（Cube contains），
- * 本地不截值：截断上限由服务端裁决并随 truncated 文案透出。
+ * 关键词交给服务端过滤（Cube contains），本地不截值：
+ * 截断上限由服务端裁决并随 truncated 文案透出。
  */
 import { useEffect, useState } from "react";
 import { CircleAlertIcon, InboxIcon, SearchIcon } from "lucide-react";
@@ -27,7 +25,6 @@ export function CatalogValuesDialog({
   target,
   onClose,
 }: {
-  /** 待翻值的维度；null = 关闭 */
   target: ValuesTarget | null;
   onClose: () => void;
 }) {
@@ -49,7 +46,7 @@ function ValuesBody({ member }: { member: string }) {
   const [contains, setContains] = useState("");
   const [query, setQuery] = useState("");
 
-  // 输入防抖：每次击键直打 /load 等于把 Cube 当自动补全后端
+  // 输入防抖：击键不直打 Cube。
   useEffect(() => {
     const timer = setTimeout(() => setQuery(contains.trim()), 300);
     return () => clearTimeout(timer);

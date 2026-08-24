@@ -72,7 +72,7 @@ export async function requestFullscreen<S extends HostShellState>(
   store: HostStore<S>,
 ): Promise<void> {
   const result = await app.requestDisplayMode({ mode: "fullscreen" });
-  // 宿主应另发 hostcontextchanged；先应用响应可避免宽松宿主漏通知时状态滞后。
+  // 宽松宿主可能漏发 hostcontextchanged，故先应用响应
   store.set({ displayMode: result.mode } as Partial<S>);
   if (result.mode !== "fullscreen") throw new Error("宿主未切换到全屏模式。");
 }

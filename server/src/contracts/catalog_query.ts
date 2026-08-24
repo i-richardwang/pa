@@ -1,4 +1,3 @@
-/** Catalog 公开请求合同与确定性归一。 */
 import { z } from "zod";
 
 export const CATALOG_TERMS_MAX = 20;
@@ -16,7 +15,7 @@ export type CatalogQueryInput = z.infer<typeof CATALOG_QUERY_INPUT>;
 
 export type NormalizedCatalogQuery = { mode: "overview" } | { mode: "search"; terms: string[] };
 
-/** trim、大小写不敏感去重，保留第一次出现的原始写法供逐项记账。 */
+/** 保留第一次出现的原始写法，供 unmatched_terms 逐项记账。 */
 export function normalizeCatalogTerms(terms: string[]): string[] {
   const seen = new Set<string>();
   const normalized: string[] = [];

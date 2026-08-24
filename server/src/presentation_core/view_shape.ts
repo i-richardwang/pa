@@ -58,7 +58,7 @@ export type SeriesDef = {
   name: string;
   /**
    * 度量来源列（载荷列短名）；分类值派生的系列（分组折线、堆叠段）无此字段。
-   * 需要按字段绑定的消费方只认本字段，name 只作展示，避免展示名变化破坏报告呈现编译。
+   * 按字段绑定的消费方只认本字段，name 只作展示。
    */
   column?: string;
   format: ColumnFormat;
@@ -69,10 +69,7 @@ export type SeriesDef = {
   mark?: "bar";
   /** 条形图专用：本系列对应的结构占比值在 ChartRow 中的键。 */
   shareKey?: string;
-  /**
-   * 本系列所对照的那条系列的 `key`：同期叠加把各对照期都对到主期上。有它才谈得上差值，
-   * 「谁减谁」是编排期就定下的事实，读数卡不去猜哪条是主期。
-   */
+  /** 所对照系列的 `key`（同期叠加各对照期都对到主期）；「谁减谁」在编排期定。 */
   baselineKey?: string;
 };
 export type ChartRow = Record<string, Cell>;
@@ -161,9 +158,8 @@ export type TableModel = {
   /** 与明细彻底分离的模型重算总体；不参与排序、截断与记录投影。 */
   summaryRows?: Cell[][];
   /**
-   * 每格回指原始结果行下标（null=该格无来源行，如轴标签列与缺席格）。
-   * 缺省即「模型行 = 原始行」的恒等映射（长表）；交叉表重排了行列，必须携带本映射，
-   * 记录投影据此取回该格的业务坐标（时间与维度值），与图表规格的 sourceRows 同一语义。
+   * 每格回指原始结果行下标（null=该格无来源行）；缺省即长表的恒等映射。
+   * 交叉表重排行列后必须携带，与图表规格的 sourceRows 同一语义。
    */
   sourceRows?: (number | null)[][];
   /** 热力着色（只随 table 声明下发）：刻度按指标列键各立一把，见 `table_shading.ts`。 */
@@ -226,10 +222,9 @@ function timeLabel(year: Cell, month: Cell): { label: string; key: number } {
 }
 
 /**
- * 列角色判定只消费服务端完整声明的 column_roles，数值型维度不会被误判为指标。
- * 数值列的基础身份不因指标关系而改变：
- * structure_shares 只补充指标关系，默认字段绑定是否把占比作为辅助通道由 primaryMeasureIndices
- * 决定；显式绑定始终可引用它。分类轴仍要求取值 ≥2——取值唯一的维度列是回显的过滤条件；
+ * 列角色只消费服务端声明的 column_roles；数值列的基础身份不因指标关系而改变。
+ * structure_shares 只补充指标关系，是否作为辅助通道由 primaryMeasureIndices 决定，
+ * 显式绑定始终可引用它。分类轴要求取值 ≥2（取值唯一的维度列是过滤回显）；
  * 声明为 time 但改了名的列（派生视图搬运）当作分类标签轴。
  */
 export function detectRoles(view: ViewBlock): Roles {
@@ -278,7 +273,7 @@ function flatTable(view: ViewBlock, titleOf: (c: string) => string): TableModel 
     numeric: view.column_roles[c] === "measure",
     headerPath: [{ key: `field:${c}`, label: titleOf(c) }],
   }));
-  // 标签占用首个业务分组列；没有分组列可占时照样交付数字，绝不因为放不下标签而丢掉总体。
+  // 标签占首个 dimension 列；无该列时仍交付数字。
   const labelIdx = view.columns.findIndex((column) => view.column_roles[column] === "dimension");
   const summaryRows = view.summary?.rows.map((row) =>
     labelIdx >= 0
@@ -349,8 +344,7 @@ function coordinatePeriods(time: ResultTime | undefined): CoordinatePeriod[] | n
 
 /**
  * 期间叠加是否成立：多个期间、每段桶数相同且不止一个，且各对照段相对主段整体回移**整年**
- * （起止的月份部分相同、年份不同）。相邻周期对照不满足整年回移——它在连续时间轴上本来
- * 就画得对，不叠加；异长窗口（往年全年对今年至今）同样落在此判定之外。
+ * （起止的月份部分相同、年份不同）。相邻周期与异长窗口都落在此判定之外。
  */
 function overlayPeriods(time: ResultTime | undefined): CoordinatePeriod[] | null {
   const periods = coordinatePeriods(time);
@@ -373,10 +367,7 @@ function periodLabel(period: { from: string; to: string }): string {
     : monthRangeLabel(period.from, period.to);
 }
 
-/**
- * 合计覆盖期间的写实读法。图例名可以粗（同年即写年份），这里不行：不能整窗合并的指标
- * 在终点求值，副标要如实说出它到底盖住了哪几个月，读者才不会把「年初至今」读成「全年」。
- */
+/** 合计覆盖期间须写实到月：图例名可以粗到年，副标不行。 */
 function coverageLabel(period: { from: string; to: string }): string {
   const year = (month: string) => Number(month.slice(0, 4));
   const month = (value: string) => Number(value.slice(5, 7));
@@ -552,10 +543,8 @@ export function primaryMeasureIndices(view: ViewBlock, measureIdx: number[]): nu
 
 /**
  * 结构式标题 = 度量 · 按分类维度 · 趋势粒度，如「收入 · 按区域 · 月度趋势」。
- * 列角色取自 detectRoles，与图型判定同源：图上画了什么，标题就说什么。
- * 占比派生列与取值唯一的分类列（过滤条件回显）循同规不进标题；度量超过三个以「等」收束。
- * 时间列有 ≥2 个时点才算趋势（单时点是过滤回显），带 month 列即月度、否则年度。
- * 没有度量时只列分类；分类也没有时返回 null。
+ * 列角色取自 detectRoles，与图型判定同源。占比派生列与取值唯一的分类列不进标题；
+ * 度量超过三个以「等」收束。时间列 ≥2 个时点才算趋势，带 month 列即月度、否则年度。
  */
 export function structureTitle(view: ViewBlock, titleOf: (c: string) => string): string | null {
   const roles = detectRoles(view);
@@ -715,10 +704,7 @@ function categorySeriesBar(
   };
 }
 
-/**
- * 饼图（仅声明路径）：单分类 × 单计数度量的部分-整体构成。率不做切片（不构成整体）、
- * 切片数超感知极限或分类值重复（不成矩阵）时退空，表仍忠实呈现。
- */
+/** 饼图（仅声明路径）：单分类 × 单计数度量；率不做切片——不构成整体。 */
 function pieChart(
   view: ViewBlock,
   roles: Roles,
@@ -768,15 +754,13 @@ type ResolvedTableAxis = {
   valueOf: (row: Cell[], metricIdx: number, rowIndex?: number) => AxisValue | null;
 };
 
-// 类型进键，免得数字 1 与字符串 "1" 认成同一个坐标；空值先归一，否则空与空串会排出两列
-// 同名的「—」，而它们在数据里的差别构不成两个坐标。
+// 类型进键：数字 1 与字符串 "1" 不是同一个坐标。空值先归一。
 const cellKey = (value: Cell) =>
   isBlankCell(value) ? '"blank"' : JSON.stringify([typeof value, value]);
 
 /**
- * 时间轴取值的键：年月是标量坐标，同一坐标可能以数字（业务桶键）或字符串（结果行）
- * 两种载体到达同一张表——键因此按字面量归一，不带类型。带类型会让「桶造的列」与
- * 「行造的单元格」永不相等，整表落空。
+ * 年月同一坐标可能以数字（业务桶键）或字符串（结果行）两种载体到达同一张表，
+ * 键因此按字面量归一、不带类型。
  */
 const timeAxisKey = (value: Cell) => (value === null || value === undefined ? "" : String(value));
 
@@ -911,10 +895,9 @@ function resolveTableAxis(
 type DeltaColumn = { after: number; primary: number; comparison: number; column: TableColumn };
 
 /**
- * 时间列轴取值 → 所属期间序号。归属由桶经该轴自身的取值函数投影得到，故与列键同源；
+ * 时间列轴取值 → 所属期间序号；归属经该轴自身的取值函数投影，与列键同源。
  * 月份层级不承载期间身份（同一月号在各期间都出现），不参与差值。
- * 期间与列值必须**一一对应**：一个列值属于多个期间（跨年窗口的年列），或一个期间摊出
- * 多个列值（bucket 级列轴逐桶成列），「主期 − 对照期」都没有唯一配对——宁可不加列，也不猜。
+ * 期间与列值必须**一一对应**，否则不加列。
  */
 function periodOfTimeValue(
   view: ViewBlock,
@@ -943,9 +926,9 @@ function periodOfTimeValue(
 
 /**
  * 对照差值列：同一指标（及其余列轴取值）下，为每个对照期追加一列「主期 − 对照期」。
- * 算术属服务端——消费方（含 MCP 壳）不得对指标做算术，只印服务端给出的值。
+ * 算术属服务端：消费方（含 MCP 壳）只印不算。
  * 率的差是百分点，量的差是相对变化率（分母为零时无定义，留空）。
- * 差值列没有单一来源行，故不参与下钻（sourceRows 记 null）。
+ * 差值列不参与下钻（sourceRows 记 null）。
  */
 function comparisonDeltas(
   view: ViewBlock,
@@ -1010,9 +993,8 @@ function deltaValue(primary: Cell, comparison: Cell, rate: boolean): number | nu
 }
 
 /**
- * 整窗读数模型：每个指标一个数、一句写实的覆盖期间，以及相对各对照期的差值——差值走与
- * 表格差值列同一个 deltaValue，率得百分点、量得相对变化率。
- * 它是指标卡的唯一数据源：大数字读的是整窗合计，不是碰巧只有一行的那一行。
+ * 指标卡的唯一数据源：大数字读的是整窗合计，不是碰巧只有一行的那一行。
+ * 差值与表格差值列同走 deltaValue，率得百分点、量得相对变化率。
  */
 export type TotalBandMetric = {
   column: string;
@@ -1036,10 +1018,7 @@ function isWholeWindowResult(view: ViewBlock, shape: ResultShape): boolean {
   return shape.roles.timeIdx.length === 0 && shape.roles.measureIdx.length === view.columns.length;
 }
 
-/**
- * 派生结果没有业务时间轴，因而没有整窗合计供给。它若已收敛为单行纯指标，那一行本身
- * 就是整窗单值——来源查询已按合计粒度求过值，这里只是换个读法，不做任何算术。
- */
+/** 派生结果无整窗合计供给：已收敛为单行纯指标时那一行即整窗单值，本层不做算术。 */
 function singleRowBand(
   view: ViewBlock,
   titleOf: (c: string) => string,
@@ -1133,8 +1112,8 @@ function unavailableTable(
 }
 
 /**
- * 通用表格布局编译器：完整布局中的每个轴只负责坐标，指标值始终来自模型结果原值。
- * 稀疏矩阵留空；重复坐标无法忠实表达时显式返回 unavailable，不做聚合或静默换形。
+ * 每个轴只负责坐标，指标值始终来自模型结果原值。稀疏矩阵留空；
+ * 重复坐标无法忠实表达时返回 unavailable，不做聚合或静默换形。
  */
 function compileTableLayout(
   view: ViewBlock,
@@ -1297,9 +1276,8 @@ function compileTableLayout(
 }
 
 /**
- * 按呈现声明构建图型：绑定名已在 chart_spec 校验层归一并补齐默认值，这里只剩
- * 数据完整性守卫——前提不满足（时间点不足、列在本结果中不成角色、矩阵不成立）时
- * 返回 null 退表格，与缺省判定的守卫同语义。
+ * 绑定名已在 chart_spec 校验层归一补齐，这里只剩数据完整性守卫：
+ * 前提不满足时返回 null 退表格。
  */
 function declaredChart(
   view: ViewBlock,
@@ -1444,8 +1422,8 @@ export function compileChart(
 }
 
 /**
- * KPI 运行时守卫：整窗读数可成、1–4 个指标、无业务分组。分组结果不成 KPI——把分组合起来
- * 只剩一个数，等于把用户要的那件事丢掉；时间序列则无妨，大数字读的正是它的整窗合计。
+ * KPI 运行时守卫：整窗读数可成、1–4 个指标、无业务分组。
+ * 时间序列可成 KPI，大数字读的正是它的整窗合计。
  */
 export function canCompileKpi(
   view: ViewBlock,

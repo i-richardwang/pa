@@ -1,12 +1,7 @@
 /**
- * 序数维度排序：职级、阶段分类等维度的取值有业务序（职级从高到低），字符串排序会
- * 声明序覆盖字符串序，避免业务分档标签误排。
- * 模型层以 meta.value_order 声明业务序（声明序即呈现序，随 /v1/meta 暴露），
- * 本模块是引擎边界的唯一排序点：查询未显式 order 时，按声明序稳定重排结果行，
- * 文本应答、CSV 导出与预览卡片同一顺序。
- *
- * 只重排声明维度：其余业务维度与时间维度以取值首现序作复合键参与排序——
- * 引擎返回的分组与相对顺序原样保留，声明维度只在同组内归位，不打散不越界。
+ * 序数维度排序：模型层以 meta.value_order 声明业务序（随 /v1/meta 暴露）。
+ * 本模块是引擎边界唯一排序点，查询未显式 order 时按声明序稳定重排，文本、CSV 与预览同序。
+ * 只重排声明维度，其余维度以取值首现序参与复合键。
  */
 import type { CubeQuery, CubeView } from "../ports/cube_gateway.js";
 
@@ -21,8 +16,7 @@ export function sortByValueOrder<T extends Record<string, unknown>>(
   const declared = dims.filter((d) => orderOf.has(d));
   if (!declared.length) return data;
 
-  // 每个维度一个取值 → 序号映射：声明维度用声明序（未声明的取值排在声明值之后、按首现序），
-  // 其余维度用首现序（复合键下等价于保持原分组与原相对顺序）
+  // 未在声明序中的取值排在声明值之后，按首现序。
   const rankOf = dims.map((d) => {
     const rank = new Map<string, number>();
     const listed = orderOf.get(d);

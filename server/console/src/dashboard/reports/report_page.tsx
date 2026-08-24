@@ -37,7 +37,6 @@ export function ReportPage({ id }: { id: string }) {
     savedReplay,
     target: { kind: "update", reportId: id, ifRevision: report?.revision ?? 1 },
   });
-  /** 归档回到清单：清单先撤下这一行，回执关闭才提交；撤销把它放回清单。 */
   function archive() {
     if (!report) return;
     const { id: reportId, name, revision } = report;

@@ -169,10 +169,7 @@ function resolveInside(root: string, path: string): string {
   return target;
 }
 
-/**
- * 加载只含声明的版本化语义包。包不能执行代码，模型路径也不能逃逸包目录；
- * 因而公开 Demo 与私有适配使用同一装配合同，而不需要分叉应用核心。
- */
+/** 加载只含声明的版本化语义包；包不能执行代码，模型路径不得逃逸包目录。 */
 export async function loadSemanticPackage(root: string): Promise<SemanticPackage> {
   const packageRoot = resolve(root);
   const manifestPath = resolve(packageRoot, "semantic_package.yml");

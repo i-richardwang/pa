@@ -1,8 +1,5 @@
 /**
- * 撤下策略单测：钉住的浮层认哪两下、不认哪两下，以及撤下后订阅是否真的解掉。
- *
- * 宿主由调用方交进来，故这三件不必支起 DOM——它们恰恰是静态渲染看不见的那一部分。
- * 断言一律从 `watchDismiss` 这道生产入口进：判据单独拎出来问，问不出订阅那半边的形。
+ * 从 `watchDismiss` 这道生产入口验：判据与订阅两半都要覆盖。
  */
 import { expect, test } from "bun:test";
 import { watchDismiss, type DismissEvent, type DismissHost } from "./dismiss.js";

@@ -14,7 +14,6 @@ test("stage renders a result slot with no border of its own", () => {
   const html = renderToStaticMarkup(<ChartStage>图</ChartStage>);
 
   expect(html).toContain('data-slot="chart-stage-result"');
-  // 结果区不自带外框：边框一旦回到这里，图自己那圈就成了第二层
   const slot = html.match(/class="([^"]*)"[^>]*data-slot="chart-stage-result"/)?.[1] ?? "";
   expect(slot, "结果区那一层没找到，断言失去着力点").not.toBe("");
   expect(slot).not.toContain("border");
@@ -22,7 +21,6 @@ test("stage renders a result slot with no border of its own", () => {
   expect(html).not.toContain("--pa-stage-aside");
 });
 
-/** 定位与页级动作住壳 titlebar；本断言确认舞台不自带题条。 */
 test("stage carries no titlebar of its own — the shell one holds crumb and actions", () => {
   const html = renderToStaticMarkup(<ChartStage>图</ChartStage>);
 

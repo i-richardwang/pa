@@ -1,8 +1,4 @@
-/**
- * 翻值守卫单测：公开分类自动开放、个体粒度恒拒绝、查询组装（contains/上限探测）。
- * 行权限由 Cube access_policy 与 query 共用同一策略；
- * handler 集成（真实应答 schema、contains 翻值、个体粒度拒绝）由 scripts/smoke.ts 覆盖。
- */
+/** 行权限由 Cube access_policy 与 query 共用同一策略。 */
 import { describe, expect, test } from "bun:test";
 import {
   DIMENSION_VALUES_CAP,

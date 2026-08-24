@@ -8,13 +8,12 @@
  *   full 保留两侧全集并从已有侧回填缺失侧的关联键。未命中的度量保持 null，不填 0。
  * - 组合键中的 null 是可对齐的业务空值：只有两侧整组键（含其余非空键）一致时才合并。
  *   任一算式操作数为 null、除零或结果非有限数时返回 null。
- * - 任一输入 has_more=true 即拒绝，避免在不完整结果上生成看似精确的派生数；模型采样不影响
- *   本模块，调用方必须传入采样前的服务端完整行。
+ * - 任一输入 has_more=true 即拒绝；调用方必须传入采样前的服务端完整行。
  * - 派生列不得冒用 catalog 标准度量展示名；正式指标仍只能在模型层定义。
  * - join 键只能是同源或规范同名维度以及执行器生成的同类时间列；算式列只能引用度量。
  * - 不同业务时间的度量只在同一标准度量命中封闭可比矩阵时参与算术；跨时间语义恒拒绝。
  * - 输出列序与身份完全由 columns 决定；搬运列可用 as 区分同名来源列，格式与口径随列继承。
- * - 任一派生规格或变换失败即拒绝整件查询工件，不返回已付费的基础查询部分；调用方修正后整体重试。
+ * - 任一派生规格或变换失败即拒绝整件查询工件。
  */
 import type { ViewBlock, QueryNote } from "../semantic_core/query_payload.js";
 import {
@@ -790,7 +789,7 @@ export function transformDerivedView(
     ...(displayNotes.length ? { display_notes: displayNotes } : {}),
   };
   if (!spec.summary) return block;
-  // 空结果不造总体；有结果却拿不到来源总体是契约破裂，必须现形而不是让派生结果少一条带。
+  // 空结果不造总体；有结果而来源无总体即抛错。
   if (!rows.length) return block;
 
   const summarySources = new Map<string, EngineViewBlock>();

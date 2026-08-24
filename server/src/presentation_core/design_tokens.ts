@@ -14,21 +14,21 @@ export const CHART_SERIES: readonly TokenPair[] = [
 ] as const;
 
 export const CHART_CHROME = {
-  /** 轴刻度 = text-faint；轴是定位标注，不与内容正文争层级 */
+  /** 轴刻度 = text-faint */
   axisText: { light: "#aaaaaa", dark: "#6e6e6e" },
-  /** 数据值标签 = text-muted；它是数据注释，比轴刻度高一档 */
+  /** 数据值标签 = text-muted */
   valueText: { light: "#767676", dark: "#a3a3a3" },
-  /** 双向虚线网格 = line 全浓度；线型本身已提供降噪 */
+  /** 双向虚线网格 = line 全浓度 */
   gridLine: { light: "#e8e8e8", dark: "#2b2b2b" },
-  /** 桶边界那档分隔线：比横向读数线深、比它细——它划的是结构不是读数 */
+  /** 桶边界分隔线：比横向网格深且细 */
   gridEdge: { light: "rgba(0, 0, 0, 0.15)", dark: "rgba(255, 255, 255, 0.16)" },
   /** 图表所在承载面（饼图切缝、需要遮挡时的底色） */
   surface: { light: "#ffffff", dark: "#171717" },
-  /** 值标签底片：浅灰药丸垫在系列色数字底下，描边用承载面色隔开数据 */
+  /** 值标签底片；描边用承载面色 */
   labelChip: { light: "#f7f7f8", dark: "#232323" },
 
   pointerBand: { light: "rgba(0, 0, 0, 0.04)", dark: "rgba(255, 255, 255, 0.07)" },
-  /** 指针竖虚线（纯折线）= text-muted：它比网格线重（要被看见），比数据轻（不与线争） */
+  /** 指针竖虚线（纯折线）= text-muted */
   pointerLine: { light: "#767676", dark: "#a3a3a3" },
 
   blurred: { light: "#dedede", dark: "#3a3a3a" },

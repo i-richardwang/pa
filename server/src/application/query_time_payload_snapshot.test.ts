@@ -8,9 +8,8 @@ import { authorizeTestAnalysisPlan } from "../test_support/dashboard.js";
 import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
 
 /**
- * 公共交付协议的逻辑时间黄金对：结果列、列角色与业务桶。
- * 物理查询窗口是服务内部计划，不进入 Web 与 Agent 契约。
- * 需要有意改变公共时间契约时，在提交信息里写清楚为什么，并连同本文件的黄金值一起改。
+ * 公共交付协议的逻辑时间黄金对；物理查询窗口是内部计划，不进 Web 与 Agent 契约。
+ * 改契约须同改本文件的黄金值。
  */
 const GOLDEN_PATH = new URL("./query_time_payload.golden.json", import.meta.url);
 
@@ -55,7 +54,7 @@ const view: CubeView = {
   dimensions: [{ name: `${VIEW}.organization_name`, title: "组织", type: "string" }],
 };
 
-/** 结果行不进黄金对，故只需返回结构完整的空结果与注记。 */
+/** 黄金对不含结果行，桩只返回结构完整的空结果。 */
 const emptyLoad = (query: CubeQuery) => ({
   data: [],
   annotation: {
@@ -75,7 +74,6 @@ const cube = {
     sources: { [TIME_SOURCE]: { actualThrough: "2026-07", availableThrough: "2026-07" } },
   }),
   load: async (query: CubeQuery) => emptyLoad(query),
-  // 同期多窗一次请求逐窗执行，按声明的窗口数逐个返回结构完整的空结果。
   loadMulti: async (query: CubeQuery) =>
     (query.timeDimensions?.[0]?.compareDateRange ?? [[]]).map(() => emptyLoad(query)),
 } as unknown as CubeGateway;
@@ -99,7 +97,6 @@ const MEASURE_SETS: Record<string, string[]> = {
   ],
 };
 
-/** 业务时间形态覆盖截止月份、按月、按年（含部分年）、合计、对照与相对窗口。 */
 const TIME_INPUTS: Record<string, TimeInput> = {
   cutoff_default: {},
   cutoff: { cutoff: "2026-06" },
@@ -153,7 +150,7 @@ test("公共交付协议的时间口径与黄金对逐字节一致", async () =>
     await Bun.write(GOLDEN_PATH, `${JSON.stringify(actual, null, 2)}\n`);
   }
   const golden = (await Bun.file(GOLDEN_PATH).json()) as Record<string, string>;
-  // 用例集本身也是黄金对的一部分：少录一种时间形态等于门禁出现盲区。
+  // 用例集键也是黄金对的一部分。
   expect(Object.keys(actual).sort()).toEqual(Object.keys(golden).sort());
   for (const key of Object.keys(golden)) {
     expect(actual[key], `公共时间契约变化：${key}`).toBe(golden[key]);
@@ -162,7 +159,6 @@ test("公共交付协议的时间口径与黄金对逐字节一致", async () =>
 
 test("黄金对覆盖全部时间形态且不泄漏内部求值方式", async () => {
   const golden = (await Bun.file(GOLDEN_PATH).json()) as Record<string, string>;
-  // 快照必须同时覆盖成功与失败路径。
   const thrown = Object.values(golden).filter((value) => value.startsWith("throw: "));
   expect(thrown.length).toBeGreaterThan(0);
   expect(thrown.length).toBeLessThan(Object.keys(golden).length);

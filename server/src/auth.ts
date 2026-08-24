@@ -45,9 +45,8 @@ function authOptions(cfg: AuthConfig, db: SqliteDatabase) {
         access_scope: { type: "string", required: false, defaultValue: "", input: false },
       },
     },
-    // admin 插件 = 角色模型（user.role，默认 admin/user 两角色）：
-    // 控制台 /dashboard 按角色分层的依据；角色和数据范围由同一个用户管理动作提交。
-    // apiKey 插件 = /mcp bearer 通道的 key 来源：key 绑 session 用户，自助创建/吊销；
+    // user.role 是控制台 /dashboard 分层依据，角色与数据范围由同一个用户管理动作提交。
+    // apiKey 是 /mcp bearer 通道的 key 来源：key 绑 session 用户，与角色同一套用户身份。
     plugins: [
       mcp({ loginPage: "/login" }),
       admin(),

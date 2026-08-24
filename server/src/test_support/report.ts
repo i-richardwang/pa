@@ -63,7 +63,7 @@ function testTimeIntent(time: TimeInput, grouped: boolean): TimeIntent {
   if (time.last || time.compare) {
     throw new Error("复杂时间测试必须直接使用 TimeIntent 构造语义规格");
   }
-  // 显示方式只有序列粒度；解析为整段单桶时省略即可（单月窗口本来就只有一个数）。
+  // 显示方式只有序列粒度；整段单桶时省略 display。
   const grain = time.grain ?? resolveTimeOutputGrain(time, undefined, { grouped });
   return TIME_INTENT_INPUT.parse({
     window: time.range

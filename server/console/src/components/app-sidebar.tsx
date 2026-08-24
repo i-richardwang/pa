@@ -13,10 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { RouteKey } from "@/dashboard/router";
 
-/**
- * 侧栏装配：栏头工作区下拉 + 收起（hover 显）+ 搜索；栏中扁平导航；无栏底账号脚。
- * 工具钮与导航条是两套配方，禁止混用 SidebarMenuButton。
- */
+/** 工具钮与导航条是两套配方，禁止混用 SidebarMenuButton。 */
 export function AppSidebar({
   groups,
   route,

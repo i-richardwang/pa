@@ -1,13 +1,6 @@
-/**
- * 全局快捷键的共同前提：输入场景不抢注。
- *
- * 焦点落在可编辑元素时，键盘属于那个输入框——`?` 是正文字符，`⌘B` 在富文本里是加粗，
- * `⌘.` 在输入法候选态有自己的含义。全局监听器抢下来，用户看到的是打不出字。
- *
- * 判据按结构取（closest / isContentEditable），不靠宿主的 DOM 类，无 DOM 也能单测。
- */
+/** 全局快捷键的共同前提：焦点落在可编辑元素时，键盘归那个输入框。 */
 
-/** 判据要问的那几样，DOM Element 满足它。 */
+/** DOM Element 满足这个结构。 */
 export type KeyTarget = {
   closest(selector: string): KeyTarget | null;
   isContentEditable?: boolean;
@@ -30,13 +23,9 @@ export function isEditableTarget(target: AnyTarget): boolean {
   );
 }
 
-/** 会把焦点收进自己身体里的浮层：它开着时 Esc 归它。 */
 const POPUP_SELECTOR = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
 
-/**
- * 这一下 Esc 是否归最外层的右栏：输入框里的归输入法，浮层里的归那层浮层；
- * 只有键落在浮层之外，或落在承载右栏的那个容器自身时，才算给右栏的。
- */
+/** 承载右栏的容器自身也带浮层角色，落在它上面算给右栏。 */
 export function escapeClaimsAside(
   event: { key: string; target: AnyTarget },
   asideRoot: KeyTarget | null,

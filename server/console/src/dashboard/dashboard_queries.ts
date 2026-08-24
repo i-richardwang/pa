@@ -1,8 +1,6 @@
 /**
- * 控制台通用服务端资源的取数与写入（TanStack Query）——报告编辑器族之外的一切：
- * 会话身份、口径目录、维度取值、报告/分析/看板列表与其增删、管理端的成员 / API Key / 反馈 / 日志。
- * 同一资源多处消费时收口到一个键位即跨页去重（如目录被报告编辑器/目录页/筛选编辑器、
- * 看板列表被列表页/命令面板共用）。缓存只存 api.ts 经 Zod 校验的契约类型。
+ * 控制台通用服务端资源取数（报告编辑器族之外）。同一资源收口到一个键位；
+ * 缓存只存 api.ts 经 Zod 校验的契约类型。
  */
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -68,7 +66,7 @@ export const dashboardKeys = {
   analysisReplay: (id: string) => ["analysis_replay", id] as const,
   boards: ["boards"] as const,
   board: (id: string) => ["board", id] as const,
-  /** 板级时间覆盖是键的一部分：结构化值直接进键，TanStack 按结构哈希 */
+  /** TanStack 按结构哈希，结构化值可直接进键。 */
   boardReportReplay: (boardId: string, reportId: string, timeOverride: TimeIntent | null) =>
     ["board_report_replay", boardId, reportId, timeOverride] as const,
   users: ["users"] as const,
@@ -156,9 +154,8 @@ export function useDeleteBusinessTerm() {
 }
 
 /**
- * 维度取值现查：与 MCP values_of 同路径、同分类/个体粒度守卫。
- * 值集合随行权限与数据刷新变化，故每次打开重取、不跨开留存（staleTime/gcTime 皆 0）——
- * 缓存会让当前权限下可见的分类值过期。输入去抖期保留上一批结果（只压暗、不清空）。
+ * 维度取值现查（同 MCP values_of 路径与分类/个体粒度守卫）：值集合随行权限变，
+ * 不缓存（staleTime/gcTime 皆 0）。输入去抖期保留上一批结果（只压暗、不清空）。
  */
 export function useDimensionValues(member: string, contains: string, enabled = true) {
   return useQuery({
@@ -182,7 +179,6 @@ export function useReportsList(enabled = true) {
   });
 }
 
-/** 本人分析记录，服务端切片分页；翻页/换窗时保留上一页做压暗过渡。 */
 export function useMyAnalyses(days: number, limit: number, offset: number, enabled = true) {
   return useQuery({
     queryKey: dashboardKeys.myAnalyses(days, limit, offset),
@@ -208,7 +204,6 @@ export function useAnalysisReplay(id: string) {
   });
 }
 
-/** 保存 View 身份为独立报告；成功后失效报告列表，让「我的报告」与选择器取到新行。 */
 export function useCreateReport() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -235,7 +230,6 @@ export function useBoard(id: string) {
   });
 }
 
-/** 看板成员视角重放一块报告瓦片；板级时间覆盖随查询串下发，键位随之分开。 */
 export function boardReportReplayQueryOptions(
   boardId: string,
   reportId: string,
@@ -270,7 +264,6 @@ export function useCreateBoard() {
   });
 }
 
-/** 保存看板：写回详情缓存并失效看板列表（名称 / 瓦片数随之刷新）。 */
 export function useSaveBoard(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -283,7 +276,6 @@ export function useSaveBoard(id: string) {
   });
 }
 
-/** 把报告追加到看板（先取板 revision，再 POST items）。 */
 export function useAddReportToBoard() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -315,8 +307,6 @@ export function useDeleteBoard() {
     },
   });
 }
-
-/* ─── 成员（admin） ─── */
 
 export function useUsers() {
   return useQuery({
@@ -357,8 +347,6 @@ export function useResetUserPassword() {
       postJson(`/dashboard/api/users/${encodeURIComponent(id)}/password`, body, OK_PAYLOAD_SCHEMA),
   });
 }
-
-/* ─── API Key（Better Auth 自助端点） ─── */
 
 export function useApiKeys() {
   return useQuery({
@@ -401,8 +389,6 @@ export function useRevokeApiKey() {
   });
 }
 
-/* ─── 反馈与日志（admin） ─── */
-
 export function useFeedbackPage(offset: number) {
   return useQuery({
     queryKey: dashboardKeys.feedbackPage(offset),
@@ -438,7 +424,6 @@ export function useResolveFeedback() {
   });
 }
 
-/** 日志页三块并取：概况、业务问题分页、未答信号共用一个时间窗。 */
 export function useUsage(days: number, offset: number) {
   return useQuery({
     queryKey: dashboardKeys.usage(days, offset),

@@ -1,8 +1,4 @@
-/**
- * 控制台应用：拉取 /api/me，套应用壳（侧栏导航 + 主区，见 layout/shell.tsx），按 hash 路由渲染分页。
- * 导航按角色分层（见 layout/shell.tsx），但访问边界始终是各端点的服务端守卫。
- * 个人设置是壳上的居中弹层，由侧栏与命令面板打开，不占路由。
- */
+/** 访问边界始终是各端点的服务端守卫，导航按角色分层不构成授权。 */
 import { useState } from "react";
 import { LoadingMark } from "pa-result-view";
 import { authClient } from "../auth_client";
@@ -56,7 +52,6 @@ export function DashboardApp() {
   const error = errorText(meQuery.error);
   const [route, navigate] = useHashRoute();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // 深链打开的设置弹层关上即回报告列表：设置不是一页，hash 不停在它上面。
   const settingsRoute = route.page === "settings" ? route : null;
   function onSettingsOpenChange(open: boolean) {
     setSettingsOpen(open);
@@ -84,7 +79,6 @@ export function DashboardApp() {
   }
 
   const active = resolveRoute(navKeyOf(route), me.is_admin);
-  // 角色守卫把路由归一到默认页时，页面也按归一后的导航项渲染。
   const page: Route =
     navKeyOf(route) === active && route.page !== "settings"
       ? route

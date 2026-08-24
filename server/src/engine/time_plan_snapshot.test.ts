@@ -7,7 +7,6 @@ import type { TimeInput } from "../semantic_core/time_contract.js";
  * 时间编译黄金对：三种时间语义 × 全部业务时间形态 × 单指标/混合指标的编译产物快照。
  * 快照锁定当前形态：正式指标计划只承载一份业务时间，执行腿只承载事实内查询与窗口。
  * 产物包含物理查询与守卫文案两类结果，改动任一都会在此暴露。
- * 需要有意改变编译产物时，在提交信息里写清楚为什么，并连同本文件的黄金值一起改。
  */
 const GOLDEN_PATH = new URL("./time_plan.golden.json", import.meta.url);
 
@@ -174,12 +173,11 @@ function compileAll(): Record<string, string> {
 
 test("时间编译产物与单一业务时间终态黄金对逐字节一致", async () => {
   const actual = compileAll();
-  // 有意改变编译产物时的唯一再生成入口。
   if (process.env.UPDATE_TIME_GOLDEN) {
     await Bun.write(GOLDEN_PATH, `${JSON.stringify(actual, null, 2)}\n`);
   }
   const golden = (await Bun.file(GOLDEN_PATH).json()) as Record<string, string>;
-  // 用例集本身也是黄金对的一部分：少录一种时间形态等于门禁出现盲区。
+  // 键集合全等：新增时间形态必须同步录入黄金值。
   expect(Object.keys(actual).sort()).toEqual(Object.keys(golden).sort());
   for (const key of Object.keys(golden)) {
     expect(actual[key], `编译产物变化：${key}`).toBe(golden[key]);
@@ -188,7 +186,6 @@ test("时间编译产物与单一业务时间终态黄金对逐字节一致", as
 
 test("黄金对覆盖三种时间语义与全部业务时间形态，且守卫用例仍在其中", async () => {
   const golden = (await Bun.file(GOLDEN_PATH).json()) as Record<string, string>;
-  // 快照必须同时覆盖成功与失败路径。
   const thrown = Object.values(golden).filter((value) => value.startsWith("throw: "));
   expect(thrown.length).toBeGreaterThan(0);
   expect(thrown.length).toBeLessThan(Object.keys(golden).length);

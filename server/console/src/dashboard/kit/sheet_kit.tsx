@@ -7,7 +7,6 @@ export function SheetSection({
   className,
 }: {
   title?: string;
-  /** 节标题行右侧的动作（如复制按钮）；无标题时不渲染标题行 */
   action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;

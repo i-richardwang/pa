@@ -2,10 +2,9 @@
 @import "tw-animate-css";
 
 @import "@fontsource-variable/inter/wght.css";
-/* 设计令牌单源：--pa-* 定义与 pa-* 工具类映射都在令牌源里。 */
 @import "../../src/presentation_core/tokens.css";
 
-/* 结果视图是独立工作区，Tailwind 不会从 console 入口自动发现，显式登记唯一渲染包。 */
+/* Tailwind 不扫 console 入口之外的工作区，结果视图须显式登记。 */
 @source "../../result_view/src";
 
 @source "../../src/presentation_core";
@@ -14,10 +13,9 @@
   --shadow-sm: 0 1px 4px 2px color-mix(in srgb, var(--pa-shadow) 47%, transparent);
   --shadow-md: 0 4px 20px 0 color-mix(in srgb, var(--pa-shadow) 29%, transparent);
   --shadow-login: 0 12px 40px 0 var(--pa-shadow);
-  /* 弹层投影：表单弹层与占满视口中央的舞台弹层同用 */
   --shadow-stage: 0 25px 50px -12px var(--pa-shadow);
   --font-serif: ui-serif, Georgia, "Times New Roman", "Songti SC", "Noto Serif SC", serif;
-  /* toast 进场/出场动效令牌，成功与失败按奇偶项错相。 */
+  /* toast 进出动效。同一条 toast 更新时按奇偶换动画名：同名动画不会重放。 */
   --animate-toast-success-odd: toast-success-odd 0.32s cubic-bezier(0.5, 1, 0.89, 1);
   --animate-toast-success-even: toast-success-even 0.32s cubic-bezier(0.5, 1, 0.89, 1);
   --animate-toast-error-odd: toast-error-odd 0.28s cubic-bezier(0.5, 1, 0.89, 1);
@@ -68,7 +66,6 @@
   }
 }
 
-/* 内容区可滚动但不占滚动条空间。 */
 @utility no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -77,15 +74,12 @@
   }
 }
 
-/* 看板编辑态画布：拖拽/缩放中的瓦片墨色描边 + 投影浮起，缩放手柄与落位占位框同用墨色
-   （编辑反馈属 chrome，与主动作同色系；彩色留给数据）。
-   .react-grid-* 是 react-grid-layout 的第三方类名。 */
+/* .react-grid-* 是 react-grid-layout 的第三方类名。 */
 .react-grid-item:is(.react-draggable-dragging, .resizing) .pa-tile-card {
   border-color: var(--pa-ink);
   box-shadow: 3px 3px 8px var(--pa-shadow);
 }
 
-/* 正被拖拽/缩放的那一块不出操作钮：手在搬它，钮此刻按不到也不该闪 */
 .react-grid-item:is(.react-draggable-dragging, .resizing) [data-dontdrag] {
   visibility: hidden;
 }
@@ -100,7 +94,6 @@
   border-radius: var(--radius-md);
 }
 
-/* 编辑态整卡可拖的光标语义；控件自带光标（pointer/text）自然覆盖 */
 .pa-board-editing .react-grid-item {
   cursor: grab;
 }

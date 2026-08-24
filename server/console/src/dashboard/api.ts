@@ -87,10 +87,7 @@ export async function parseJsonResponse<T>(res: Response, schema: JsonSchema<T>)
 
 const request = parseJsonResponse;
 
-/**
- * 控制台时间戳的唯一拼法：本地时区、年月日时分、数字等宽。
- * 年带上是因为同一张表里既有上周的记录也有一年后的到期日；没有值印一道破折号。
- */
+/** 控制台时间戳的唯一拼法：本地时区、年月日时分、数字等宽。 */
 export function formatAt(at: string | Date | null | undefined): string {
   if (!at) return "—";
   return new Date(at).toLocaleString("zh-CN", {

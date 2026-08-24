@@ -8,7 +8,7 @@ export type InputProps = Omit<
   InputPrimitive.Props & React.RefAttributes<HTMLInputElement>,
   "size"
 > & {
-  /** `sm` 是设置面里的一档：与小号下拉同高。 */
+  /** `sm` 与小号下拉同高。 */
   size?: "sm" | "default";
   unstyled?: boolean;
 };

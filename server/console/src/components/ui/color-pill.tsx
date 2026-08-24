@@ -4,10 +4,6 @@ import { CheckIcon } from "lucide-react";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 
-/**
- * 色粒：一圈发丝环里一粒色点。未选是四成大的点，悬停长到五成半；选中即铺满整圆并压一枚反白勾。
- * 全站取色只有这一件——系列配色、表格单色色阶都用它，成排摆放由调用方定间距。
- */
 export function ColorPill({
   color,
   selected = false,

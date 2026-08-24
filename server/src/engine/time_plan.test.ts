@@ -134,7 +134,6 @@ describe("业务时间桶枚举", () => {
         const buckets = timeBuckets({ kind: "range", ...range }, grain);
         expect(buckets[0].from).toBe(range.from);
         expect(buckets.at(-1)!.to).toBe(range.to);
-        // 相邻桶首尾相接、互不重叠：整段被无缝切分，没有落在桶外的月份。
         buckets.forEach((bucket, index) => {
           expect(bucket.from <= bucket.to).toBe(true);
           if (index > 0) expect(bucket.from > buckets[index - 1].to).toBe(true);
@@ -593,10 +592,8 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
         last: { years: 3 },
       }).success,
     ).toBe(false);
-    // cutoff × last 正是「锚点 × 窗口」，必须合法。
     expect(TIME_INPUT.safeParse({ cutoff: "2026-06", last: { years: 3 } }).success).toBe(true);
     expect(TIME_INPUT.safeParse({ last: { months: 12 } }).success).toBe(true);
-    // last 展开后即 range，同期对照的相对形态与之并存合法。
     expect(TIME_INPUT.safeParse({ last: { months: 6 }, compare: [{ years_ago: 1 }] }).success).toBe(
       true,
     );

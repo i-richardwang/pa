@@ -39,7 +39,6 @@ export function AddBoardWidget({
   const error = errorText(reportsQuery.error);
 
   return (
-    // 搜索、过滤、键盘走位与 combobox 无障碍契约全归 Autocomplete 原语，本件只排版。
     <Autocomplete
       items={reports ?? []}
       itemToStringValue={(item: unknown) => (item as ReportRow).name}

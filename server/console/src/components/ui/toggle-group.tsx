@@ -13,7 +13,7 @@ export function ToggleGroup({
   ...props
 }: ToggleGroupPrimitive.Props & { columns: number; bordered?: boolean }): ReactElement {
   const track = useRef<HTMLDivElement>(null);
-  /** 滑块的落点量出来才知道；`animate` 记的是量之前它在不在——首次现身不该从别处滑过来。 */
+  /** `animate` 记的是量之前滑块在不在：首次现身不从别处滑来。 */
   const [slider, setSlider] = useState<{ width: number; offset: number; animate: boolean }>();
 
   useLayoutEffect(() => {

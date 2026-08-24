@@ -32,7 +32,6 @@ function useSlotState<T>(empty: T): Slot<T> {
   return useMemo(() => ({ value, set }), [value, set]);
 }
 
-/** 写入 hook 的公共身体：工厂按 deps 记忆，挂上即写、卸下即清。 */
 function useSlotWriter<T>(slot: Slot<T>, factory: () => T, deps: DependencyList, empty: T): void {
   const next = useMemo(factory, deps);
   useEffect(() => {
@@ -40,8 +39,6 @@ function useSlotWriter<T>(slot: Slot<T>, factory: () => T, deps: DependencyList,
     return () => slot.set(empty);
   }, [next, slot.set, empty]);
 }
-
-/* ---- 题条动作 ---- */
 
 const TitlebarActionsContext = createContext<Slot<React.ReactNode | null>>({
   value: null,
@@ -57,12 +54,10 @@ export function TitlebarActionsProvider({ children }: { children: React.ReactNod
   return <TitlebarActionsContext.Provider value={slot}>{children}</TitlebarActionsContext.Provider>;
 }
 
-/** 题条右侧的动作位：印出最近一处登记处里登记的节点。 */
 export function TitlebarActionsOutlet(): React.ReactNode {
   return useContext(TitlebarActionsContext).value;
 }
 
-/** 页面把动作（「+ 新建」、详情页的保存/更多）挂到所属题条右侧。 */
 export function useSetTitlebarActions(
   factory: () => React.ReactNode | null,
   deps: DependencyList,
@@ -70,9 +65,6 @@ export function useSetTitlebarActions(
   useSlotWriter(useContext(TitlebarActionsContext), factory, deps, null);
 }
 
-/* ---- 详情面包屑 ---- */
-
-/** 详情页挂到主区 titlebar 的面包屑：与列表页同槽，父级可点、当前页不可点。 */
 export type DetailCrumb = {
   parentHref: string;
   parentLabel: string;
@@ -96,8 +88,6 @@ export function useSetDetailCrumb(factory: () => DetailCrumb | null, deps: Depen
   useSlotWriter(useContext(DetailCrumbContext), factory, deps, null);
 }
 
-/* ---- 工作台右栏 ---- */
-
 export type StageAside = {
   node: React.ReactNode;
   /** 这栏是拿来调的还是拿来读的——壳据此取宽度那一档。 */
@@ -117,15 +107,11 @@ const StageAsideContext = createContext<Slot<StageAside | null>>({
   set: () => {},
 });
 
-/** 壳读取：有值时 MAIN 改为「左题条+内容 | 右栏通高」，窄屏改为底部 Sheet。 */
 export function useStageAside(): StageAside | null {
   return useContext(StageAsideContext).value;
 }
 
-/**
- * 工作台挂右栏（右栏顶到白卡顶）。收起时工厂返回 null，壳恢复整宽 titlebar。
- * `dismiss` 经 ref 转交，不进依赖——换个闭包不该让栏重挂。
- */
+/** `dismiss` 经 ref 转交，不进依赖：换个闭包不该让栏重挂。 */
 export function useSetStageAside(
   factory: () => React.ReactNode | null,
   deps: DependencyList,
@@ -142,7 +128,6 @@ export function useSetStageAside(
   }, [node, face, slot.set]);
 }
 
-/** 壳给主区套的一整组挂载面。 */
 export function ShellChromeProvider({ children }: { children: React.ReactNode }) {
   const crumb = useSlotState<DetailCrumb | null>(null);
   const aside = useSlotState<StageAside | null>(null);
@@ -157,10 +142,6 @@ export function ShellChromeProvider({ children }: { children: React.ReactNode })
 
 export const MAIN_CARD_BODY_INSET = "px-4 pt-0 pb-4" as const;
 
-/**
- * 列表内容列：主卡内全宽 + MAIN_CARD_BODY_INSET。
- * 填满 titlebar 以下剩余高度；控制条 `ListControlBar` 钉住，表体走 `ListScrollBody`。
- */
 export function ListPageBody({
   children,
   className,
@@ -195,7 +176,6 @@ export function ListScrollBody({
   );
 }
 
-/** 清单控制条：钉在清单顶，靠 `ListPageBody` + 本件 `shrink-0` + `ListScrollBody` 分栏实现。 */
 export function ListControlBar({
   left,
   right,
@@ -237,7 +217,6 @@ export function ListSegmentGroup({
   );
 }
 
-/** 控制条内的分面片：选中出灰罩层，未选只是灰字。 */
 export function ListSegment({
   selected,
   children,
@@ -261,7 +240,6 @@ export function ListSegment({
   );
 }
 
-/** 灰条内的幽灵下拉：无描边，靠灰条自身衬底；与同条内的分面片同高。 */
 export function ListControlCategory<T extends string>({
   value,
   onValueChange,
@@ -296,11 +274,7 @@ export function ListControlCategory<T extends string>({
   );
 }
 
-/**
- * 清单行内的分类片：描边圆片，形出自 Button 的 compact 档。
- * `absent` 说的是「本该有个去处，但它不在」——虚线是这句话的写法，不是「不可点」的同义词：
- * 只读的分类标签同样不可点，却是实打实存在的一件事，仍走实线。
- */
+/** `absent` = 本该有个去处但它不在；只读的分类标签不可点，仍走实线。 */
 export function ListCategoryPill({
   children,
   className,
@@ -311,7 +285,6 @@ export function ListCategoryPill({
     <Button
       className={cn(
         "text-pa-muted",
-        // 不可点的芯片出的是 span，钮那套指针与悬停在它身上没有对应动作。
         !props.onClick && "cursor-default hover:border-pa-line",
         absent && "border-dashed",
         className,

@@ -1,8 +1,4 @@
-/**
- * 使用日志统计查询：/dashboard/api 的数据层，与写入器共享同一 app.db 连接。
- * 与 scripts/usage_report.py 是同一张 usage_log 表的两个瘦读者（表结构即契约，写入方见 usage_log.ts）：
- * 本模块服务控制台交互查看，脚本服务离线/cron 报告。
- */
+/** usage_log 的只读统计层，与写入器共享同一 app.db 连接。 */
 import type { SqliteDatabase } from "../sqlite.js";
 import { ANALYSIS_RETENTION_DAYS } from "../ports/analysis_repository.js";
 import type { UsageStatistics } from "../ports/usage_statistics.js";

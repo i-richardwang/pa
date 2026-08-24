@@ -118,7 +118,7 @@ test("列归属与排序只使用全局维度、业务指标域和宽事实", ()
     "metric_domain:scene_b",
     "metric_domain:scene_a",
   ]);
-  // 全内部成员的技术事实不上图；没有业务名的事实同样不上图——地图上没有它能说的话。
+  // 全内部成员与无业务名的事实都不上图。
   expect(columns.facts.map((fact) => fact.name)).toEqual(["fact_a", "fact_b"]);
 });
 
@@ -198,7 +198,6 @@ test("说不出业务名的成员、部门树不成行，也不退回原名", ()
   };
 
   expect(listedMembers(fact).map((row) => row.label)).toEqual(["部门", "一级部门"]);
-  // 按名解析这一路同样不回落：解析不到业务名就整行不发，计数少一行也不印 d2。
   expect(listedMembers(fact, ["d1", "d2", "secret", "readable"]).map((row) => row.label)).toEqual([
     "部门",
     "部门树",

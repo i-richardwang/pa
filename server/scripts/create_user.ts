@@ -1,15 +1,9 @@
 /**
- * 用户开通（管理员在本机执行）：
- *   bun run user:create -- <email> <password> [显示名] [--admin] \
- *     [--data-scope=<授权值>]... [--data-scope=*] [--with-key]
- * 写入与服务同一 SQLite 文件（PA_AUTH_DB，默认 data/auth.db，相对 server/ 目录）。
- * 服务端无自助注册，本脚本是唯一开通入口。
+ * 用户开通（管理员在本机执行）：写入与服务同一 SQLite 文件（PA_AUTH_DB，默认 data/auth.db，
+ * 相对 server/ 目录）。服务端无自助注册，本脚本是唯一开通入口。
  *
- * 授权（见 src/engine/cube_security.ts 与 view.access_policy）:
- * --admin 设为管理员；省略时为普通分析用户。
- * --data-scope 行权限——可重复传入语义包所定义授权维度的单个值，或单独传 "*" 表示全量；
- *             缺省为空，账号可登录但不能查询数据。
- * --with-key 开通后签发一枚绑定该用户的 API key；明文只打印一次。
+ * 授权口径见 src/engine/cube_security.ts 与 view.access_policy；--data-scope 缺省为空
+ * ＝账号可登录但不能查询数据。
  *
  * 经用户账号适配器与 apiKey 插件端点（服务端直调不经 HTTP、无会话要求）；账号创建时同时写入
  * 绑定当前语义包身份的 access_scope。密码散列（scrypt）

@@ -35,10 +35,7 @@ import type { BusinessTermRegistry } from "./business_term_registry.js";
 import type { CubeSecurityContext, TimeContext } from "../ports/cube_gateway.js";
 import { InvalidRequestError, UnavailableError } from "./errors.js";
 
-/**
- * 用户入口只暴露稳定的可恢复状态；完整模型装配诊断保留在 cause 与服务端日志中。
- * 这道边界覆盖 MCP、控制台与所有复用 CatalogService 的应用服务。
- */
+/** 用户入口只暴露稳定的可恢复状态；完整模型装配诊断保留在 cause 与服务端日志中。 */
 export class SemanticModelUnavailableError extends UnavailableError {
   constructor(cause: unknown) {
     super("数据模型暂时不可用，请稍后重试", cause);

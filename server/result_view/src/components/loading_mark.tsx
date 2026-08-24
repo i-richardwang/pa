@@ -8,7 +8,7 @@ const BAR: Record<LoadingMarkSize, { width: number; height: number; gap: number;
     small: { width: 2, height: 11, gap: 2, radius: 2 },
   };
 
-/** 墨色：前景色的 20%；深浅两套由 `--pa-fg` 自己翻面。 */
+/** 深浅两套由 `--pa-fg` 自己翻面。 */
 const INK = "color-mix(in srgb, var(--pa-fg) 20%, transparent)";
 
 const DELAYS = ["-0.1s", "-0.2s", "-0.3s", "-0.4s"] as const;

@@ -30,7 +30,6 @@ export function ReportHistoryDialog({
   onRestored: (report: ReportDetail) => Promise<void>;
 }) {
   const [actionError, setActionError] = useState<string | null>(null);
-  // 关着不取数：历史是偶发动作，没打开时它连一次请求都不该发。
   const revisions = useReportRevisions(reportId, open);
   const restoreReport = useUpdateReport(reportId);
   const data = revisions.data;

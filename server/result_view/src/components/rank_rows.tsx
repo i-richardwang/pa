@@ -35,7 +35,6 @@ export function RankRows({
   const points = chart.model.records?.points[0] ?? [];
 
   return (
-    // 框内再内缩一圈：分隔线与末列的数都不该贴到框缘上
     <div className="h-full overflow-y-auto px-4">
       {rows.map((row, i) => {
         const point = points[i];
@@ -67,7 +66,6 @@ export function RankRows({
                 }}
               />
             </span>
-            {/* 值那一格：可下钻时它本身就是一个按钮，不用 role/tabIndex/keydown 手搭一个出来 */}
             {openable && point ? (
               <button
                 className="shrink-0 cursor-pointer rounded-sm border-0 bg-transparent pl-3 text-right text-pa-fg text-sm tabular-nums underline-offset-2 hover:underline pa-focus"

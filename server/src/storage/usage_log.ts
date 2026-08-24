@@ -1,19 +1,13 @@
 /**
- * MCP 使用日志：每次工具调用落 app.db 的 usage_log 表，
- * 是产品改进用的旁路观察日志——title 保留分析问题原文，catalog 只记录
- * 概念数量与逐项 unmatched_terms；
- * 报错调用（目录外成员名）是另一类"未答问题"信号。周期报告见 scripts/usage_report.py。
- *
- * 与 export_audit 分工：export_audit 是文件外带的安全审计链（含 HTTP 下载事件），
- * 本表只记最小观察元数据与结果规模，不落原始入参或结果行。
- * query_fingerprint 是查询规格的内容哈希，仅用于周期报告聚合重复查询候选。
+ * MCP 使用日志：每次工具调用落 app.db 的 usage_log 表。
+ * 只记最小观察元数据与结果规模，不落原始入参或结果行；title 保留问题原文，
+ * catalog 只记概念数与逐项 unmatched_terms；query_fingerprint 供聚合重复查询候选。
  */
 import { USAGE_LOG_RETENTION_DAYS, type UsageLog, type UsageRecord } from "../ports/usage_log.js";
 import type { SqliteDatabase } from "../sqlite.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** 工厂注入应用库连接：连接生命周期由 composition root 统一管理。 */
 export function createUsageLog(db: SqliteDatabase, options: { now?: () => number } = {}): UsageLog {
   const now = options.now ?? Date.now;
   let lastCleanupAt = Number.NEGATIVE_INFINITY;

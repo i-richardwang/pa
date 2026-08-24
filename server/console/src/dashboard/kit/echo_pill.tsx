@@ -14,7 +14,6 @@ export function EchoPill({
 }: {
   label: string;
   tone?: keyof typeof TONE_CLASS;
-  /** 传入即可点；不传则只读（pointer-events-none）。 */
   onClick?: () => void;
 }) {
   const shape = TONE_CLASS[tone];

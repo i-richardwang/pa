@@ -1,8 +1,4 @@
-/**
- * 服务端图表配置单测：按形态逐一验证 option 的结构性事实——图型、系列、轴、
- * 项目视觉常量（色板/网格）与 pa 扩展块（格式声明、占比注释）。
- * option 的完整视觉细节不逐键断言（那是 echarts 的输入，渲染端整体消费）。
- */
+/** option 只断言结构性事实，视觉细节不逐键断言。 */
 import { describe, expect, test } from "bun:test";
 import {
   buildViewChart,
@@ -39,7 +35,6 @@ function realSeries<T>(chart: ViewChart): T[] {
   return (chart.option.series as T[]).slice(0, chart.model.legend.length);
 }
 
-/** 呈现模型（与 option 并列交付的那份读数） */
 function pa(chart: ViewChart): ChartModel {
   return chart.model;
 }
@@ -60,7 +55,6 @@ describe("趋势折线", () => {
   test("时间占 x 轴、度量成折线系列，使用项目色板与克制网格", () => {
     if (!chart) throw new Error("应产出折线配置");
     expect(chart.form).toBe("line");
-    // 色显式写在每条系列上（图例色点与画布要同一个字面值），option 不另带一份调色板
     expect(chart.option.color).toBeUndefined();
     expect(SERIES_COLORS[0]).toBe("#3b6fdb");
     const xAxis = chart.option.xAxis as {
@@ -77,16 +71,13 @@ describe("趋势折线", () => {
     };
     expect(xAxis.type).toBe("category");
     expect(xAxis.data).toEqual(["2026-01", "2026-02", "2026-03"]);
-    // 轴不画自己的线：框的边就是轴，直线到了圆角那儿会戳出框外
     expect(xAxis.axisLine).toEqual({ show: false });
-    // 类目轴刻度留在框外（下缘），故只有色号、字重、字号与离轴距离
     expect(xAxis.axisLabel).toEqual({
       color: "#aaaaaa",
       fontWeight: 400,
       fontSize: 12,
       margin: 6,
     });
-    // 竖线划的是时间桶的边界：比横向那道读数线深一档、细一半
     expect(xAxis.splitLine).toEqual({
       show: true,
       showMinLine: false,
@@ -108,18 +99,15 @@ describe("趋势折线", () => {
       lineStyle: { color: "#e8e8e8", type: [3, 3], width: 1 },
     });
     expect(yAxis[0].splitLine.lineStyle).not.toEqual(xAxis.splitLine.lineStyle);
-    // 首末两条落在框缘上（判据见 ui_spec「图表画布」节），两个方向都不画
     expect([xAxis.splitLine.showMinLine, yAxis[0].splitLine.showMinLine]).toEqual([false, false]);
-    // 聚焦换装不做过渡（判据见 ui_spec「图表画布」节的动画契约）
     expect(chart.option.stateAnimation).toEqual({ duration: 0 });
     const series = realSeries<{ type: string; name: string; data: unknown[] }>(chart);
     expect(series).toHaveLength(1);
     expect(series[0].type).toBe("line");
     expect(series[0].name).toBe("在职人数");
-    // 数据格恒为裸数值；末点实心记号是样式，见「末点」用例
     expect(series[0].data).toEqual([100, 120, 140]);
     const grid = chart.option.grid as { containLabel: boolean };
-    // 值轴刻度的摆法（判据见 ui_spec「图表画布」节）；最高那格翻面，免得跑到框外
+    // verticalAlignMaxLabel：最高一格翻面，不出框
     const yLabel = (chart.option.yAxis as { axisLabel: Record<string, unknown> }[])[0].axisLabel;
     expect(yLabel).toEqual({
       color: "#aaaaaa",
@@ -132,12 +120,9 @@ describe("趋势折线", () => {
       verticalAlignMaxLabel: "top",
       padding: [4, 0, 4, 0],
     });
-    // 框缘不为轴标签让路，故 containLabel 关
     expect(grid.containLabel).toBe(false);
-    // 框本身不由 grid 画（DOM 那层画，圆角在 canvas 上画不出来）
     expect(grid).not.toHaveProperty("show");
     expect(grid).not.toHaveProperty("backgroundColor");
-    // 四缘的数字不在编译产物里：宿主是哪一档留白编译期不知道，由渲染端按场景档位一次算定
     expect(chart.plot_gutter).toBeUndefined();
     expect(grid).toEqual({ containLabel: false });
   });
@@ -154,16 +139,14 @@ describe("趋势折线", () => {
         itemStyle: Record<string, unknown>;
       };
     }[];
-    // 空心圆点 = 承载面色填充 + 系列色描边（边宽 = 线宽）：填充要挡住身下的线
     expect(series[0].itemStyle).toEqual({
       color: "#ffffff",
       borderColor: "#3b6fdb",
       borderWidth: 1.5,
     });
     expect(series[0].lineStyle).toEqual({ width: 1.5, color: "#3b6fdb" });
-    // 单系列填面积：编译期只落纯色，渐变由渲染端按翻转后的色现拼
+    // 渐变由渲染端拼，编译期只落纯色
     expect(series[0].areaStyle).toEqual({ color: "#3b6fdb" });
-    // 激活点实心：系列色填充 + 底面色描边
     expect(series[0].emphasis.itemStyle).toEqual({
       color: "#3b6fdb",
       borderColor: "#ffffff",
@@ -190,7 +173,6 @@ describe("趋势折线", () => {
     expect(focusedColor(color, 1, 1)).toBe(color);
     expect(focusedColor(color, 0, 1)).toBe(CHART_CHROME.blurred.light);
 
-    // 换焦点只重发样式段：本色出现在哪几处就换哪几处，data 不重发（重发要把静态形状重画一遍）
     const focused = focusPatch(pair, 0).series ?? [];
     const dimmed = focused[1] as {
       lineStyle: { color: string };
@@ -201,21 +183,17 @@ describe("趋势折线", () => {
     };
     expect(dimmed.lineStyle.color).toBe(CHART_CHROME.blurred.light);
     expect(dimmed.itemStyle.borderColor).toBe(CHART_CHROME.blurred.light);
-    // 承载面色不是任何系列的本色，换焦点时原样留着：圆点心与激活点的描边仍挡得住身下的线
     expect(dimmed.itemStyle.color).toBe(CHART_CHROME.surface.light);
     expect(dimmed.emphasis.lineStyle.color).toBe(CHART_CHROME.blurred.light);
     expect(dimmed.emphasis.itemStyle.color).toBe(CHART_CHROME.blurred.light);
-    // 末点标记的色写在自己的样式段上，换焦点一并染到：ECharts 的继承只认系列级 color，而那一项不重发
     expect(dimmed.markPoint.itemStyle.color).toBe(CHART_CHROME.blurred.light);
     expect(dimmed).not.toHaveProperty("data");
 
     const self = focused[0] as { lineStyle: { color: string } };
     expect(self.lineStyle.color).toBe(SERIES_COLORS[0]);
-    // 收回焦点：人人本色，与编译期那一份同形
     const rest = focusPatch(pair, null).series?.[0] as { lineStyle: { color: string } };
     expect(rest.lineStyle.color).toBe(SERIES_COLORS[0]);
 
-    // 置灰全由这道取色式算出：编译期的 option 里没有第二套交互态，故绘图区内的悬停改不动谁的色
     const compiled = pair.option.series as { emphasis: Record<string, unknown> }[];
     expect(compiled[0].emphasis).not.toHaveProperty("focus");
     expect(compiled[0]).not.toHaveProperty("blur");
@@ -240,15 +218,11 @@ describe("趋势折线", () => {
         { type: "line", y: ["active_employee_count", "new_hire_count"], valueLabels },
       );
 
-    // 无焦点：印谁由图级档位定
     expect(labelsOf(twoLines("all"), null)).toEqual([true, true]);
     expect(labelsOf(twoLines("main"), null)).toEqual([true, false]);
-    // 有焦点：只有焦点那条印数——十几个底片压在一堆灰线上，认不出哪个数属于正在看的那条
     expect(labelsOf(twoLines("all"), 1)).toEqual([false, true]);
-    // 焦点落在「仅主指标」没选中的那条上：把它现出来，焦点即此刻要读的那条
     expect(labelsOf(twoLines("main"), 1)).toEqual([false, true]);
 
-    // 形制编译期就配齐（现出来那条不是现搭的），余量按印得出数的全部系列留，框不随悬停移动
     const compiled = twoLines("main")?.option.series as { label: Record<string, unknown> }[];
     expect(compiled[1].label.backgroundColor).toBe(compiled[0].label.backgroundColor);
     expect(compiled[1].label.color).toBe(SERIES_COLORS[1]);
@@ -261,9 +235,7 @@ describe("趋势折线", () => {
       showContent: boolean;
       axisPointer: { type: string; lineStyle: Record<string, unknown> };
     };
-    // 整列触发：折线的命中体只有 6px 圆点、密集时还被藏起来，逐项触发等于读不出数
     expect(tooltip.trigger).toBe("axis");
-    // echarts 只画指针、只报落在哪一格；读数卡是与菜单同层的浮层，要能钉住能命中
     expect(tooltip.showContent).toBe(false);
     expect(tooltip).not.toHaveProperty("formatter");
     expect(tooltip).not.toHaveProperty("backgroundColor");
@@ -278,14 +250,11 @@ describe("趋势折线", () => {
   test("图例走 model.legend（HTML 图例），option 不含 echarts legend 组件", () => {
     if (!chart) throw new Error("应产出折线配置");
     expect(chart.option.legend).toBeUndefined();
-    // 图例单元带着自己的取值与格式：画面上每个要读的数都出自模型，不从 option 里反解
     expect(pa(chart).legend).toEqual([
       { name: "在职人数", color: "#3b6fdb", format: "number", values: [100, 120, 140] },
     ]);
     expect(pa(chart).categories).toEqual(["2026-01", "2026-02", "2026-03"]);
-    // 「最新」只此一处：图例读数（触屏没有悬停浮层，图例是仅剩的读数位）与末点实心记号同出此桶
     expect(pa(chart).latest).toEqual({ index: 2, label: "2026-03" });
-    // 末点实心记号是样式，走 markPoint；数据格恒为裸数值，读数端不必认识任何逐点特例
     const line = (chart.option.series as { data: unknown[]; markPoint: unknown }[])[0];
     expect(line.data).toEqual([100, 120, 140]);
     expect(line.markPoint).toEqual({
@@ -315,13 +284,11 @@ describe("趋势折线", () => {
     if (!ragged) throw new Error("应产出折线配置");
     expect(pa(ragged).latest).toEqual({ index: 0, label: "2026-07" });
     expect(pa(ragged).legend.map((item) => item.values[0])).toEqual([100, 9]);
-    // 末点实心记号跟着同一个「最新」走：落在 2026-07，不落在缺数的 2026-08
     const marks = realSeries<{ markPoint: { data: { coord: number[] }[] } }>(ragged).map(
       (s) => s.markPoint.data[0].coord[0],
     );
     expect(marks).toEqual([0, 0]);
 
-    // 一桶都凑不齐时整条不发：宁可没有读数，也不给半行数配一个说不清的桶名
     const empty = buildViewChart(
       view(
         ["year", "month", "active_employee_count", "new_hire_count"],
@@ -400,14 +367,11 @@ describe("柱线组合（量+率混量纲）", () => {
       axisPointer: { type: string; shadowStyle: { color: string } };
     };
     expect(tooltip.trigger).toBe("axis");
-    // 柱已经占满高度，指针再叠一条竖线就是第二根轴；带色与控件 hover 同料
     expect(tooltip.axisPointer.type).toBe("shadow");
     expect(tooltip.axisPointer.shadowStyle).toEqual({ color: "rgba(0, 0, 0, 0.04)" });
-    // 面积只给单系列（判据见 ui_spec「图表画布」）
     for (const series of chart.option.series as { areaStyle?: unknown }[]) {
       expect(series.areaStyle).toBeUndefined();
     }
-    // 有柱就不画竖线：柱已占住整个桶（判据见 ui_spec「图表画布」节）
     expect((chart.option.xAxis as { splitLine: unknown }).splitLine).toEqual({ show: false });
   });
 });
@@ -540,7 +504,6 @@ describe("分类条形", () => {
     if (!chart) throw new Error("应产出条形配置");
     expect(chart.form).toBe("bar");
     expect(chart.layout).toBe("rank");
-    // 排行版式不落 echarts：没有 option 可言，类目、取值与占比全在模型里；高度按行数一次算定
     expect(chart.plot_gutter).toBeUndefined();
     expect(chart.option).toEqual({});
     expect(chart.height).toBe(2 * RANK_ROW.height);
@@ -1009,11 +972,9 @@ describe("服务端物理呈现声明", () => {
     expect(labelShown()).toEqual([false, false]);
     expect(labelShown("main")).toEqual([true, false]);
     expect(labelShown("all")).toEqual([true, true]);
-    // 贴上限的标签朝上画：余量留在框内（grid 缩进），场地框不因标签开关移动
     const labeled = buildViewChart(trendView, { ...decl, valueLabels: "all" });
     if (!labeled) throw new Error("应产出带标签的折线配置");
     expect(labeled.plot_inset?.top).toBe(30);
-    // 标签形制：浅灰底片 + 承载面色描边 + 14px 系列色数字
     const pill = (realSeries(labeled)[0] as { label?: Record<string, unknown> }).label;
     expect(pill?.backgroundColor).toBe("#f7f7f8");
     expect(pill?.borderColor).toBe("#ffffff");
@@ -1043,7 +1004,7 @@ describe("服务端物理呈现声明", () => {
     if (!flat) throw new Error("应产出条形配置");
     const flatSeries = flat.option.series as { label?: { position?: string } }[];
     expect(flatSeries.every((s) => s.label?.position === "right")).toBe(true);
-    // 最宽标签是「1,234」：右栏 = 实测底片宽 + 号距，框外栏（左类目栏）保持不动
+    // 右栏按最宽标签「1,234」算
     const right = flat.plot_inset?.right ?? 0;
     expect(right).toBeGreaterThan(30);
     expect(flat.plot_gutter?.left).toBeGreaterThan(0);
@@ -1082,16 +1043,13 @@ describe("服务端物理呈现声明", () => {
     }[];
     expect(series[0].type).toBe("pie");
     expect(series[0].radius).toEqual(["48%", "80%"]);
-    // 占比进图例，总计进环心；切片不出外部标签和引线。
     expect(series[0].label.show).toBe(false);
     expect(series[0].labelLine.show).toBe(false);
-    // 数据格只有名与值；切片色走调色板按序对位（样式不进数据格，换焦点换的是整份调色板）
     expect(series[0].data).toEqual([
       { name: "A", value: 60 },
       { name: "B", value: 40 },
     ]);
     expect(chart.option.color).toEqual(["#3b6fdb", "#e0857a"]);
-    // 饼图没有类目轴也就没有指针，落在哪一片由逐项事件报，echarts 那层整个关掉
     expect(chart.option.tooltip).toEqual({ show: false });
     expect(chart.option.legend).toBeUndefined();
     expect(pa(chart).legend).toEqual([
@@ -1100,9 +1058,7 @@ describe("服务端物理呈现声明", () => {
     ]);
     expect(pa(chart).categories).toEqual(["在职人数"]);
     expect(pa(chart).pointer).toBe("item");
-    // 绘图底只属直角坐标系：饼图无 grid，不铺底也不出发丝框
     expect(chart.option.grid).toBeUndefined();
-    // 扇形的角度就是值：悬停态整个关掉，切片上也就没有第二份交互样式
     const states = chart.option.series as { emphasis: unknown; data: Record<string, unknown>[] }[];
     expect(states[0].emphasis).toEqual({ disabled: true });
     for (const slice of states[0].data) expect(slice).not.toHaveProperty("emphasis");
@@ -1184,10 +1140,7 @@ describe("服务端物理呈现声明", () => {
   });
 });
 
-/**
- * 对照叠加折线的完整呈现编译：期间系列必须一路走到 ECharts 选项与下钻点位。
- * 这是服务端交付形态的端到端形状检查——浏览器不做二次编译，选项错了就是屏上错。
- */
+/** 对照叠加折线：期间系列一路走到 option 与下钻点位。 */
 describe("对照叠加折线的交付形态", () => {
   const months = [1, 2, 3, 4, 5, 6, 7, 8];
   const comparisonView: ViewBlock = {
@@ -1238,18 +1191,14 @@ describe("对照叠加折线的交付形态", () => {
       "2026-07",
       "2026-08",
     ]);
-    // 同位对照：主期 8 月 = 8/50，对照期同位 = 8/100。末点带实心记号，值在 `value` 上。
-    const lastValue = (series: (typeof option.series)[number]) => {
-      const cell = series.data.at(-1);
-      return typeof cell === "object" && cell !== null ? cell.value : cell;
-    };
+    // 同位对照：主期 8 月 = 8/50，对照期同位 = 8/100。
+    const lastValue = (series: (typeof option.series)[number]) => series.data.at(-1);
     expect(lastValue(option.series[0])).toBeCloseTo(0.16, 10);
     expect(lastValue(option.series[1])).toBeCloseTo(0.08, 10);
     // 身份链：对照系列末点回指结果中的 2025-08 行（前 8 行是 2025）。
     const points = pa(block.chart!).records?.points;
     expect(points?.[0]?.[7]?.row).toBe(15);
     expect(points?.[1]?.[7]?.row).toBe(7);
-    // 「谁减谁」在编排期立好：读数卡照这条关系读差值，不去猜哪条是主期
     const legend = pa(block.chart!).legend;
     expect(legend?.[0]).not.toHaveProperty("baseline");
     expect(legend?.[1]?.baseline).toBe(0);
@@ -1362,7 +1311,6 @@ describe("小数位随系列进呈现模型", () => {
     );
     if (!chart) throw new Error("应产出折线配置");
     expect(pa(chart).legend.map((item) => item.decimals)).toEqual([0, undefined]);
-    // 量在主轴、率在副轴：只有率轴拿到位数
     expect(pa(chart).axis_decimals).toEqual({ y: [null, 0] });
 
     const plain = buildViewChart(
@@ -1381,10 +1329,7 @@ describe("小数位随系列进呈现模型", () => {
   });
 });
 
-/**
- * 焦点这套机制与形态无关：凡是画得出图例的图，落选一律换成同一个失焦色。
- * 逐形态各写一遍取色只会漏掉后加的那一种，故此处按形态清单一次点名。
- */
+/** 凡画得出图例的图，落选一律换同一失焦色——按形态清单逐一点名。 */
 test("每种形态一律照同一道取色式置灰：折线、柱线组合、分类柱、堆叠、对照叠加、饼图", () => {
   const comparisonView = {
     ...view(
@@ -1500,7 +1445,6 @@ test("每种形态一律照同一道取色式置灰：折线、柱线组合、�
     if (!chart) throw new Error(`${name}没编译出来，下面全部落空`);
     const legend = pa(chart).legend;
     expect(legend.length, `${name}应有两条以上图例才谈得上焦点`).toBeGreaterThan(1);
-    // 饼图的落选是同一条系列里的别的切片，故焦点换的是调色板；其余按系列重出样式段
     const patch = focusPatch(chart, 0);
     const [self, other] = (patch.series ?? patch.color) as unknown[];
     expect(JSON.stringify(other), `${name}的落选没换成失焦色`).toContain(

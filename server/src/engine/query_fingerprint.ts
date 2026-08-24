@@ -1,11 +1,7 @@
 /**
  * 查询指纹：对归一后的 AnalysisDefinition 生成稳定内容哈希，仅用于使用报告聚合重复分析候选。
- * 指纹锚定"查出什么数"：
- * - 参与哈希：查询视图的 measures/dimensions/filters/time/group_sort；派生视图的
- *   from/join/columns（含表达式 AST 与搬运/派生列的 as 列身份）/order/limit；
- * - 不参与：title/view_title 与局部 view id（纯命名）——换标题或换 id 不换码；
- * - filters 内部键排序且按序列化排序：过滤条件写法顺序不同不算两种分析；
- *   measures/dimensions 保持原序——列顺序即表格形态的一部分。
+ * title/view_title 与局部 view id 不进哈希（纯命名）；filters 按序列化排序，
+ * measures/dimensions 保持原序——列顺序是表格形态的一部分。
  * 入参先过 canonical AnalysisDefinition 校验；定义无效（含物理 view 限定成员名）返回 undefined。
  */
 import { createHash } from "node:crypto";

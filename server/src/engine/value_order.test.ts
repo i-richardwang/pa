@@ -1,4 +1,3 @@
-/** 序数维度声明序排序纯函数单测（sortByValueOrder）；meta 读取路径由 smoke 端到端覆盖 */
 import { describe, expect, test } from "bun:test";
 import { sortByValueOrder } from "./value_order.js";
 type CubeQuery = import("../ports/cube_gateway.js").CubeQuery;

@@ -1,6 +1,5 @@
 /**
  * 看板存储：一个稳定 uuid 指向一张 24 列网格画布的有序瓦片集。
- * 瓦片 = 拖拽/缩放单元：report 瓦片存 report 引用与网格占格，text 瓦片存行内 Markdown。
  * 存储只存引用与坐标，report 瓦片的 name/presentation_type 由 application service 在载荷期解析。
  * created_by 是唯一维护人；查看与重放的共享权限由 application service 按看板成员关系裁决。
  */

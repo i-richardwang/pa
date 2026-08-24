@@ -1,8 +1,5 @@
 /**
- * 读数模型单测：指针落在一格上，卡片该印哪几行。
- *
- * 行只出自呈现模型里的图例单元——垫层不在模型里也就不可能成为一条读数；占比与差值是
- * 那两个数之间的一步，不回头找明细。差值恒带符号、恒中性，与整窗读数的注脚同一套读法。
+ * 指针落格 → 读数行：行只出自图例单元，占比与差值只做一步呈现算术。
  */
 import { expect, test } from "bun:test";
 import { legendShares, readoutModel } from "./readout.js";
@@ -39,7 +36,6 @@ test("抬头取类目名，逐单元成行，格式与位数随单元声明", ()
     { series: 0, color: "#3b6fdb", name: "在职人数", value: "1,200" },
     { series: 1, color: "#e0857a", name: "完成率", value: "23%" },
   ]);
-  // 第二格读的是第二格，不是恒读首格
   expect(readoutModel(chart, 1).header).toBe("市场");
   expect(readoutModel(chart, 1).rows[0].value).toBe("45");
 });

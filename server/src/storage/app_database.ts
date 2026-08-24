@@ -5,7 +5,6 @@ import { openSqlite, type SqliteDatabase } from "../sqlite.js";
  * 结构印记：本文件 DDL 的规范化摘要，开库时写进 `user_version`。
  *
  * 非空库的印记与当前 DDL 不同时，开库立即 fail-closed，由部署方以空库重建。
- * 印记从 DDL 自动得出。
  *
  * 摘要取自 DDL 源文本并折叠空白：重排版、改缩进不算结构变化，动表、动列、动索引才算。
  */

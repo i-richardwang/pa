@@ -1,7 +1,4 @@
-/**
- * 管理员日志页与 scripts/usage_report.py 消费同一 usage_log。
- * KPI 展示全窗口概况；分面（业务问题 / 调用统计 / 未答信号）与时间窗同走清单控制条。
- */
+/** 管理员日志页与 scripts/usage_report.py 消费同一 usage_log。 */
 import { type ReactNode, useState } from "react";
 import { CircleAlertIcon } from "lucide-react";
 import type {
@@ -135,11 +132,7 @@ function toolLabel(tool: string): string {
   return TOOL_LABELS[tool] ?? tool;
 }
 
-/** 标题和说明在 Frame 外呈现，Frame 只承载表格内容。 */
-/**
- * 分面下的一段表。**分面只有一段表时不发段名**——那一档的名字控制条上已经写过，
- * 再写一遍就是同一句话说两遍；只留那行说明。
- */
+/** 分面只有一段表时不发段名。 */
 function TableSection({
   title,
   description,

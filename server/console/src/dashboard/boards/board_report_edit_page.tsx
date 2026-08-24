@@ -1,7 +1,6 @@
 /**
- * 看板瓦片的分叉调整：以他人（或自己）看板上的报告为种子，在同一工作台里改，
- * 保存时以当前身份铸自有 Analysis/View 并新建报告——不把别人的身份挂到自己名下。
- * 面包屑父级是那块看板，故「不改了」走面包屑回去，不另设取消钮。
+ * 看板瓦片的分叉调整：保存时以当前身份铸自有 Analysis/View 并新建报告，
+ * 不把别人的身份挂到自己名下。
  */
 import { AnalysisWorkbench } from "../analyses/analysis_workbench";
 import { errorText, useBoard, useBoardReportReplay, useCatalogQuery } from "../dashboard_queries";
@@ -35,7 +34,7 @@ export function BoardReportEditPage({ boardId, reportId }: { boardId: string; re
             hasSavedResult: true,
           }
         : null,
-    // 分叉的规格取自那份重放本身：规格与结果同来同走，没有可拆的两条腿。
+    // 分叉的规格取自那份重放本身。
     savedReplay: replay,
     target: { kind: "create" },
   });

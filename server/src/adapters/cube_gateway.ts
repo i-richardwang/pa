@@ -72,14 +72,11 @@ async function token(state: CubeGatewayState, context: CubeSecurityContext): Pro
   return jwt;
 }
 
-/**
- * 引擎应答的统一入口：网络失败、非 JSON（如网关 502 页面）、HTTP 错误在此转成
- * 可指引重试的信息——这是所有工具调用的必经层，不把故障以 TypeError 形态漏给上层。
- */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Cube 应答可能是非 JSON（网关 502 页面），在此转成可重试信息。 */
 async function request(
   state: CubeGatewayState,
   path: string,
@@ -124,11 +121,7 @@ async function request(
   return body;
 }
 
-/**
- * /v1/meta：只含 public views。5 分钟缓存。
- * meta.internal 成员不进入公开成员数组；服务端契约解析仍可从独立字段读取，
- * 目录、查询规划与层级补全只消费 measures/dimensions。
- */
+/** meta.internal 成员移出公开 measures/dimensions，只留在 internal* 字段供服务端契约解析。 */
 function normalizeMetaViews(cubes: (CubeView & { type: string })[]): CubeView[] {
   const isInternal = (member: CubeMember) => member.meta?.internal === true;
   return cubes
@@ -160,7 +153,7 @@ const CUBE_HIERARCHY_SCHEMA = z.object({
   levels: z.array(z.string()),
 });
 
-/** 只有 public view 进目录：先按 type 分流，再对 view 严格解析。 */
+/** 只有 public view 进目录。 */
 const META_SCHEMA = z.object({
   cubes: z.array(z.object({ type: z.string() }).passthrough()),
 });
@@ -239,7 +232,6 @@ async function loadRaw(
   throw unavailable("Cube 查询超时（Continue wait 重试耗尽）");
 }
 
-/** /v1/load：带 Continue wait 重试。 */
 async function fetchLoad(
   state: CubeGatewayState,
   query: CubeQuery,
@@ -306,7 +298,6 @@ export function normalizeSqlResponse(query: CubeQuery, body: unknown): Generated
   }));
 }
 
-/** /v1/sql：返回与实际物理窗口逐一对应的生成 SQL。 */
 async function fetchSql(
   state: CubeGatewayState,
   query: CubeQuery,

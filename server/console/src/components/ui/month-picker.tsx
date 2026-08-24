@@ -175,7 +175,6 @@ export function MonthPickerDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 弹层的无障碍名，同时作字段名。 */
   label: string;
   value: string;
   onValueChange: (value: string) => void;

@@ -1,7 +1,4 @@
-/**
- * 数据能力地图是统一语义目录的只读投影。
- * 这里不解析 Cube 模型、不推导业务分类，也不实现查询规划。
- */
+/** 数据能力地图是统一语义目录的只读投影。 */
 import type {
   SemanticCatalogDimensionGroup,
   SemanticCatalogFact,

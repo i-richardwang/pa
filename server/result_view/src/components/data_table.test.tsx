@@ -1,7 +1,5 @@
 /**
- * 表格渲染单测：TableModel → DOM 结构。shape 层已充分验证"该产出什么模型"，
- * 这里验证"模型摆成了什么"：两层表头的 rowSpan/colSpan/组边框无法仅由 shape 测试覆盖，
- * 错位时通常只能在最终 DOM 结构中发现。
+ * TableModel → DOM：表头 rowSpan/colSpan 与组边框只在最终结构上看得出。
  * renderToStaticMarkup 直渲，不引 DOM：本文件断言的都是一次渲染的产物，不涉及交互。
  */
 import { expect, test } from "bun:test";
@@ -96,7 +94,6 @@ test("表体语言：明细常规字重、空值出破折号、文本列带截�
   expect(count(html, "font-normal")).toBeGreaterThanOrEqual(4);
   expect(html).not.toContain("font-bold");
   expect(html).not.toContain("font-semibold");
-  // 空值的写法见 ui_spec「结果网格」
   expect(count(html, "—")).toBe(2);
   expect(html).toContain('class="text-pa-faint">—');
   // 文本列内容包在截断包装里，数值列裸渲染；空格没有内容可截，不进包装
@@ -228,14 +225,14 @@ test("记录格按 sourceRows 回指原始结果行；无来源的空格不出�
   );
   // 3 个表头排序钮 + 3 个有来源的值格记录入口；(市场, 2025) 无来源不问也不出钮
   expect(countTag(html, "button")).toBe(3 + 3);
-  // 记录可点性只在悬停/聚焦时现形：静息态染色会让同列数字一半蓝一半黑，被读成值有名堂。
+  // 可点性只在悬停/聚焦时现形
   const recordCells = html.match(/<button aria-label="查看明细[^>]*/g) ?? [];
   expect(recordCells).toHaveLength(3);
   for (const cell of recordCells) {
     expect(cell).toContain("hover:text-pa-accent");
     expect(cell.replace(/(hover|focus-visible):\S+/g, "")).not.toContain("text-pa-accent");
   }
-  // 排序钮是 chrome：静息透明，hover/激活才显中性底；染蓝会与记录入口抢信号。
+  // 排序钮是 chrome：静息透明
   const sortHeads = html.match(/<button type="button" title="[^>]*/g) ?? [];
   expect(sortHeads).toHaveLength(3);
   for (const head of sortHeads) {

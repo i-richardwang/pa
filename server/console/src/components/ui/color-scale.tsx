@@ -3,10 +3,7 @@
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 
-/**
- * 色阶样片：一条从下限到上限的渐变，横向是胶囊（描边可选）、纵向是直条。
- * 颜色由调用方给停点（编译层 `shadingStops` 的取值），件本身不调色。
- */
+/** 停点出自编译层 `shadingStops`，件本身不调色。 */
 export function ColorScale({
   stops,
   vertical = false,
@@ -38,7 +35,6 @@ export function ColorScale({
   );
 }
 
-/** 纵向色阶上的停点圆钮：填该停的颜色，白边一圈把它从色条上抬起来。 */
 export function ColorScaleStop({
   color,
   className,
@@ -59,7 +55,6 @@ export function ColorScaleStop({
   );
 }
 
-/** 横向色阶上的阈值刻点：一粒半透明墨点。 */
 export function ColorScaleTick({ className }: { className?: string }): React.ReactElement {
   return (
     <span

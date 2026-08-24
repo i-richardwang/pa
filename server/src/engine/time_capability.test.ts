@@ -1,10 +1,6 @@
 /**
- * 时间能力卡与时间守卫的零分叉门禁。卡是编译器知识的投影，编辑器据它事前禁用；
- * 若两者分叉，用户会看到「灰着却其实能跑」或「亮着但点了必炸」，比只有事后拒绝更糟。
- *
- * 用例走生产路径：Cube 元数据 → 目录装配 → 语义编译 → 物理时间规划，判据是
- * `timeDisplayIssues` 的预测与该路径是否抛错**逐例等价**（双向断言）。用例矩阵
- * 只含时间能力一种失败源——窗口都在可查范围内、对照互不重叠——故抛错必归因于能力。
+ * 卡是编译器时间知识的投影：卡的预测与生产路径（Cube 元数据 → 目录装配 → 语义编译 →
+ * 物理时间规划）的接受/拒绝必须逐例等价。用例矩阵只含时间能力一种失败源。
  */
 import { expect, test } from "bun:test";
 import {
@@ -176,7 +172,6 @@ test("被拒的正是按月定义指标的越界组合", () => {
     "按月定义",
   );
   expect(rejection("measure:current_month_turnover_rate", at("年内期间·自动"))).toBeUndefined();
-  // 无约束指标在同样的组合下一律放行——规则不误伤。
   expect(rejection("measure:active_employee_count", at("年内期间·按年"))).toBeUndefined();
   expect(rejection("measure:turnover_count", at("跨年期间·按月"))).toBeUndefined();
 });

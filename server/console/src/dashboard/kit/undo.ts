@@ -1,8 +1,7 @@
 /**
  * 移除资产的统一回执：界面先撤下，toast 关闭时才提交后端，「撤销」取消提交并由调用方还原界面。
- * 看板删除、报告归档、术语删除都走这一条；AlertDialog 只留给安全敏感操作（API Key 吊销）
- * 与放弃未保存的编辑。提交失败时印错误回执并还原界面；倒计时内整页卸载会丢提交，
- * 属乐观界面的既定取舍。悬停 toast 会顺延倒计时（Base UI 悬停暂停）。
+ * AlertDialog 只留给安全敏感操作（API Key 吊销）与放弃未保存的编辑。
+ * 悬停 toast 会顺延倒计时（Base UI 悬停暂停）。
  */
 import { toastManager } from "@/components/ui/toast";
 import { ApiError } from "../api";

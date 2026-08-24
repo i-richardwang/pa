@@ -456,10 +456,7 @@ test("a page never writes the sheet's width", async () => {
 const OPTION_ROW = /<InspectorRow\b([\s\S]*?)<\/InspectorRow>/g;
 const SELECT_TRIGGER = /<SelectTrigger\b([^>]*)>/g;
 
-/**
- * 行里的下拉必须有名字。名字要么由行的标签给（`label={<SelectLabel>…}`，读屏才不会把当前值
- * 念成名字），要么下拉自带 `aria-label`——浮层里那些不归本行标签管的下拉走的是后一条。
- */
+/** 行内下拉的名字来自行标签 `label={<SelectLabel>}` 或自带 `aria-label`。 */
 function unnamedSelectRows(text: string): string[] {
   const bad: string[] = [];
   for (const [block, body] of text.matchAll(OPTION_ROW)) {

@@ -28,7 +28,6 @@ type RecordProjectionInput = {
   onRequest: (request: RecordProjectionDialogRequest) => void;
 };
 
-/** 报告与看板共用的格点记录投影绑定；来源只决定请求目标，不改变坐标推导。 */
 export function useRecordProjection({
   source,
   replay,
@@ -49,7 +48,6 @@ export function useRecordProjection({
       replay.record_projection_bindings.views.map((binding) => [binding.result_view_id, binding]),
     );
     return {
-      // 可点性是指标列属性；零值仍可打开并得到诚实的空名单。
       canOpen(viewId, column) {
         return !!bindingByView.get(viewId)?.metrics[column];
       },

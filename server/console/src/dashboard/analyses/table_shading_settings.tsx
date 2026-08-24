@@ -1,9 +1,7 @@
 /**
- * 表格配色的设置件：行里是一块色带预览（色阶 + 阈值刻点 + 读数），点开是同一张浮层
- * 里的三样东西——色阶族（单色 / 双向）与该族的取值、阈值三格、翻转。色带样片的颜色出自
- * 编译层 `shadingStops`，与结果格用的是同一份取值；读数与占位是当前结果的数据缺省
- * （`tableShadingDefaults`），阈值留空即落在那里。率族指标的阈值按表里印出来的百分数读写，
- * 存回声明时换回 0–1 标度。
+ * 色带样片的颜色出自编译层 `shadingStops`，与结果格同一份取值；
+ * 读数与占位是当前结果的数据缺省（`tableShadingDefaults`），阈值留空即落在那里。
+ * 率族指标的阈值按表里印出来的百分数读写，存回声明时换回 0–1 标度。
  */
 import { ArrowDownUpIcon } from "lucide-react";
 import { DIVERGING_PALETTES, SERIES_COLORS, shadingStops } from "@charts";

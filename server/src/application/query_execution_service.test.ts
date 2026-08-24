@@ -1077,7 +1077,7 @@ test("派生结果没有单一业务时间轴，因而没有整窗合计", async
   );
 
   expect(result.payload.view.totals).toBeUndefined();
-  // 来源查询也不白算一遍合计：只发了来源查询本身这一次，没有多出的合计腿。
+  // 来源查询不额外发合计腿。
   expect(calls).toHaveLength(1);
 });
 

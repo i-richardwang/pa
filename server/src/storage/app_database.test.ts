@@ -153,7 +153,6 @@ describe("app database", () => {
     db.close();
   });
 
-  // 印记必须对 DDL 结构敏感、对纯排版不敏感，才能在开库时识别非当前结构。
   test("结构印记随 DDL 的结构变化而变，随排版变化而不变", () => {
     const ddl = "CREATE TABLE t (id TEXT PRIMARY KEY);";
     expect(schemaStampOf(ddl)).not.toBe(schemaStampOf(`${ddl}\nCREATE TABLE u (id TEXT);`));

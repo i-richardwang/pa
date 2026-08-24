@@ -22,8 +22,6 @@ export function ReportInspector({
       ? { catalog, draft, onChange: session.setDraft, replay: session.activeReplay }
       : null;
 
-  // 分界线归容器不归本件：作为右栏时那条线是「列与列之间」，作为底部 Sheet 时是 Sheet 自己的
-  // 上缘，两种身份都不是配置栏的属性。本件只管自己那一栏的内容。
   return (
     <aside
       aria-label="报告配置"

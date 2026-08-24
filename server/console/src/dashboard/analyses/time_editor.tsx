@@ -41,7 +41,7 @@ type CustomComparisonWindow = Extract<
   { kind: "custom" }
 >["window"];
 
-/** 常备档只留最常用的几个；其余长度走「自定义范围」，长列表比多一次点击更贵。 */
+/** 常备档只留最常用的几个，其余长度走「自定义范围」。 */
 const MONTH_CHOICES = [12, 24] as const;
 const YEAR_CHOICES = [2, 3, 5] as const;
 const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -62,9 +62,7 @@ export const withCurrent = (choices: readonly number[], current: number): number
   choices.includes(current) ? [...choices] : [current, ...choices];
 
 /**
- * 观察窗口一句话。它也是题名副行的全部内容——**只出窗口，不出粒度与对比**：
- * 副行答的是「这张图看的是哪一段时间」，粒度与对比答的是「怎么切、跟谁比」，
- * 那两件在底栏上是可点的控件，副行复述一遍既改不动又抢读。
+ * 观察窗口一句话，也是题名副行的全部内容：只出窗口，不出粒度与对比。
  */
 export function windowSummary(time: TimeIntent): string {
   const { window } = time;
@@ -147,10 +145,7 @@ export function setTimeComparison(
   return { ...base, ...(comparison ? { comparison } : {}) };
 }
 
-/**
- * 换窗口种类时的默认取值。相对窗口不带端点——它们恒随数据滚动；只有绝对表达式
- * （固定单月、明确起止月）承载冻结，故只有它们从上一窗口继承终点。
- */
+/** 只有绝对表达式承载冻结，故只有它们从上一窗口继承终点。 */
 function presetWindow(
   choice: WindowChoice,
   latest: string,
@@ -203,9 +198,7 @@ export function summarizeResolvedTime(
 }
 
 /**
- * 落草稿前的唯一校验闸：既拦时间意图自身的非法组合（zod 与结果粒度层会抛），
- * 也拦当前指标能力下不成立的显示方式——后者按**解析后**的粒度判定，因此省略显示方式
- * 而被自动解析成非法档的窗口改动同样会被拦下，不留到预览时才 fail-closed。
+ * 落草稿前的唯一校验闸；显示方式按解析后的粒度判定。
  */
 export function timeChangeIssue(
   time: TimeIntent,
@@ -227,10 +220,8 @@ export function timeChangeIssue(
 }
 
 /**
- * 期间浮层：**一列行，选中出勾**。相对窗口的 N 直接摊成行，
- * 不在浮层里再套一层 Select——浮层里再开浮层正是同一枚控件长出两副面孔的由来。
- * 需要具体月份的档（单个月份的观察月、自定义范围的起止月）把选择交给月份弹层，
- * 那是换承载不是叠层：浮层收起，选择在一枚居中弹层里一次做完。
+ * 期间浮层：相对窗口的 N 摊成行，不在浮层里再套 Select；
+ * 需要具体月份的档把选择交给月份弹层。
  */
 export function WindowPopup({
   time,
@@ -249,7 +240,6 @@ export function WindowPopup({
     const normalized = adjustTimeWindow(time, next);
     return onChange(normalized.time, normalized.adjustment);
   };
-  // 端点只在绝对表达式之间传递：从冻结窗口换到另一种冻结窗口时保留观察终点。
   const endpoint =
     window.kind === "range"
       ? window.to
@@ -258,7 +248,7 @@ export function WindowPopup({
         : undefined;
   const trailing = (unit: "month" | "year", count: number) =>
     window.kind === "trailing" && window.unit === unit && window.count === count;
-  /** 这一档落到实处的起止月：两种回看口径的差别就在这里。紧凑写法，别把档名挤到省略。 */
+  /** 这一档落到实处的起止月：两种回看口径的差别在这里。 */
   const detail = (candidate: TimeIntent["window"]) => {
     const { from, to } = primaryTimeRange({ window: candidate }, latest);
     return `${from} – ${to}`;
@@ -373,9 +363,8 @@ const DISPLAY_CHOICES: { value: TimeDisplayChoice; label: string }[] = [
 ];
 
 /**
- * 点某一档的落值：点别的档即显式写入；再点已显式指定的那档即剥掉 `display` 键，交回
- * 服务端按窗口与指标推导——「跟随窗口」没有自己的按钮，它是再点一次当前档。
- * 亮着的档若只是推导结果（未显式指定），再点不动：没有可撤回的东西。
+ * 再点已显式指定的那档即剥掉 `display` 键，交回服务端推导；
+ * 推导结果那档再点不动。
  */
 export function toggleDisplayChoice(
   time: TimeIntent,
@@ -389,9 +378,8 @@ export function toggleDisplayChoice(
 }
 
 /**
- * 每一档此刻选不了的理由：能力卡的裁决之外，把落值那道闸（`timeChangeIssue`）对该档预跑
- * 一遍——对照期在某一粒度下与主期撞桶这类只有解析后才知道的拒绝，也要在点击前就灰掉。
- * 「看起来能点、点了才弹」是这里要杜绝的；toast 只留给这张表也算不出的情形。
+ * 每档对落值闸 `timeChangeIssue` 预跑一遍，点击前就灰；
+ * toast 只留给这张表也算不出的情形。
  */
 function displayChoiceIssues(
   time: TimeIntent,
@@ -505,7 +493,6 @@ export function ComparisonPopup({
   const custom = time.comparison?.kind === "custom" ? time.comparison.window : undefined;
   const setComparison = (comparison?: TimeIntent["comparison"]) =>
     onChange(setTimeComparison(time, comparison));
-  // 与显示方式同一原则：会被落值闸拒绝的档点击前就灰，理由随行；不留「点了才弹」。
   const row = (
     value: ComparisonChoice,
     label: string,
@@ -566,7 +553,7 @@ export function ComparisonPopup({
   );
 }
 
-/** 已选对照期间在行上直接读出来——它是这一档的取值，不该只藏在弹层里。 */
+/** 已选对照期间在行上直接读出。 */
 function customComparisonSummary(window: CustomComparisonWindow): string {
   return window.kind === "current_month"
     ? monthLabel(window.month)
@@ -658,9 +645,8 @@ function TimeMonthPickers({
 }
 
 /**
- * 时间栏：期间与对比各收在一枚浮层钮里，显示粒度一击直达；工作台底栏与看板时间覆盖
- * 同用这一条。每次落值都过 `timeChangeIssue` 这道闸，联动调整与拒绝都以 toast 回执——
- * 静默调整不许有。解析后的主期、对照与数据截止收进期间钮的 Tooltip。
+ * 工作台底栏与看板时间覆盖同用这一条；每次落值都过 `timeChangeIssue`，
+ * 联动调整与拒绝都以 toast 回执。
  */
 export function TimeBar({
   time,

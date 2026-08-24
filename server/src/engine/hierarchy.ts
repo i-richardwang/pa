@@ -1,9 +1,7 @@
 /**
- * 层级维度补全：同名下级成员可能属于不同上级；查询只引用下级而上级未被约束时，
- * 同名成员会被静默跨上级加总成错数。
- * 模型层以 Cube 原生 hierarchies 参数声明层级（随 /v1/meta 暴露）。查询引用层级某一级，
- * 其上级既不在分组维度、也无单值 equals 过滤时，把缺失上级加入分组维度——同名下级
- * 按上级拆行呈现，宁多一列不出错数。
+ * 模型层以 Cube 原生 hierarchies 声明层级（随 /v1/meta 暴露）。查询引用层级某一级、
+ * 其上级既不在分组维度也无单值 equals 过滤时，把缺失上级加入分组维度——否则同名下级
+ * 会跨上级静默加总。
  */
 import type { CubeFilterCondition, CubeQuery, CubeView } from "../ports/cube_gateway.js";
 import { completeHierarchyDimensions } from "../semantic_core/hierarchy_completion.js";

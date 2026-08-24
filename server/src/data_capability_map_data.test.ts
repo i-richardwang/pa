@@ -272,7 +272,6 @@ cubes:
     "不得声明运行时 join",
   );
 
-  // joins 键不允许出现，空数组同样拒绝。
   const emptyJoin = withBadJoin.replace(
     '    joins:\n      - name: nowhere\n        relationship: many_to_one\n        sql: "1 = 1"\n',
     "    joins: []\n",

@@ -1,11 +1,5 @@
 /**
- * 看板瓦片：以当前浏览者权限运行报告的薄容器——取数、瓦片外壳与编辑动作归本组件，
- * 载荷呈现全部交给 ViewRenderer（与结果卡同一份渲染栈，tile 场景）。
- * 各瓦片独立成败，权限或规格错误不影响整板。
- * chrome 走 TileShell（与文本瓦片同一份）：单行标题头、正文填满且不套滚动容器。
- * 拖拽和缩放由外层画布管理，编辑态整卡可拖；按钮/表单等交互元素经
- * 拖拽取消选择器豁免，见 board_page 的 DRAG_CANCEL。
- * 瓦片菜单与整板「编辑看板」分立：查看「打开报告」/「调整并另存」，整板编辑里「编辑报告」。
+ * 以当前浏览者权限运行报告的薄容器；各瓦片独立成败，权限或规格错误不影响整板。
  */
 import { type UseQueryOptions, useQuery } from "@tanstack/react-query";
 import {
@@ -63,7 +57,6 @@ export function BoardTile({
   boardId: string;
   reportId: string;
   name: string;
-  /** 编辑态（仅创建者可达）：浮出「…」操作菜单，取数走 owner 端点实时预览 */
   editing?: boolean;
   viewerEmail: string;
   /** 查看态板级时间覆盖；编辑态忽略。 */
@@ -78,8 +71,7 @@ export function BoardTile({
   onRemove?: () => void;
 }) {
   const override = !editing && timeOverride ? timeOverride : null;
-  // 编辑期草稿新加的瓦片尚未落库，board-scoped 端点（校验瓦片在持久化看板内）会 404；
-  // 编辑仅创建者可达、瓦片引用的都是本人报告，故编辑期走所有者重放，查看期走成员端点。
+  // 编辑期草稿瓦片未落库，board-scoped 端点会 404，故编辑期走所有者重放。
   const replayOptions: UseQueryOptions<ReplayPayload, Error, ReplayPayload, readonly unknown[]> =
     editing
       ? reportReplayQueryOptions(reportId)
@@ -97,10 +89,7 @@ export function BoardTile({
 
   const isReportOwner = data?.caller === viewerEmail;
   const hasReportAction = !!data && (isReportOwner || !!data.payload.view_id);
-  /**
-   * 文案与整板「编辑看板」刻意分立：查看态不说「编辑」，避免像在改板；
-   * 整板编辑态才用「编辑报告」。非报告主只给「调整并另存」。
-   */
+  /** 非报告主只给「调整并另存」。 */
   const reportMenuItem = hasReportAction ? (
     isReportOwner ? (
       <MenuLinkItem href={reportHash(reportId)}>

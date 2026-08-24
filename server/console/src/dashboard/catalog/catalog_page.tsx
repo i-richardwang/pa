@@ -78,7 +78,6 @@ import { RowMenu } from "../kit/table_kit";
 import { MenuItem } from "@/components/ui/menu";
 import { PopupSection } from "@/components/ui/surface";
 
-/** 控制条分类：选项是 PA 的成员族。 */
 type CatalogFacet = "measures" | "domains" | "dimensions" | "terms";
 
 const CATALOG_FACETS: ReadonlyArray<{ value: CatalogFacet; label: string }> = [
@@ -88,7 +87,6 @@ const CATALOG_FACETS: ReadonlyArray<{ value: CatalogFacet; label: string }> = [
   { value: "terms", label: "业务术语" },
 ];
 
-/** 点开的详情实体：成员（指标/维度）或指标域，共用一个侧滑面板。 */
 type Detail =
   | { kind: "member"; member: CatalogMemberPayload }
   | { kind: "metric_domain"; topic: MetricDomainPayload };
@@ -144,14 +142,13 @@ export function CatalogPage() {
     });
   }
   const found = useMemo(() => filterCatalog(data, terms, keyword), [data, terms, keyword]);
-  // 管理员恒见词典区（空词典也要有登记入口），故其空态不计入「什么都没搜到」。
+  // 管理员的词典区空态不计入「什么都没搜到」。
   const nothing =
     (facet === "measures" && !found.measures.length) ||
     (facet === "dimensions" && !found.dimensions.length) ||
     (facet === "terms" && !found.terms.length && !isAdmin) ||
     (facet === "domains" && !(data?.metric_domains.length ?? 0));
 
-  // 主操作在 titlebar：管理员登记词条与「+ 新建」同槽。
   useSetTitlebarActions(
     () =>
       isAdmin ? (
@@ -163,16 +160,13 @@ export function CatalogPage() {
     [isAdmin],
   );
 
-  // 右栏里点「查看取值」：先收栏再开弹窗，避免栏与 Dialog 抢焦点
+  // 先收栏再开弹窗，两者不同时持有焦点。
   function openValues(target: ValuesTarget) {
     setDetail(null);
     setValuesTarget(target);
   }
 
-  /*
-    公式行的分子分母是同一份目录里的成员，点它就把右栏换成那一条。
-    换栏不切分类：栏是就地翻页，若连带把主表也翻到另一族，人就找不回刚才那条了。
-  */
+  // 换栏不切主表分类。
   const openMember = useCallback(
     (id: string) => {
       const member = [...(data?.measures ?? []), ...(data?.dimensions ?? [])].find(
@@ -183,7 +177,6 @@ export function CatalogPage() {
     [data],
   );
 
-  // 与工作台配置栏同槽：推挤列表、通高顶到 MAIN 白卡顶，不是 Sheet 罩层
   useSetStageAside(
     () =>
       detail ? (
@@ -289,8 +282,7 @@ function contains(term: string, texts: (string | undefined)[]): boolean {
 }
 
 /**
- * 按成员自身文本过滤（标题、口径、Agent 查询指引：搜"回流"能命中埋在指引里的成员）。
- * 成员与场景的可查关系是服务端选路职责，不在客户端展开——目录页只做语义身份与教学的浏览。
+ * 按成员自身文本过滤（标题、口径、Agent 查询指引）；可查关系归服务端选路。
  */
 function filterCatalog(data: CatalogPayload | null, terms: TermRow[], keyword: string) {
   const measures = data?.measures ?? [];
@@ -315,7 +307,6 @@ function filterCatalog(data: CatalogPayload | null, terms: TermRow[], keyword: s
   };
 }
 
-/** 指标域：单表裸铺，无分区头。 */
 function MetricDomainSection({
   topics,
   onOpen,
@@ -373,10 +364,7 @@ function formatLabel(format: string | undefined): string | null {
   return format;
 }
 
-/**
- * 清单主列：名称一行、说明一行，说明走次级字色。说明格允许换行（`line-clamp-2`），
- * 否则整列被撑成一行的宽度，末列挤出白卡外。
- */
+/** 说明格须 `line-clamp-2` 换行，否则整列按单行宽度撑。 */
 function MetricNameCell({ member }: { member: CatalogMemberPayload }) {
   return (
     <TableCell className="whitespace-normal">
@@ -395,11 +383,7 @@ function MetricNameCell({ member }: { member: CatalogMemberPayload }) {
   );
 }
 
-/**
- * 第二列印归属，不印格式。格式只有率指标才有，整列十之八九是「—」——
- * 一列到底全是破折号，占的是宽度，给的不是信息。归属则每条都有，
- * 且正是扫这张表时唯一会拿来分组的东西。
- */
+/** 第二列印归属：格式只有率指标才有，整列多为空。 */
 function MetricDomainCell({ domain }: { domain: MetricDomainPayload | undefined }) {
   return (
     <TableCell className="px-1.5 py-3">
@@ -447,7 +431,6 @@ function MeasureTable({
   );
 }
 
-/** 可翻值维度的「查看取值」入口在详情面板内，行面只留身份与说明。 */
 function DimensionTable({
   dimensions,
   onOpen,
@@ -505,26 +488,23 @@ function TermSection({
   onDelete?: (row: PublicBusinessTerm) => void;
 }) {
   if (terms.length === 0) {
-    return (
-      // 搜索无果不上图标：那是一次按键就能撤销的过渡回应，不是「这里还没有东西」的落地态
-      filtered ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>没有匹配的业务术语</EmptyTitle>
-            <EmptyDescription>清空搜索框可查看全部。</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <InboxIcon />
-            </EmptyMedia>
-            <EmptyTitle>暂无业务术语</EmptyTitle>
-            <EmptyDescription>可从一句准确、可独立理解的定义开始。</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      )
+    return filtered ? (
+      <Empty>
+        <EmptyHeader>
+          <EmptyTitle>没有匹配的业务术语</EmptyTitle>
+          <EmptyDescription>清空搜索框可查看全部。</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    ) : (
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <InboxIcon />
+          </EmptyMedia>
+          <EmptyTitle>暂无业务术语</EmptyTitle>
+          <EmptyDescription>可从一句准确、可独立理解的定义开始。</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
   return (
@@ -820,7 +800,6 @@ function domainOf(
   return catalog?.metric_domains.find((domain) => domain.measure_ids.includes(member.id));
 }
 
-/** 一个业务属性组，及其在本域可拆的维度业务名。 */
 type DimensionGroupRow = { group: string; titles: string[] };
 
 /**
@@ -845,10 +824,6 @@ function dimensionGroups(catalog: CatalogPayload | null, ids: string[]): Dimensi
   return rows;
 }
 
-/**
- * 字典成员/指标域档案：壳层右栏，与报告 `ReportInspector` 同槽。
- * 内容是只读 About（题头 + 定义散文 + Options 式键值），不是查询配置。
- */
 function CatalogProfileAside({
   catalog,
   detail,
@@ -909,9 +884,7 @@ function DimensionsRow({ groups }: { groups: DimensionGroupRow[] }) {
 }
 
 /**
- * 公式行：分子分母各成一枚芯片。它们本身就是这份目录里的成员，
- * 「这个数由哪两个数算出」与「那两个数又是什么」该一步可达，不该是一行读完就断的灰字。
- * 内部计算件没有公开身份，那一端便是静态芯片——点不动，但仍然读得懂。
+ * 分子分母是本目录成员，做成可点芯片；内部计算件无公开身份，只出静态芯片。
  */
 function FormulaRow({
   formula,
@@ -935,7 +908,6 @@ function FormulaRow({
   );
 }
 
-/** 成员完整档案：口径与公式、元信息网格、关联业务术语；指标另有开分析、维度另有翻值入口。 */
 function MemberProfileBody({
   member,
   dimensions,
@@ -958,7 +930,6 @@ function MemberProfileBody({
   );
   const format = formatLabel(member.format);
   const dimensionKind = member.dimension_kind === "overlapping" ? "可重叠" : null;
-  // 翻值入口挂在口径旁：「它是什么」与「它都有哪些值」是同一个问题的两半。
   const action = isSearchableCatalogDimension(member) ? (
     <Button
       onClick={() => onValues({ member: member.id, title: member.title })}
@@ -968,11 +939,7 @@ function MemberProfileBody({
       查看取值
     </Button>
   ) : undefined;
-  /*
-    元信息全在一张网格里，缺项就少一行。一行不剩时整块不出，
-    不留一个空着的框冒充内容。「类型」不入网格：人是从「指标」或「维度」
-    那一栏点进来的，那一行只是把来路复述一遍。
-  */
+  // 元信息一张网格，缺项少一行、一行不剩整块不出；「类型」不入网格。
   const facts =
     (domain ? 1 : 0) +
     (dimensions.length ? 1 : 0) +
@@ -1013,7 +980,6 @@ function MemberProfileBody({
   );
 }
 
-/** 指标域完整档案：数据范围散文一节，其余元信息同走一张网格。 */
 function MetricDomainProfileBody({
   topic,
   dimensions,

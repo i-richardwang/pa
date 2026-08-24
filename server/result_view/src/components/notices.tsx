@@ -1,9 +1,6 @@
 /**
- * 结果提示：截行时引导全屏（环境支持才出入口，经 CardActions 注入；行数与截行
- * 事实本身由表格行数条陈述，本组件只承载动作与例外提示）；
- * 服务端截断（卡片交付上限触顶）引导下载完整结果。
- * 导出入口 = export 限时票据；环境只注入真实可用的
- * 下载、外链或剪贴板动作，未注入时不呈现失效退路。
+ * 截行引导全屏、服务端截断引导下载；行数与截行事实由表格行数条陈述。
+ * 动作只在环境经 CardActions 注入时出现，不留失效退路。
  */
 import { useState } from "react";
 import { Check, Download, ExternalLink, Link2, Maximize2 } from "lucide-react";

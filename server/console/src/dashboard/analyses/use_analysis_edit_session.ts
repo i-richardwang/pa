@@ -1,14 +1,10 @@
 /**
  * 报告 / 分析工作台的编辑会话。
  *
- * 种子一到位就落草稿，配置栏恒可用；「改没改」是草稿与基线的差（`dirty`），
- * 它决定有没有可保存的东西、要不要拦离开。
- *
  * 播种代际 = 会话键 × 放弃次数：只有换会话与显式重播种（放弃改动）推进代际，
- * 查询 refetch 换了 `seed` 的引用不算。飞行中的运行结果回来时代际不符即作废。
+ * 查询 refetch 换了 `seed` 的引用不算；飞行中的运行结果回来时代际不符即作废。
  *
- * 规格与结果是两条腿：种子只管规格，结果字节另走 `savedReplay` 后到即可；
- * 预览结果住在查询缓存的会话键位下（`useDraftPreview`）。
+ * 规格与结果是两条腿：种子只管规格，结果字节另走 `savedReplay` 后到即可。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";

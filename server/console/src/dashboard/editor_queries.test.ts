@@ -32,10 +32,7 @@ test("预览结果按会话键位存放：换会话即换键，同会话两次�
   expect(reportKeys.draftPreview("report:r1")).not.toEqual(reportKeys.draftPreview("analysis:a1"));
 });
 
-/**
- * 铸新 View 后的合并：身份换新的地方有两处（顶层与 payload 里那份），
- * 漏掉任何一处，界面照样画出一张对的图，但下钻与明细会打向旧 view——错得不出声。
- */
+/** 铸新 View 的身份换新有两处（顶层与 payload），必须同改。 */
 const BASE_IDS = { analysis: "a0000000-0000-4000-8000-000000000000", view: "v0000000" };
 const NEXT_IDS = {
   analysis: "11111111-1111-4111-8111-111111111111",
@@ -75,7 +72,6 @@ function stubMaterialize(): { calls: { path: string; body: unknown }[]; restore:
   const original = globalThis.fetch;
   globalThis.fetch = (async (path: string, init?: RequestInit) => {
     calls.push({ path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    // 创建 Run 那条路只验路由：它的响应是整份重放载荷，不在本组用例的题内。
     if (path === "/dashboard/api/analyses") return new Response("{}", { status: 503 });
     return new Response(
       JSON.stringify({
@@ -126,7 +122,6 @@ test("沿用基线时结果行不重取，呈现按新声明重编，上一版�
       view_preferences: base.view_preferences,
       base,
     });
-    // 铸 View 的请求不带结果行：它只换身份，不执行查询
     expect(stub.calls[0]?.body).toEqual({
       analysis_id: BASE_IDS.analysis,
       view: { type: "table" },

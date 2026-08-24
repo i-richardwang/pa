@@ -8,14 +8,12 @@ const BROWSER_SAFE_ROOTS = [
   ["result_view", new URL("../result_view/src/", import.meta.url)],
 ] as const;
 
-/** 结果视图的样式契约：组件在 result_view，令牌单源在 presentation_core/tokens.css，
-    两个宿主样式表都必须导入它，缺导入则类名在而 CSS 规则不在。 */
+/** 令牌单源是 presentation_core/tokens.css，两个宿主样式表都必须导入。 */
 const RENDER_STACK = new URL("../result_view/src/", import.meta.url);
 const HOST_STYLESHEETS = ["../widget/src/styles.css", "../console/src/styles.css"];
 const TOKENS_CSS = new URL("./presentation_core/tokens.css", import.meta.url);
 
 test("browser-safe source packages remain free of Node, database, and service configuration imports", async () => {
-  // 就近同置的用例不进浏览器，可以用 bun:test 与 node:fs 读取真文件；只扫产品模块。
   for (const [label, root] of BROWSER_SAFE_ROOTS) {
     const files = (await readdir(root, { recursive: true })).filter(
       (name) => (name.endsWith(".ts") || name.endsWith(".tsx")) && !name.includes(".test."),
@@ -53,8 +51,7 @@ test("every pa-* token the render stack uses is defined by both host stylesheets
       ),
     ].map((match) => match[1]),
   );
-  // 内联 style 直接消费的变量：当前渲染栈可以零消费（tooltip 恒深底走字面色），
-  // 但一旦消费就必须有裸变量定义；正则活性用合成样例保证，不依赖真实用例存在。
+  // 内联 style 消费的每个变量都必须有裸变量定义。
   const VAR_PATTERN = /var\(\s*(--pa-[a-z][a-z-]*)/g;
   expect([...'style="color:var(--pa-fg)"'.matchAll(VAR_PATTERN)].map((match) => match[1])).toEqual([
     "--pa-fg",
@@ -85,11 +82,7 @@ test("every pa-* token the render stack uses is defined by both host stylesheets
   }
 });
 
-/**
- * 出类名的源目录必须在两个宿主样式表里 `@source` 登记。没登记的目录不是立刻失效——
- * 它的类只在别处碰巧写过同名类时才生出规则，于是新类静默丢失、旧类看着还好。
- * 渲染栈在 result_view，图例行版式那份配方在 presentation_core（`legendRowClass`）。
- */
+/** 出类名的源目录必须在两个宿主样式表里 `@source` 登记。 */
 const CLASS_BEARING_SOURCES = ["../../result_view/src", "../../src/presentation_core"];
 
 test("every source directory that emits class names is registered with both host stylesheets", async () => {

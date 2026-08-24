@@ -4,14 +4,9 @@ import { IconButton } from "./icon_button.js";
 import { chartMarkerClass, themedColor } from "../../../src/presentation_core/chart_config.js";
 
 /**
- * 读数卡：指针落在哪一格，这张卡就读哪一格。壳与菜单、Popover 同一张（`.pa-popup-surface`），
- * 模糊取卡那一档（`.pa-popup-surface-card`）。
- *
- * 单系列以值为主、系列名为次：只有一个数时先读数，再读它是什么。多系列走「色点 / 名 / 值」
- * 三栏，一栏排到 17 行才另起一栏、至多四栏，栏宽随栏数成档——否则一条长清单会顶穿画布。
- *
- * 卡内不标「指针在哪一根」：那件事由画布的指针（列高亮带或竖虚线）与激活点交代，卡片只管读数。
- * 未钉住时整张卡不可命中（指针要能穿过它继续读图），钉住后才接管悬停与点击。
+ * 壳与菜单同一张（`.pa-popup-surface`），模糊取卡那一档（`.pa-popup-surface-card`）。
+ * 一栏 17 行、至多四栏：再多会顶穿画布。
+ * 未钉住时整张卡不可命中，钉住后才接管悬停与点击。
  */
 
 const COLUMN_TIERS = [
@@ -122,19 +117,17 @@ export function ReadoutCard({
           </IconButton>
         </div>
       )}
-      {/* 抬头给关闭钮让出右上角那一块，否则钉住时长标题压在钮下面 */}
+      {/* 右上角留给关闭钮 */}
       {model.header && (
         <div className="mr-5 truncate px-4 pt-3 pb-0.5 text-pa-fg text-sm">{model.header}</div>
       )}
       <div className={`px-4 py-2 ${COLUMN_GRID[columns - 1]}`.trim()}>
         {rows.map((row, index) => {
           const body = sole ? <SoleRow row={row} /> : <SeriesRow row={row} />;
-          // 未钉住时整张卡不可命中：行既不接管悬停，也不画成可点的样子
           if (!pinned) {
             return <div key={`${row.name}-${index}`}>{body}</div>;
           }
-          // 钉住后行是真按钮：有投影的点开明细，没有的只把它那条系列提到前面来——
-          // 后者对键盘同样成立（聚焦即提亮），故不降格成静态元素再补 role
+          // 行恒为按钮：无投影的行也要能聚焦提亮
           const point = row.point;
           const openable = point && onRowClick && (canOpenRow?.(point) ?? true);
           const open = openable && point ? () => onRowClick?.(point) : undefined;

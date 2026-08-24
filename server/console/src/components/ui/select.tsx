@@ -38,14 +38,10 @@ const selectTriggerIconClassName = "size-3 shrink-0 text-pa-faint";
 export interface SelectButtonProps extends useRender.ComponentProps<"button"> {
   size?: VariantProps<typeof selectTriggerVariants>["size"];
   variant?: VariantProps<typeof selectTriggerVariants>["variant"];
-  /** 取值前的记号，与取值同行；记号是取值的一部分（例如排序方向），不是装饰。 */
   icon?: React.ReactNode;
 }
 
-/**
- * 选择器形的触发件：闭合态印当前取值，尾随开合记号。下拉之外「点开一张面选一个值」的
- * 触发件（浮层、成员选择面）都用它，形与 `SelectTrigger` 同一份。
- */
+/** 「点开一张面选一个值」的触发件都用它，形与 `SelectTrigger` 同一份。 */
 export function SelectButton({
   className,
   size,
@@ -161,11 +157,7 @@ export function SelectValue({
   );
 }
 
-/**
- * 下拉面：落在触发件下方 4px，**不盖住触发件**——把选中项对到触发件上的那套（Base UI 的
- * `alignItemWithTrigger`）会让同一个「选一个值」在下拉与浮层列表上长出两种开合方式。
- * 面料与行排印出自 `surface.tsx`，高度到 19rem 自滚，滚动不另加渐隐箭头。
- */
+/** `alignItemWithTrigger` 恒 false：Base UI 默认把选中项对到触发件上，与浮层列表的开合方式不一致。 */
 export function SelectPopup({
   className,
   children,

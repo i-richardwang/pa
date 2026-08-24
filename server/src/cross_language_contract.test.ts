@@ -10,7 +10,6 @@ test("TypeScript and Python group usage errors with the same text limit", async 
 
   expect(declaration).not.toBeNull();
   expect(Number(declaration?.[1])).toBe(USAGE_ERROR_GROUP_TEXT_LIMIT);
-  // Every truncation site interpolates the shared constant, so the two languages cannot drift apart.
   expect([...source.matchAll(/substr\(error,[^)]*\)/g)].map((match) => match[0])).toEqual([
     "substr(error, 1, {USAGE_ERROR_GROUP_TEXT_LIMIT})",
   ]);

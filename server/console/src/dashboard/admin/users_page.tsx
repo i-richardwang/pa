@@ -1,8 +1,5 @@
 /**
  * 成员（admin）：列表 / 新建 / 配权（数据角色 + 授权范围）/ 重置密码。
- * 承载在设置弹层的一节里（`settings_page.tsx`），不占整页、不进主导航——
- * 它管的是工作区里的人，与账号、API Key 同属设置。
- * 用户读取与写入只消费服务端结构化应用合同。
  * 权限边界始终是服务端守卫，隐藏 UI 不构成授权。
  */
 import { useEffect, useMemo, useState } from "react";
@@ -109,7 +106,6 @@ const USER_SORT: Record<
   role: (u) => roleLabel(u.role),
 };
 
-/** 行首圆片里的首字母：有名用名，无名退到邮箱。 */
 function initialOf(user: AdminUser): string {
   return (user.name.trim().charAt(0) || user.email.charAt(0) || "?").toUpperCase();
 }
@@ -212,11 +208,7 @@ export function UsersPage({ me }: { me: MePayload }) {
                       </div>
                     </TableCell>
                     <TableCell className="text-pa-muted">{u.email}</TableCell>
-                    {/*
-                      角色不摆胶囊：胶囊在本仓是「资源自己挑的那个归类」的记号（报告的图型、
-                      指标的分类），成员的角色不是他挑的，是这套系统给的固定几档，与邮箱、
-                      授权范围同属账号属性——同一行里三个属性两种排法，会读成角色更要紧。
-                    */}
+                    {/* 角色是系统给的固定档，与邮箱、授权范围同排普通文本，不摆胶囊。 */}
                     <TableCell className="text-pa-muted">{roleLabel(u.role)}</TableCell>
                     <TableCell className="text-pa-muted">
                       {scopeLabel(u.access_scope, me.access_scope.title)}
@@ -256,14 +248,12 @@ export function UsersPage({ me }: { me: MePayload }) {
   );
 }
 
-/** 配权：数据角色 + 授权范围，Dialog 表单提交后即时生效 */
 function GrantDialog({
   user,
   meEmail,
   accessScopeTitle,
   onClose,
 }: {
-  /** 配权目标；null = 关闭 */
   user: AdminUser | null;
   meEmail: string;
   accessScopeTitle: string;
@@ -352,15 +342,7 @@ function GrantDialog({
   );
 }
 
-/** 重置密码：Dialog 表单，提交到服务端用户管理用例。 */
-function ResetPasswordDialog({
-  user,
-  onClose,
-}: {
-  /** 重置目标；null = 关闭 */
-  user: AdminUser | null;
-  onClose: () => void;
-}) {
+function ResetPasswordDialog({ user, onClose }: { user: AdminUser | null; onClose: () => void }) {
   const [password, setPassword] = useState("");
   const resetPassword = useResetUserPassword();
   const { reset: resetMutation } = resetPassword;
@@ -480,10 +462,7 @@ function CreateUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      {/*
-        表单弹层不分栏、不加宽：字段并排会让眼睛在两列之间来回跳，且「邮箱 / 显示名」
-        与「角色 / 授权范围」并不是成对的一件事，摆成一行读起来像它们是。
-      */}
+      {/* 表单弹层不分栏、不加宽。 */}
       <DialogPopup className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>新增用户</DialogTitle>

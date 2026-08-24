@@ -1,7 +1,4 @@
-/**
- * 复制成功后短暂返回 isCopied。局域网 HTTP 不一定暴露 Clipboard API，
- * 非安全上下文使用隐藏 textarea + execCommand 完成复制。
- */
+/** 非安全上下文（局域网 HTTP）没有 Clipboard API，回退 textarea + execCommand。 */
 import * as React from "react";
 
 function fallbackCopy(value: string): boolean {

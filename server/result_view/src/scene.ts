@@ -1,9 +1,6 @@
 /**
- * 宿主场景的 chrome 取舍：`ViewScene` 一个枚举，每一项取舍由这一张表答完。结果面里的每个
- * 构件都按 scene 查这张表，不另收布尔参数。新增场景 = 表里加一行。
- *
- * 场地几何（留白、画不画框）同样按 scene 查，表在 chart_config（`PLOT_PADDING` / `PLOT_FRAME`），
- * 因为 echarts 的 grid 与 DOM 的场地框要读同一组数。
+ * chrome 取舍按 scene 查这一张表，不另收布尔参数；场地几何的表在 chart_config
+ * （`PLOT_PADDING` / `PLOT_FRAME`），与 echarts grid 同源。
  */
 import type { ViewScene } from "../../src/presentation_core/chart_config.js";
 
@@ -24,7 +21,6 @@ type SceneTraits = {
   scopeBand: boolean;
   /** 表格明细格内衬：密度由留白分，不动字级、线色与底色 */
   cellPad: string;
-  /** 表格行数条：瓦片里贴着壳底不画线，其余场景画顶线 */
   countBar: string;
 };
 

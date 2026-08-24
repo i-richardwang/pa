@@ -1,9 +1,4 @@
-/**
- * 全局命令面板：侧栏搜索与 ⌘K 共用这一个面。
- * 空态仅输入行 + 脚注；有查询字展开扁平结果（类型在右侧，无分组标题）。
- * 选中即整页导航；字典项跳指标字典并预填搜索词（sessionStorage）。
- * 数据首开时拉取并缓存本次会话；任一数据源失败只缺该源不整体失败。
- */
+/** 全局命令面板：侧栏搜索与 ⌘K 共用这一个面。 */
 import { useEffect, useMemo, useState } from "react";
 import { LoadingMark } from "pa-result-view";
 import {
@@ -88,7 +83,7 @@ function itemText(item: PaletteItem): string {
   }
 }
 
-/** 搜索可吃语义 id，同屏标签只显示业务名称；内部身份永不成为界面文案。 */
+/** 搜索匹配语义 id，标签只印业务名称。 */
 function itemLabel(item: PaletteItem): string {
   if (item.kind === "member" || item.kind === "metric_domain") return item.title;
   if (item.kind === "business_term") return item.canonicalTerm;
@@ -175,10 +170,8 @@ export function CommandPalette({
   onOpenChange: (open: boolean) => void;
   /** 关掉后焦点还给谁：这一面没有触发件，由开它的那一处交代（见 shell）。 */
   finalFocus?: CommandFinalFocus;
-  /** 已按角色过滤的主导航（设置项由本组件补充）。 */
   navItems: readonly NavEntry[];
   navigate: (r: RouteKey) => void;
-  /** 设置是壳上的弹层，由壳打开。 */
   onOpenSettings: () => void;
 }) {
   const [q, setQ] = useState("");
@@ -250,7 +243,6 @@ export function CommandPalette({
     [termsQuery.data, termsQuery.isError],
   );
 
-  // 空白新建也是键盘可达的一等入口：Agent 优先不代表人只能从既有资产出发。
   const actionGroup: PaletteItem[] = [
     { kind: "action", label: "新建分析", hash: analysisNewHash() },
   ];
@@ -260,7 +252,6 @@ export function CommandPalette({
   ];
 
   const idle = q.trim() === "";
-  // 有查询时是扁平结果行（类型在右侧），不分组；空态不展开结果区。
   const groups: PaletteGroup[] = [
     {
       value: "结果",
@@ -309,7 +300,6 @@ export function CommandPalette({
     }
   }
 
-  // 任一数据源还没回来就算在等：搜索面覆盖的每一源都算数。
   const loading =
     !idle && [boards, reports, analyses, catalog, terms].some((source) => source === null);
 

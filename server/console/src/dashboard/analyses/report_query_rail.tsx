@@ -57,13 +57,10 @@ import {
 import { FilterEditor } from "./filter_editor";
 import { MemberPopover, type PickableMember } from "./member_picker";
 
-/** 成员行自带记号槽宽的左缩，内容盒不加横内缩；行与题行贴合无空档。 */
 const MEMBER_CONTENT_CLASS = "px-0 pt-0 md:px-0";
 
 /**
- * 分组各行**共用一张网格**，不是各排各的行盒：维度选择器吃剩余宽（`1fr`），范围触发件
- * 与移除钮按内容定宽（`auto`）——而 `auto` 是**整列一起量**的，于是每行两枚触发件的分界
- * 恒落在同一条竖线上。行间的缝走 `gap-y`，不写在行上：行已经不是一个盒子了。
+ * CSS `auto` 列是整列一起量：分组各行共用一张网格，触发件才对齐同一条竖线。
  */
 const BREAKDOWN_CONTENT_CLASS = cn(
   INSPECTOR_ROW_INDENT_CLASS,
@@ -74,8 +71,7 @@ const BREAKDOWN_CONTENT_CLASS = cn(
 const MAX_ITEMS_LIMIT = 20;
 
 /**
- * 题行右端的添加入口：全栏同一枚幽灵 `+`，位置不随内容多少上下漂。
- * 返回元素而非组件：它交给 `PopoverTrigger render={...}`，开合处理器与 ref 直接合并到这枚元素上。
+ * 返回元素而非组件：交给 `PopoverTrigger render={...}`，处理器与 ref 直接合并到该元素上。
  */
 const addButton = (label: string) => (
   <Button aria-label={label} className="text-pa-muted" size="icon-sm" variant="subtle">
@@ -83,10 +79,7 @@ const addButton = (label: string) => (
   </Button>
 );
 
-/**
- * 成员行末的动作钮：幽灵图标常显。**图标认不出它作用在哪一层**——同一枚减号在筛选题行删的是
- * 整条筛选、在这里删的是一个成员，故一律配 Tooltip 把宾语讲明。
- */
+/** 同一枚减号在筛选题行与成员行删的宾语不同，一律配 Tooltip 讲明。 */
 function RowAction({
   label,
   tip,
@@ -120,7 +113,6 @@ function RowAction({
   );
 }
 
-/** 文本框的落值时机：失焦，或回车（回车即失焦，落值只走一条路）。 */
 const commitOnEnter = (event: React.KeyboardEvent<HTMLInputElement>) => {
   if (event.key === "Enter") event.currentTarget.blur();
 };
@@ -141,11 +133,7 @@ function calculationTitle(dimensionTitle: string): string {
 /** 成员浮层里那条「构成占比」的身份：不是目录成员，只是加进查询的另一种指标。 */
 const PERCENT_OF_TOTAL_PICK_ID = "calculation:percent_of_total";
 
-/**
- * 构成占比在成员浮层里的那一行：与目录指标同一份列表、同一套不可选理由——它是由已选指标
- * 算出来的**另一个指标**，不是另一类东西，故没有第二个添加入口。
- * 前置条件不满足时仍列出、只是灰，理由讲的是「先去做什么」。
- */
+/** 前置条件不满足时仍列出、只是灰，理由讲「先去做什么」。 */
 export function percentOfTotalPick({
   measures,
   dimensions,
@@ -366,8 +354,7 @@ function BreakdownField({
     : direction === "desc"
       ? "从高到低"
       : "从低到高";
-  // 触发件印的是**这一句设置的结论**，不是控件名：限了项数就说取哪一端的几项，
-  // 只排序没限项就说按什么排，什么都没声明才是「全部」。
+  // 触发件印这一句设置的结论，不印控件名。
   const rangeLabel = !active
     ? "全部"
     : active.max_items
@@ -386,7 +373,6 @@ function BreakdownField({
       : ArrowUpNarrowWideIcon;
 
   return (
-    // 维度与范围两格直接进父网格：列宽由整栏的网格统一定，各行对齐。
     <>
       <div className="mr-2.5 min-w-0" data-slot="breakdown-field">
         <MemberPopover
@@ -411,7 +397,6 @@ function BreakdownField({
           render={
             <SelectButton
               aria-label={`${label}分组范围：${rangeLabel}`}
-              // 宽随内容，右外边距留在格内，与移除钮之间保留缝隙。
               className="mr-0.5 w-auto min-w-0 text-pa-muted"
               icon={<RangeIcon />}
               size="sm"
@@ -540,9 +525,7 @@ export function ReportQueryRail({
 
   onRunPreview: () => void;
   previewing: boolean;
-  /** 图型条住在栏顶、查询步之前。 */
   leading?: ReactNode;
-  /** 其他能力分区，例如图表呈现设置，按同一滚动面板继续渲染。 */
   children?: ReactNode;
 }) {
   // 被编辑的视图取自草稿规格的收敛点：草稿是编辑对象的真相，结果只是它上一次运行的产物。
@@ -576,8 +559,7 @@ export function ReportQueryRail({
     [...catalog.measures, ...catalog.dimensions].map((item) => [item.id, item]),
   );
   const titleOf = (member: string) => catalogById.get(member)?.title ?? resultTitleOf(member);
-  // 成员可以删到零：空查询是合法的中间态（正如空白新建的起点），
-  // 只是不可执行——出口由栏底「运行预览」与保存按钮的禁用把住，不靠禁止删除来兜。
+  // 空查询是合法中间态，出口由「运行预览」与保存的禁用把住。
   const runnable = isAnalysisRunnable(draft);
   const hasIncompleteFilter = filters.some((filter) => filter.values.length === 0);
 

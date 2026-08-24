@@ -1,7 +1,4 @@
-/**
- * 呈现声明静态校验单测：绑定成员存在性、类型专属约束、缺省补齐与归一
- * （输出载荷列短名）。数据守卫（矩阵/率切片等运行时前提）在 view_shape/chart_config 测。
- */
+/** 呈现声明的静态校验；运行时数据守卫在 view_shape/chart_config 测。 */
 import { describe, expect, test } from "bun:test";
 import { validateChartDecl, type ChartSpecContext } from "./chart_spec.js";
 

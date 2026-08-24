@@ -1,7 +1,4 @@
-/**
- * 正式指标 Planner：把逻辑指标查询编译为最少数量的单事实 Cube 查询腿。
- * 本模块只产生不可变执行计划，不访问 Cube，也不计算指标结果。
- */
+/** 正式指标 Planner：把逻辑指标查询编译为最少数量的单事实 Cube 查询腿。 */
 import type { TopNSelectionSpec } from "../semantic_core/analysis_spec.js";
 import type { TimeInput } from "../semantic_core/time_contract.js";
 import { z } from "zod";

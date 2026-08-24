@@ -1,7 +1,4 @@
-/**
- * 看板列表：titlebar + 灰控制条 + 全宽裸铺表，与我的报告同一骨架。
- * 删除只对创建者开放；看板码仅在详情页展示。
- */
+/** 删除只对创建者开放；看板码仅在详情页展示。 */
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CircleAlertIcon, PackageIcon, PlusIcon, Trash2Icon } from "lucide-react";
@@ -74,7 +71,7 @@ const BOARD_SORT: Record<
 export function BoardsPage({ me }: { me: MePayload }) {
   const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
-  /** 归属分面：控制条左半恒有一组档位，没有档位就只剩一条托着搜索框的空灰带。 */
+  /** 归属分面：控制条左半恒有一组档位。 */
   const [owner, setOwner] = useState<"all" | "mine">("all");
   const queryClient = useQueryClient();
   const boardsQuery = useBoards();

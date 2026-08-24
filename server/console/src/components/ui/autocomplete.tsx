@@ -13,14 +13,7 @@ import {
 } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 
-/**
- * 字段选择面（combobox）：搜索、过滤、方向键走位与无障碍语义全归 Base UI 原语。
- * 值选择列表是**另一份契约**，归 `popover-list.tsx`——两者长得几乎一样，
- * 但键盘模型不同，按长相合并会逼出一个只认领 `listbox` 角色、不实现走位的假件。
- *
- * 默认值说的是 PA 的话（玻璃壳、13px/420 行、禁用不降透明度），不是出厂值：
- * 统一封装输入、候选列表与键盘交互，避免消费者重复实现同一组行为。
- */
+/** 与 `popover-list.tsx` 不合并：可搜索面的键盘走位出自 Base UI combobox。 */
 export const Autocomplete: typeof AutocompletePrimitive.Root = AutocompletePrimitive.Root;
 
 export function AutocompletePopup({

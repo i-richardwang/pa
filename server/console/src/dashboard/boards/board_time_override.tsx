@@ -4,10 +4,6 @@ import { Button } from "@/components/ui/button";
 import { DEFAULT_TIME_WINDOW } from "../analyses/analysis_draft";
 import { TimeBar } from "../analyses/time_editor";
 
-/**
- * 看板级时间覆盖：有覆盖时就是一条时间栏加一枚清除钮，每一次改动即刻落到看板；
- * 还没有覆盖时，编辑态给一枚入口，点下即以默认窗口开启覆盖，再在栏上调。
- */
 export function BoardTimeOverride({
   time,
   editing = false,
@@ -15,7 +11,6 @@ export function BoardTimeOverride({
   dataAsOf,
 }: {
   time: TimeIntent | null;
-  /** 编辑态才提供设置入口；查看态仅在覆盖生效时显示。 */
   editing?: boolean;
   onChange: (time: TimeIntent | null) => void;
   dataAsOf: string;

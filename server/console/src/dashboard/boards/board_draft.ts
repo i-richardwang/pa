@@ -1,8 +1,6 @@
 /**
- * 看板编辑态草稿助手：新瓦片的稳定身份与落位、草稿与服务端真值的脏比较。
- * tile_id 在客户端生成（RGL 的 key + 服务端归一要求 uuid），走 getRandomValues 而非
- * crypto.randomUUID——后者仅安全上下文可用，控制台可经局域网明文 http 访问。
- * 落位与尺寸沿用 tile_sizing 的形态映射：新瓦片按 presentation_type 粗分尺寸、堆到画布底部整列排开。
+ * tile_id 在客户端生成，走 getRandomValues 而非 crypto.randomUUID——
+ * 后者仅安全上下文可用，控制台可经局域网明文 http 访问。
  */
 import type { BoardMutationTile, BoardPayload, BoardTile, Place } from "@contracts/board_contract";
 import type { ReportRow } from "@contracts/report_contract";
@@ -36,7 +34,6 @@ function newReportTile(report: ReportRow, tiles: BoardTile[]): BoardTile {
   };
 }
 
-/** 新文本瓦片：整行落底，起始尺寸同尺寸表默认（最小高见 tile_sizing.text）。 */
 export function newTextTile(tiles: BoardTile[]): BoardTile {
   return {
     kind: "text",
@@ -53,7 +50,6 @@ function persistProjection(tile: BoardTile): string {
   return `${tile.tile_id}|${body}|${x},${y},${w},${h}`;
 }
 
-/** 草稿与服务端真值是否等价（成员、顺序、坐标、文本一致；派生字段不计）。 */
 function sameTiles(a: BoardTile[], b: BoardTile[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((tile, i) => persistProjection(tile) === persistProjection(b[i]));
@@ -134,10 +130,7 @@ export function tilesInReadingOrder(tiles: readonly BoardTile[]): BoardTile[] {
   return [...tiles].sort((a, b) => a.place.y - b.place.y || a.place.x - b.place.x);
 }
 
-/**
- * 与相邻瓦片对换整格 `place`（含宽高），避免只换 y 造成叠压。
- * 已在顶/底则原样返回。
- */
+/** 对换整格 `place`（含宽高），不只换 y；已在顶/底则原样返回。 */
 export function moveBoardTile(
   draft: BoardEditState,
   tileId: string,

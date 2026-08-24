@@ -11,13 +11,11 @@ const html = (md: string) => renderToStaticMarkup(<TextMarkdown md={md} />);
 test("XSS：<script> 不产可执行脚本元素，转义为文本", () => {
   const out = html("正文\n\n<script>alert(1)</script>");
   expect(out).not.toContain("<script");
-  // 危险源码作为文本转义呈现（&lt;script&gt;），不进 DOM 脚本
   expect(out).toContain("&lt;script&gt;");
 });
 
 test("XSS：<img onerror> 不落地为带事件处理器的图片元素", () => {
   const out = html('<img src=x onerror="alert(1)">');
-  // 整段作为文本转义（&lt;img…&gt;）：无活的 img 元素、无活的事件处理器属性
   expect(out).not.toContain("<img");
   expect(out).not.toContain('onerror="');
   expect(out).toContain("&lt;img");

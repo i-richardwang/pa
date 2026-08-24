@@ -62,7 +62,7 @@ function isTimeAxis(dimension: ReturnType<typeof findDimension>): boolean {
   );
 }
 
-/** 发现不成立的查询形态即拒绝，避免返回有数值但业务含义已改变的结果。 */
+/** 不成立的查询形态返回的数值业务含义已改变，一律拒绝。 */
 export function assertMeasureFilterCompatibility(query: CubeQuery, views: CubeView[]): void {
   const filters = filterMembers(query.filters);
   const dimensions = [...(query.dimensions ?? []), ...filters];

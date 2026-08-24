@@ -16,7 +16,7 @@ function rowTimeKey(view: ViewBlock, row: number): { year: number; month?: numbe
 
 /**
  * 按行键定位该行所属的业务时间桶。桶由服务端唯一编译点解析并随结果交付，此处只做匹配。
- * 一行匹配不到或匹配到多个桶时返回 null——宁可不提供记录投影，也不给一个猜出来的时间范围。
+ * 一行匹配不到或匹配到多个桶时返回 null。
  */
 function bucketOfRow(view: ViewBlock, buckets: ResultTimeBucket[], row: number) {
   const key = rowTimeKey(view, row);
@@ -30,11 +30,7 @@ function bucketOfRow(view: ViewBlock, buckets: ResultTimeBucket[], row: number) 
 
 /**
  * 渲染结果格携带的是已解析业务时间；Record Projection 只复用它，不接受“最新月”等相对表达。
- * 交付的桶对全部指标列相同，指标各自的时间语义由服务端在桶区间上收窄（期间取整段、
- * 时点与年初累计取桶终点），因此这里无须按 metric 区分。
- *
- * `override` 是被点击读数显式携带的覆盖期间（指标卡的整窗大数），身份优先于行桶——
- * 名单必须回答用户点的那个数，而不是碰巧排在首行的那个桶。
+ * `override`（被点击读数显式携带的覆盖期间）优先于行桶：名单必须回答用户点的那个数。
  */
 export function recordProjectionTimeCoordinate(
   view: ViewBlock,

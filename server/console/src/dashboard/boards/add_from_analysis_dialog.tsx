@@ -1,8 +1,4 @@
-/**
- * 从查询记录新建报告（看板编辑态）：命令面板式搜选本人一条分析记录，命名后加入草稿。
- * 本组件只选择记录；命名、归属和持久化由 SaveReportDialog 负责。
- * 报告记录独立持久化，加入看板仅修改可撤销草稿。
- */
+/** 本组件只选择记录；命名、归属与持久化由 SaveReportDialog 负责。 */
 import type { MyAnalysisRow } from "@contracts/analysis_contract";
 import {
   Command,

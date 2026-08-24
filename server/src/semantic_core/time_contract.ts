@@ -341,9 +341,8 @@ export function expandTimeCompare(time: TimeInput, defaultCutoff?: string): Time
 }
 
 /**
- * 相对窗口省略结果粒度时的默认：按月回看即按月。按年回看只有跨过多个日历年才按年——
- * 单个年桶不成序列（今年至今、近一年都落在这里），画成一个点等于什么也没说，故按月给走势。
- * 只对无业务分组的结果成立：带分组时时间本来就不占轴。
+ * 相对窗口省略结果粒度时的默认：months 按月；years 只有跨过多个日历年才按年，
+ * 单个年桶按月。只对无业务分组的结果成立。
  */
 function lastDefaultGrain(time: TimeInput): TimeOutputGrain | undefined {
   if (!time.last) return undefined;
@@ -421,8 +420,8 @@ function duplicateOutputBucket(
 
 /**
  * 意图层与物理时间编译层共用的结果粒度规则。对照窗口在最终时间键上必须互斥，
- * 否则相同行无法判断属于哪一个业务坐标。省略主截止月且带对照时保守按月输出，
- * 避免浏览器规划器因拿不到 actual_through 而与服务端推断分叉。
+ * 否则相同行无法判断属于哪一个业务坐标。省略主截止月且带对照时恒按月输出：
+ * 浏览器规划器拿不到 actual_through，必须与服务端同解。
  *
  * 省略粒度时的默认逐形态列在 docs/time_contract.md §1 的表里，本函数是那张表的唯一实现。
  * 内部 grain 可显式要求 total（合计腿、记录投影都这么用），带对照时拒绝：合计没有时间键。
@@ -499,10 +498,8 @@ export type TotalPeriod = { from: string; to: string; coverage: TotalCoverage };
 
 /**
  * 指标在一个时间坐标上的合计求值期间。能整窗合并即 window，期间就是坐标本身；
- * 不能合并的两族退为 endpoint——按月定义的指标只覆盖终点当月，年初归零的指标覆盖终点
- * 所在日历年的年初至终点。两条降级各镜像一处编译器守卫（compatibleTimeGrain 与
- * assertYearToDateBuckets）：守卫拒绝的是「把这些月份合成一个数」，而合计位不因此留空，
- * 它给出一个标注了真实期间的诚实值。
+ * 不能合并的两族退为 endpoint——按月定义只覆盖终点当月，年初归零覆盖终点所在日历年的
+ * 年初至终点。两条降级各镜像 compatibleTimeGrain 与 assertYearToDateBuckets。
  */
 export function totalPeriodOf(
   capabilities: TimeCapabilities,

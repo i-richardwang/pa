@@ -41,7 +41,7 @@ function toolText(result: unknown): string {
   return text;
 }
 
-// 1. 发现元数据（根路径 well-known，MCP 客户端的探测入口）
+// 根路径 well-known 是 MCP 客户端的探测入口
 const meta = (await (await fetch(`${base}/.well-known/oauth-authorization-server`)).json()) as {
   authorization_endpoint: string;
   token_endpoint: string;
@@ -50,7 +50,7 @@ const meta = (await (await fetch(`${base}/.well-known/oauth-authorization-server
 if (!meta.registration_endpoint) throw new Error("发现元数据缺 registration_endpoint");
 console.log("发现:", meta.authorization_endpoint);
 
-// 2. 动态客户端注册（公共客户端，PKCE 免密钥）
+// 公共客户端，PKCE 免密钥
 const redirectUri = "http://127.0.0.1:9876/callback";
 const reg = (await (
   await fetch(meta.registration_endpoint, {
@@ -68,7 +68,7 @@ const reg = (await (
 if (!reg.client_id) throw new Error(`注册失败: ${JSON.stringify(reg)}`);
 console.log("注册 client_id:", reg.client_id);
 
-// 3. 密码登录取会话 cookie（浏览器登录页同一接口）
+// 与浏览器登录页同一接口
 const signIn = await fetch(`${base}/api/auth/sign-in/email`, {
   method: "POST",
   // Origin 为 Better Auth CSRF 校验所需（浏览器自动携带，脚本模拟之）
@@ -83,7 +83,7 @@ const cookie = signIn.headers
 if (!cookie) throw new Error("登录未返回会话 cookie");
 console.log("登录成功:", email);
 
-// 4. 授权码（PKCE S256；已登录会话直接发码重定向）
+// PKCE S256；已登录会话直接发码重定向
 const verifier = b64url(randomBytes(32));
 const challenge = b64url(createHash("sha256").update(verifier).digest());
 const authorizeURL = new URL(meta.authorization_endpoint);
@@ -99,7 +99,6 @@ const code = new URL(location, base).searchParams.get("code");
 if (!code) throw new Error(`授权未发码: ${authorize.status} ${location}`);
 console.log("授权码已发");
 
-// 5. 换 access token
 const token = (await (
   await fetch(meta.token_endpoint, {
     method: "POST",
@@ -116,7 +115,7 @@ const token = (await (
 if (!token.access_token) throw new Error(`换 token 失败: ${JSON.stringify(token)}`);
 console.log("access token 已取得");
 
-// 6. 持 token 走 MCP 查数（金标准数字与 API key 通道一致）
+// 金标准数字与 API key 通道一致
 const client = new Client({ name: "pa-oauth-smoke", version: "0.1.0" });
 await client.connect(
   new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
@@ -296,7 +295,7 @@ if (typeof queryPayload.analysis_id !== "string") {
   throw new Error("run_analysis 未返回 analysis_id");
 }
 
-// 呈现重跑创建新的不可变 View；show 只挂载，模型 loader 按新 view_id 重放同一结果。
+// 重跑创建新的不可变 View
 const rerunResult = await callTool({
   name: "rerun_analysis",
   arguments: {
@@ -397,7 +396,6 @@ if (
 ) {
   throw new Error(`period 业务时间声明异常: ${JSON.stringify(periodView.time)}`);
 }
-// 第二条独立分析用于验证多份查询记录的属主边界。
 const smokeTitle2 = `oauth-smoke 分组织在职 ${Date.now()}`;
 await callTool({
   name: "run_analysis",
@@ -496,7 +494,7 @@ if (expectedScopedOrg) {
   }
   console.log(`受限派生查询: ${expectedScopedOrg} 单一组合结果为 1 行，差值 ${delta}`);
 }
-// 7. analysis → report pointer → find/update/export 的 MCP 产品链路。
+// analysis → report pointer → find/update/export 的 MCP 产品链路
 const saved = JSON.parse(
   toolText(
     await callTool({
@@ -583,7 +581,7 @@ const anonReplay = await fetch(`${base}/dashboard/api/analysis_views/${mineRow.v
 if (anonReplay.status !== 401) throw new Error(`重放端点未登录应 401: ${anonReplay.status}`);
 console.log("analysis/report/export 与 web 重放链路正常");
 
-// 8. 无凭证 401，且 WWW-Authenticate 指向受保护资源元数据（MCP 客户端发现链路）
+// WWW-Authenticate 须指向受保护资源元数据（MCP 客户端发现链路）
 const unauth = await fetch(`${base}/mcp`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },

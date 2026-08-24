@@ -29,14 +29,7 @@ export function popoverListCheck(selected: boolean): React.ReactNode {
   return selected ? <CheckIcon aria-hidden="true" className="size-3" /> : undefined;
 }
 
-/**
- * `detail` 是标题右侧的弱字说明，例如相对期间的实际起止月；
- * 同一列里两种口径的档名长得一样时，靠它把差别摆在读者眼前。
- *
- * `selected` 是**当前取值**，`unavailable` 是**这一档此刻选不了**（降透明不可点，理由归
- * 调用方的 Tooltip）。后者不叫 `inert`：HTML 的同名属性会把元素整个撤出无障碍树，
- * 而选不了的档正需要读屏念出来。
- */
+/** `unavailable` 不叫 `inert`：HTML 的 `inert` 会把元素撤出无障碍树，选不了的档仍要被读屏念出。 */
 export function PopoverListRow({
   children,
   icon,

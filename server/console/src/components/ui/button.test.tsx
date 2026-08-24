@@ -1,8 +1,4 @@
-/**
- * 钮的 loading 态：守它**换掉的是记号不是结构**——文字抹掉、标记叠在原位、随钮的字色走，
- * 且这次等待只被念一遍（钮自己有 `aria-disabled`，标记闭嘴）。
- * 尺寸档到缩放档的映射也在这里钉住：小钮塞进原尺寸的标记会顶破 24px 的行高。
- */
+/** 尺寸档映射缩放档：原尺寸标记顶破小钮 24px 行高。 */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Button } from "./button.js";

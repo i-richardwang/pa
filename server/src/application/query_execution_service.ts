@@ -199,8 +199,7 @@ async function executeView(
     selection: spec.selection,
   });
   const queryPlan = prepared.plan;
-  // 总体是「去掉业务分组重算」，时间粒度必须与明细同解：省略粒度时的默认按有无分组决定，
-  // 去掉分组后再让它自行推导就会与明细分叉，故显式钉住主查询已解析的粒度。
+  // 总体腿的时间粒度钉住主查询已解析的粒度，与明细同解。
   const summaryTime = { ...spec.time, grain: queryPlan.business_time.outputGrain };
   const parallelSummaryPlan =
     includeSummary && !spec.selection

@@ -11,7 +11,6 @@ import {
 
 export const AlertDialog: typeof AlertDialogPrimitive.Root = AlertDialogPrimitive.Root;
 
-/** 确认框是表单档弹层的窄一号：罩、视口与壳同 Dialog，只收窄一档。 */
 export function AlertDialogPopup({
   className,
   portalProps,

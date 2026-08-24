@@ -100,7 +100,7 @@ function dataExtents(
 }
 
 function scaleOf(extent: Extent, thresholds: TableShadingPreferences["thresholds"]): ShadingScale {
-  // 自动端点包住数据与已显式声明的其他停点，保证“只填一个阈值”也始终得到有序色阶。
+  // 自动端点包住数据与已声明的其他停点，色阶恒有序。
   const min =
     thresholds?.min ??
     Math.min(extent.min, thresholds?.mid ?? extent.min, thresholds?.max ?? extent.min);
@@ -111,8 +111,7 @@ function scaleOf(extent: Extent, thresholds: TableShadingPreferences["thresholds
 }
 
 /**
- * 编译刻度：对每个要着色的列键，取其全部数值格的极值作缺省两端、两端中点作缺省中点，
- * 声明阈值逐项覆盖。刻度是色的几何，不是对指标的聚合——本层不对值求和求均。
+ * 刻度是色的几何不是对指标的聚合：本层不对值求和求均。
  * 一个键没有任何数值时不立刻度（渲染端遂不着色）。
  */
 export function compileTableShading(
@@ -134,8 +133,8 @@ export function compileTableShading(
 }
 
 /**
- * 缺省刻度的读法：不填阈值时色阶实际落在哪里。多个键各有一把刻度，这里给它们的并集
- * （最小的下限、最大的上限、两端中点），供设置面印读数与占位；一格数值都没有时为 null。
+ * 多把刻度的并集（最小下限、最大上限、两端中点），供设置面印读数与占位；
+ * 一格数值都没有时为 null。
  */
 export function shadingDataScale(
   columns: ShadedColumns,
@@ -199,8 +198,8 @@ function monoBase(palette: string, dark: boolean): Rgb {
 }
 
 /**
- * 一条色阶从下限到上限的取样停点（CSS 颜色），给编辑器画色带样片用：单色两停
- * （最淡→基色）、双向三停；翻转即倒序。与 `shadeCell` 同一份取值，样片不另调色。
+ * 色阶取样停点（CSS 颜色），给编辑器画色带样片用。
+ * 与 `shadeCell` 同一份取值，样片不另调色。
  */
 export function shadingStops(palette: string, flipped: boolean, dark: boolean): string[] {
   const diverging = divergingPalette(palette);

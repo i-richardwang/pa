@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { BlockedHint, Hint } from "@/components/ui/hint";
 import { SECTION_TITLE_TEXT } from "@/components/ui/surface";
 
-/** 两面由 InspectorBody 定在栏上，段与行各自认领（判据见 ui_spec「侧栏系统」）。 */
 export const INSPECTOR_SECTION_CLASS =
   "border-b-[0.5px] border-pa-line px-3 py-2.5 last:border-b-0 md:px-2.5 md:py-2 " +
   "group-data-[face=profile]/inspector:border-b-0 group-data-[face=profile]/inspector:p-4 " +
@@ -15,15 +14,13 @@ export const INSPECTOR_SECTION_CLASS =
 
 const INSPECTOR_SECTION_HEADER_CLASS =
   "group/panel-section-header flex h-11 items-center justify-between gap-2.5 pl-2.5 md:h-8 md:pl-2";
-/** 档案面里行与段题左缘对齐：段题统辖的就是这些行。 */
 const INSPECTOR_SECTION_CONTENT_CLASS =
   "px-2.5 pt-1 md:px-2 group-data-[face=profile]/inspector:px-0";
-/** 档案面的段间分界：内缩两格、只隔不框——框会把每一段读成一个控件组。 */
 const INSPECTOR_SECTION_RULE_CLASS =
   "mx-2 hidden border-pa-line border-b-[0.5px] pt-4 " +
   "group-data-[face=profile]/inspector:group-[&:not(:last-child)]/section:block";
 
-/** 行里图标槽的宽：图标 4 格加与名字之间的 2.5 格。无图标的行缩这一段，名字与带图标的行同起点。 */
+/** 6.5 = 图标 4 格 + 图标到名字 2.5 格。 */
 export const INSPECTOR_ROW_INDENT_CLASS = "ml-6.5";
 
 export function InspectorSection({
@@ -42,7 +39,6 @@ export function InspectorSection({
   blocked?: React.ReactNode;
   description?: React.ReactNode;
   actions?: React.ReactNode;
-  /** 可折叠节：题行整行可点，题后跟一枚折角；收起时内容只隐藏不卸载 */
   collapsible?: boolean;
   defaultExpanded?: boolean;
   children?: React.ReactNode;
@@ -122,10 +118,9 @@ export function InspectorSection({
   );
 }
 
-/** 右栏的面：配置面拿来调，档案面拿来读。面属于栏，不属于每一段；壳的 `StageAside.face` 同此枚举。 */
+/** 与壳的 `StageAside.face` 同一份枚举。 */
 export type InspectorFace = "settings" | "profile";
 
-/** 每条右栏都从这里开正文。 */
 export function InspectorBody({
   face = "settings",
   children,
@@ -149,7 +144,6 @@ export function InspectorBody({
   );
 }
 
-/** 档案头卡：图标、名字、口径，以及关于这条记录本身的几项事实。 */
 export function InspectorProfileCard({
   icon,
   title,
@@ -159,10 +153,8 @@ export function InspectorProfileCard({
 }: {
   icon?: React.ReactNode;
   title: React.ReactNode;
-  /** 口径句。留空时给破折号：「这条还没写口径」也是读者要知道的。 */
   description?: React.ReactNode;
   action?: React.ReactNode;
-  /** 事实行（InspectorRow），没有就不出这一块。 */
   children?: React.ReactNode;
 }): React.ReactElement {
   return (
@@ -190,10 +182,6 @@ export function InspectorProfileCard({
   );
 }
 
-/**
- * 栏里唯一的一种行：清单行、设置行、事实行都是它，变的只是右槽里放什么。
- * `children` 即右槽——给字符串按「值」排版，给节点照放。行高触屏 44、桌面 32。
- */
 export function InspectorRow({
   icon,
   label,
@@ -203,10 +191,8 @@ export function InspectorRow({
   onClick,
   children,
 }: {
-  /** 名字前的记号；记号槽也可以放一枚勾选框，勾的就是这一行。 */
   icon?: React.ReactNode;
   label: React.ReactNode;
-  /** 无记号的行让出记号槽的宽，名字与带记号的行同起点。 */
   indent?: boolean;
   blocked?: React.ReactNode;
   actions?: React.ReactNode;
@@ -231,7 +217,6 @@ export function InspectorRow({
       <span
         className={cn(
           "min-w-0 truncate leading-5",
-          // 配置面的名字是控件的名字，次于控件；档案面的名字就是内容本身。
           blocked ? "text-pa-faint" : "group-data-[face=settings]/inspector:text-pa-muted",
         )}
         title={typeof label === "string" ? label : undefined}
@@ -241,7 +226,6 @@ export function InspectorRow({
       {blocked ? <BlockedHint reason={blocked} /> : null}
     </span>
   );
-  // 值可以截短，控件不能：只有字符串那一档让出空间。
   const value = children ? (
     <span
       className={cn(

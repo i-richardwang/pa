@@ -154,7 +154,6 @@ test("四个内容态时间栏都在场，且住在结果区内", () => {
   ];
   for (const [name, markup] of states) {
     expect(markup, name).toContain('aria-label="观察时间"');
-    // 条在结果区内：时间栏出现在结果区标记之后
     expect(markup.indexOf('data-slot="chart-stage-result"'), name).toBeLessThan(
       markup.indexOf('aria-label="观察时间"'),
     );
@@ -251,11 +250,8 @@ test("明细能力由来源派生：有来源的保存重放态可点开数字�
     boardId: "board-1",
     reportId: "report-1",
   };
-  // 看板分叉编辑页的形态：来源在场、显示保存重放 → 数字是「查看明细」按钮
   expect(render(saved, null, boardSource)).toContain('aria-label="查看明细：在职人数 120"');
-  // 无来源（分析回放 / 空白新建）：同一份重放也不可点
   expect(render(saved, null, { kind: "none" })).not.toContain("查看明细");
-  // 草稿预览态：来源在场也不可点——草稿坐标不与落库 revision 交叉
   expect(
     render({ activeReplay: projectableReplay(), showingSavedReplay: false }, null, boardSource),
   ).not.toContain("查看明细");

@@ -200,7 +200,7 @@ export function RecordProjectionDialog({
                   <LoadingMark className="py-16" />
                 </div>
               ) : data && !data.rows.length && !data.offset ? (
-                // 零值格同样可点，空记录集是诚实答案——须明说，不能只留一张空表头。
+                // 零值格可点，空记录集须明说。
                 <div className="flex min-h-48 items-center justify-center text-sm text-pa-muted">
                   该口径下没有构成记录。
                 </div>

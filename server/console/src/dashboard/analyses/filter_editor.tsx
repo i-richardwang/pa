@@ -28,14 +28,9 @@ const RELATION_LABELS: Record<Filter["relation"], string> = {
   none_of: "不是其中之一",
 };
 
-/** 行下展开的取值区与行名同起点：让出记号槽，再加行盒的横内缩。 */
 const VALUES_CLASS = cn(INSPECTOR_ROW_INDENT_CLASS, "px-2");
 
-/**
- * 一条筛选是栏里的一行：名字是维度、右槽是取值关系、行外一枚移除。取值区在行下展开：
- * 刚加的条件还没有值，摆开等着挑；已经选好的收起——收起态照样把取值印出来，
- * 收的只是改的那套控件。
- */
+/** 已选好取值的条件收起：收的只是改的那套控件，取值照印。 */
 function FilterRow({
   filter,
   title,
@@ -62,7 +57,7 @@ function FilterRow({
   }, [typed]);
 
   const searchable = isSearchableCatalogDimension(member);
-  // 收起时不取值：整栏的筛选各自发一轮维度取值请求，只为了填一张看不见的列表。
+  // 收起时不取维度取值。
   const options = useDimensionValues(memberId, query, searchable && open).data?.values ?? [];
   const candidates = options.filter((value) => !values.includes(value));
 
@@ -203,7 +198,6 @@ function filterMeta(catalogDimensions: CatalogMemberPayload[]) {
   return (reference: string) => catalogDimensions.find((item) => item.id === reference);
 }
 
-/** 「筛选」分区的内容：一条筛选一行。空列表时本件不渲染，由分区题行独自成节。 */
 export function FilterEditor({
   filters,
   catalogDimensions,

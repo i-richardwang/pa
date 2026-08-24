@@ -29,7 +29,6 @@ import {
 } from "./engine/canonical_semantic_model.js";
 import { createUserAdministrationService } from "./application/user_administration_service.js";
 
-// 鉴权 fail-closed：基座未配置即拒绝启动；PA_ALLOW_OPEN=1 是部署者对当前监听范围的显式放行。
 if (!config.authSecret && !config.allowOpen) {
   throw new Error(
     "未配置鉴权：需设 PA_AUTH_SECRET（openssl rand -hex 32）启用鉴权基座；" +
@@ -181,17 +180,16 @@ if (config.authSecret) {
   );
 }
 
-// 授权主体解析：token（OAuth 或 API key）只带 userId，回查 email、数据角色和授权范围。
-// API key 与 OAuth 共用此解析并生成同一 Cube securityContext。
-// 不缓存：角色与数据范围可被管理员随时调整，鉴权正确性优先于按请求省一次查库（与 key 校验同理）。
+// token（OAuth 或 API key）只带 userId，每请求回查 email、角色与授权范围，不缓存：
+// 管理员的调整即时生效。两条通道共用此解析并生成同一 Cube securityContext。
 async function resolvePrincipal(a: Auth, userId: string): Promise<Principal> {
   const ctx = await a.$context;
   return resolveBetterAuthPrincipal(ctx.internalAdapter, userId, semanticPackage.access_scope);
 }
 
-// /mcp 鉴权：Bearer 先按 API key 校验（apiKey 插件，key 绑用户），再落 OAuth session；
-// 基座未启用且 PA_ALLOW_OPEN=1 = 对当前可达范围开放。两条鉴权通道 caller 均为属主 email。
-// key 每请求实时校验不缓存（吊销即时生效，正确性优先于按请求省一次查库）。
+// /mcp 鉴权：Bearer 先按 API key 校验（apiKey 插件，key 绑用户），再落 OAuth session。
+// 基座未启用且 PA_ALLOW_OPEN=1 = 对当前可达范围开放。两条通道 caller 均为属主 email。
+// key 同样每请求实时校验，吊销即时生效。
 app.use("/mcp", async (c, next) => {
   if (!auth) {
     c.set("principal", LOCAL_PRINCIPAL);

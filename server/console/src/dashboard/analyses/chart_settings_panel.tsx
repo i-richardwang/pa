@@ -1,10 +1,4 @@
-/**
- * 呈现设置：图型条（`ChartTypeBar`）住在栏顶、查询步之前；其余设置（`ChartOptionsPanel`）
- * 在查询步之后。两件都只出分节、不包容器，与查询步是同一层兄弟，「末节不画底线」才认得出
- * 整栏真正的最后一节。
- *
- * **成员名恒经 makeTitleOf 翻成中文标题后才上屏**——出现限定名即违规。
- */
+/** 成员名恒经 makeTitleOf 翻成中文标题后才上屏。 */
 import { useId, useState } from "react";
 import {
   ChartColumnIcon,
@@ -79,17 +73,13 @@ const AXIS_ITEMS = { left: "左轴", right: "右轴" };
 const SERIES_FORM_ITEMS = { line: "折线", bar: "柱形" };
 const SHADING_STYLE_ITEMS = { none: "不着色", values: "数值与颜色", colors: "仅颜色" };
 
-/** 设置行右槽里的幽灵下拉：宽随取值，靠右。 */
 const GHOST_SELECT_TRIGGER = "w-auto justify-end";
 
 const SUMMARY_TOOLTIP = "总体保留当前筛选与时间粒度，并由数据模型去掉业务分组后重新计算。";
 
-/** 设置节的行自带记号槽宽的左缩，内容盒不加横内缩。 */
 const ROWS_CONTENT_CLASS = "px-0 md:px-0";
 
-/**
- * 下拉行：名字在左、取值在右。`items` 既是闭合态的取值表也是下拉面的行——每个标签只写一次。
- */
+/** `items` 同时是闭合态取值表与下拉面的行，每个标签只写一次。 */
 function SelectRow<K extends string>({
   label,
   items,
@@ -133,7 +123,6 @@ type PanelProps = {
   catalog: CatalogPayload;
 };
 
-/** 图型条：紧贴栏顶，无「图表类型」节题。 */
 export function ChartTypeBar({ draft, replay, onChange, catalog }: PanelProps) {
   const forms = new Set(sensibleForms(replay.payload.view));
   return (
@@ -187,8 +176,7 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   const dimensions = context?.dimensions ?? [];
   const canSummarize = measures.length > 0 && dimensions.length > 0;
   const summaryEnabled = semanticSummaryEnabled(draft);
-  // 构成占比自带各类合计（各类之和就是 100%），模型层不许再叠一行总体：这条闸在这里就灰给人看，
-  // 不等点开关时才被拒。
+  // 构成占比自带各类合计，模型层不许再叠总体。
   const summaryBlocked =
     semanticView && !isSemanticDerivedView(semanticView) && semanticView.calculations?.length
       ? "已有构成占比，各类合计就是总体"
@@ -243,7 +231,6 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   const canSplitSeries = (chart.type === "line" || chart.type === "bar") && dimensions.length > 1;
   // 饼图的扇区归属即取值，没有逐系列样式；此时指标行只留「上不上轴」。
   const canStyleSeries = (chart.type === "line" || chart.type === "bar") && !chart.group_by;
-  // 拆分系列后没有「主指标」可指，这一档不出现（契约同判）。
   const valueLabelItems: Record<string, string> = chart.group_by
     ? { none: "不显示", all: "全部" }
     : { none: "不显示", main: "仅主指标", all: "全部" };
@@ -474,8 +461,7 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
           .filter((member) => !annotations.includes(member))
           .map((member) => {
             const checked = y.includes(member);
-            // 没显式选色时亮的是编译器给这条系列的那一色：色怎么分是编译期的事，
-            // 面板不另算一份色序
+            // 色序出自编译期，面板不另算一份。
             const intent = series[member] ?? {};
             const color =
               intent.color ??

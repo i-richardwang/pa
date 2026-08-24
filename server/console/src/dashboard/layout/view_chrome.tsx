@@ -37,10 +37,6 @@ export function HeaderIconButton({
   );
 }
 
-/**
- * 题条上的「更多」：与表行末那枚 `RowMenu` 同一套菜单、不同一档钮——题条属于壳，
- * 行末属于内容。借用行末那枚，同一条题条上就会并排出现两种图标钮长相。
- */
 export function HeaderMenu({
   label = "更多操作",
   children,
@@ -65,10 +61,6 @@ export function HeaderTextAction({
   return <Button variant="subtle" className={cn("[&_svg]:size-4", className)} {...props} />;
 }
 
-/**
- * 查看面首载：住在结果区内，等待期间那片地方空着，正中一枚加载标记。
- * 题名与底栏都在结果区之外，首载时它们已经就位，本件只管绘图区那一格。
- */
 export function ViewPageLoading() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -88,14 +80,12 @@ export function ViewPageError({ message }: { message: string }) {
   );
 }
 
-/** 档案栏的壳：通高一条栏，栏顶只有一枚关闭钮，栏身是档案面的可滚正文。 */
 export function ProfileAside({
   label,
   closeLabel,
   onClose,
   children,
 }: {
-  /** 这条栏是谁的档案，念给读屏听。 */
   label: string;
   closeLabel: string;
   onClose: () => void;

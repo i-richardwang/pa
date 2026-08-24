@@ -47,9 +47,7 @@ export const DEFAULT_TIME_WINDOW = {
 } as const satisfies Record<string, TimeIntent["window"]>;
 
 /**
- * 空白起点：从零建分析就是「种子为空的 create」，同样进统一编辑器、
- * 同样经预览铸不可变快照。空查询本身不可执行（无成员），
- * 由 isAnalysisRunnable 把住预览与保存两个出口，编译合法性仍归服务端裁定。
+ * 空查询不可执行；isAnalysisRunnable 把住预览与保存两个出口，编译合法性归服务端。
  */
 export function blankAnalysisDefinition(title: string): AnalysisDefinition {
   return {
@@ -58,7 +56,6 @@ export function blankAnalysisDefinition(title: string): AnalysisDefinition {
   };
 }
 
-/** 空白分析的编辑种子：空查询配一张表格，还没有任何落定结果。 */
 export function blankAnalysisSeed(name: string): {
   name: string;
   analysis: AnalysisDefinition;
@@ -73,7 +70,7 @@ export function blankAnalysisSeed(name: string): {
   };
 }
 
-/** 结果视图是否已具备可执行的成员；空查询无法编译，预览与保存都不给出口。 */
+/** 结果视图是否已具备可执行的成员。 */
 export function isAnalysisRunnable(draft: Pick<AnalysisEditState, "analysis">): boolean {
   const viewId = semanticAnalysisSink(draft.analysis.views);
   const view = draft.analysis.views.find((candidate) => candidate.id === viewId);
@@ -97,10 +94,7 @@ export function beginAnalysisEdit(
     view: SemanticViewIntent;
     view_preferences?: ViewPreferences;
   },
-  /**
-   * 这份规格有没有落定结果。传的是**判定**不是结果字节：报告页规格先到、结果后到，
-   * 播种那一刻就已经知道稍后会有一份对位的结果，此时把草稿记成「改过但没预览」是错的。
-   */
+  /** 传的是判定不是结果字节：报告页规格先到、结果后到。 */
   hasSavedResult: boolean,
 ): AnalysisEditState {
   const analysis = clone(seed.analysis);
@@ -457,9 +451,8 @@ export function removeSemanticQueryMember(
 }
 
 /**
- * 分组维度就地换绑：位次不动，指着它的分组排序跟着改指新维度——
- * 「换一个维度」和「删掉再加一个」在用户那里是两件事，后者会把这一维度上已配好的排名规格
- * 连带清掉，还会把它甩到列尾。已在查询里的维度不可重复出现，故换成已选者即为删除。
+ * 分组维度就地换绑：位次不动，指着它的分组排序跟着改指新维度；
+ * 换成已在查询里的维度即为删除。
  */
 export function replaceSemanticQueryDimension(
   view: SemanticQueryView,

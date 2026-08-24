@@ -157,7 +157,6 @@ describe("dashboard app routes and access control", () => {
       ],
       measures: [{ title: "YTD主要事件率", ai_context: "只供 Agent" }],
     });
-    // 对外语义投影不含物理绑定
     expect(payload.metric_domains[0]).not.toHaveProperty("name");
     expect(payload.measures[0]).not.toHaveProperty("available_in");
     expect(payload.measures[0]).not.toHaveProperty("name");

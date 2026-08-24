@@ -58,10 +58,8 @@ function useReportReplay(id: string) {
 }
 
 /**
- * 报告详情 + 与其版本对位的已存重放，**两跳并排发**。
- *
- * 对账不靠键位靠载荷：重放自己带 revision，与详情对不上就说明两次取数之间报告被改写，
- * 双双拉回后收敛到同一版本。这条守卫与两跳的先后无关，故拆掉串行不影响它。
+ * 报告详情 + 与其版本对位的已存重放，两跳并排发。
+ * 重放自带 revision，与详情对不上即双双拉回；与两跳先后无关。
  */
 export function useReportResource(id: string) {
   const queryClient = useQueryClient();
@@ -115,7 +113,6 @@ export function useUpdateReport(id: string) {
   });
 }
 
-/** 归档：报告离开本人清单；它的详情、重放与版本缓存随之撤下。 */
 export function useArchiveReport() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -149,14 +146,10 @@ type DraftRunInput = {
   analysis: AnalysisDefinition;
   view: SemanticViewIntent;
   view_preferences: ViewPreferences;
-  /**
-   * 规格未变时沿用的结果：只铸新 View（不执行查询），呈现块在本地按新声明重编。
-   * 传 null 表示规格已变，创建 Run 并执行。
-   */
+  /** 传 null 表示规格已变，创建 Run 并执行；否则只铸新 View。 */
   base: ReplayPayload | null;
 };
 
-/** 把草稿跑成一份带不可变 Analysis/View 身份的重放载荷。 */
 export async function runDraft(input: DraftRunInput): Promise<ReplayPayload> {
   const { analysis, view, view_preferences, base } = input;
   if (!base) {
@@ -195,8 +188,7 @@ export function useRunDraft() {
 }
 
 /**
- * 编辑会话的预览结果：会话把已验收的运行结果写进键位 `draftPreview(sessionKey)`，这里读出。
- * 结果只属于当前会话，无观察者即回收（gcTime 0），换会话不会读到上一段的预览。
+ * 预览结果住在会话键位 `draftPreview(sessionKey)`，无观察者即回收（gcTime 0）。
  */
 export function useDraftPreview(sessionKey: string): ReplayPayload | null {
   const query = useQuery({

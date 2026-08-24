@@ -16,10 +16,8 @@ export type CatalogDimensionKind = "categorical" | "overlapping";
  */
 
 /**
- * 率指标公式行的分子分母，已解析为中文标题（人读公式不读成员名）。
- * 两端本身也是目录成员时随附其语义 id，界面据此把公式做成可跳转的引用——
- * 「它由哪两个数算出来」和「那两个数是什么」本就该一步可达。
- * 内部计算件没有公开身份，那一端便只有标题。
+ * 率指标公式的分子分母，已解析为中文标题（人读公式不读成员名）。
+ * 两端本身是目录成员时随附其语义 id；内部计算件没有公开身份，那一端只有标题。
  */
 export type PublicCatalogFormula = {
   numerator: string;
@@ -63,9 +61,7 @@ export function isSearchableCatalogDimension(
   );
 }
 
-/**
- * 指标域导览条目：id 是稳定的目录身份，其他字段承业务导航与查询说明。
- */
+/** id 是稳定的目录身份。 */
 export type PublicMetricDomain = {
   id: MetricDomainId;
   title: string;

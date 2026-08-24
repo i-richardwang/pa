@@ -1,7 +1,4 @@
-/**
- * 呈现层测试的结果块夹具：给列名与行就得到一个 ViewBlock。
- * 列角色缺省按名推：year/month 是时间，全数值列是度量，其余是维度；要改就显式给 roles。
- */
+/** 列角色缺省按名推：year/month 是时间，全数值列是度量，其余是维度；要改就显式给 roles。 */
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
 
 export type Cell = string | number | null;

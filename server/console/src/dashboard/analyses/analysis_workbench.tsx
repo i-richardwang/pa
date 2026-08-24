@@ -54,13 +54,11 @@ export function AnalysisWorkbench({
   recordSource,
   saveLabel,
 }: {
-  /** 列表父级：挂到与列表页名同槽的 titlebar 面包屑。 */
   crumb: { href: string; label: string };
   /** 草稿到位前的题名回落（载入中显示的名字）。 */
   title: string;
   session: AnalysisEditSession;
   catalog: CatalogPayload | null;
-  /** 页级动作（归档、版本历史等），排在保存组之前，与面包屑同槽。 */
   actions?: ReactNode;
   error?: string | null;
   /** 明细能力（格点记录弹层）由工作台据此统一派生，宿主页面不自行接线。 */
@@ -70,7 +68,7 @@ export function AnalysisWorkbench({
 }) {
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [recordRequest, setRecordRequest] = useState<RecordProjectionDialogRequest | null>(null);
-  // 明细只对已保存的重放开放：草稿态坐标与落库 revision 会交叉，预览一跑即关、保存后恢复。
+  // 明细只对已保存的重放开放：草稿坐标与落库 revision 会交叉。
   const records = useRecordProjection({
     source: recordSource,
     replay: session.activeReplay,
@@ -151,14 +149,13 @@ export function AnalysisWorkbench({
         />
       ) : null,
     [catalog, inspectorOpen, session],
-    // 窄屏上壳把这栏摆成底部 Sheet：背景点击与 Esc 走的是同一个「收起」
     () => setInspectorOpen(false),
   );
 
   const note = session.presentationNotes[0];
   const replay = session.activeReplay;
 
-  // 常驻时间栏（页面底栏左段）：有结果时进真底栏，首载 / 加载 / 空态 / 错误态用同一底栏壳承接
+  // 四个内容态共用同一底栏壳。
 
   const queryView = draft && catalog ? semanticSinkQueryView(draft.analysis) : null;
   const timeBar =

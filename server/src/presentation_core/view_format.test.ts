@@ -1,7 +1,4 @@
-/**
- * 呈现格式化单测：percent / percentage_point 的原始值恒为 0–1 标度（载荷契约），
- * 列格式只认 column_formats 显式声明——无声明即普通数值，不按列名猜测。
- */
+/** 列格式只认 column_formats 显式声明，不按列名猜测。 */
 import { describe, expect, test } from "bun:test";
 import { readdir, readFile } from "node:fs/promises";
 import {

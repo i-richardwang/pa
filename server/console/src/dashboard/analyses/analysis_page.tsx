@@ -25,7 +25,6 @@ export function AnalysisPage({ id }: { id: string }) {
           ownedViewId: data.view_id,
         }
       : null,
-    // 回放是一次取数：规格与结果同来同走，没有可拆的两条腿。
     savedReplay: data,
     target: { kind: "create" },
   });

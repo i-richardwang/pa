@@ -1,7 +1,5 @@
 /**
- * 反馈审核页（admin）：消费 Agent 主动提报的数据能力缺口。接受只表示认可该缺口值得补，
- * 指标、口径与数据范围仍以模型 YAML 的 Git 变更为准。
- * 业务术语不走本通道——术语在指标字典页直接维护，未登记的叫法经使用日志的零命中检索浮现。
+ * 接受只表示认可该缺口值得补；指标、口径与数据范围仍以模型 YAML 的 Git 变更为准。
  */
 import { useEffect, useState } from "react";
 import { CheckIcon, CircleAlertIcon, InboxIcon, XIcon } from "lucide-react";

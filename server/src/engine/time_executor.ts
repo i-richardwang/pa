@@ -150,10 +150,7 @@ export async function executePlanned(
   return resolvePlannedResults(plan, results);
 }
 
-/**
- * 完整结果执行：每个物理时间窗口独立使用探测上限，命中即拒绝，不把上限写回业务计划，
- * 因而不会在多窗合并后按物理行静默裁掉实体的部分时间坐标。
- */
+/** 完整结果执行：每个物理时间窗口独立使用探测上限，命中即拒绝，不把上限写回业务计划。 */
 export async function executeCompletePlanned(
   cube: Pick<CubeGateway, "load" | "loadMulti">,
   plan: PlannedQuery,

@@ -16,7 +16,6 @@ export function DialogClose(props: DialogPrimitive.Close.Props): React.ReactElem
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
-/** 模态层的罩：Dialog、AlertDialog、Sheet 与命令面同一张。 */
 export const DIALOG_BACKDROP_CLASS =
   "fixed inset-0 z-50 bg-pa-dimmer backdrop-grayscale transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0";
 
@@ -28,10 +27,7 @@ export function OverlayCloseButton(props: React.ComponentProps<typeof Button>): 
 
 export type DialogVariant = "form" | "stage";
 
-/**
- * 弹层分两档：`form` 是要提交或确认的动作表单，窄屏贴到底边；`stage` 是占满视口中央的
- * 舞台（设置面、受控明细），任何屏幕都居中。档位同时决定视口与弹层两层的类。
- */
+/** `form` 是要提交或确认的动作表单，`stage` 是占满视口中央的舞台（设置面、受控明细）。 */
 export const dialogViewportVariants = cva(
   "fixed inset-0 z-50 grid grid-rows-[1fr_auto_3fr] justify-items-center p-4",
   {

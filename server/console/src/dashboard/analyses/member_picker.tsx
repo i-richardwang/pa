@@ -31,7 +31,6 @@ export type MemberGroup = { label: string; items: PickableMember[] };
 
 const UNGROUPED_LABEL = "其他";
 
-/** 实心菱形：度量行。 */
 export function DiamondFilled({ className }: { className?: string }) {
   return (
     <svg
@@ -49,7 +48,6 @@ export function DiamondFilled({ className }: { className?: string }) {
   );
 }
 
-/** 空心菱形：维度行，与度量的实心菱形成对。 */
 export function DiamondOutline({ className }: { className?: string }) {
   return (
     <svg
@@ -157,7 +155,7 @@ function MemberItem({
   const detail = member.description.trim();
   const item = (
     <AutocompleteItem
-      // 不可选的行仍要能悬停：理由在 Tooltip 里，指针穿过去就读不到了。
+      // 不可选的行仍须可悬停（理由在 Tooltip）。
       className={state ? "data-disabled:pointer-events-auto" : undefined}
       disabled={Boolean(state)}
       onClick={() => onPick(member)}
@@ -199,10 +197,7 @@ export function MemberPopover({
   emptyLabel?: string;
   selectedDimensions: string[];
   blockedDimensions?: string[];
-  /**
-   * 排在目录成员之后的一节非目录条目（例如由已选指标算出来的构成占比）。它们与目录成员
-   * 走同一份行、同一套搜索与不可选理由——加进查询的东西只有一个入口、一种列表语法。
-   */
+  /** 非目录条目（如构成占比）与目录成员共用同一份行与不可选理由；无第二个添加入口。 */
   extras?: MemberGroup;
   /** 指标域清单（目录契约）：指标行按它分节；不给就不分节。 */
   metricDomains?: readonly MetricDomainPayload[];

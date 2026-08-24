@@ -437,7 +437,7 @@ export const VIEW_BLOCK_SCHEMA = z
     });
   });
 
-/** Raw shape is reused directly by MCP registration; do not recreate these fields in server.ts. */
+/** MCP 注册直接复用此 raw shape，不得在 server.ts 重建这些字段。 */
 export const QUERY_PAYLOAD_OUTPUT = {
   analysis_id: z.string().optional().describe("本次结果使用的不可变分析定义身份"),
   view_id: z.string().optional().describe("本次结果使用的不可变呈现视图身份"),

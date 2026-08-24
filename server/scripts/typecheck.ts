@@ -1,13 +1,11 @@
 /**
- * 类型门禁：覆盖面算出来，编译器点名取。
+ * 类型门禁：每一份 tsconfig 过一遍 tsc，清单由 `git ls-files` 现取，不抄进 package.json。
  *
- * 仓库里每一份 tsconfig 都要过一遍 tsc，清单由 `git ls-files` 现取——清单一旦抄进
- * package.json，新工作区落地那天两边就分叉，而分叉的样子是静默零覆盖加一个绿灯。
  * 编译器走本包 `node_modules/.bin/tsc`：`bunx tsc` 在没有 node_modules 的目录下会去
  * npm 现拉一个大版本不同的编译器。仓库根按本文件位置算，不问 git：pre-commit 会设
  * `GIT_DIR`，此时 `rev-parse --show-toplevel` 返回的是当前目录而非仓库根。
  *
- * 分两面（`--tests` 取用例面）是为让 pre-commit 只跑源码面；两面合起来即全部 tsconfig。
+ * 分两面（`--tests` 取用例面）：pre-commit 只跑源码面，两面合起来即全部 tsconfig。
  */
 import { $ } from "bun";
 

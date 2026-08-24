@@ -1,9 +1,6 @@
 /**
  * 单语言边界门禁：物理 Cube 绑定与选路只能活在服务端编译器目录。
- * 浏览器与对外公共契约不得重新依赖 CompilerCatalog 或任何编译器选路模块——它们只说语义。
- *
- * 静态断言：扫描 console/src 与 contracts/catalog_contract，禁止导入编译器内务模块。
- * 带存活自检：探测器必须命中已知违规样本，对合规导入零命中。
+ * 浏览器与对外公共契约不得依赖 CompilerCatalog 或任何编译器选路模块——它们只说语义。
  */
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -67,7 +64,6 @@ describe("单语言边界门禁", () => {
       importsForbidden(`import type { X } from "../semantic_core/compiler_catalog.js";`),
     ).toEqual(["compiler_catalog"]);
     expect(importsForbidden(`import { useState } from "react";`)).toEqual([]);
-    // 语义契约导入不算违规
     expect(
       importsForbidden(`import type { PublicCatalogDocument } from "@contracts/catalog_contract";`),
     ).toEqual([]);
@@ -86,10 +82,7 @@ describe("单语言边界门禁", () => {
   });
 });
 
-/**
- * 最小语义/物理双投影夹具。语义 id 使用成员类型与规范短名；
- * 物理限定名、执行 view 名与 aliasMember 仍只在服务端编译目录中流转。
- */
+/** 最小语义/物理双投影夹具；语义 id = 成员类型 + 规范短名。 */
 const DOCUMENT: CatalogDocument = {
   access_scope: { id: "test_scope", title: "测试数据范围" },
   observation_scopes: ["统计口径：测试"],
@@ -158,16 +151,13 @@ describe("单语言物理绑定不上线", () => {
       expect(topic.id).toBe("metric_domain:workforce_structure");
       expect(topic).not.toHaveProperty("name");
       expect(topic).not.toHaveProperty("hierarchies");
-      // 指标域只上数据时间业务标签，绝不上内部 time_source key。
       expect(topic).not.toHaveProperty("time_source");
       expect(topic.time_context_title).toBe("人员数据");
     }
     // incompatible_dimensions 归一为语义 id（规范短名 organization_name → dimension:organization_name）
     expect(semantic.measures[0]?.incompatible_dimensions).toEqual([ORG_ID]);
-    // 整份线载荷里不出现成员物理限定名或 aliasMember。
     const wire = JSON.stringify(semantic);
     expect(wire).not.toContain("hc_col");
-    // 内部时间源 key 不上线
     expect(wire).not.toContain('"time_source":"workforce"');
   });
 
@@ -178,7 +168,7 @@ describe("单语言物理绑定不上线", () => {
         workforce: { actualThrough: "2026-06", availableThrough: "2026-07" },
       },
     };
-    // 两个视图共用同一内部 source，按 source key 去重为一项；标题是业务标签而非内部 key
+    // 两个视图共用同一 source，去重为一项。
     const out = publicTimeContext(
       [{ time_source: "workforce" }, { time_source: "workforce" }],
       context,
@@ -222,9 +212,8 @@ describe("单语言物理绑定不上线", () => {
     });
     const route = compiled.routes.find((r) => r.result_view_id === "v1");
     expect(route?.status).toBe("direct");
-    // 全等而非排除：直查血缘只有状态与语义视图 id，选路字段无从随实现变化混入。
+    // 全等而非排除：直查血缘只有状态与语义视图 id。
     expect(Object.keys(route!).sort()).toEqual(["result_view_id", "status"]);
-    // 对外血缘里不出现物理执行 view 名
     expect(JSON.stringify(compiled.routes)).not.toContain("employee_and_key_talent");
   });
 });
@@ -232,10 +221,8 @@ describe("单语言物理绑定不上线", () => {
 describe("语义解析 fail-closed", () => {
   it("物理成员名解析失败，语义 id 正常", () => {
     const compiler = toCompilerCatalog(DOCUMENT);
-    // 语义 id 命中
     expect(catalogMember(compiler, HEADCOUNT_ID, "measure")?.id).toBe(HEADCOUNT_ID);
     expect(catalogMember(compiler, ORG_ID, "dimension")?.id).toBe(ORG_ID);
-    // 物理限定名与裸短名一律不命中
     expect(
       catalogMember(compiler, "employee_and_key_talent.active_employee_count", "measure"),
     ).toBeUndefined();
@@ -252,7 +239,7 @@ describe("语义解析 fail-closed", () => {
       "employee_and_key_talent.active_employee_count",
     );
     expect(active_employee_count?.available_in[0]?.view).toBe("employee_and_key_talent");
-    // 业务词典只教学、不参与选路；编译器目录从类型与运行时都不承载它。
+    // 业务词典只教学，不参与选路。
     expect(compiler).not.toHaveProperty("business_terms");
   });
 });

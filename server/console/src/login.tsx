@@ -1,9 +1,4 @@
-/**
- * OAuth 登录页：Better Auth 授权流未登录时重定向至此（带原始授权参数）。
- * 登录成功且有挂起授权流时，响应携带 {url, redirect}，authClient 内置插件
- * 自动跳回授权端点续流并最终回到发起连接的 MCP 客户端；直接访问则只提示已登录。
- * 页面不提供第三方登录、自助注册或找回密码入口。
- */
+/** OAuth 授权流未登录时重定向至此，登录后由 authClient 的 redirect 插件跳回授权端点续流。 */
 import {
   useEffect,
   useId,
@@ -22,11 +17,7 @@ import { authClient } from "./auth_client";
 
 type LoginView = "gate" | "password";
 
-/**
- * 站内回跳参数（如 /dashboard 未登录时带来）：解析后须与当前站点同源才放行，
- * 防开放重定向——字符串前缀判断挡不住反斜杠/制表符等被浏览器归一化成 //host 的绕过，
- * 交给 URL 解析按 origin 裁定，只回传站内路径部分。
- */
+/** 回跳参数按 URL 解析取同源：前缀判断挡不住 \ 与制表符被浏览器归一化成 //host。 */
 function safeRedirect(): string | null {
   const raw = new URLSearchParams(window.location.search).get("redirect");
   if (!raw) return null;

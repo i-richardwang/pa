@@ -1,11 +1,7 @@
 /**
- * 极简 hash 路由：控制台整棵 /dashboard 子树是单文件服务端整页返回，
- * hash 路由无需服务端 catch-all，且保留浏览器前进后退与书签能力。
- * 看板与报告详情使用带参路由，使资产可被保存为书签和直接转发。
- * 页面分面（看哪一批东西）各占一个 hash 段，切分面同样可书签、可前进后退；
- * 筛选（看多大范围）留在页内状态。设置是浮在当前页上的弹层，`#/settings`、`#/users`
- * 两个深链落在报告列表之上打开它。
- * 非法或空 hash 归一到默认页（reports，业务首屏）。
+ * 极简 hash 路由：分面各占一个 hash 段，筛选留在页内状态；
+ * 设置是浮在当前页上的弹层，`#/settings`、`#/users` 两个深链落在报告列表之上打开它。
+ * 非法或空 hash 归一到默认页 reports。
  */
 import { useEffect, useRef, useState } from "react";
 import { TIME_INTENT_INPUT, type TimeIntent } from "@time";
@@ -35,14 +31,14 @@ const PLAIN_PAGES: ReadonlyArray<"boards" | "catalog" | "model" | "feedback"> = 
   "feedback",
 ];
 
-/** 形似看板 id 即进看板页——id 是否有效由服务端裁决，无效在页内得到明确报错而非静默回默认页 */
+/** 形似看板 id 即进看板页；id 有效性由服务端裁决。 */
 const BOARD_HASH = /^board\/([^/]+)$/;
 const BOARD_REPORT_EDIT_HASH = /^board\/([^/]+)\/report\/([^/]+)\/edit$/;
 const REPORTS_HASH = /^reports(?:\/(history))?$/;
 const USAGE_HASH = /^usage(?:\/(stats|unanswered))?$/;
 const SETTINGS_HASH = /^(settings|users)$/;
 const REPORT_HASH = /^report\/([^/]+)$/;
-/** `new` 是 analysis 命名空间下的保留段，必须先于 `analysis/:id` 匹配，否则会被当成分析 id */
+/** `new` 保留段必须先于 `analysis/:id` 匹配。 */
 const ANALYSIS_NEW_HASH = /^analysis\/new$/;
 const ANALYSIS_HASH = /^analysis\/([^/]+)$/;
 
@@ -51,7 +47,7 @@ export function navigateTo(hash: string): void {
   window.location.hash = hash;
 }
 
-/** 看板页的 hash（含 #），供导航与链接共用一个拼写落点；可选 `?t=` 编码板级时间覆盖。 */
+/** 看板页 hash；可选 `?t=` 编码板级时间覆盖。 */
 export function boardHash(id: string, time?: TimeIntent | null): string {
   if (!time) return `#/board/${id}`;
   return `#/board/${id}?t=${encodeURIComponent(JSON.stringify(time))}`;
@@ -80,7 +76,6 @@ export function reportsHash(facet: ReportsFacet = "reports"): string {
   return facet === "reports" ? "#/reports" : "#/reports/history";
 }
 
-/** 我的报告页「查询记录」分面 */
 export function reportsHistoryHash(): string {
   return reportsHash("history");
 }
@@ -95,12 +90,10 @@ export function settingsHash(tab: SettingsTab = "account"): string {
   return tab === "users" ? "#/users" : "#/settings";
 }
 
-/** 空白新建分析页的 hash：尚未铸出快照，故以保留段 `new` 占位于 analysis/ 命名空间 */
 export function analysisNewHash(): string {
   return "#/analysis/new";
 }
 
-/** 分析详情页（按 view_id 重放）的 hash */
 export function analysisHash(id: string): string {
   return `#/analysis/${id}`;
 }
@@ -135,18 +128,14 @@ export function parseRoute(hash: string): Route {
 }
 
 /**
- * 导航离开守卫：编辑态有未保存草稿时，
- * 拦截离开当前页的一切路径——浏览器级刷新/关闭走 beforeunload 原生确认，应用内导航
- * （侧栏 navigate 改 hash、logo/返回 anchor 均汇于 hashchange）由 useHashRoute 在 hashchange
- * 时回滚 hash 并跑异步确认，确认通过再放行。守卫状态为模块级单例：控制台同时至多一个编辑态。
- * 只有 hash 的 path 段变化才算离开；同页仅 query 段变化（如看板 `?t=` 时间覆盖）是
- * 页内状态变更，不拦。
+ * 导航离开守卫。守卫状态是模块级单例：控制台同时至多一个编辑态。
+ * 只有 hash 的 path 段变化才算离开；同页仅 query 段变化（如看板 `?t=`）不拦。
  */
 let blockerActive = false;
 let blockerConfirm: (() => Promise<boolean>) | null = null;
 
 export function useLeaveBlocker(active: boolean, confirm: () => Promise<boolean>): void {
-  // confirm 每次渲染换引用，用 ref 稳定身份，避免 effect 反复重挂
+  // confirm 每次渲染换引用，用 ref 稳定身份
   const confirmRef = useRef(confirm);
   confirmRef.current = confirm;
   useEffect(() => {
@@ -177,7 +166,7 @@ export function useHashRoute(): [Route, (r: RouteKey) => void] {
       if (to === currentRef.current) return;
       if (blockerActive && blockerConfirm && pathOf(to) !== pathOf(currentRef.current)) {
         const target = to;
-        navigateTo(currentRef.current); // 回滚，阻止应用切页
+        navigateTo(currentRef.current);
         void blockerConfirm().then((ok) => {
           if (ok) {
             blockerActive = false; // 已确认的目标只放行一次，后续导航仍需重新建立守卫。

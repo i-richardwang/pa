@@ -176,7 +176,6 @@ export async function runQueryPipeline(
   plan: ExecutionPlan,
   presentation: PresentationSpec,
 ): Promise<QueryRunResult> {
-  // 执行器只消费已解析的不透明 plan，呈现按其唯一 output 投影。
   const {
     principal,
     cubeContext,
@@ -194,7 +193,7 @@ export async function runQueryPipeline(
   const summarySources = new Set(
     outputSpec.summary ? (isDerivedViewSpec(outputSpec) ? outputSpec.from : [outputSpec.id]) : [],
   );
-  // 合计位只属于用户可见的那个交付结果；派生结果没有单一业务时间轴，故也没有整窗合计。
+  // 合计位只属于交付结果；派生结果没有整窗合计。
   const queryResults = await Promise.all(
     queryEntries.map(({ spec }) =>
       deps.executeView(

@@ -9,9 +9,6 @@ function initials(email: string): string {
   return email.slice(0, 1).toUpperCase();
 }
 
-/**
- * 工作区菜单：栏头触发器 + 徽标，弹出面随内容撑开、不定死宽度。
- */
 export function NavWorkspace({
   user,
   onOpenSettings,

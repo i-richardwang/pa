@@ -1,11 +1,3 @@
-/**
- * 控制台清单页行文法：
- * - ListFacets：控制条左侧的分面片，切的是「看哪一批」
- * - DaysRangeChips：控制条右侧的时间窗，筛的是「看多久之内」
- * - ResourceName：行内名字格，整块即链接
- * - RowMenu：行尾 `…`
- * - useTableSort + SortableHead：客户端整表排序
- */
 import { useMemo, useState } from "react";
 import { ChevronDownIcon, ChevronUpIcon, EllipsisIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,11 +7,6 @@ import { cn } from "@/lib/utils";
 import { ListSegment, ListSegmentGroup } from "../layout/layout_chrome";
 import { navigateTo } from "../router";
 
-/**
- * 控制条上两类档位只有一条分界：分面改变看的是哪批东西，是页面的一个落点，
- * 走 hash、可书签、可前进后退；筛选只收窄同一批东西的范围，留在页内状态。
- * 两者同用分面片这一种控件，区别只在值落在哪。
- */
 export function ListFacets<T extends string>({
   label,
   value,
@@ -46,7 +33,7 @@ export function ListFacets<T extends string>({
 
 const DAYS_RANGES = [7, 30, 90] as const;
 
-/** 日志类清单的时间窗：单选组，恒有一档选中。 */
+/** 恒有一档选中。 */
 export function DaysRangeChips({
   days,
   onDays,
@@ -65,9 +52,6 @@ export function DaysRangeChips({
   );
 }
 
-/**
- * 清单行的名字格只有名字：类型信息由各自的列承担，行里的信息各占一格。
- */
 export function ResourceName({
   href,
   children,

@@ -15,15 +15,12 @@ export type NavMainItem = {
   icon: React.ReactNode;
 };
 
-/** label 为空 = 主列表（无段标题）；有 label 才渲染段标签（如「管理」） */
 export type NavMainGroup = {
   label: string;
   items: readonly NavMainItem[];
 };
 
-/**
- * 图标住在自己的方槽里，不直接塞进按钮——直接塞会让选中底色贴着图标边缘走。
- */
+/** 图标另占方槽：选中底色不贴图标边缘。 */
 export function NavMain({
   groups,
   route,

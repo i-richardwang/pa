@@ -18,9 +18,8 @@ export type MaterializedExport = {
  * 执行导出计划并装配 CSV。与分析执行服务复用同一指标计划、结果计算与序数维度排序——
  * 三处出口（文本/预览/CSV）同数同序。列头与预览卡片共用规范化成员名。
  *
- * 导出恒按服务端顶格预算执行。触顶导出上限时置 complete=false：引擎上限即 50000，
- * 无法多取探测，触顶即完整性不可确认——由应用服务拒绝交付
- * （不完整名单被当完整名单用是错数，宁缺）。
+ * 触顶导出上限即置 complete=false：引擎上限无法多取探测，完整性不可确认，
+ * 由应用服务拒绝交付。
  */
 export async function runExport(
   cube: CubeGateway,

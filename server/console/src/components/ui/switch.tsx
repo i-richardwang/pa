@@ -25,10 +25,6 @@ function Switch({ className, ...props }: SwitchPrimitive.Root.Props): React.Reac
   );
 }
 
-/**
- * 开关行：右栏那一种行，右槽放开关。`tooltip` 是这一行的说明，悬停整行时从左侧浮出，
- * 不占面板高度；`blocked` 是此刻不可开的原因。
- */
 export function SwitchField({
   label,
   blocked,

@@ -37,7 +37,6 @@ const isTransform = (file: string) => file === TRANSFORM;
 const isMetricCalculator = (file: string) => file === METRIC_CALCULATOR;
 
 describe("度量计算边界", () => {
-  // 报告级占比也只能通过语义规格进入统一 Planner，壳与前端仍不得直接对结果行求和。
   test("占比只由正式模型或受控报告规格声明，MCP 壳内不实现派生", () => {
     expect(derivesShare("function derive_share() {}"), "探针必须能发现占比派生").toBe(true);
     expect(derivesShare("function render() {}"), "探针不得误报普通函数").toBe(false);

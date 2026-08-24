@@ -87,9 +87,9 @@ import {
 
 type GridBreakpoint = "lg" | "sm";
 
-// lg 是唯一可写入持久化的布局；sm 由 lg 派生为单列且不回写，避免多个桌面断点竞争坐标。
+// lg 是唯一可写入持久化的布局；sm 由 lg 派生为单列且不回写。
 const GRID_COLS: Record<GridBreakpoint, number> = { lg: BOARD_GRID_COLUMNS, sm: 1 };
-// 断点与间距：≤752 单列；间距取自 tile_sizing 的单源常量，横纵与桌面移动端同值
+// 间距单源在 tile_sizing。
 const GRID_BREAKPOINTS: Record<GridBreakpoint, number> = { lg: MOBILE_BREAKPOINT + 1, sm: 0 };
 const GRID_MARGINS: Record<GridBreakpoint, readonly [number, number]> = {
   lg: GRID_MARGIN,
@@ -135,7 +135,6 @@ export function BoardPage({
   timeOverride?: TimeIntent | null;
 }) {
   const [draft, setDraft] = useState<BoardEditState | null>(null);
-  // 「从分析」两步：先 AddFromAnalysisDialog 选记录，再 SaveReportDialog 命名保存报告
   const [fromAnalysisOpen, setFromAnalysisOpen] = useState(false);
   /** 选记录面没有触发件；归还目标见 `useOpenerFocus`。 */
   const fromAnalysisFocus = useOpenerFocus();
@@ -250,7 +249,6 @@ export function BoardPage({
     }
   }, [data, draft, saveBoard, closeAddDialogs]);
 
-  /** 完成：有改动则落库并退出，无改动直接退出。 */
   const finishEdit = useCallback(async () => {
     if (!draft) return;
     if (!dirty) {
@@ -261,10 +259,6 @@ export function BoardPage({
     await save();
   }, [draft, dirty, closeAddDialogs, save]);
 
-  /**
-   * 编辑态题条只放「取消」+「完成」；「重命名」沉到卡内 hero（仍开同一对话，不挤题条）。
-   * 板级时间设置入口亦在 hero。
-   */
   useSetTitlebarActions(() => {
     if (editing) {
       return (
@@ -309,7 +303,6 @@ export function BoardPage({
     finishEdit,
   ]);
 
-  /** 布局变更回写草稿：只认桌面（lg）坐标，移动端单列堆叠不落库；无实变化不回写。 */
   function applyLayout(_current: Layout, all: ResponsiveLayouts<GridBreakpoint>) {
     const lg = all.lg;
     if (!lg) return;
@@ -324,7 +317,6 @@ export function BoardPage({
       current ? { ...current, tiles: [...current.tiles, newTextTile(current.tiles)] } : current,
     );
   }
-  /** 草稿级移除 + Undo：撤销原位还原。 */
   function removeTile(tileId: string) {
     const removed = draft?.tiles.find((t) => t.tile_id === tileId);
     setDraft((current) => (current ? removeBoardTile(current, tileId) : current));

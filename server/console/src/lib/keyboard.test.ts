@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { escapeClaimsAside, isEditableTarget, type KeyTarget } from "./keyboard";
 
-/** 一个只会回答 closest 的节点：把它处在哪些祖先里直接交代出来。 */
 function node(within: Record<string, KeyTarget | null>, editable = false): KeyTarget {
   return {
     closest: (selector) => within[selector] ?? null,

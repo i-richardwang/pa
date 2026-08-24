@@ -1,12 +1,6 @@
 /**
- * 渲染期派生：绘图留白 / plot 框的归属、密度、注入的那几个格式化器，全部经 `renderOption`
- * 这一个入口验——它是一个纯函数，同样的输入恒得同样的 option。
- *
- * 留白与框：宿主换档必须**从 PLOT_PADDING / PLOT_FRAME 取**。渲染产物必须等于表里那一行——
- * 若渲染端另写一组数字，两处各持一份留白，改哪边都只改对一半，而没有任何东西会报错。
- * 故断言落在「渲染产物 === 表里那一行」上，不是落在「渲染端写了某个数字」上。
- *
- * 读数卡的行与版式在 `readout.test.ts` 与 `readout_card.test.tsx`。
+ * 渲染期派生经 `renderOption` 一个入口验；留白与框的断言取自 PLOT_PADDING / PLOT_FRAME，
+ * 不重写数字。
  */
 import { expect, test } from "bun:test";
 import {
@@ -237,7 +231,6 @@ test("焦点现出的那条也带格式化器：此刻不印数的系列同样�
   );
   const hidden = (renderOption(two, state()).series as { label: { formatter: Formatter } }[])[1];
   expect(hidden.label.formatter({ value: 0.0234 })).toBe("2%");
-  // 焦点落在它身上：现出来，格式化器仍在
   const focused = (
     renderOption(two, state({ focused: 1 })).series as {
       label: { show: boolean; formatter: Formatter };
@@ -280,7 +273,6 @@ test("值标签密度守卫：局促时按步距挑桶印数且恒印末点，�
     },
   };
   expect(run(horizontal, 60)({ value: 20, dataIndex: 1 })).toBe("20");
-  // 没开标签的系列不配格式化器
   const unlabeled = renderOption(
     chart([{ type: "line", name: "在职人数", data: [10, 20, 30] }], {}, "line"),
     state(),

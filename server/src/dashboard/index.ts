@@ -33,7 +33,7 @@ export function dashboardRoutes(deps: DashboardDependencies) {
   dashboard.get("/", async (c) => {
     const session = await deps.auth.api.getSession({ headers: c.req.raw.headers });
     if (!session) return c.redirect("/login?redirect=/dashboard");
-    // 单文件 SPA：禁止浏览器长缓存，否则 docker cp 新产物后界面仍像「没变化」
+    // 单文件 SPA：产物每次重发，禁止浏览器缓存。
     c.header("Cache-Control", "no-store");
     return c.html(await deps.html());
   });

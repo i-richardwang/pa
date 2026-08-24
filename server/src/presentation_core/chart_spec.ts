@@ -1,9 +1,7 @@
 /**
- * 服务端把 ViewIntent 与 ViewPreferences 合成这份物理呈现输入；它不进入 MCP 或持久化合同。
- * schema 校验成员绑定和图型前提，实际数据不满足声明时只退回忠实表格，不静默改写数据。
- * 时间轴由时间执行器合成；line 可确认时间成员，bar、pie 和 group_by 不接受时间绑定。
- * 个体名单恒为表格。
- * 物理呈现是纯编译产物，不参与分析指纹内容哈希。
+ * ViewIntent 与 ViewPreferences 合成的物理呈现输入；不进入 MCP 或持久化合同，
+ * 也不参与分析指纹内容哈希。实际数据不满足声明时只退回忠实表格，不静默改写数据。
+ * 时间轴由时间执行器合成；个体名单恒为表格。
  */
 import { z } from "zod";
 import { memberShortName } from "../semantic_core/member_name.js";
@@ -342,7 +340,7 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
       );
     }
 
-    // 只读声明字段会把「自动 · 按月」这类合法状态误判成无时间轴。
+    // 粒度走 resolveTimeOutputGrain 解析，不读声明字段。
     const grain = resolveTimeOutputGrain(spec.time ?? {}, undefined, {
       grouped: (spec.dimensions ?? []).length > 0,
     });
@@ -362,7 +360,6 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
     };
   }
 
-  // bar/pie 的分类轴：显式 x，或从规格唯一可推（去掉 group_by 后恰剩一个维度）时补齐
   const axisCandidates = dimensions
     .map((name) => memberShortName(name))
     .filter((key) => key !== groupBy);

@@ -6,6 +6,5 @@ import { STAGE_ASIDE_WIDTH } from "./layout_chrome";
 
 test("右栏宽度按用途分两档", () => {
   expect(STAGE_ASIDE_WIDTH.settings).toBe(320);
-  // 档案面比配置面宽一档：那栏摆的是记录本身，不是控件。
   expect(STAGE_ASIDE_WIDTH.profile).toBeGreaterThan(STAGE_ASIDE_WIDTH.settings);
 });

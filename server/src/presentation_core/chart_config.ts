@@ -1,16 +1,9 @@
 /**
- * 声明式呈现编译：在完整行上确定性编译表格、KPI 或 Agent 显式声明的图表。
- * 服务端产出可序列化的完整呈现块并在此完成选型，浏览器只布局和渲染。
- *
- * 图表交付两样东西：echarts `option`（绘图指令）与 `model`（呈现模型——渲染端要**读**的
- * 每一个数：类目、图例单元及其取值/格式/色、占比、最新桶、指针模型、下钻投影）。
- * 系列在编译前一次解析成 {形态, 色, 轴位}（缺省出自图型，显式声明按来源列覆盖），
- * option 的每一段样式都按解析结果一次写就。
- * 样式不进数据格：`series.data` 恒为裸数值，末点记号走 markPoint、饼图色走调色板。
- *
- * 函数不可序列化，数值轴与值标签的格式化由渲染端按 `model` 注入；四缘留白按宿主场景档位
- * 由渲染端算定。视觉常量取自 design_tokens.ts，序列化 option 恒为亮色原值，暗色由渲染端按
- * CHART_DARK_COLORS 映射翻转。本文件只做数据编排与样式声明，零度量算术（engine_boundary 守护）。
+ * 声明式呈现编译：服务端产出可序列化的完整呈现块，浏览器只布局和渲染。
+ * 图表交付 `option`（绘图指令）与 `model`（渲染端唯一读数源）。
+ * 系列在编译前一次解析成 {形态, 色, 轴位}；样式不进数据格（`series.data` 恒为裸数值）。
+ * 序列化 option 恒为亮色原值；格式化函数与四缘留白由渲染端按 `model` 注入。
+ * 本文件只做数据编排与样式声明，零度量算术（engine_boundary 守护）。
  */
 import {
   analyzeResultShape,
@@ -62,8 +55,8 @@ export type AxisDecimals = {
 };
 
 /**
- * 图例单元：画面上可被聚焦、可被逐行读出的那一个东西——笛卡尔图是系列，饼图是切片。
- * 取值按类目序对位（`values[i]` 是第 i 个类目上的读数；饼图一片一个值，只有 `values[0]`）。
+ * 图例单元：笛卡尔图一系列一项、饼图一切片一项。
+ * 取值按类目序对位（饼图只有 `values[0]`）。
  */
 export type ChartLegendItem = {
   name: string;
@@ -72,19 +65,11 @@ export type ChartLegendItem = {
   /** 模型声明的小数位；未声明缺席，走呈现层默认 */
   decimals?: number;
   values: (number | null)[];
-  /**
-   * 本单元所对照的那个单元的序号（同期叠加里各对照期都指向主期）。读数卡据此附差值；
-   * 「谁减谁」在编排期立好，呈现层不猜哪条是主期。
-   */
+  /** 所对照单元的序号（同期叠加里各对照期都指向主期）；读数卡据此附差值。 */
   baseline?: number;
 };
 
-/**
- * 呈现模型：与 echarts `option` 并列交付、供渲染端**读**的那份数据。
- *
- * option 只是绘图指令——它里面的数字是画出来给眼睛看的，不是给程序读回来的；读数卡、
- * 排行版式、图例读数、饼图环心总计要的每一个数都在这里，渲染端不从 option 里反解任何东西。
- */
+/** 与 `option` 并列交付、供渲染端读的那份数据；渲染端不从 option 反解任何数。 */
 export type ChartModel = {
   /** 类目名：笛卡尔图是类目轴的顺序，饼图是度量名那一个「桶」 */
   categories: string[];
@@ -94,10 +79,7 @@ export type ChartModel = {
   axis_decimals?: AxisDecimals;
   /** 结构占比注释：按类目序对位；读数卡随附一行占比说明 */
   share?: { title: string; values: (number | null)[] };
-  /**
-   * 「最新」落在哪个类目：每个单元都有值的最后一个时间桶。图例读数与末点实心标记同出此处——
-   * 一个标签只交代得了一个时间断面，凑不齐就整个不发。只随时间趋势下发。
-   */
+  /** 每个单元都有值的最后一个时间桶，凑不齐则缺席；只随时间趋势下发。 */
   latest?: { index: number; label: string };
   /** 读数索引由谁报：整列指针（类目轴）或逐项进出（饼图无类目轴） */
   pointer: "axis" | "item";
@@ -129,10 +111,7 @@ export type PresentationBlock = {
   table: TableModel;
   /** 声明式表格布局的实际编译状态；无法忠实成矩阵时才 unavailable。 */
   table_layout: TableLayoutStatus;
-  /**
-   * 结构式标题（`structureTitle`）：度量 · 按分类 · 趋势粒度。与图型判定同源——图上画了什么，
-   * 标题就说什么。结构派生不出任何一段时缺席，渲染端退到通用标题。
-   */
+  /** 结构式标题（`structureTitle`）：度量 · 按分类 · 趋势粒度；派生不出任何一段时缺席。 */
   structure_title?: string;
   chart?: ViewChart;
 
@@ -206,7 +185,6 @@ export const CHART_DARK_COLORS: Record<string, string> = Object.fromEntries(
     .map((pair) => [pair.light.toLowerCase(), pair.dark]),
 );
 
-/** 亮色原值 → 当前主题的那一档：映射表只此一张，取色处不各查一遍。 */
 export function themedColor(color: string, dark: boolean): string {
   return dark ? (CHART_DARK_COLORS[color.toLowerCase()] ?? color) : color;
 }
@@ -275,17 +253,13 @@ function labelColumnWidth(labels: string[]): number {
 }
 
 /**
- * 失焦是一次取色。
- *
- * 「谁在焦点」只有一个状态，两个消费点——图例上的色点、画布上的系列——都按这一道式子取色，
- * 故两处不可能各自置灰一半。绘图区内的悬停只出读数（判据见 ui_spec「图表画布」节）：
+ * 图例色点与画布系列共用这道取色式。
  * echarts 的 blur/focus 状态机不声明；`emphasis` 只用来把指针所在那一列的点填实。
  */
 export function focusedColor(color: string, index: number, focused: number | null): string {
   return focused === null || focused === index ? color : BLURRED;
 }
 
-/** 系列色写得出的几个段：线、面、柱面、激活态与末点标记都在其中。 */
 const STYLE_KEYS = ["lineStyle", "itemStyle", "areaStyle", "emphasis", "markPoint"] as const;
 
 function recolor<T>(node: T, from: string, to: string): T {
@@ -298,10 +272,8 @@ function recolor<T>(node: T, from: string, to: string): T {
 }
 
 /**
- * 换焦点要改的那几样，按单元出一份：只重出样式段与层序，`data` 不动。
- * 段内凡是这个单元的本色一律换成取色结果——就地认色，不必逐形态各记一份「色写在哪几处」；
- * 这一招成立的前提是本色只以字面值出现，故系列在编译期一次建成、不回补（见 `resolveSeries`）。
- * 饼图的色在调色板上，换焦点即换一份调色板。
+ * 换焦点只重出样式段与层序，`data` 不动；饼图换的是整份调色板。
+ * 前提是本色只以字面值出现，故系列在编译期一次建成、不回补（见 `resolveSeries`）。
  */
 export function focusPatch(
   chart: ViewChart,
@@ -335,11 +307,7 @@ export function focusPatch(
   };
 }
 
-/**
- * 数值标签跟着焦点走：焦点在时只有焦点那条印数——十几个底片同时压在一堆灰线上，
- * 读的人认不出哪个数属于他正看的那条。焦点不在时按图级档位印（档位写在编译期的 `show` 里），
- * 焦点落在档位没选中的系列上时把它现出来：焦点即「此刻要读的那条」。
- */
+/** 焦点在时只印焦点那条（含档位未选中的）；焦点不在时按编译期的 `show` 档位印。 */
 function valueLabelShown(
   label: { show?: boolean },
   index: number,
@@ -353,9 +321,8 @@ export const seriesZ = (index: number) => 2 * index + 2;
 export const haloZ = (index: number) => 2 * index + 1;
 
 /**
- * 折线的垫层：同一份数据、同一条路径，只画成 4px 的承载面色，压在本色线正下方。
- * 垫层一律追加在真系列之后，真系列的序号因此不动——`model.legend` 与 option.series 按序号对位，
- * 真系列的条数以 `model.legend.length` 为准。它不参与任何交互（`silent`），也不进读数卡。
+ * 折线的垫层一律追加在真系列之后，真系列的序号因此不动：
+ * `model.legend` 与 option.series 按序号对位，真系列条数以 `model.legend.length` 为准。
  */
 function lineHalo(values: (number | null)[], index: number) {
   return {
@@ -370,9 +337,8 @@ function lineHalo(values: (number | null)[], index: number) {
 }
 
 /**
- * 末点实心标记：「最新」那一桶上压一颗本色实心圆。它是样式不是数据，故走 markPoint——
- * `series.data` 恒为裸数值，读数、垫层、焦点换色都不必认识「末点长得不一样」这个特例。
- * 颜色显式写在自己的 itemStyle 上：ECharts 的继承取系列级 `color`，而焦点换色只重出样式段。
+ * 末点实心标记走 markPoint，`series.data` 保持裸数值。
+ * 色显式写在自己的 itemStyle 上：ECharts 的继承只取系列级 `color`，而焦点换色只重出样式段。
  */
 function latestMarkPoint(values: (number | null)[], latest: number | undefined, color: string) {
   const value = latest === undefined ? null : values[latest];
@@ -391,9 +357,7 @@ function latestMarkPoint(values: (number | null)[], latest: number | undefined, 
 }
 
 /**
- * 折线：空心圆点，指针所在那一列的点由 emphasis 填实。`showSymbol` 是密度开关——
- * 关掉后 echarts 只在指针命中时现出那一颗，这正是「密集时藏点、悬停仍读得出」要的行为，
- * 渲染端按实宽翻这一位即可，不必另写透明度。
+ * `showSymbol` 关时 echarts 只在指针命中处现出那一颗点；渲染端按实宽翻这一位。
  */
 function lineSeriesPreferences(color: string, multi: boolean) {
   return {
@@ -412,10 +376,6 @@ function lineSeriesPreferences(color: string, multi: boolean) {
   };
 }
 
-/**
- * 柱系列：同类目多柱紧贴（barGap 0）、类目带留 40% 白，方角无边框。
- * 柱占带宽 60%——柱之间要留得出「这是相邻两个桶」的间隙，贴太近就读成一条被切开的带子。
- */
 function barSeriesPreferences(color: string) {
   return {
     color,
@@ -427,19 +387,9 @@ function barSeriesPreferences(color: string) {
 }
 
 /**
- * 指针与读数索引：echarts 的 tooltip 组件只留下这两件事，卡片本体不归它。
- *
- * **整列触发**（trigger axis）：指针落在类目带内的任意高度都读得出数。逐项触发要求精确
- * 命中图形本身，而折线的命中体只有那颗 6px 圆点、密集时还被密度规则藏起来——那等于折线
- * 根本没有读数卡。整列触发同时让「一列多系列」只出一张卡，与卡内逐系列成行的排版同构。
- *
- * **指针形按图型分档**：有柱的图画整条列高亮带（柱已经占满高度，再叠一条竖线就是第二根
- * 轴）；纯折线画一条竖虚线（无柱可依，需要一条线把读数与横坐标对上）。
- *
- * **内容不由它出**（`showContent: false`）：读数卡是与菜单同层的浮层，要能钉住、能命中、
- * 卡内行还要回头驱动系列聚焦——echarts 那只 HTML 盒子给不了这些，它只负责把指针画在
- * 该在的一列，并按 `updateAxisPointer` 报出落在哪一格。饼图没有类目轴也就没有指针，
- * 索引由逐项的 mouseover 报出，故整个组件关掉。
+ * tooltip 组件只留指针与读数索引：整列触发（折线的命中体只有 6px 圆点，逐项触发命不中），
+ * `showContent` 关——读数卡是另一层浮层，此处只按 `updateAxisPointer` 报出落在哪一格。
+ * 饼图没有类目轴也就没有指针，索引由逐项 mouseover 报出，故整个组件关掉。
  */
 function pointerOption(hasBar: boolean) {
   return {
@@ -458,13 +408,7 @@ function seriesIndexOf(series: { key: string }[], key: string): number | null {
   return index < 0 ? null : index;
 }
 
-/**
- * 宿主场景：结果面住在哪一种容器里。它是渲染栈唯一的场景词汇——场地留白、画不画框、
- * chrome 取舍（`VIEW_SCENES`）都按这一个枚举查表。
- * - `card` MCP 结果卡：答数态，高度由内容撑
- * - `tile` 看板瓦片：概览态，壳自己就是边界
- * - `page` 控制台整页查看面：中段裸铺，高度取容器
- */
+/** 渲染栈唯一的场景词汇：场地留白、画不画框、chrome 取舍（`VIEW_SCENES`）都按它查表。 */
 export type ViewScene = "card" | "tile" | "page";
 
 export const PLOT_PADDING: Record<
@@ -477,16 +421,15 @@ export const PLOT_PADDING: Record<
 };
 
 /**
- * 结果面场地画不画那圈圆角发丝框，按宿主场景定、不看形态：画布、排行、表格在同一场景下同框。
- * 瓦片壳自己就是边界，故不画。框落在 DOM（`PlotSlab`）而不是 echarts 的 grid：canvas 画不出圆角。
+ * 画不画那圈圆角发丝框按宿主场景定、不看形态。
+ * 框落在 DOM（`PlotSlab`）而不是 echarts 的 grid：canvas 画不出圆角。
  */
 export const PLOT_FRAME: Record<ViewScene, boolean> = { card: true, tile: false, page: true };
 
 export const PLOT_RADIUS = 10;
 
 /**
- * 场地横向留白对应的内衬类：读数条、空态、提示行与场地框同轴。
- * 写成字面量：Tailwind 只扫源码里出现过的类名，拼出来的那种扫不到；
+ * 写成字面量：Tailwind 只扫源码里出现过的类名，拼出来的那种扫不到。
  * 与 `PLOT_PADDING` 的横向档同值，由 echart.test.tsx 逐档对表看住。
  */
 export function sceneInsetClass(scene: ViewScene): "px-0" | "px-4" {
@@ -494,8 +437,7 @@ export function sceneInsetClass(scene: ViewScene): "px-0" | "px-4" {
 }
 
 export function legendRowClass(scene: ViewScene, withLatest = false): string {
-  // 带末桶读数时，触屏（`pointer-coarse`）铺成两列读数格：每项要放得下名字与值两行。
-  // 网格由「带值」触发而不是无条件——不带值的图例在触屏上没有变形的理由。
+  // 触屏（`pointer-coarse`）带值时铺两列读数格：每项要放得下名字与值两行。
   const touch = withLatest
     ? " pointer-coarse:grid pointer-coarse:grid-cols-2 pointer-coarse:items-stretch pointer-coarse:gap-x-4 pointer-coarse:gap-y-3"
     : "";
@@ -503,9 +445,8 @@ export function legendRowClass(scene: ViewScene, withLatest = false): string {
 }
 
 /**
- * 系列色点：读数条与读数卡逐行都是这一颗，故形制只此一处。
- * `lead` 是读数卡单读数那一档——值印到 18px，点要跟着再落下来一点才在同一条视线上。
- * 下移用位移不用外边距：点与首行文字对的是视线，不该把自己那半像素算进行高。
+ * 系列色点：读数条与读数卡逐行共用这一颗；`lead` 是读数卡单读数那一档（值印到 18px）。
+ * 下移用位移不用外边距：点对的是视线，不进行高。
  */
 export function chartMarkerClass(variant: "row" | "lead" = "row"): string {
   const drop =
@@ -514,8 +455,6 @@ export function chartMarkerClass(variant: "row" | "lead" = "row"): string {
       : "translate-y-[4.5px] pointer-coarse:translate-y-[3px]";
   return `${drop} size-2 shrink-0 self-start rounded-full pointer-coarse:size-3`;
 }
-
-/* ---------- option 构建 ---------- */
 
 const CHART_HEIGHT = { cartesian: 300, pie: 320 } as const;
 
@@ -533,11 +472,7 @@ type ResolvedSeries = Omit<SeriesDef, "mark"> & {
   values: (number | null)[];
 };
 
-/**
- * 系列解析：缺省形态/轴位由图型给，显式声明（`decl.display`）按来源列覆盖，色缺省按序取板。
- * 解析在建 option 之前完成，option 里的每一段样式（线、面积、激活态、末点）都按解析结果
- * 一次写就，同一条系列的色只有这一个来源。
- */
+/** 解析在建 option 之前完成一次；同一条系列的色只有这一个来源。 */
 function resolveSeries(
   series: SeriesDef[],
   rows: ChartRow[],
@@ -606,11 +541,10 @@ function recordPoints(rows: ChartRow[], sourceRows: ChartSourceRow[], series: Se
 }
 
 /**
- * 图级数值标签：main=仅第一主系列，all=全部系列。每条真系列都配齐标签形制，`show` 才是开关：
- * 焦点期间「只有焦点系列印数」要把档位没选中的那些也现出来，形制现搭会与编译期这份长不一样。
- * 形制是浅灰底片（高 18、圆角 4、承载面色描边）+ 14px 系列色数字——系列色对底片的对比度
- * 整套色板两个主题都过 1.45，由 design_tokens 测试看住，故不带运行时调暗环节。
- * 堆叠段的外侧是相邻段不是空场地：标签进段内；平铺条才朝值轴末端画。
+ * 图级数值标签：main=仅第一主系列，all=全部系列。
+ * 每条真系列都配齐形制，`show` 才是开关——焦点期要现出档位未选中的那条。
+ * 系列色对底片的对比度两个主题都过 1.45（design_tokens 测试看住），故不带运行时调暗环节。
+ * 堆叠段标签进段内，平铺条朝值轴末端画。
  */
 function valueLabel(show: boolean, color: string, position: "inside" | "top" | "right") {
   return {
@@ -634,10 +568,7 @@ const VALUE_LABEL_HEADROOM = 30;
 /** 标签底片与数据点/条端的间距（px）。 */
 const VALUE_LABEL_GAP = 6;
 
-/**
- * 值标签底片宽（px）：逐字符查表（数字 8/逗号 4/点 4/% 10/负号 6）+ 两侧衬垫 5、最小 20。
- * 值、格式、位数编译期全知道，渲染层密度守卫与横排右栏都按它算。
- */
+/** 值标签底片宽（px）：渲染层密度守卫与横排右栏都按它算。 */
 export function valueLabelPillWidth(text: string): number {
   const width = [...text].reduce((sum, ch) => {
     if (/\d/.test(ch)) return sum + 8;
@@ -674,7 +605,6 @@ type SeriesContext = {
   valueLabels?: "main" | "all";
 };
 
-/** 一条系列的 option：形态、色、轴位、标签、末点，按解析结果一次写就。 */
 function seriesOption(s: ResolvedSeries, index: number, ctx: SeriesContext) {
   const label =
     ctx.valueLabels === undefined
@@ -710,7 +640,7 @@ function seriesWithHalo(series: ResolvedSeries[], ctx: SeriesContext) {
   ];
 }
 
-/** 值标签要的框内余量：段内标签不占，平铺标签按方向留顶栏或右栏（只按印得出数的系列算，框不随悬停移动） */
+/** 值标签要的框内余量：只按印得出数的系列算，框不随悬停移动。 */
 function valueLabelInset(series: ResolvedSeries[], ctx: SeriesContext) {
   if (ctx.valueLabels === undefined || ctx.stacked) return {};
   return ctx.orientation === "horizontal"
@@ -730,9 +660,8 @@ const valueAxisOption = (side: "left" | "right", first: boolean) => ({
 const OPTION_BASE = { textStyle: { fontFamily: FONT_FAMILY }, ...MOTION } as const;
 
 /**
- * plot 场地。`containLabel` 恒关，框也不由 grid 画（见 `PLOT_FRAME`）：绘图区四缘必须
- * 在渲染前就算得出来，DOM 那层框才对得上。四缘的数字由渲染端按场景档位（`PLOT_PADDING`）
- * 加 `plot_gutter`/`plot_inset` 算定——编译期不知道宿主是哪一档，故不写数字。
+ * `containLabel` 恒关，框也不由 grid 画（见 `PLOT_FRAME`）：四缘必须在渲染前算得出，
+ * DOM 那层框才对得上。四缘数字由渲染端按 `PLOT_PADDING` 加 `plot_gutter`/`plot_inset` 算定。
  */
 const GRID = { containLabel: false } as const;
 
@@ -748,10 +677,6 @@ type CartesianInput = {
   valueLabels?: "main" | "all";
 };
 
-/**
- * 竖排笛卡尔图：类目占 x 轴，量画柱（主轴）、率画线（副轴）；时间趋势与分类组合同一张版式，
- * 差别只在类目是什么、有没有「最新」与占比。
- */
 function cartesianOption(input: CartesianInput): ViewChart {
   const { series } = input;
   const ctx: SeriesContext = {
@@ -864,7 +789,6 @@ function barOption(spec: BarSpec, decl: ChartRenderDecl): ViewChart {
     pointer: "axis",
     records: recordPoints(spec.rows, spec.sourceRows, spec.series),
   };
-  // 单系列（不堆叠）改走排行版式：一行说一个类目，值与占比各占一列；不落 echarts，故无 option
   if (series.length === 1 && !spec.stacked) {
     return {
       form: "bar",
@@ -888,7 +812,6 @@ function barOption(spec: BarSpec, decl: ChartRenderDecl): ViewChart {
     ...valueLabelInset(series, ctx),
     option: {
       ...OPTION_BASE,
-      // 类目在左轴（中文长标签），刻度留在框外自占一栏
       grid: GRID,
       tooltip: pointerOption(true),
       xAxis: {
@@ -903,7 +826,7 @@ function barOption(spec: BarSpec, decl: ChartRenderDecl): ViewChart {
         type: "category",
         data: categories,
         inverse: true,
-        // 栏宽已按字面量算定，放不下的截断——全名仍在读数卡里
+        // 放不下即截断，全名在读数卡里
         axisLabel: {
           ...axisLabelStyle,
           width: gutter.left - LABEL_COLUMN.gap,
@@ -920,8 +843,7 @@ function barOption(spec: BarSpec, decl: ChartRenderDecl): ViewChart {
 }
 
 /**
- * 饼图（声明路径专属）：内半径 = 外半径 3/5、切缝用底面色边框，切片不出外部标签和引线，
- * 占比进图例（渲染端按值计算）、环心常驻总计（渲染端注入）。
+ * 饼图（声明路径专属）：占比与环心总计由渲染端注入。
  * 切片色走调色板（`option.color` 按切片序对位），数据格只有名与值。
  */
 function pieOption(spec: PieSpec): ViewChart {
@@ -948,7 +870,6 @@ function pieOption(spec: PieSpec): ViewChart {
           label: { show: false },
           labelLine: { show: false },
           itemStyle: { borderColor: CHART_SURFACE, borderWidth: 2 },
-          // 扇形的角度就是值：鼠标碰哪一片都不许它改样子
           emphasis: { disabled: true },
           data: spec.rows.map((r) => ({ name: r.label, value: r.value })),
         },

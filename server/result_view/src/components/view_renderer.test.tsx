@@ -1,9 +1,6 @@
 /**
- * 统一渲染器单测：三个宿主场景（card / tile / page）与它们的呈现一致性。
- * 本文件守的不变量是"容器身份只改 chrome，不改数据"：三个宿主共用同一渲染器，
- * 本断言防止呈现产物随容器分叉。场景枚举既是入参也是断言口径——断言直接说 scene="tile"。
- * renderToStaticMarkup 直渲、不引 DOM：断言只覆盖一次渲染的产物，
- * 出图、排序、悬浮层等需要真实 DOM，不在此处覆盖。
+ * 三个宿主场景（card / tile / page）的呈现一致性：容器身份只改 chrome，不改数据。
+ * renderToStaticMarkup 直渲、不引 DOM：出图、排序、悬浮层不在此处覆盖。
  */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -108,14 +105,10 @@ test("查看面旗标：数据与答数态逐格一致；标题归页头，元�
   const same = payload();
   const page = render({ payload: same, scene: "page" });
   expect(cells(page)).toEqual(cells(render({ payload: same, scene: "card" })));
-  // 标题由查看面页头承载，内容栈只渲染数据区
   expect(text(page)).not.toContain("各组织在职人数");
-  // 行数与新鲜度全部归底栏——它住在结果框之外，因而不在本组件版面
   expect(text(page)).not.toContain("共 2 行");
   expect(text(page)).not.toContain("数据截至");
-  // 整页不挂口径带
   expect(text(page)).not.toContain("口径：在职含试用期");
-  // 表格自身的行数条同样让位给底栏
   expect(page).not.toContain(VIEW_SCENES.page.countBar);
   // fill：高度取容器，表格转为自带内滚
   expect(page).toContain("overflow-auto");

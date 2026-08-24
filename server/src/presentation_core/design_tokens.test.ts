@@ -32,9 +32,8 @@ test("tokens.css and design_tokens.ts define the same values", async () => {
   for (const [name, pair] of Object.entries(UI_TOKENS)) {
     expect(cssTokens.get(name), `tokens.css lacks --pa-${name}`).toEqual({ ...pair });
   }
-  // 反向：CSS 侧不允许存在 TS 镜像之外的**字面**颜色令牌。
-  // 例外都不是颜色：popover-glow 是投影，glass-blur 是玻璃壳的模糊槽位与它的两档取值；selected 由 ink
-  // 现算（color-mix），没有可镜像的明暗字面值。
+  // CSS 侧不得有 TS 镜像之外的**字面**颜色令牌。
+  // 下列例外都不是颜色：投影、玻璃壳模糊槽位、由 ink 现算（color-mix）的 selected。
   const extra = [...cssTokens.keys()].filter((name) => !(name in UI_TOKENS));
   expect(extra).toEqual([
     "selected",
@@ -55,11 +54,9 @@ test("the series palette feeds serialized options in order", () => {
 test("dark color map covers exactly the pairs that differ", () => {
   expect(CHART_DARK_COLORS["#3b6fdb"]).toBe("#5b8def");
   expect(CHART_DARK_COLORS[CHART_CHROME.gridLine.light]).toBe(CHART_CHROME.gridLine.dark);
-  // 明暗同值的取值不得进映射（替换是恒等，混进来说明生成逻辑坏了）
   for (const [light, dark] of Object.entries(CHART_DARK_COLORS)) {
     expect(dark, `${light} 的暗色替换是恒等`).not.toBe(light);
   }
-  // 未知颜色不得命中
   expect(CHART_DARK_COLORS["#123456"]).toBeUndefined();
   // 键恒为小写（渲染端 lookup 前做 toLowerCase）
   for (const key of Object.keys(CHART_DARK_COLORS)) {

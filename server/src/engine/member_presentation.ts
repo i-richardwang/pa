@@ -20,7 +20,7 @@ export function memberDisplayTitle(
   return prefix && title.startsWith(prefix) ? title.slice(prefix.length) : title;
 }
 
-/** 重叠分类天然需要解释；其余维度只在模型显式声明时展示口径说明。 */
+/** 重叠分类恒展示口径说明；其余维度只在模型显式声明时展示。 */
 export function showDimensionNote(member: CubeMember | undefined): boolean {
   return (
     member?.meta?.user_note === true || (member ? dimensionKind(member) === "overlapping" : false)

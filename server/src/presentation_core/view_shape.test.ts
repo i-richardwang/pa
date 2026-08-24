@@ -1,7 +1,4 @@
-/**
- * 声明式呈现编译单测：结果结构识别、表格重排和图表声明彼此独立。
- * 表格可以按稳定阅读规则横置时间；任何图表都必须由显式 ChartDecl 触发。
- */
+/** 表格重排与图表声明彼此独立；任何图表都必须由显式 ChartDecl 触发。 */
 import { describe, expect, test } from "bun:test";
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
 import { type Cell, viewBlock } from "../test_support/view_block.js";
@@ -666,10 +663,6 @@ describe("显式呈现能力与形态标签", () => {
   });
 });
 
-/**
- * 对照感知呈现：结果带多个业务期间时，同期比较按**期内位置**叠加成多系列，
- * 表格在对照列旁给出服务端派生的差值。相邻周期对照不叠加——它在连续时间轴上本来就画得对。
- */
 describe("对照期呈现", () => {
   const monthly = (
     coordinates: { role: "primary" | "comparison"; from: string; to: string }[],
@@ -716,7 +709,6 @@ describe("对照期呈现", () => {
     if (!chart || !("series" in chart)) throw new Error("应编译出折线");
     expect(chart.series.map((item) => item.name)).toEqual(["2026年", "2025年"]);
     expect(chart.rows.map((row) => row.t)).toEqual(["2026-01", "2026-02", "2026-03"]);
-    // 同一横轴位置同时承载主期与对照期的值——这正是同期比较的读法。
     expect(chart.rows[0]).toMatchObject({ s0: 0.04, s1: 0.01 });
     expect(chart.rows[2]).toMatchObject({ s0: 0.06, s1: 0.03 });
   });
@@ -796,14 +788,13 @@ describe("对照期呈现", () => {
       "较2025年",
     ]);
     expect(compiled.table.columns[2].format).toBe("percentage_point");
-    // 主期 − 对照期，服务端算好；浮点按同尺度比较。
+    // 浮点按同尺度比较。
     expect(Number(compiled.table.rows[0][2])).toBeCloseTo(0.03, 10);
     expect(compiled.table.sourceRows?.[0][2]).toBeNull();
     expect(compiled.layout).toEqual({ state: "applied", leafColumns: 3 });
   });
 
   test("bucket 级时间列轴逐桶成列，期间与列值非一一对应：不派生差值", () => {
-    // 每期摊出多个列值时「主期 − 对照期」没有唯一配对，宁可只给基础矩阵，也不猜。
     const bucketLayout = {
       type: "table" as const,
       y: [],
@@ -860,11 +851,7 @@ describe("对照期呈现", () => {
   });
 });
 
-/**
- * 时间轴的两个载体：列由业务桶造（桶键是数字，空桶也要成列），单元格由结果行造
- * （执行层把年月作为字符串返回）。键若带类型，两侧永不相等，整张交叉表落空——
- * 故按字面量归一，并对两种载体各断言一次。
- */
+/** 两种载体（桶键数字 / 结果行字符串）各断言一次。 */
 describe("月×年交叉表的时间键归一", () => {
   const crosstab = {
     type: "table" as const,
@@ -897,8 +884,7 @@ describe("月×年交叉表的时间键归一", () => {
       crosstab,
     );
     expect(compiled.table.columns.map((column) => column.label)).toEqual(["month", "2025", "2026"]);
-    // 月为行、年为列：11 月与 12 月落 2025 列，1 月落 2026 列，两列互不串格。
-    // 行头单元格保持结果自身的载体类型，故按字面量比较。
+    // 行头保持结果自身的载体类型，故按字面量比较。
     expect(compiled.table.rows.map(([month, ...values]) => [String(month), ...values])).toEqual([
       ["11", 100, null],
       ["12", 101, null],

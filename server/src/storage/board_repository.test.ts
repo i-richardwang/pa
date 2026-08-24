@@ -88,7 +88,6 @@ describe("boards 存取", () => {
       revision: 2,
     });
     expect(updated!.updated_at >= created.updated_at).toBe(true);
-    // 存取往返：tiles JSON 列持久化后与写入一致
     expect((await boards.get(created.id))?.tiles).toEqual(tiles);
     expect(
       await boards.update("00000000-0000-0000-0000-000000000000", { name: "x" }, 1),

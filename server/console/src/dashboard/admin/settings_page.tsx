@@ -83,7 +83,6 @@ import {
   useRevokeApiKey,
 } from "../dashboard_queries";
 
-/** 表单类分节居中一栏读；清单类分节（成员表）铺满。 */
 const FORM_COLUMN_CLASS = "md:mx-auto md:max-w-2xl";
 
 export function SettingsDialog({
@@ -95,7 +94,7 @@ export function SettingsDialog({
   me: MePayload;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 开启时落在哪一节；缺省账户。弹层不留上次停在哪的记忆。 */
+  /** 弹层不留上次停在哪的记忆。 */
   tab?: SettingsTab;
 }) {
   const [current, setCurrent] = useState<SettingsTab>(tab);
@@ -236,7 +235,6 @@ function scopeLabel(accessScope: PresentedAccessScope): string {
   return accessScope.values.join("、");
 }
 
-/** 账号页：身份与权限是几行事实，能做什么是一张清单。 */
 function AccountPage({ me }: { me: MePayload }) {
   return (
     <>
@@ -274,8 +272,6 @@ function AccountPage({ me }: { me: MePayload }) {
   );
 }
 
-/* ─── API Key ─── */
-
 const DAY = 60 * 60 * 24;
 const EXPIRY_OPTIONS: readonly { label: string; seconds: number | null }[] = [
   { label: "永不过期", seconds: null },
@@ -289,7 +285,7 @@ function KeysPage() {
   const revokeKey = useRevokeApiKey();
   const [showCreate, setShowCreate] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyRow | null>(null);
-  // 列表按签发时间倒序（服务端给的顺序），不做表头排序：一个人手里就那么几把 key。
+  // 顺序即服务端签发序（倒序）。
   const keys = keysQuery.data ?? null;
   const rows = keys ?? [];
   const error = errorText(keysQuery.error) ?? errorText(revokeKey.error);

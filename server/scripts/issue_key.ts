@@ -1,9 +1,6 @@
 /**
- * 无头签发 API Key（CI / smoke / 无浏览器的脚本接入场景）：
- * bun run key:issue -- <email> [名称]
- * 服务端直调 apiKey 插件 createApiKey（不经 HTTP、无会话要求），key 绑该用户身份，
- * 明文只打印一次——存入 .env 的 PA_MCP_API_KEY 或客户端配置的 Authorization 头。
- * 与控制台内自助签发完全等价，仅为无浏览器环境提供 bootstrap 入口。
+ * 无头签发 API Key（CI / smoke / 无浏览器的脚本接入场景）。
+ * 服务端直调 apiKey 插件 createApiKey（不经 HTTP、无会话要求），key 绑该用户身份。
  * key 以 SHA-256 散列入库（apiKey 插件默认 hasher，不依赖 PA_AUTH_SECRET），
  * 故离线签发的 key 与运行中服务算得同一散列、可直接校验通过。
  * 注意：容器内服务持长连接，跨 Docker 挂载的新写入对其不可见（virtiofs 缓存），

@@ -349,7 +349,6 @@ describe("CatalogDocument", () => {
       "name",
       "title",
     ]);
-    // 只在一个视图可查的成员照常成条，available_in 只有一项
     const classificationSource = catalog.dimensions.find((d) => d.title === "分类来源");
     expect(classificationSource?.id).toBe("dimension:classification_source");
     expect(
@@ -566,8 +565,7 @@ describe("CatalogDocument", () => {
     expect(
       payload.measures.find((measure) => measure.title === "综合得分")?.records_available,
     ).toBeUndefined();
-    // 公式零件在本夹具里写的是短名（events / population），成员却是限定名——
-    // 两种写法都得认出中文，认不出就会把物理名当文案印给人看。
+    // 公式零件在夹具里是短名、成员是限定名，两种写法都须解析为中文。
     expect(payload.measures.find((measure) => measure.title === "事件率")?.formula).toEqual({
       numerator: "事件数",
       numerator_id: "measure:events",
@@ -712,17 +710,14 @@ describe("CatalogDocument", () => {
       toSemanticCatalog(buildCatalogDocument(rateViews(denominator))).measures.find(
         (member) => member.title === "YTD事件率",
       );
-    // 跨视图的零件只剩短名，照样要认出中文——身份也跟着补出来，公式两端才点得动。
+    // 跨视图零件只剩短名，仍须解析出中文与语义身份。
     expect(rateOf("ytd_headcount")?.formula).toEqual({
       numerator: "YTD事件数",
       numerator_id: "measure:ytd_event",
       denominator: "YTD月均基数",
       denominator_id: "measure:ytd_headcount",
     });
-    /*
-      零件是内部计算件也照样翻：它不可查，但公式行是给人读口径的，不该因此缺一半。
-      它没有公开身份，那一端便只有标题——界面据此把它画成点不动的静态芯片。
-    */
+    // 内部计算件无公开身份：公式行只出标题，不出 id。
     expect(rateOf("ytd_answered")?.formula).toEqual({
       numerator: "YTD事件数",
       numerator_id: "measure:ytd_event",

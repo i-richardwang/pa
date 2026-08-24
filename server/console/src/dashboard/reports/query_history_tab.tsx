@@ -1,8 +1,6 @@
 /**
- * 查询记录：本人经此账号发起的分析履历（title 原文 + 结果规模）。
- * 纵向可见——只含自己，caller 由服务端锁定，仅记问题与结果规模。
+ * 查询记录：纵向可见——只含自己，caller 由服务端锁定，仅记问题与结果规模。
  * 带 view_id 的记录可重放，也可升格为独立报告；审计日志本身不承载资产恢复职责。
- * 时间窗是我的报告页题条上的页级控件，本件只按给定窗口取数并翻页。
  */
 import { useState } from "react";
 import { CircleAlertIcon, HistoryIcon, SaveIcon } from "lucide-react";

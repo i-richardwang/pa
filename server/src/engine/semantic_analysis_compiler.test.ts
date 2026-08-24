@@ -589,7 +589,6 @@ describe("semantic analysis compiler", () => {
       view: { type: "table" },
     });
     expect(compiled.routes[0]).toMatchObject({ status: "direct" });
-    // 选路已内部化：物理落点由 plan.nodes 的物理成员名验证（test_people_metrics.*）
     expect(compiled.plan.nodes[0]).toMatchObject({
       measures: ["test_people_metrics.active_employee_count", "test_people_metrics.ytd_event_rate"],
       dimensions: ["test_people_metrics.organization_name", "test_people_metrics.department_name"],
@@ -630,7 +629,6 @@ describe("semantic analysis compiler", () => {
       view: { type: "table" },
     });
     expect(compiled.routes[0]).toMatchObject({ status: "direct" });
-    // 选路已内部化：物理落点由 plan.nodes 的物理成员名验证。
     expect(compiled.plan.nodes[0]).toMatchObject({
       measures: [
         "test_people_metrics.active_employee_count",

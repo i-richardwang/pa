@@ -45,14 +45,9 @@ export function toNumber(value: string | number | null): number | null {
 }
 
 /**
- * 维度取值的显示名。**空只出占位符，不编词**：随手填一个「未知」会和真叫这个名字的取值
- * 撞在一起，读者从此分不出哪个是数据说的。
- *
- * 空、空串与纯空白同归一处——它们在数据里的差别构不成两个类别，而分开会让同一批行在图例里
- * 裂成两项。轴与图例都从这里取名，故它同时是**分组键**：任何一处绕过它，同一批行就会
- * 一边按 `""` 归组、一边按 `—` 查表，查不到。
- *
- * 明细表体不走这里：格子空着读得出来（见 `data_table`），图例项空着就成了没有名字的东西。
+ * 维度取值的显示名。**空只出占位符，不编词**：编出的名字会和真叫这个名字的取值撞在一起。
+ * 空、空串与纯空白同归一处。轴与图例都从这里取名，故它同时是**分组键**：绕过即查不到。
+ * 明细表体不走这里（见 `data_table`）。
  */
 export function isBlankCell(value: string | number | null | undefined): boolean {
   return value === null || value === undefined || String(value).trim() === "";
@@ -79,8 +74,8 @@ export function formatCell(
 }
 
 /**
- * 带符号的差值读法：增长显式带 +，下降天然带 −，量纲与小数位沿用 formatCell。
- * 符号只陈述方向，不判断好坏——模型层没有指标方向声明，涨跌染色会把流失类指标读反。
+ * 带符号的差值读法；量纲与小数位沿用 formatCell。
+ * 符号只陈述方向：模型层没有指标方向声明，涨跌染色会把流失类指标读反。
  */
 export function formatSignedDelta(
   value: number | null,

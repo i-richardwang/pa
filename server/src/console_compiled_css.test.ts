@@ -35,17 +35,15 @@ function utility(candidate: string): string {
 const NOT_IN_A_CLASS_NAME = /[;"'<{}$`]/;
 
 /**
- * 候选提取：取字符串字面量里以空白分隔的片段，与 Tailwind 自己看见的那一份对齐——
- * 拼接出来的类名（`rounded-${x}`）两边都看不见，那是 Tailwind 本身的约束，不是这里的漏。
+ * 候选＝字符串字面量里以空白分隔的片段，与 Tailwind 看见的那一份对齐
+ * （拼接出来的类名两边都看不见）。
  */
 function candidates(text: string): string[] {
   const out = new Set<string>();
   for (const match of text.matchAll(/"([^"\n]*)"|'([^'\n]*)'|`([^`\n]*)`/g)) {
     const literal = match[1] ?? match[2] ?? match[3] ?? "";
     for (const token of literal.split(/\s+/)) {
-      // 样式值不是类名：`--pa-stage-aside` 是自定义属性名，`var(--pa-ink)` 是它的取值，
-      // 拼 HTML 那几处还会切出 `font-weight:450;line-height:21px` 这样的碎片。
-      // 这一路由 console_style_boundary 那侧看守（它管的是「有没有绕开令牌写死色值」）
+      // 样式值不是类名：`--x` 与 `var(--x)` 片段在此排除。
       if (token.startsWith("--") || token.startsWith("var(")) continue;
       if (NOT_IN_A_CLASS_NAME.test(token)) continue;
       if (token.length > 1 && /^[\w[!:*&>~.@[\]/-]/.test(token)) out.add(token);
@@ -72,7 +70,6 @@ const DEAD_PROBE = [
 
 test("a class name that was written actually compiles to a rule", async () => {
   for (const { label, entry, srcs } of HOSTS) {
-    /** 候选去重后记住谁先写的，判死时才报得出出处 */
     const origin = new Map<string, string>();
     for (const src of srcs) {
       const names = (await readdir(src, { recursive: true })).filter(isProductSource);

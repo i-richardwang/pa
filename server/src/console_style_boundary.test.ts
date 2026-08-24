@@ -12,7 +12,7 @@ const FORBIDDEN = [
   },
 ];
 
-/** 内联 style 只认设计令牌：它绕开了编译产物那道门，所以在源码上看。 */
+/** 内联 style 绕开编译产物，只能在源码上查。 */
 const INLINE_STYLE = /style=\{\{[^}]*\}\}/g;
 const FOREIGN_INLINE_VAR = /var\(\s*--(?!pa-)[\w-]+/g;
 function foreignInlineVars(source: string): string[] {

@@ -1,13 +1,6 @@
 /**
- * 渲染期的 option 派生：编译产物（`chart.option` + `chart.model`）× 此刻的渲染状态
- * （主题、宿主场景、视口尺寸、焦点、钉住）→ 可直接 `setOption` 的完整对象。
- *
- * 编译期不知道的事全在这里一次算完：宿主是哪一档留白、画布多宽（符号与标签密度、刻度档数）、
- * 谁在焦点、是否钉住；函数不可序列化，值轴刻度与值标签的格式化器也在此注入。
- * 它是一个纯函数：同样的输入恒得同样的 option。
- *
- * 暗色主题：option 恒为亮色原值，这里按 CHART_DARK_COLORS 映射递归替换字符串；
- * 单系列折线的面积渐变在翻色之后现拼——序列化只带得动纯色，而渐变必须用翻过的那个色去算。
+ * 编译产物 × 渲染状态 → `setOption` 对象。翻色按 CHART_DARK_COLORS 走字面值，
+ * 函数与渐变必须在翻色之后注入。
  */
 import {
   CHART_CHROME,
@@ -39,7 +32,6 @@ export function isDarkTheme(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-/** 主题变化订阅：宿主翻 data-theme 或系统翻 prefers-color-scheme 都触发 */
 export function watchTheme(onChange: () => void): () => void {
   const observer = new MutationObserver(onChange);
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
@@ -51,15 +43,9 @@ export function watchTheme(onChange: () => void): () => void {
   };
 }
 
-/* ---------- 几何 ---------- */
-
 export type Viewport = { width: number; height: number };
 
-/**
- * 场地框相对画布四缘的退让（px）：场景留白 + 该形态自己那一栏框外轴标签。
- * echarts 的 grid 与 DOM 那层 plot 框读同一道算式——两处各算一次，框迟早圈错地方。
- * 值标签的框内余量（`plot_inset`）不在此列：它只缩数据区（见 `gridRect`），框不动。
- */
+/** grid 与 DOM 场地框读同一道算式，两处必须同源。 */
 export function plotRect(
   chart: ViewChart,
   scene: ViewScene,
@@ -78,7 +64,6 @@ export function gridRect(
   return { ...rect, top: rect.top + (inset.top ?? 0), right: rect.right + (inset.right ?? 0) };
 }
 
-/** 数据区实际尺寸；依赖轴向空间的密度策略统一从这里取值。 */
 export function plotSize(chart: ViewChart, scene: ViewScene, viewport: Viewport): Viewport {
   const rect = gridRect(chart, scene);
   return {
@@ -87,22 +72,14 @@ export function plotSize(chart: ViewChart, scene: ViewScene, viewport: Viewport)
   };
 }
 
-/* ---------- 密度 ---------- */
-
 /** 折线圆点：每点摊不到 12px 就只在指针命中时现出那一颗（`showSymbol` 的原生语义）。 */
 const SYMBOL_SPACING = 12;
 
-/**
- * 值标签密度：空间不足时按步距挑桶印数、恒印末点。
- * 折线：每点摊到 37.33px 以上才逐点印，否则步距 = ceil(50 / 每点宽)；
- * 柱：步距 = ceil((最宽底片 + 4) / 每列宽)（放得下即逐列印，无独立阈值）。
- * 横排条一行一格不会横向挤，不在此列（类目不在 x 轴）。
- */
+/** 值标签阈值（px）：每点可用宽低于此即按步距挑桶。 */
 const VALUE_LABEL_SPACING = 37.33;
 const LINE_LABEL_BUDGET = 50;
 const BAR_LABEL_GAP = 4;
 
-/** 值轴档数随绘图区尺度走：每 80px 一档，夹在 2–10。 */
 const TICK_SPACING = 80;
 
 function labelStep(kind: unknown, per: number, widest: number): number {
@@ -112,11 +89,7 @@ function labelStep(kind: unknown, per: number, widest: number): number {
   return Math.max(1, Math.ceil((widest + BAR_LABEL_GAP) / per));
 }
 
-/**
- * 值标签格式化器：与读数卡同一套格式（率带单位、位数随列声明），否则 0–1 标度的率会以
- * 小数印在图上。配了标签形制就装，不看此刻印不印——焦点会现出档位没选中的那条。
- * 步距 > 1 时只印整步与末点。
- */
+/** 与读数卡同源的格式与位数；配了标签形制即装，焦点会现出此刻不印的那条。 */
 function valueLabelFormatter(
   format: ColumnFormat,
   decimals: number | undefined,
@@ -174,8 +147,6 @@ function applyTickDensity(option: MutableOption, plot: Viewport): void {
   ticks(asArray(option.yAxis), plot.height);
 }
 
-/* ---------- 注入 ---------- */
-
 /** 值轴刻度：与读数卡同源的格式与位数，率轴按百分比/百分点标单位。 */
 function injectAxisFormatters(option: MutableOption, model: ChartModel): void {
   const inject = (
@@ -202,13 +173,9 @@ export function legendTotal(model: ChartModel): number {
   return model.legend.reduce((sum, item) => sum + (item.values[0] ?? 0), 0);
 }
 
-/** 环心总计：值为主、总计标签为次，居中常驻。 */
 function injectPieCenterTotal(option: MutableOption, model: ChartModel, dark: boolean): void {
   const lead = model.legend[0];
   if (!lead) return;
-  // 主次靠这两档的深浅差说话：值取 `valueText`（数据注释那一档），标签退到 `axisText`
-  // （轴刻度那一档）。反过来接的后果是环心正中那个数比它自己的标签还淡——一张图里
-  // 最该被读到的数，读起来像个注脚。
   const valueColor = dark ? CHART_CHROME.valueText.dark : CHART_CHROME.valueText.light;
   const labelColor = dark ? CHART_CHROME.axisText.dark : CHART_CHROME.axisText.light;
   option.graphic = [
@@ -241,7 +208,7 @@ function injectPieCenterTotal(option: MutableOption, model: ChartModel, dark: bo
   ];
 }
 
-/** `#rrggbb` → 带 alpha 的 rgba；非六位十六进制（用户自定义色可能是任意写法）返回 null */
+/** 自定义色可能不是六位十六进制，此时返回 null。 */
 function withAlpha(color: string, alpha: number): string | null {
   const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
   if (!hex) return null;
@@ -249,13 +216,7 @@ function withAlpha(color: string, alpha: number): string | null {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/**
- * 单系列折线的面积：系列色自顶 5% 淡出，到 70% 高度收尽。
- *
- * 编译端只落一个纯色（暗色翻转按字面值查表，渐变对象里的 rgba 查不到），渐变在这里拼——
- * 此时色已经翻转过。收尽点定在 70% 而非底：铺到轴上就成了一块实色，把网格线与零基线读没了，
- * 面积要给的只是「量的体感」，不是第二个图层。
- */
+/** 面积渐变在翻色之后现拼；收尽点 70%，铺到底会盖住网格线与零基线。 */
 function injectAreaGradient(option: MutableOption): void {
   for (const series of asArray(option.series)) {
     const area = series.areaStyle as MutableOption | undefined;
@@ -263,7 +224,6 @@ function injectAreaGradient(option: MutableOption): void {
     const top = withAlpha(area.color, 0.05);
     const bottom = withAlpha(area.color, 0);
     if (!top || !bottom) {
-      // 自定义色解析不了就退成同效果的平涂，宁可淡一点也不留一块不透明的实色
       area.opacity = 0.05;
       continue;
     }
@@ -281,7 +241,6 @@ function injectAreaGradient(option: MutableOption): void {
   }
 }
 
-/** 亮色 → 暗色：递归替换 option 里的已知颜色字符串。 */
 function applyDarkColors(value: unknown): unknown {
   if (typeof value === "string") return CHART_DARK_COLORS[value.toLowerCase()] ?? value;
   if (Array.isArray(value)) return value.map(applyDarkColors);
@@ -293,8 +252,6 @@ function applyDarkColors(value: unknown): unknown {
   return value;
 }
 
-/* ---------- 派生 ---------- */
-
 export type RenderState = {
   dark: boolean;
   scene: ViewScene;
@@ -305,10 +262,7 @@ export type RenderState = {
   pinned: number | null;
 };
 
-/**
- * 焦点落到 option 上：样式段与层序按单元重出（`focusPatch` 出的就是按序号对位的那几项），
- * 饼图换的是整份调色板。在翻色之前做——焦点色与本色同是亮色原值。
- */
+/** 必须在翻色之前：焦点色与本色同是亮色原值。 */
 function applyFocus(option: MutableOption, chart: ViewChart, focused: number | null): void {
   const patch = focusPatch(chart, focused);
   if (patch.color) option.color = patch.color;
@@ -339,7 +293,6 @@ export function renderOption(chart: ViewChart, state: RenderState): MutableOptio
       triggerOn: state.pinned === null ? "mousemove|click" : "none",
     };
   }
-  // 系统开了减动效时整体关闭；option 本身的动画契约只留交互态那一点过渡
   if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) {
     option.animation = false;
   }

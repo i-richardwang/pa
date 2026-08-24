@@ -1,7 +1,4 @@
-/**
- * 正式指标 Calculator：对齐各单事实聚合结果并计算声明式指标节点。
- * 本模块不规划查询、不访问 Cube，也不接受用户公式。
- */
+/** 正式指标 Calculator：对齐单事实聚合结果并计算声明式指标节点；不接受用户公式。 */
 import type { TopNSelectionSpec } from "../semantic_core/analysis_spec.js";
 import type {
   CubeFilter,

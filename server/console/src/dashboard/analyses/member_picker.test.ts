@@ -22,12 +22,10 @@ const dimension: CatalogMemberPayload = {
 
 describe("report editor member picker", () => {
   test("候选本地灰化只据纯语义信号：互斥维度与被封锁维度，双向置灰", () => {
-    // 指标声明与某维度互斥：该维度被选中时指标置灰
     expect(pickableMembers([measure], ["dimension:department_name"], [])[0]).toMatchObject({
       canonical_name: measure.id,
       incompatible: true,
     });
-    // 维度被选中指标封锁（blockedDimensions）时置灰
     expect(pickableMembers([dimension], [], ["dimension:department_name"])[0]).toMatchObject({
       canonical_name: dimension.id,
       incompatible: true,
@@ -67,8 +65,6 @@ describe("report editor member picker", () => {
         [],
       ),
     );
-    // 组序取成员首次出现；同组成员并节而非各自成节。
-    // 没给指标域时指标不分节，落兜底桶且恒在末位
     expect(grouped.map((group) => group.label)).toEqual([
       "岗位与职级",
       "员工基本信息",

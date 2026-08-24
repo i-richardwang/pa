@@ -9,7 +9,6 @@ export function Hint({ className, ...props }: React.ComponentProps<"p">): React.
   return <p className={cn(HINT_TEXT, className)} data-slot="hint" {...props} />;
 }
 
-/** 「此刻不可用」的理由：就地一枚提示钮，悬停读理由。 */
 export function BlockedHint({ reason }: { reason: React.ReactNode }): React.ReactElement {
   return (
     <Tooltip>

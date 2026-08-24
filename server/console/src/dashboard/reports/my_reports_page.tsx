@@ -1,7 +1,3 @@
-/**
- * 我的报告清单：titlebar + 灰控制条 + 全宽裸铺表。
- * 「报告 / 查询记录」是控制条分面；「新建分析」挂 titlebar。
- */
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArchiveIcon, ChartBarIcon, CircleAlertIcon, PlusIcon } from "lucide-react";

@@ -1,7 +1,6 @@
 /**
- * 控制台外壳：shadcn SidebarProvider + 画布灰、栏头工作区菜单、收起钮 hover 显隐。
  * 全局键位：⌘/Ctrl+K 命令面板、⌘/Ctrl+. 与官方 ⌘/Ctrl+B 折叠侧栏、? 快捷键一览、Esc 收起工作台右栏。
- * 侧栏开合恒由用户手动决定，偏好记 localStorage——没有任何页面会替用户收起主导航。
+ * 侧栏开合恒由用户手动决定，偏好记 localStorage。
  */
 import { useEffect, useRef, useState } from "react";
 import {
@@ -73,7 +72,6 @@ function navGroups(isAdmin: boolean): NavMainGroup[] {
   const visible = visibleNav(isAdmin);
   return [
     {
-      // 主列表无段标题；仅管理段带标签
       label: "",
       items: visible
         .filter((n) => !n.adminOnly)
@@ -93,7 +91,6 @@ function routeTitle(route: RouteKey, items: readonly NavItem[]): string {
   return items.find((n) => n.key === route)?.label ?? "我的报告";
 }
 
-/** 非管理员的 admin 路由归一到默认页。 */
 export function resolveRoute(route: RouteKey, isAdmin: boolean): RouteKey {
   return visibleNav(isAdmin).some((n) => n.key === route) ? route : "reports";
 }
@@ -148,7 +145,6 @@ export function DashboardShell({
   /** 清单骨架：titlebar 恒显页名 + 可选「+ 新建」。详情/表单页勿开。 */
   listChrome?: boolean;
   mainSurface?: MainSurface;
-  /** 个人设置：居中弹层，不占路由页。 */
   settingsOpen?: boolean;
   settingsTab?: SettingsTab;
   onSettingsOpenChange?: (open: boolean) => void;
@@ -246,8 +242,6 @@ export function DashboardShell({
 }
 
 /**
- * Esc 收起档案面右栏（`face: "profile"`）：它随一次选中而开，Esc 就是放下这条记录。
- * 配置面右栏是工作台的开关件，不随 Esc 收起。桌面推挤栏与窄屏 Sheet 同一条规则。
  * 听在 document 捕获阶段：Sheet 原语没有触发件，不接管 Esc，也不保证事件冒得出来。
  */
 function useStageAsideEscape(
@@ -299,11 +293,8 @@ function StageAsideSheet({
 }
 
 /**
- * MAIN 内容列。有工作台右栏时：左列 = titlebar + 内容；
- * 右栏通高顶到白卡顶，不吃整宽 titlebar。
- *
- * 树形必须在右栏显隐间保持稳定：若「有栏」走包一层 div、「无栏」改 Fragment，
- * 左列会整段 remount，工作台 `useState`（含配置栏开合）被重置，收起钮形同失灵。
+ * 树形必须在右栏显隐间保持稳定：改走 Fragment 会让左列整段 remount，
+ * 工作台 `useState`（含配置栏开合）被重置。
  */
 function MainColumn({
   open,
@@ -334,7 +325,6 @@ function MainColumn({
         <div
           className={cn(
             "flex min-h-0 min-w-0 flex-1 flex-col",
-            // 清单页：外层不滚；控制条钉顶，表体走 ListScrollBody
             listChrome ? "overflow-hidden" : "overflow-y-auto",
           )}
         >
@@ -361,13 +351,7 @@ function MainColumn({
 }
 
 /**
- * 清单 / 详情同槽 titlebar：
- * - 列表：页名 + 页面登记的动作（「+ 新建」）
- * - 详情：`父级 / 当前` 面包屑（与列表页名同一位置，一脉相承）+ 页面登记的动作
- * - 其它：仅侧栏收起时显示 Trigger + 短名 + 搜索
- *
- * 三种载荷同高（`Titlebar` 基线）：收侧栏时若换一档矮条，页内容会随开合上下跳。
- * 工作台开配置栏时，本题条只住左列，不横跨右栏。
+ * 三种载荷同高（`Titlebar` 基线）：换一档矮条会让页内容随侧栏开合上下跳。
  */
 function ShellTitlebar({
   open,
@@ -383,10 +367,7 @@ function ShellTitlebar({
   const detailCrumb = useDetailCrumb();
   const isMobile = useIsMobile();
   /**
-   * 窄屏侧栏是抽屉（Sheet），只能从这条题条的汉堡钮拉开——抽屉自身那个钮在抽屉里面，
-   * 只关得上打不开。而 `open` 是桌面档的展开偏好（localStorage，默认 true），拿它当
-   * 判据会让窄屏恰好落进「已展开所以不必给入口」的分支：题条整条不渲染，导航无从进入。
-   * 故窄屏恒亮入口，与桌面偏好无关。
+   * 窄屏恒亮导航入口：`open` 是桌面展开偏好，拿它当判据会让窄屏无从进入导航。
    */
   const showTrigger = !open || isMobile;
   const showBar = listChrome || !!detailCrumb || showTrigger;
@@ -412,7 +393,7 @@ function ShellTitlebar({
             </span>
           </nav>
         ) : listChrome ? (
-          // 清单页的页名只在题条里出现一次，页内没有第二处大标题——那它就是这一页的 h1。
+          // 页名只在题条出现一次，故它是本页 h1。
 
           <h1 className="min-w-0 truncate">{title}</h1>
         ) : (

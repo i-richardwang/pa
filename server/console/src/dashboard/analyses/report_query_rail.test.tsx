@@ -182,7 +182,6 @@ test("无结果时成员名仍走目录翻译，不上屏限定名", () => {
 
 test("已选成员成行不成片：胶囊只留给筛选取值", () => {
   const out = render(withMembers(blankDraft()));
-  // 指标仍是一行；分组维度是一行 Breakdown，维度与范围两枚触发件并列在同一行内。
   expect(out.match(/data-slot="inspector-row"/g)).toHaveLength(1);
   expect(out.match(/data-slot="breakdown-field"/g)).toHaveLength(1);
   expect(out).toContain('aria-label="组织分组范围：全部"');
@@ -197,7 +196,6 @@ test("筛选条件就地成行：维度、取值关系与已选值都在栏内�
   // 行不是浮层：维度、关系与取值片必须出现在这一次静态渲染里（浮层只会渲染触发件）。
   expect(out).toContain('data-slot="filter-row"');
   expect(out).toContain("是其中之一");
-  // 已有取值 ⇒ 收起态：改的控件收起，读的取值仍印在卡上。
   expect(out).toContain("示例组织甲");
   expect(out).not.toContain("搜索或输入取值");
 });
@@ -215,14 +213,12 @@ test("添加入口一律在题行右端，没有行内添加位", () => {
   }
   expect(out.indexOf('aria-label="添加筛选条件"')).toBeLessThan(out.indexOf("是其中之一"));
   expect(out.indexOf('aria-label="选择指标"')).toBeLessThan(out.indexOf("在职人数"));
-  // 筛选的取值胶囊不承载第二种添加入口。
   expect(out).not.toContain("添加筛选条件缩小范围");
 });
 
 test("取值关系只有两档，翻转即换文案", () => {
   const out = render(withFilter(withMembers(blankDraft()), "none_of"));
   expect(out).toContain("不是其中之一");
-  // 筛选面只提供成员取值关系，不提供比较算子。
   for (const dropped of ["包含", "大于", "小于", "有值", "无值"]) {
     expect(out).not.toContain(dropped);
   }
@@ -241,11 +237,9 @@ test("一个分组维度一行：维度可就地换，排名选项只在范围�
   const row = out.slice(out.indexOf('data-slot="breakdown-field"'));
   const rowEnd = row.indexOf('data-slot="inspector-section-content"');
   const field = rowEnd < 0 ? row : row.slice(0, rowEnd);
-  // 维度自己就是选择器（不必删掉再加一个），范围触发件与它同在这一行内。
   expect(field).toContain('aria-label="分组维度：组织"');
   expect(field).toContain('aria-label="组织分组范围：全部"');
   expect(field).toContain('aria-label="移除 组织"');
-  // 浮层只渲染触发件：两组设置的题与控件都不在这一次静态渲染里。
   for (const inPopover of ["排序依据", "最大项数", "数值", "名称"]) {
     expect(out).not.toContain(inPopover);
   }

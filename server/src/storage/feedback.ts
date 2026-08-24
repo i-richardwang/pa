@@ -1,8 +1,7 @@
 /**
- * 数据能力反馈：Agent 在当前目录无法满足用户问题时把缺口落 app.db（提报后告知用户即可，
- * 无需事前征求同意）。反馈只进入审核队列，不改变查询与目录；补齐能力仍由管理员改模型完成。
- * topic_key 只用于把同一缺口聚合为优先级信号，每次原话仍逐行保留。
- * 业务术语不走本通道：术语由管理员在指标字典页直接维护，未登记的叫法经零命中检索进入其视野。
+ * 数据能力反馈：反馈只进入审核队列，不改变查询与目录；补齐能力由管理员改模型完成。
+ * topic_key 只把同一缺口聚合为优先级信号，问题原话每次仍逐行保留。
+ * 业务术语不走本通道：术语由管理员在指标字典页维护。
  */
 import { createHash } from "node:crypto";
 import type {
@@ -14,7 +13,7 @@ import type { FeedbackRecord, FeedbackRepository } from "../ports/feedback_repos
 import type { NormalizedFeedbackInput } from "../contracts/feedback_input.js";
 import type { SqliteDatabase } from "../sqlite.js";
 
-/** 同一缺口的聚合身份：按缺口解释归一，问题原话每次仍逐行保留。 */
+/** 同一缺口的聚合身份：按缺口解释归一。 */
 export function feedbackTopicKey(input: NormalizedFeedbackInput): string {
   const identity = input.detail.normalize("NFKC").toLocaleLowerCase().replace(/\s+/g, " ").trim();
   return createHash("sha256")

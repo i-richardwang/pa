@@ -7,9 +7,7 @@ export function ChartStage({
   footer,
   children,
 }: {
-  /** 题名区：Explore 式 22/26 + 灰副文，恒在结果之上。 */
   heading?: ReactNode;
-  /** 页面底栏：时间栏 + 结果元信息。通栏落在结果区之外。 */
   footer?: ReactNode;
   children: ReactNode;
 }) {
@@ -39,10 +37,6 @@ export function ChartStage({
   );
 }
 
-/**
- * 题名块：名字一行，其下一行灰字答「这张图看的是哪一段时间」——**副行只出观察窗口**。
- * 粒度与对比不进副行：它们在底栏上是可点的控件，题下复述一遍既改不动又与控件抢读。
- */
 export function ChartStageHeading({
   title,
   sub,
@@ -52,7 +46,6 @@ export function ChartStageHeading({
   title: ReactNode;
   /** 观察窗口一句话（见 `windowSummary`）；无时间意图的宿主不传。 */
   sub?: ReactNode;
-  /** 可选附加行（如明细弹层坐标带）；查看面主路径不传。 */
   extra?: ReactNode;
   className?: string;
 }) {

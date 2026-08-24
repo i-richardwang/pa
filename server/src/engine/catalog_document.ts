@@ -371,8 +371,7 @@ function resolveIncompatibleInView(
   const ids = new Set<string>();
   for (const reference of references) {
     const matches = tokens?.get(reference);
-    // 同一维度投影到更聚焦的指标域后，互斥维度可能根本不在该域中；
-    // 结构上已不可组合，无需把该引用复制到 View。
+    // 互斥维度引用在本视图零命中即跳过：该维度不在此域中。
     if (!matches || matches.size === 0) continue;
     if (matches.size > 1) {
       throw new Error(

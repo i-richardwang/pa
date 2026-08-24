@@ -1,7 +1,4 @@
-/**
- * 无界日志列表使用服务端 limit/offset 分页，total 来自同一窗口的 COUNT。
- * 分页器只呈现区间和导航，不在浏览器中持有或切分完整结果集。
- */
+/** 服务端 limit/offset 分页；浏览器不持有完整结果集。 */
 import { Button } from "@/components/ui/button";
 import { FrameFooter } from "@/components/ui/frame";
 import {
@@ -38,8 +35,7 @@ export function TablePager({
   }));
 
   return (
-    // FrameFooter 恒为 justify-end（动作靠右）；分页器要的是两端分置，
-    // 故内层显式 w-full 撑满，否则会被父级压成内容宽度并整体挤到右缘。
+    // FrameFooter 恒为 justify-end，内层须显式 w-full 才两端分置。
     <FrameFooter className="pt-2">
       <div className="flex w-full items-center justify-between gap-2">
         <div className="flex items-center gap-2 whitespace-nowrap">

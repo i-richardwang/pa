@@ -1,7 +1,6 @@
 /**
- * 从当前语义包的 YAML 声明生成 Demo 能力地图参考夹具。
- * 模型调整后重跑：bun run generate:data-capability-map；
- * 运行时控制台从服务端读取当前包；该夹具只供纯前端与投影漂移测试。
+ * 从当前语义包的 YAML 声明生成 Demo 能力地图参考夹具；模型调整后重跑。
+ * 该夹具只供纯前端与投影漂移测试。
  */
 import { writeFile } from "node:fs/promises";
 import { projectDataCapabilityMap } from "../src/presentation_core/data_capability_map.js";

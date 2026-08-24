@@ -1,9 +1,6 @@
 /**
- * 数据能力地图的纯逻辑：三列归属与列内排序、定高节点的确定性布局、选中邻接与按需边计算。
- * 指标域居中为枢纽，维度构件、事实构件分居左右——用户从指标族进入，向两侧看复用维度与事实血缘。
- * 维度构件按全局业务语义组织，同一构件只出现一次；事实构件只承载物理指标来源。
- * 事实→维度构件是物理承载血缘，指标域→维度/事实是语义投影；前者只在选中时入画，后者常亮。
- * 列内按被指标域绑定的连接度排序以减少边交叉。
+ * 三列归属：指标域居中为枢纽，维度构件在左、事实构件在右；
+ * 维度构件按全局业务语义组织，同一构件只出现一次；列内按绑定连接度排序。
  */
 import type {
   DataCapabilityMapMetricDomain,
@@ -40,7 +37,7 @@ export function nodeId(ref: CapabilityNodeRef): string {
   return ref.topic.id;
 }
 
-/** 左侧泳道只承载全局规范维度构件，不把物理事实伪装成维度。 */
+/** 左侧泳道只承载全局规范维度构件。 */
 export type DimensionComponentRef = {
   kind: "dimension_group";
   group: DataCapabilityMapDimensionGroup;
@@ -56,14 +53,12 @@ export function canvasFact(fact: DataCapabilityMapFact): fact is CanvasFact {
   return fact.title !== null && fact.members.some((member) => !member.internal);
 }
 
-/** 可上屏的一条成员：名字是业务名，没有业务名的成员根本不成行。 */
 export type ListedMember = {
   name: string;
   label: string;
   kind: "dimension" | "measure";
 };
 
-/** 可上屏的一条部门树：树名与逐层业务名。 */
 export type ListedHierarchy = {
   name: string;
   title: string;
@@ -71,9 +66,8 @@ export type ListedHierarchy = {
 };
 
 /**
- * 展平为可列举成员：不传 names 取事实全部公开成员；传 names（绑定 includes）时逐名解析，
- * 公开成员按类型归组、部门树归入维度组。内部成员与没有业务名的名字都不列——
- * 控制台只说业务的话，说不出的那一条整行不发，不退回物理名或语义 id。
+ * 不传 names 取事实全部公开成员；传 names（绑定 includes）时逐名解析，
+ * 公开成员按类型归组、部门树归入维度组。
  */
 export function listedMembers(fact: DataCapabilityMapFact, names?: string[]): ListedMember[] {
   const named = (name: string, title: string | null, kind: ListedMember["kind"]) =>
@@ -91,7 +85,7 @@ export function listedMembers(fact: DataCapabilityMapFact, names?: string[]): Li
   });
 }
 
-/** 树是一条自上而下的路径：其中一层说不出业务名，这条路径就读不通，整条不发。 */
+/** 任一层无业务名即整条树不发。 */
 export function listedHierarchies(fact: DataCapabilityMapFact): ListedHierarchy[] {
   return fact.hierarchies.flatMap((hierarchy) => {
     const levels = hierarchy.levels.map(
@@ -231,7 +225,6 @@ function handlesToward(
 
 export function capabilityEdges(data: DataCapabilityMapData): CapabilityEdgeRef[] {
   const onCanvas = new Set(data.facts.filter(canvasFact).map((fact) => fact.name));
-  // 属性组归属线：事实→属性组的物理承载血缘，选中时按需入画。
   const attributes = data.dimension_groups.flatMap((group) =>
     group.bindings
       .filter((binding) => onCanvas.has(binding.fact))
@@ -279,7 +272,6 @@ export function capabilityEdges(data: DataCapabilityMapData): CapabilityEdgeRef[
 
 export type CapabilityHighlight = { nodes: ReadonlySet<string>; edges: ReadonlySet<string> };
 
-/** 选中节点 → 该节点与其相邻边和对端节点保持全亮，其余淡出 */
 export function highlightFor(
   edges: CapabilityEdgeRef[],
   selected: string | null,

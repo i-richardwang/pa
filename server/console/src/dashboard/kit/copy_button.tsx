@@ -1,6 +1,3 @@
-/**
- * 代码复制钮：题条场景走幽灵 pill；复制成功后短暂显示「已复制」。
- */
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCopyToClipboard } from "@/hooks/use_copy_text";

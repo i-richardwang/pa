@@ -19,7 +19,6 @@ const headCell =
   "h-8 border-pa-line border-b bg-pa-bg px-1 text-left align-middle font-normal text-xs";
 const cellText = "whitespace-nowrap font-normal";
 const frozenCell = "sticky left-0 z-[1] bg-pa-bg group-hover:bg-pa-wash-solid";
-/** 缺席的格。 */
 const EMPTY_CELL = <span className="text-pa-faint">—</span>;
 /**
  * 总体带与组边界线只用单边工具类：两个 border-color 工具类落在同一元素上时，胜者由样式表生成
@@ -28,11 +27,7 @@ const EMPTY_CELL = <span className="text-pa-faint">—</span>;
 const groupEdge = "border-l border-l-pa-line";
 const shadeText = { ink: "text-pa-ink", inverse: "text-pa-ink-fg" } as const;
 
-/**
- * 热力格：底色铺在格内一块圆角片上而不是整格——片与片之间留出格内衬的一圈，行线不被色片
- * 压断，深浅在网格里各自成块可辨。字色按底色对比选墨色或反白（`shadeCell` 决定）；
- * 「仅颜色」档把数字藏起来只留色。明暗档只有着色的表才需要问，故订阅在本件而不在表上。
- */
+/** 明暗只有着色的表要问，故订阅落在本件而不在表上。 */
 function ShadeChip({
   value,
   formatKey,
@@ -134,7 +129,7 @@ export function DataTable({
   const columnSchemaKey = JSON.stringify(model.columns.map(tableColumnKey));
   const headerRows = tableHeaderRows(model.columns);
   const headerDepth = headerRows.length;
-  /** 首列是坐标才冻结：数值打头的表没有行头，冻住一列数字反而挡住后面的数字。 */
+  /** 首列是坐标才冻结。 */
   const frozen = model.columns[0] ? !model.columns[0].numeric : false;
   const bodyCell = `${cellText} ${traits.cellPad} border-pa-line border-b`;
   const summaryCell = `${cellText} ${traits.cellPad} border-b border-b-pa-line bg-pa-bg font-medium`;
@@ -157,7 +152,7 @@ export function DataTable({
   const total = `共 ${rows.length} 行`;
   const footer = shown.length < rows.length ? `已显示前 ${shown.length} 行 · ${total}` : total;
 
-  /** 右边还有没有列：滚动、容器改尺寸与换模型三处都要重问，答案只有量得出来。 */
+  /** 滚动、改尺寸、换模型三处都要重问。 */
   const probeScroll = () => {
     const node = scrollerRef.current;
     setScrollableRight(!!node && node.scrollWidth - node.clientWidth - node.scrollLeft > 1);
@@ -195,7 +190,6 @@ export function DataTable({
     setExpandHint(null);
   };
 
-  /** 悬停探测：可截列且确实溢出才亮展开钮；悬停到任何其他格子即收 */
   const probeTruncation =
     (row: number, col: number, cappable: boolean) => (e: React.MouseEvent<HTMLElement>) => {
       const inner = e.currentTarget.firstElementChild;
@@ -222,10 +216,7 @@ export function DataTable({
     </button>
   );
 
-  /**
-   * 画竖线的列：只在多层表头下、每个顶层分组的首列画一条，贯穿表头、总体与明细。
-   * 单层表不画——那里没有「组」可分，每列自己就是一组，逐列画就成了网格。
-   */
+  /** 多层表头下每个顶层分组的首列画一条，贯穿表头、总体与明细。 */
   const edgeAt = new Set(
     headerDepth <= 1
       ? []
@@ -250,14 +241,11 @@ export function DataTable({
     col: TableColumn,
     value: string | number | null,
   ) => {
-    // 数值列不设截断上限——数字撑不到需要截断的宽度
     const text = value === null ? null : formatCell(value, col.formatKey, col.format, col.decimals);
     if (text === null) return EMPTY_CELL;
     if (col.numeric) {
       const cellSource = sourceOf(rows[ri].source, i);
-      // 记录入口不进静息态：染色的数字会被读成"这个值有名堂"，而能否查看记录是列的属性，
-      // 与格里的数值无关。静息一律本色，悬停/聚焦才现形：
-      // 格子不画可点性，可点性靠交互暴露）。空格没有数字可点，钮也就不存在。
+      // 可点性只在悬停/聚焦时现形
       const content =
         cellSource !== null && canOpenCell?.(cellSource, i) ? (
           <button
@@ -339,8 +327,7 @@ export function DataTable({
               </tr>
             ))}
           </thead>
-          {/* 总体是表格 chrome 不是明细：紧随表头成带，与表头同层吸顶（两者相邻平铺不相互压盖），
-              滚动只发生在明细上——总体因此永远不吃列表尾部，读者也不会把它读成"以上合计"。 */}
+          {/* 必须排在明细之前：吸顶偏移按表头实高叠加 */}
           {model.summaryRows?.length ? (
             <tbody
               aria-label="总体"
@@ -363,7 +350,7 @@ export function DataTable({
               ))}
             </tbody>
           ) : null}
-          {/* 表尾不封口：末行的行线与行数条的顶线会叠成一条双线，而表格的下边界由行数条交代。 */}
+          {/* 下边界由行数条的顶线交代 */}
           <tbody
             className="[&>tr:last-child>td]:border-b-0"
             onMouseLeave={() => setExpandHint((prev) => (prev === null ? prev : null))}

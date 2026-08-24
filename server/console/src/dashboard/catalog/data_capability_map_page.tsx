@@ -107,7 +107,7 @@ function nodeTitle(ref: CapabilityNodeRef): string {
   return ref.topic.title;
 }
 
-/** 角色不进摘要（泳道标题已表达），只报内容量；全内部成员的构件按技术字段说明。 */
+/** 摘要只报内容量；全内部成员的构件按技术字段说明。 */
 function nodeSummary(ref: CapabilityNodeRef, data: DataCapabilityMapData): string {
   if (ref.kind === "metric_domain") {
     return `${ref.topic.metrics.length} 个指标 · ${ref.topic.bindings.length} 个事实`;
@@ -172,7 +172,6 @@ function CapabilityNode({ data }: NodeProps<CapabilityFlowNode>) {
   );
 }
 
-/** 枢纽泳道（指标域）标题用前景色压重一档，其余泳道保持弱化。 */
 function LaneLabelNode({ data }: NodeProps<LaneLabelFlowNode>) {
   return (
     <div
@@ -229,10 +228,9 @@ const EDGE_TYPES = { capability: CapabilityEdge };
 
 const PRO_OPTIONS = { hideAttribution: true };
 
-/** 首屏取景与「回到全景」共用一份取景参数：两处各写一个数，回不到人记得的那一屏。 */
+/** 首屏取景与「回到全景」同一份参数。 */
 const MAP_FIT_VIEW = { padding: 0.1 };
 
-/** 清单行：左图标 + 业务名。右侧留给读者用得上的口径说明，不印物理名与语义 id。 */
 function MemberRow({ member }: { member: ListedMember }) {
   return (
     <InspectorRow
@@ -262,7 +260,6 @@ function MemberListSection({
   );
 }
 
-/** 关系行：label 左，指向的那些记录各成一枚芯片——这些名字是这一行的全部内容。 */
 function RelationRow({ label, names }: { label: string; names: string[] }) {
   return (
     <InspectorRow label={label}>
@@ -275,7 +272,7 @@ function RelationRow({ label, names }: { label: string; names: string[] }) {
   );
 }
 
-/** 该事实被哪些指标域取用：地图上那是一根线，档案里要读得出名字。 */
+/** 该事实被哪些指标域取用。 */
 function domainTitlesOfFact(data: DataCapabilityMapData, fact: string): string[] {
   return data.metric_domains
     .filter((topic) => topic.bindings.some((binding) => binding.fact === fact))
@@ -292,10 +289,6 @@ function domainTitlesOfGroup(
     .map((topic) => topic.title);
 }
 
-/**
- * 头卡：这一条构件本身是什么——名字、口径，以及它在图上那几根线读不出名字的去向。
- * 物理表名与语义 id 不进这里：控制台只说业务的话。
- */
 function CapabilityProfileCard({
   nodeRef,
   capabilityMap,
@@ -346,7 +339,6 @@ function FactInspectorBody({
   fact: DataCapabilityMapFact;
   capabilityMap: DataCapabilityMapData;
 }) {
-  // 被属性组认领的维度归属左列组节点，事实本体清单只列剩余内容。
   const grouped = groupedNamesOf(capabilityMap, fact.name);
   const own = listedMembers(
     fact,
@@ -408,7 +400,6 @@ function DimensionGroupInspectorBody({
   );
 }
 
-/** 指标域展示规范指标、共同分析维度与正式指标图解析出的物理事实血缘。 */
 function MetricDomainInspectorBody({
   topic,
   capabilityMap,
@@ -608,10 +599,7 @@ function DataCapabilityMapContent({ capabilityMap }: { capabilityMap: DataCapabi
 
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col", MAIN_CARD_BODY_INSET)}>
-      {/*
-        画布的场地：与结果面那圈发丝框同一件事——框圈住绘图区，与里面长成什么样无关。
-        半径取 `PLOT_RADIUS`（图表场地的同一个数），两处各写一个数就会差出一档圆角。
-      */}
+      {/* 半径取 `PLOT_RADIUS`，与图表场地同一个数。 */}
       <div
         className="min-h-0 flex-1 overflow-hidden border border-pa-line"
         style={{ borderRadius: PLOT_RADIUS }}

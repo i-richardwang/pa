@@ -1,8 +1,6 @@
 /**
- * 人类作者的视觉偏好：只决定同一份聚合结果怎么画，不改变查询、分组、计算或呈现通道。
- *
- * 这份合同属于 Web 创作面，不进入 Agent MCP schema。`ViewIntent` 负责图表类型和数据通道；
- * 服务端只在最终渲染边界把二者合成物理 PresentationSpec。
+ * 人类作者的视觉偏好：只决定同一份聚合结果怎么画。
+ * 属 Web 创作面，不进入 Agent MCP schema。
  */
 import { z } from "zod";
 import { ViewIntentError, type SemanticViewIntent } from "../semantic_core/semantic_analysis.js";

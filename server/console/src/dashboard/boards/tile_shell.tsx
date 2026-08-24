@@ -2,9 +2,8 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * 瓦片壳：卡面 + 标题行 + 右侧操作。壳自己就是边界，内容区不画框（见 `PLOT_FRAME.tile`）。
- * 操作钮的现身档由 `affordance` 定：查看态悬停/聚焦才现，编辑态常驻。
- * 拖拽/缩放进行中把它藏起来是那一块瓦片的状态，落在 styles.css 的 `.react-draggable-dragging` 规则上。
+ * 壳自己就是边界，内容区不画框（见 `PLOT_FRAME.tile`）。
+ * 拖拽/缩放进行中把它藏起来落在 styles.css 的 `.react-draggable-dragging` 规则上。
  */
 export function TileShell({
   title,
@@ -14,7 +13,6 @@ export function TileShell({
 }: {
   title: ReactNode;
   affordance?: "hover" | "pinned";
-  /** 标题行右侧操作（`⋯` 菜单等）。 */
   actions?: ReactNode;
   children: ReactNode;
 }) {

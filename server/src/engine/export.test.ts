@@ -1,7 +1,3 @@
-/**
- * 导出通道纯函数单测：CSV 装配；短票据见 export_ticket.test.ts。
- * /export 路由与真实查询由 scripts/smoke.ts 端到端覆盖。
- */
 import { describe, expect, test } from "bun:test";
 import type { CubeGateway } from "../ports/cube_gateway.js";
 import { runExport, toCsv } from "./export.js";
