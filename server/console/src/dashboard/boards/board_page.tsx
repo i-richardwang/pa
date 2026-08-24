@@ -202,7 +202,7 @@ export function BoardPage({
       }),
     [],
   );
-  useLeaveBlocker(dirty, confirmLeave);
+  useLeaveBlocker(() => dirty, confirmLeave);
 
   function resolveLeave(ok: boolean) {
     leaveResolve.current?.(ok);

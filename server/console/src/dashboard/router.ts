@@ -130,29 +130,28 @@ export function parseRoute(hash: string): Route {
 /**
  * 导航离开守卫。守卫状态是模块级单例：控制台同时至多一个编辑态。
  * 只有 hash 的 path 段变化才算离开；同页仅 query 段变化（如看板 `?t=`）不拦。
+ * 判据只有「这次离开会不会丢工作」一条，与谁发起导航无关：草稿落库即不脏，守卫自然放行，
+ * 因此没有、也不该有「本次跳转豁免」之类的旁路。
  */
-let blockerActive = false;
-let blockerConfirm: (() => Promise<boolean>) | null = null;
+let leaveGuard: { dirty: () => boolean; confirm: () => Promise<boolean> } | null = null;
 
-export function useLeaveBlocker(active: boolean, confirm: () => Promise<boolean>): void {
-  // confirm 每次渲染换引用，用 ref 稳定身份
-  const confirmRef = useRef(confirm);
-  confirmRef.current = confirm;
+/** `dirty` 是现问现答的判定，不是快照：镜像成布尔会滞后一拍，落库后的跳转会被自己拦下。 */
+export function useLeaveBlocker(dirty: () => boolean, confirm: () => Promise<boolean>): void {
+  const live = useRef({ dirty, confirm });
+  live.current = { dirty, confirm };
   useEffect(() => {
-    if (!active) return;
-    blockerActive = true;
-    blockerConfirm = () => confirmRef.current();
+    leaveGuard = { dirty: () => live.current.dirty(), confirm: () => live.current.confirm() };
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!live.current.dirty()) return;
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => {
-      blockerActive = false;
-      blockerConfirm = null;
+      leaveGuard = null;
       window.removeEventListener("beforeunload", onBeforeUnload);
     };
-  }, [active]);
+  }, []);
 }
 
 export function useHashRoute(): [Route, (r: RouteKey) => void] {
@@ -164,14 +163,12 @@ export function useHashRoute(): [Route, (r: RouteKey) => void] {
     const onHash = () => {
       const to = window.location.hash;
       if (to === currentRef.current) return;
-      if (blockerActive && blockerConfirm && pathOf(to) !== pathOf(currentRef.current)) {
+      const guard = leaveGuard;
+      if (guard?.dirty() && pathOf(to) !== pathOf(currentRef.current)) {
         const target = to;
         navigateTo(currentRef.current);
-        void blockerConfirm().then((ok) => {
-          if (ok) {
-            blockerActive = false; // 已确认的目标只放行一次，后续导航仍需重新建立守卫。
-            navigateTo(target);
-          }
+        void guard.confirm().then((ok) => {
+          if (ok) navigateTo(target);
         });
         return;
       }

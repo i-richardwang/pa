@@ -4,7 +4,7 @@
  */
 import { AnalysisWorkbench } from "./analysis_workbench";
 import { errorText, useAnalysisReplay, useCatalogQuery } from "../dashboard_queries";
-import { reportsHistoryHash } from "../router";
+import { navigateTo, reportHash, reportsHistoryHash } from "../router";
 import { useAnalysisEditSession } from "./use_analysis_edit_session";
 
 export function AnalysisPage({ id }: { id: string }) {
@@ -27,6 +27,7 @@ export function AnalysisPage({ id }: { id: string }) {
       : null,
     savedReplay: data,
     target: { kind: "create" },
+    onCreated: (report) => navigateTo(reportHash(report.id)),
   });
 
   return (

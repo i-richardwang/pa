@@ -4,7 +4,7 @@
  */
 import { AnalysisWorkbench } from "../analyses/analysis_workbench";
 import { errorText, useBoard, useBoardReportReplay, useCatalogQuery } from "../dashboard_queries";
-import { boardHash } from "../router";
+import { boardHash, navigateTo, reportHash } from "../router";
 import { useAnalysisEditSession } from "../analyses/use_analysis_edit_session";
 
 export function BoardReportEditPage({ boardId, reportId }: { boardId: string; reportId: string }) {
@@ -37,6 +37,7 @@ export function BoardReportEditPage({ boardId, reportId }: { boardId: string; re
     // 分叉的规格取自那份重放本身。
     savedReplay: replay,
     target: { kind: "create" },
+    onCreated: (report) => navigateTo(reportHash(report.id)),
   });
 
   return (

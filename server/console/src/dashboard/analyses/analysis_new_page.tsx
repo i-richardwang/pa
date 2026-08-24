@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { AnalysisWorkbench } from "./analysis_workbench";
 import { useCatalogQuery } from "../dashboard_queries";
 import { blankAnalysisSeed } from "./analysis_draft";
-import { reportsHistoryHash } from "../router";
+import { navigateTo, reportHash, reportsHistoryHash } from "../router";
 import { useAnalysisEditSession } from "./use_analysis_edit_session";
 
 const BLANK_NAME = "未命名分析";
@@ -15,6 +15,7 @@ export function AnalysisNewPage() {
     sessionKey: "analysis:new",
     seed,
     target: { kind: "create" },
+    onCreated: (report) => navigateTo(reportHash(report.id)),
   });
 
   return (

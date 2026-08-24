@@ -11,7 +11,7 @@ import { ReportHistoryDialog } from "./report_history_dialog";
 import { useArchiveReport, useReportResource } from "../editor_queries";
 import { useAnalysisEditSession } from "../analyses/use_analysis_edit_session";
 import { HeaderMenu } from "../layout/view_chrome";
-import { navigateTo, reportsHash } from "../router";
+import { navigateTo, reportHash, reportsHash } from "../router";
 import { AddToBoardAction } from "./add_to_board_picker";
 
 export function ReportPage({ id }: { id: string }) {
@@ -36,6 +36,8 @@ export function ReportPage({ id }: { id: string }) {
     seed,
     savedReplay,
     target: { kind: "update", reportId: id, ifRevision: report?.revision ?? 1 },
+    // 原地保存留在本页；只有「另存为」产生新报告，才换向那份新报告。
+    onCreated: (created) => navigateTo(reportHash(created.id)),
   });
   function archive() {
     if (!report) return;

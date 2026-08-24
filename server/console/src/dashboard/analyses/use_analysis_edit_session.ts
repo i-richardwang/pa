@@ -26,7 +26,7 @@ import {
   type AnalysisEditState,
 } from "./analysis_draft";
 import { reportKeys, useDraftPreview, useRunDraft, useUpdateReport } from "../editor_queries";
-import { navigateTo, reportHash, useLeaveBlocker } from "../router";
+import { useLeaveBlocker } from "../router";
 
 export type AnalysisEditorSeed = {
   name: string;
@@ -49,6 +49,8 @@ type AnalysisEditSessionInput = {
 
   savedReplay?: ReplayPayload | null;
   target: AnalysisEditorTarget;
+  /** 新建与另存产生新报告后的去向由宿主页裁决；保存只负责落库与落定基线。 */
+  onCreated: (report: { id: string; name: string }) => void;
 };
 
 export function useAnalysisEditSession({
@@ -56,9 +58,16 @@ export function useAnalysisEditSession({
   seed,
   savedReplay = null,
   target,
+  onCreated,
 }: AnalysisEditSessionInput) {
   const queryClient = useQueryClient();
-  const [draft, setDraft] = useState<AnalysisEditState | null>(null);
+  const [draft, setDraftState] = useState<AnalysisEditState | null>(null);
+  /** 草稿的同步镜像：离开守卫在被问到时读它，答案不落后于刚落库/刚弃稿的那一拍。 */
+  const draftRef = useRef<AnalysisEditState | null>(null);
+  const setDraft = useCallback<typeof setDraftState>((next) => {
+    draftRef.current = typeof next === "function" ? next(draftRef.current) : next;
+    setDraftState(draftRef.current);
+  }, []);
   const [baselineRevision, setBaselineRevision] = useState<number | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const leaveResolve = useRef<((ok: boolean) => void) | null>(null);
@@ -103,7 +112,11 @@ export function useAnalysisEditSession({
       }),
     [],
   );
-  useLeaveBlocker(dirty, confirmLeave);
+  const wouldLoseWork = useCallback(
+    () => !!draftRef.current && isAnalysisEditDirty(draftRef.current),
+    [],
+  );
+  useLeaveBlocker(wouldLoseWork, confirmLeave);
 
   const presentationNotes = useMemo(() => {
     if (!activeReplay) return [];
@@ -151,9 +164,11 @@ export function useAnalysisEditSession({
     return true;
   }
 
+  /** 弃稿即刻生效：先扔掉草稿再推代际，重新播种由代际那条效果接手。 */
   function discard() {
     generationRef.current += 1;
     liveEpoch.current = `${sessionKey}#${generationRef.current}`;
+    setDraft(null);
     setGeneration(generationRef.current);
   }
 
@@ -177,7 +192,7 @@ export function useAnalysisEditSession({
             action: { type: "rename", name: draft.name },
             if_revision: ifRevision,
           });
-          settle(draft, renamed.revision);
+          settle(renamed.revision);
           toastManager.add({ type: "success", title: "已保存报告" });
           return true;
         }
@@ -191,7 +206,7 @@ export function useAnalysisEditSession({
           },
           if_revision: ifRevision,
         });
-        settle(draft, replaced.revision);
+        settle(replaced.revision);
         toastManager.add({ type: "success", title: "已保存报告" });
         return true;
       }
@@ -199,8 +214,9 @@ export function useAnalysisEditSession({
       const viewId = await materialize(draft);
       if (!viewId) return false;
       const report = await createReport.mutateAsync({ view_id: viewId, name: draft.name });
-      navigateTo(reportHash(report.id));
+      settle();
       toastManager.add({ type: "success", title: `已保存「${report.name}」` });
+      onCreated(report);
       return true;
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) return false;
@@ -218,10 +234,13 @@ export function useAnalysisEditSession({
     }
   }
 
-  /** 原地落定：草稿留在屏上成为新基线，乐观锁基线取服务端刚回的版本号。 */
-  function settle(saved: AnalysisEditState, revision: number) {
-    setDraft((current) => settleSaved(current ?? saved));
-    setBaselineRevision(revision);
+  /**
+   * 落定：屏上草稿已落库，即刻成为新基线——离开守卫据此不再认为有工作会丢。
+   * 原地更新才推进乐观锁基线；新建与另存的落库对象不是 `target`，其基线保持不动。
+   */
+  function settle(revision?: number) {
+    setDraft((current) => (current ? settleSaved(current) : current));
+    if (revision !== undefined) setBaselineRevision(revision);
   }
 
   async function saveAs(): Promise<boolean> {
@@ -230,8 +249,9 @@ export function useAnalysisEditSession({
       const viewId = await materialize(draft);
       if (!viewId) return false;
       const report = await createReport.mutateAsync({ view_id: viewId, name: draft.name });
-      navigateTo(reportHash(report.id));
+      settle();
       toastManager.add({ type: "success", title: `已另存为「${report.name}」` });
+      onCreated(report);
       return true;
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 401) return false;
