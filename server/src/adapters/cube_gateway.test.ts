@@ -3,7 +3,6 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { decodeJwt } from "jose";
 import {
   createCubeGateway,
-  normalizeMetaViews,
   normalizeSqlResponse,
   resolveTimeSourceAnchors,
 } from "./cube_gateway.js";
@@ -90,7 +89,7 @@ test("通用授权范围只以 data_scope 投影到 Cube JWT", async () => {
   }
 });
 
-test("内部成员只保留在服务端契约解析面", () => {
+test("内部成员只保留在服务端契约解析面", async () => {
   const view = {
     type: "view",
     name: "test_people_metrics",
@@ -115,19 +114,25 @@ test("内部成员只保留在服务端契约解析面", () => {
     ],
   } satisfies CubeView & { type: string };
 
-  const [normalized] = normalizeMetaViews([view]);
-  expect(normalized.measures.map(({ name }) => name)).toEqual([
-    "test_people_metrics.active_employee_count",
-  ]);
-  expect(normalized.dimensions.map(({ name }) => name)).toEqual([
-    "test_people_metrics.organization_name",
-  ]);
-  expect(normalized.internalMeasures?.map(({ name }) => name)).toEqual([
-    "test_people_metrics.raw_count",
-  ]);
-  expect(normalized.internalDimensions?.map(({ name }) => name)).toEqual([
-    "test_people_metrics.employee_id",
-  ]);
+  const fetchMock = spyOn(globalThis, "fetch");
+  try {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ cubes: [view] }));
+    const [normalized] = await testGateway().meta(TEST_CONTEXT);
+    expect(normalized.measures.map(({ name }) => name)).toEqual([
+      "test_people_metrics.active_employee_count",
+    ]);
+    expect(normalized.dimensions.map(({ name }) => name)).toEqual([
+      "test_people_metrics.organization_name",
+    ]);
+    expect(normalized.internalMeasures?.map(({ name }) => name)).toEqual([
+      "test_people_metrics.raw_count",
+    ]);
+    expect(normalized.internalDimensions?.map(({ name }) => name)).toEqual([
+      "test_people_metrics.employee_id",
+    ]);
+  } finally {
+    fetchMock.mockRestore();
+  }
 });
 
 test("Cube meta 与 load 的内部结构在 HTTP 边界 fail-closed", async () => {

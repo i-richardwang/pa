@@ -175,11 +175,13 @@ export function DataTable({
     return observeElementSize(node, () => setHeadHeight(node.offsetHeight));
   }, [fill]);
 
+  const columns = model.columns;
   useEffect(() => {
-    setSort((previous) => resolveTableSort(previous, model.columns));
+    setSort((previous) => resolveTableSort(previous, columns));
     setUncapped((previous) => (previous.size ? new Set() : previous));
     setExpandHint(null);
-  }, [columnSchemaKey, model.columns]);
+    // 只认列身份：模型对象换引用但列语义没变时，悬停与展开状态不该被清掉。
+  }, [columnSchemaKey]);
 
   const toggleSort = (i: number) =>
     setSort(

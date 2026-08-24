@@ -1407,14 +1407,6 @@ export function compileTableWithStatus(
   return { ...compiled, table: { ...compiled.table, shading } };
 }
 
-export function compileTable(
-  view: ViewBlock,
-  titleOf: (c: string) => string,
-  decl?: ChartDecl,
-): TableModel {
-  return compileTableWithStatus(view, titleOf, decl).table;
-}
-
 /** 着色刻度的缺省读法及其量纲：指标列的数据极值，格式与小数位在各指标一致时沿用，否则按普通数值。 */
 export type TableShadingDefaults = {
   scale: ShadingScale;

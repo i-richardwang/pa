@@ -1,11 +1,11 @@
 /** Cube Core HTTP 适配器：负责鉴权、缓存、协议调用与响应归一。 */
 import { SignJWT } from "jose";
+import { z } from "zod";
 import { accessScopeValues } from "../contracts/access_scope.js";
 import { parseKnownTimeSourceId, type TimeSourceRegistry } from "../semantic_core/time_source.js";
 import { CubeGatewayError } from "../ports/cube_gateway.js";
 import type {
   CubeGateway,
-  CubeHierarchy,
   CubeMember,
   CubeQuery,
   CubeSecurityContext,
@@ -128,7 +128,7 @@ async function request(
  * meta.internal 成员不进入公开成员数组；服务端契约解析仍可从独立字段读取，
  * 目录、查询规划与层级补全只消费 measures/dimensions。
  */
-export function normalizeMetaViews(cubes: (CubeView & { type: string })[]): CubeView[] {
+function normalizeMetaViews(cubes: (CubeView & { type: string })[]): CubeView[] {
   const isInternal = (member: CubeMember) => member.meta?.internal === true;
   return cubes
     .filter((cube) => cube.type === "view")
@@ -141,112 +141,58 @@ export function normalizeMetaViews(cubes: (CubeView & { type: string })[]): Cube
     }));
 }
 
-function optionalString(
-  record: Record<string, unknown>,
-  key: string,
-  label: string,
-): string | undefined {
-  const value = record[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== "string") throw unavailable(`${label}.${key} 字段格式异常`);
-  return value;
-}
+const CUBE_MEMBER_SCHEMA = z.object({
+  name: z.string(),
+  title: z.string(),
+  type: z.string(),
+  shortTitle: z.string().optional(),
+  description: z.string().optional(),
+  aggType: z.string().optional(),
+  format: z.string().optional(),
+  aliasMember: z.string().optional(),
+  meta: z.record(z.string(), z.unknown()).optional(),
+});
 
-function optionalMeta(
-  record: Record<string, unknown>,
-  label: string,
-): Record<string, unknown> | undefined {
-  const value = record.meta;
-  if (value === undefined) return undefined;
-  if (!isRecord(value)) throw unavailable(`Cube /meta ${label}.meta 字段格式异常`);
-  return value;
-}
+const CUBE_HIERARCHY_SCHEMA = z.object({
+  name: z.string(),
+  title: z.string().optional(),
+  levels: z.array(z.string()),
+});
 
-function parseCubeMember(value: unknown, label: string): CubeMember {
-  if (!isRecord(value)) throw unavailable(`Cube /meta ${label} 成员格式异常`);
-  if (
-    typeof value.name !== "string" ||
-    typeof value.title !== "string" ||
-    typeof value.type !== "string"
-  ) {
-    throw unavailable(`Cube /meta ${label} 成员缺少 name/title/type`);
-  }
-  const shortTitle = optionalString(value, "shortTitle", `Cube /meta ${label}`);
-  const description = optionalString(value, "description", `Cube /meta ${label}`);
-  const aggType = optionalString(value, "aggType", `Cube /meta ${label}`);
-  const format = optionalString(value, "format", `Cube /meta ${label}`);
-  const aliasMember = optionalString(value, "aliasMember", `Cube /meta ${label}`);
-  const meta = optionalMeta(value, label);
-  return {
-    name: value.name,
-    title: value.title,
-    type: value.type,
-    ...(shortTitle !== undefined ? { shortTitle } : {}),
-    ...(description !== undefined ? { description } : {}),
-    ...(aggType !== undefined ? { aggType } : {}),
-    ...(format !== undefined ? { format } : {}),
-    ...(aliasMember !== undefined ? { aliasMember } : {}),
-    ...(meta !== undefined ? { meta } : {}),
-  };
-}
+/** 只有 public view 进目录：先按 type 分流，再对 view 严格解析——非 view 的 cube 不看内部结构。 */
+const META_SCHEMA = z.object({
+  cubes: z.array(z.object({ type: z.string() }).passthrough()),
+});
 
-function parseCubeHierarchy(value: unknown, label: string): CubeHierarchy {
-  if (!isRecord(value) || typeof value.name !== "string" || !Array.isArray(value.levels)) {
-    throw unavailable(`Cube /meta ${label} 层级格式异常`);
-  }
-  if (!value.levels.every((level) => typeof level === "string")) {
-    throw unavailable(`Cube /meta ${label}.levels 字段格式异常`);
-  }
-  const title = optionalString(value, "title", `Cube /meta ${label}`);
-  return {
-    name: value.name,
-    levels: value.levels,
-    ...(title !== undefined ? { title } : {}),
-  };
-}
+const META_VIEW_SCHEMA = z.object({
+  type: z.literal("view"),
+  name: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  meta: z.record(z.string(), z.unknown()).optional(),
+  measures: z.array(CUBE_MEMBER_SCHEMA),
+  dimensions: z.array(CUBE_MEMBER_SCHEMA),
+  hierarchies: z.array(CUBE_HIERARCHY_SCHEMA).optional(),
+});
 
-function parseMetaViews(cubes: unknown[]): CubeView[] {
-  const views: (CubeView & { type: string })[] = [];
-  cubes.forEach((cube, index) => {
-    if (!isRecord(cube) || typeof cube.type !== "string") {
-      throw unavailable(`Cube /meta cubes[${index}] 格式异常`);
-    }
-    if (cube.type !== "view") return;
-    if (
-      typeof cube.name !== "string" ||
-      typeof cube.title !== "string" ||
-      !Array.isArray(cube.measures) ||
-      !Array.isArray(cube.dimensions)
-    ) {
-      throw unavailable(`Cube /meta view cubes[${index}] 缺少 name/title/measures/dimensions`);
-    }
-    if (cube.hierarchies !== undefined && !Array.isArray(cube.hierarchies)) {
-      throw unavailable(`Cube /meta view ${cube.name}.hierarchies 字段格式异常`);
-    }
-    const description = optionalString(cube, "description", `Cube /meta view ${cube.name}`);
-    const meta = optionalMeta(cube, cube.name);
-    views.push({
-      type: cube.type,
-      name: cube.name,
-      title: cube.title,
-      measures: cube.measures.map((member, memberIndex) =>
-        parseCubeMember(member, `${cube.name}.measures[${memberIndex}]`),
-      ),
-      dimensions: cube.dimensions.map((member, memberIndex) =>
-        parseCubeMember(member, `${cube.name}.dimensions[${memberIndex}]`),
-      ),
-      ...(description !== undefined ? { description } : {}),
-      ...(meta !== undefined ? { meta } : {}),
-      ...(Array.isArray(cube.hierarchies)
-        ? {
-            hierarchies: cube.hierarchies.map((hierarchy, hierarchyIndex) =>
-              parseCubeHierarchy(hierarchy, `${cube.name}.hierarchies[${hierarchyIndex}]`),
-            ),
-          }
-        : {}),
-    });
-  });
-  return normalizeMetaViews(views);
+const ANNOTATION_MEMBERS_SCHEMA = z.record(
+  z.string(),
+  z.object({ title: z.string(), description: z.string().optional() }),
+);
+
+const LOAD_RESPONSE_SCHEMA = z.object({
+  data: z.array(z.record(z.string(), z.unknown())),
+  annotation: z.object({
+    measures: ANNOTATION_MEMBERS_SCHEMA,
+    dimensions: ANNOTATION_MEMBERS_SCHEMA,
+  }),
+});
+
+/** 引擎应答按契约解析后才进应用层；不合契约即引擎不可用，不把半个结构往下传。 */
+function parse<T>(schema: z.ZodType<T>, value: unknown, label: string): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) throw unavailable(`Cube ${label} 应答不合契约：${parsed.error.message}`);
+  return parsed.data;
 }
 
 async function fetchMeta(
@@ -260,8 +206,11 @@ async function fetchMeta(
   if (!isRecord(raw)) throw unavailable("Cube /meta 应答格式异常");
   const body = raw;
   if (body.error) throw unavailable(`Cube /meta 错误：${String(body.error)}`);
-  if (!Array.isArray(body.cubes)) throw unavailable("Cube /meta 应答缺少 cubes");
-  const views = parseMetaViews(body.cubes);
+  const views = normalizeMetaViews(
+    parse(META_SCHEMA, body, "/meta")
+      .cubes.filter((cube) => cube.type === "view")
+      .map((cube, index) => parse(META_VIEW_SCHEMA, cube, `/meta cubes[${index}]`)),
+  );
   state.metaCache.set(key, { views, fetchedAt: Date.now() });
   return views;
 }
@@ -290,50 +239,13 @@ async function loadRaw(
 }
 
 /** /v1/load：带 Continue wait 重试。 */
-function parseAnnotationMembers(
-  value: unknown,
-  label: string,
-): Record<string, { title: string; description?: string }> {
-  if (!isRecord(value)) throw unavailable(`Cube /load annotation.${label} 字段格式异常`);
-  return Object.fromEntries(
-    Object.entries(value).map(([member, annotation]) => {
-      if (!isRecord(annotation) || typeof annotation.title !== "string") {
-        throw unavailable(`Cube /load annotation.${label}.${member} 字段格式异常`);
-      }
-      const description = optionalString(
-        annotation,
-        "description",
-        `Cube /load annotation.${label}.${member}`,
-      );
-      return [
-        member,
-        { title: annotation.title, ...(description !== undefined ? { description } : {}) },
-      ];
-    }),
-  );
-}
-
-function parseLoadResponse(value: unknown, label: string): LoadResponse {
-  if (!isRecord(value) || !Array.isArray(value.data) || !isRecord(value.annotation)) {
-    throw unavailable(`Cube ${label} 应答缺少 data/annotation`);
-  }
-  if (!value.data.every(isRecord)) throw unavailable(`Cube ${label} data 行格式异常`);
-  return {
-    data: value.data,
-    annotation: {
-      measures: parseAnnotationMembers(value.annotation.measures, "measures"),
-      dimensions: parseAnnotationMembers(value.annotation.dimensions, "dimensions"),
-    },
-  };
-}
-
 async function fetchLoad(
   state: CubeGatewayState,
   query: CubeQuery,
   context: CubeSecurityContext,
 ): Promise<LoadResponse> {
   const body = await loadRaw(state, query, {}, context);
-  return parseLoadResponse(body, "/load");
+  return parse(LOAD_RESPONSE_SCHEMA, body, "/load");
 }
 
 /**
@@ -347,7 +259,9 @@ async function fetchLoadMulti(
 ): Promise<LoadResponse[]> {
   const body = await loadRaw(state, query, { queryType: "multi" }, context);
   if (!Array.isArray(body.results)) throw unavailable("Cube /load 多窗应答缺少 results");
-  return body.results.map((result, index) => parseLoadResponse(result, `/load results[${index}]`));
+  return body.results.map((result, index) =>
+    parse(LOAD_RESPONSE_SCHEMA, result, `/load results[${index}]`),
+  );
 }
 
 function isSqlParameter(value: unknown): value is SqlParameter {

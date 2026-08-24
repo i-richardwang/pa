@@ -5,7 +5,7 @@ import {
   COLUMN_FORMAT_SCHEMA,
 } from "../semantic_core/query_payload.js";
 import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
-import type { PresentationBlock, ViewChart } from "./chart_config.js";
+import type { PresentationBlock } from "./chart_config.js";
 
 const OPTIONAL_AXIS_FORMATS_SCHEMA = z
   .object({
@@ -240,11 +240,6 @@ const PRESENTATION_BLOCK_SCHEMA = z
     totals: TOTAL_BAND_SCHEMA.optional(),
   })
   .strict();
-
-/** 宿主边界校验：图表块属不可信输入，渲染端只接受完整的可读模型。 */
-export function isViewChart(value: unknown): value is ViewChart {
-  return VIEW_CHART_SCHEMA.safeParse(value).success;
-}
 
 /** 宿主边界校验：浏览器只接受服务端完整编译且形态自洽的呈现块。 */
 export function isPresentationBlock(value: unknown): value is PresentationBlock {

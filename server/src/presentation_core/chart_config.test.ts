@@ -15,7 +15,7 @@ import {
   type ChartModel,
   type ViewChart,
 } from "./chart_config.js";
-import { isPresentationBlock, isViewChart } from "./presentation_guard.js";
+import { isPresentationBlock } from "./presentation_guard.js";
 import type { ViewBlock } from "../semantic_core/query_payload.js";
 import { type Cell, viewBlock } from "../test_support/view_block.js";
 import type { ChartDecl, SeriesDisplay } from "./chart_decl.js";
@@ -797,42 +797,6 @@ describe("无图形态与回答级块", () => {
       state: "unavailable",
       reason: "duplicate_coordinate",
     });
-  });
-
-  test("isViewChart 边界校验", () => {
-    const model = {
-      categories: ["一月"],
-      legend: [{ name: "人数", color: "#000", format: "number", values: [1] }],
-      axes: {},
-      pointer: "axis",
-    };
-    expect(isViewChart({ form: "line", height: 300, option: {}, model })).toBe(true);
-    expect(isViewChart({ form: "pie", height: 300, option: {}, model })).toBe(true);
-    expect(isViewChart({ form: "donut", height: 300, option: {}, model })).toBe(false);
-    expect(isViewChart({ form: "line", height: 0, option: {}, model })).toBe(false);
-    // 模型是渲染端读数的唯一来源，缺了就不是一张可呈现的图
-    expect(isViewChart({ form: "line", height: 300, option: {} })).toBe(false);
-    expect(
-      isViewChart({
-        form: "pie",
-        height: 300,
-        option: {},
-        model: { ...model, pointer: "item", legend: ["不是图例单元"] },
-      }),
-    ).toBe(false);
-    expect(
-      isViewChart({
-        form: "line",
-        height: 300,
-        option: {},
-        model: {
-          ...model,
-          categories: ["一月"],
-          legend: [{ name: "人数", color: "#000", format: "number", values: [], baseline: 1 }],
-        },
-      }),
-    ).toBe(false);
-    expect(isViewChart(null)).toBe(false);
   });
 
   test("完整呈现块的声明类型必须与编译图表一致", () => {

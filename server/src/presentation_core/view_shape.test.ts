@@ -9,7 +9,6 @@ import {
   analyzeResultShape,
   canCompileKpi,
   compileChart,
-  compileTable,
   compileTableWithStatus,
   compileTotalBand,
   renderShapeOfView,
@@ -110,7 +109,7 @@ describe("compileTable", () => {
         },
       },
     );
-    const table = compileTable(view, titleOf, {
+    const table = compileTableWithStatus(view, titleOf, {
       type: "table",
       y: [],
       tableLayout: {
@@ -120,7 +119,7 @@ describe("compileTable", () => {
         ],
         columns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
       },
-    });
+    }).table;
     expect(headerPathsOf(table)).toEqual([
       ["organization_name"],
       ["department_name"],
@@ -139,14 +138,18 @@ describe("compileTable", () => {
         .filter((month) => !(year === 2026 && month === 3))
         .map((month): Cell[] => [year, month, year * 10 + month]),
     );
-    const table = compileTable(payload(["year", "month", "active_employee_count"], rows), titleOf, {
-      type: "table",
-      y: [],
-      tableLayout: {
-        rows: [{ kind: "time", level: "month" }],
-        columns: [{ kind: "time", level: "year" }, { kind: "metrics" }],
+    const table = compileTableWithStatus(
+      payload(["year", "month", "active_employee_count"], rows),
+      titleOf,
+      {
+        type: "table",
+        y: [],
+        tableLayout: {
+          rows: [{ kind: "time", level: "month" }],
+          columns: [{ kind: "time", level: "year" }, { kind: "metrics" }],
+        },
       },
-    });
+    ).table;
     expect(headerPathsOf(table)).toEqual([
       ["month"],
       ["2025", "active_employee_count"],
@@ -160,7 +163,7 @@ describe("compileTable", () => {
   });
 
   test("未声明列轴的双分类单度量保持两个行轴", () => {
-    const table = compileTable(
+    const table = compileTableWithStatus(
       payload(
         ["organization_name", "degree", "active_employee_count"],
         [
@@ -171,7 +174,7 @@ describe("compileTable", () => {
         ],
       ),
       titleOf,
-    );
+    ).table;
     expect(headerPathsOf(table)).toEqual([
       ["organization_name"],
       ["degree"],
@@ -457,14 +460,14 @@ describe("compileTable", () => {
         },
       },
     );
-    const table = compileTable(view, titleOf, {
+    const table = compileTableWithStatus(view, titleOf, {
       type: "table",
       y: [],
       tableLayout: {
         rows: [{ kind: "field", column: "organization_name" }],
         columns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
       },
-    });
+    }).table;
     expect(table.summaryRows).toEqual([["总体", 30, 34]]);
     expect(table.sourceRows?.[0]).toEqual([null, 0, 1]);
   });
@@ -503,14 +506,14 @@ describe("compileChart", () => {
     ).toBeNull();
     expect(
       headerPathsOf(
-        compileTable(view, titleOf, {
+        compileTableWithStatus(view, titleOf, {
           type: "table",
           y: [],
           tableLayout: {
             rows: [{ kind: "field", column: "organization_name" }],
             columns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
           },
-        }),
+        }).table,
       ),
     ).toEqual([
       ["organization_name"],
@@ -1071,14 +1074,14 @@ describe("列声明的小数位随列走", () => {
         decimals: { survey_score: 0 },
       },
     );
-    const table = compileTable(view, titleOf, {
+    const table = compileTableWithStatus(view, titleOf, {
       type: "table",
       y: [],
       tableLayout: {
         rows: [{ kind: "field", column: "organization_name" }],
         columns: [{ kind: "field", column: "year" }, { kind: "metrics" }],
       },
-    });
+    }).table;
     const surveyColumns = table.columns.filter((column) => column.formatKey === "survey_score");
     expect(surveyColumns.length).toBeGreaterThan(0);
     expect(surveyColumns.every((column) => column.decimals === 0)).toBe(true);
@@ -1088,7 +1091,7 @@ describe("列声明的小数位随列走", () => {
         .every((column) => column.decimals === undefined),
     ).toBe(true);
 
-    const flat = compileTable(view, titleOf, undefined);
+    const flat = compileTableWithStatus(view, titleOf, undefined).table;
     expect(flat.columns.find((column) => column.formatKey === "survey_score")?.decimals).toBe(0);
 
     const band = compileTotalBand(
