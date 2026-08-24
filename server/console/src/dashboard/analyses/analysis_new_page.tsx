@@ -21,6 +21,7 @@ export function AnalysisNewPage() {
     <AnalysisWorkbench
       catalog={catalog}
       crumb={{ href: reportsHistoryHash(), label: "查询记录" }}
+      recordSource={{ kind: "none" }}
       saveLabel="存为报告"
       session={edit}
       title={BLANK_NAME}

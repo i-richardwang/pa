@@ -35,6 +35,8 @@ export function AnalysisPage({ id }: { id: string }) {
       catalog={catalog}
       crumb={{ href: reportsHistoryHash(), label: "查询记录" }}
       error={error}
+      // 回放按 View 身份取数，没有承载格点明细的报告或看板身份。
+      recordSource={{ kind: "none" }}
       saveLabel="存为报告"
       session={edit}
       title={title}

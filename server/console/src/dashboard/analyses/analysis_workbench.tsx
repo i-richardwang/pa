@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { CircleAlertIcon, PanelRightIcon, TableIcon } from "lucide-react";
 import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
@@ -29,6 +29,11 @@ import {
   useSetStageAside,
 } from "../layout/layout_chrome";
 import { HeaderIconButton, ViewPageError, ViewPageLoading } from "../layout/view_chrome";
+import {
+  RecordProjectionDialog,
+  type RecordProjectionDialogRequest,
+} from "../reports/record_projection_dialog";
+import { useRecordProjection, type RecordProjectionSource } from "../reports/use_record_projection";
 import { semanticSinkQueryView, setDraftTime, timeCapabilitiesOf } from "./analysis_draft";
 import { ChartStage, ChartStageHeading } from "./chart_stage";
 import { ReportInspector } from "./report_inspector";
@@ -46,7 +51,7 @@ export function AnalysisWorkbench({
   catalog,
   actions,
   error,
-  records,
+  recordSource,
   saveLabel,
 }: {
   /** 列表父级：挂到与列表页名同槽的 titlebar 面包屑。 */
@@ -58,11 +63,20 @@ export function AnalysisWorkbench({
   /** 页级动作（归档、版本历史等），排在保存组之前，与面包屑同槽。 */
   actions?: ReactNode;
   error?: string | null;
-  records?: ComponentProps<typeof ViewRenderer>["records"];
+  /** 明细能力（格点记录弹层）由工作台据此统一派生，宿主页面不自行接线。 */
+  recordSource: RecordProjectionSource;
   /** 主保存动作文案：本人报告为「保存」，未落库的分析为「存为报告」。 */
   saveLabel: string;
 }) {
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [recordRequest, setRecordRequest] = useState<RecordProjectionDialogRequest | null>(null);
+  // 明细只对已保存的重放开放：草稿态坐标与落库 revision 会交叉，预览一跑即关、保存后恢复。
+  const records = useRecordProjection({
+    source: recordSource,
+    replay: session.activeReplay,
+    disabled: !session.showingSavedReplay,
+    onRequest: setRecordRequest,
+  });
 
   const isMobile = useIsMobile();
   useEffect(() => {
@@ -260,6 +274,8 @@ export function AnalysisWorkbench({
           </AlertDialogFooter>
         </AlertDialogPopup>
       </AlertDialog>
+
+      <RecordProjectionDialog request={recordRequest} onClose={() => setRecordRequest(null)} />
     </>
   );
 }

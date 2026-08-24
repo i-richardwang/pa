@@ -89,10 +89,7 @@ export function BoardTile({
   const error = errorText(replayQuery.error);
   const ownScope = data?.time_override === "unsupported";
   const records = useRecordProjection({
-    scope: "board",
-    boardId,
-    reportId,
-    timeOverride: override,
+    source: { kind: "board", boardId, reportId, timeOverride: override },
     replay: data,
     disabled: !!editing,
     onRequest: onRecordProjectionRequest,

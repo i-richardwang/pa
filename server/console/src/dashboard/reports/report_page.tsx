@@ -7,22 +7,15 @@ import { toastManager } from "@/components/ui/toast";
 import { AnalysisWorkbench } from "../analyses/analysis_workbench";
 import { dashboardKeys, useCatalogQuery } from "../dashboard_queries";
 import { performUndoable } from "../kit/undo";
-import {
-  RecordProjectionDialog,
-  type RecordProjectionDialogRequest,
-} from "./record_projection_dialog";
 import { ReportHistoryDialog } from "./report_history_dialog";
 import { useArchiveReport, useReportResource } from "../editor_queries";
 import { useAnalysisEditSession } from "../analyses/use_analysis_edit_session";
 import { HeaderMenu } from "../layout/view_chrome";
 import { navigateTo, reportsHash } from "../router";
 import { AddToBoardAction } from "./add_to_board_picker";
-import { useRecordProjection } from "./use_record_projection";
 
 export function ReportPage({ id }: { id: string }) {
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [recordProjectionRequest, setRecordProjectionRequest] =
-    useState<RecordProjectionDialogRequest | null>(null);
   const { report, savedReplay, reportError, replayError } = useReportResource(id);
   const queryClient = useQueryClient();
   const archiveReport = useArchiveReport();
@@ -43,14 +36,6 @@ export function ReportPage({ id }: { id: string }) {
     seed,
     savedReplay,
     target: { kind: "update", reportId: id, ifRevision: report?.revision ?? 1 },
-  });
-  const records = useRecordProjection({
-    scope: "report",
-    reportId: id,
-    replay: savedReplay,
-    // 明细只对报告当前保存的 View 开放，避免草稿坐标与报告 revision 交叉。
-    disabled: !edit.showingSavedReplay,
-    onRequest: setRecordProjectionRequest,
   });
   /** 归档回到清单：清单先撤下这一行，回执关闭才提交；撤销把它放回清单。 */
   function archive() {
@@ -74,7 +59,7 @@ export function ReportPage({ id }: { id: string }) {
         catalog={catalog}
         crumb={{ href: "#/reports", label: "我的报告" }}
         error={reportError ?? replayError}
-        records={records}
+        recordSource={{ kind: "report", reportId: id }}
         saveLabel="保存"
         session={edit}
         title={report?.name ?? "报告"}
@@ -104,10 +89,6 @@ export function ReportPage({ id }: { id: string }) {
         }}
         open={historyOpen}
         reportId={id}
-      />
-      <RecordProjectionDialog
-        request={recordProjectionRequest}
-        onClose={() => setRecordProjectionRequest(null)}
       />
     </>
   );

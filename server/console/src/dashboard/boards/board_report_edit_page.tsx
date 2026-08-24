@@ -45,6 +45,7 @@ export function BoardReportEditPage({ boardId, reportId }: { boardId: string; re
       catalog={catalog}
       crumb={{ href: boardHash(boardId), label: board?.name ?? "我的看板" }}
       error={error}
+      recordSource={{ kind: "board", boardId, reportId }}
       saveLabel="存为报告"
       session={edit}
       title={name}

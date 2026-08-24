@@ -10,29 +10,38 @@ import {
   recordProjectionTimeCoordinate,
 } from "./record_projection_request";
 
+/**
+ * 已保存重放的来源身份。明细能力随它派生：服务端只按访问路径授权
+ * （自有报告 / 看板成员），来源即请求目标。没有明细端点的宿主
+ * （空白草稿、分析回放）显式声明 `none`——缺能力必须是声明，不是遗漏。
+ */
+export type RecordProjectionSource =
+  | { kind: "report"; reportId: string }
+  | { kind: "board"; boardId: string; reportId: string; timeOverride?: TimeIntent | null }
+  | { kind: "none" };
+
 type RecordProjectionInput = {
-  scope: "report" | "board";
-  reportId: string;
-  boardId?: string;
-  timeOverride?: TimeIntent | null;
+  source: RecordProjectionSource;
   /** revision、bindings 与 payload 必须来自同一次重放响应。 */
   replay: ReplayPayload | null;
   disabled: boolean;
   onRequest: (request: RecordProjectionDialogRequest) => void;
 };
 
-/** 报告与看板共用的格点记录投影绑定；访问作用域只决定请求目标，不改变坐标推导。 */
+/** 报告与看板共用的格点记录投影绑定；来源只决定请求目标，不改变坐标推导。 */
 export function useRecordProjection({
-  scope,
-  reportId,
-  boardId,
-  timeOverride,
+  source,
   replay,
   disabled,
   onRequest,
 }: RecordProjectionInput): ViewRendererProps["records"] {
+  // 摊平成原始值再进 useMemo：调用方多在渲染中现造 source 字面量，按引用比较会让
+  // 返回值每帧换身份。
+  const reportId = source.kind === "none" ? null : source.reportId;
+  const boardId = source.kind === "board" ? source.boardId : null;
+  const timeOverride = source.kind === "board" ? (source.timeOverride ?? null) : null;
   return useMemo(() => {
-    if (!replay || replay.revision === undefined || disabled || (scope === "board" && !boardId)) {
+    if (!reportId || !replay || replay.revision === undefined || disabled) {
       return undefined;
     }
     const revision = replay.revision;
@@ -67,15 +76,14 @@ export function useRecordProjection({
           ]),
         );
         onRequest({
-          target:
-            scope === "report"
-              ? { kind: "report", report_id: reportId }
-              : {
-                  kind: "board",
-                  board_id: boardId!,
-                  report_id: reportId,
-                  ...(timeOverride ? { time_override: timeOverride } : {}),
-                },
+          target: boardId
+            ? {
+                kind: "board",
+                board_id: boardId,
+                report_id: reportId,
+                ...(timeOverride ? { time_override: timeOverride } : {}),
+              }
+            : { kind: "report", report_id: reportId },
           revision,
           result_view_id: cell.viewId,
           metric_id: metric.metric_id,
@@ -93,5 +101,5 @@ export function useRecordProjection({
         });
       },
     };
-  }, [boardId, disabled, onRequest, replay, reportId, scope, timeOverride]);
+  }, [boardId, disabled, onRequest, replay, reportId, timeOverride]);
 }

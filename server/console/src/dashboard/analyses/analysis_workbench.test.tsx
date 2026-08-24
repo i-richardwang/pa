@@ -16,6 +16,7 @@ import {
   type AnalysisEditState,
 } from "./analysis_draft";
 import { ReportInspector } from "./report_inspector";
+import type { RecordProjectionSource } from "../reports/use_record_projection";
 import type { AnalysisEditSession } from "./use_analysis_edit_session";
 
 const catalog: CatalogPayload = {
@@ -127,12 +128,17 @@ function session(overrides: Partial<AnalysisEditSession>): AnalysisEditSession {
   };
 }
 
-const render = (overrides: Partial<AnalysisEditSession>, error: string | null = null) =>
+const render = (
+  overrides: Partial<AnalysisEditSession>,
+  error: string | null = null,
+  recordSource: RecordProjectionSource = { kind: "none" },
+) =>
   renderToStaticMarkup(
     <AnalysisWorkbench
       catalog={catalog}
       crumb={{ href: "#/reports", label: "我的报告" }}
       error={error}
+      recordSource={recordSource}
       saveLabel="存为报告"
       session={session(overrides)}
       title="未命名分析"
@@ -213,6 +219,46 @@ test("同一栏里没有两个同名节题", () => {
   expect(titles).toContain("指标");
   expect(titles).toContain("系列");
   expect([...new Set(titles)]).toHaveLength(titles.length);
+});
+
+/** 带明细绑定与 revision 的已保存重放：明细能力的最小成立条件。 */
+const projectableReplay = (): ReplayPayload => ({
+  ...tableReplay,
+  revision: 3,
+  record_projection_bindings: {
+    views: [
+      {
+        result_view_id: "result",
+        metrics: {
+          "measure:active_employee_count": {
+            metric_id: "metric:active_employee_count",
+            title: "在职人数",
+          },
+        },
+        dimensions: {},
+      },
+    ],
+  },
+});
+
+test("明细能力由来源派生：有来源的保存重放态可点开数字，来源 none 与草稿态都不可", () => {
+  const saved: Partial<AnalysisEditSession> = {
+    activeReplay: projectableReplay(),
+    showingSavedReplay: true,
+  };
+  const boardSource: RecordProjectionSource = {
+    kind: "board",
+    boardId: "board-1",
+    reportId: "report-1",
+  };
+  // 看板分叉编辑页的形态：来源在场、显示保存重放 → 数字是「查看明细」按钮
+  expect(render(saved, null, boardSource)).toContain('aria-label="查看明细：在职人数 120"');
+  // 无来源（分析回放 / 空白新建）：同一份重放也不可点
+  expect(render(saved, null, { kind: "none" })).not.toContain("查看明细");
+  // 草稿预览态：来源在场也不可点——草稿坐标不与落库 revision 交叉
+  expect(
+    render({ activeReplay: projectableReplay(), showingSavedReplay: false }, null, boardSource),
+  ).not.toContain("查看明细");
 });
 
 test("配置栏顶带有名称，图型顺序先图后表且表格在第四槽", () => {
