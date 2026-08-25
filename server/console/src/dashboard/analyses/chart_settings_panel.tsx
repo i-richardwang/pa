@@ -16,17 +16,16 @@ import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog
 import type { ReplayPayload } from "@contracts/replay_contract";
 import { SERIES_COLORS } from "@charts";
 import { type ChartSpecContext, normalizeTableColumns, type TableAxis } from "@chart-spec";
-import { assignChannels, isChannelForm, splitCandidates } from "@channels";
+import { splitCandidates } from "@channels";
 import { memberShortName } from "@member";
 import { isSemanticDerivedView, type SemanticViewIntent } from "@semantic-analysis";
 import type { SeriesPreferences, TableShadingPreferences } from "@view-preferences";
 import {
   analyzeResultShape,
+  type FormAvailability,
+  formAvailability,
   makeTitleOf,
   resolveTableLayout,
-  resultChannelPool,
-  sensibleForms,
-  type SensibleForm,
   tableShadingDefaults,
 } from "@shape";
 import { Button } from "@/components/ui/button";
@@ -61,7 +60,10 @@ import {
 import { PRESENTATION_TYPE_LABELS } from "./presentation_labels";
 import { TableShadingSettings } from "./table_shading_settings";
 
-const FORM_ICONS: Record<SensibleForm, React.ReactNode> = {
+/** 图型全集即标签表的键：形态名只在标签表登记一次。 */
+type Form = keyof typeof PRESENTATION_TYPE_LABELS;
+
+const FORM_ICONS: Record<Form, React.ReactNode> = {
   table: <TableIcon />,
   kpi: <HashIcon />,
   line: <ChartLineIcon />,
@@ -70,7 +72,15 @@ const FORM_ICONS: Record<SensibleForm, React.ReactNode> = {
 };
 
 /** 图型排序按读图优先级：走势、比较、读数、明细，再到构成。 */
-const FORM_ORDER: readonly SensibleForm[] = ["line", "bar", "kpi", "table", "pie"];
+const FORM_ORDER: readonly Form[] = ["line", "bar", "kpi", "table", "pie"];
+
+/** 不可选时说清卡在哪一关；事实出自 formAvailability，这里只写给人看的话。 */
+function unavailableText(availability: FormAvailability, label: string): string {
+  if (availability.state !== "channels_unmet") return `当前结果的形态不支持${label}`;
+  return availability.measures === 0
+    ? `${label}至少需要一个指标`
+    : `${label}的通道装不下当前结果的 ${availability.dimensions} 个维度`;
+}
 
 const AXIS_ITEMS = { left: "左轴", right: "右轴" };
 const SERIES_FORM_ITEMS = { line: "折线", bar: "柱形" };
@@ -128,20 +138,12 @@ type PanelProps = {
 
 export function ChartTypeBar({ draft, replay, onChange, catalog }: PanelProps) {
   const resultView = replay.payload.view;
-  const forms = new Set(sensibleForms(resultView));
-  const pool = resultChannelPool(resultView);
-  /** 不可选时说缺什么：通道装不下几个维度，还是装得下但结果形态撑不起。 */
-  const unavailableReason = (form: SensibleForm, label: string) => {
-    if (!isChannelForm(form)) return `${label}不适用于当前结果`;
-    return assignChannels(form, pool) === null
-      ? `${label}的通道装不下当前结果的 ${pool.dimensions.length} 个维度`
-      : `当前结果的形态不支持${label}`;
-  };
   return (
     <section className={INSPECTOR_SECTION_CLASS}>
       <ChartTypePicker>
         {FORM_ORDER.map((form) => {
-          const allowed = forms.has(form);
+          const availability = formAvailability(resultView, form);
+          const allowed = availability.state === "available";
           const label = PRESENTATION_TYPE_LABELS[form];
           return (
             <Tooltip disableHoverablePopup key={form}>
@@ -163,7 +165,7 @@ export function ChartTypeBar({ draft, replay, onChange, catalog }: PanelProps) {
                   selected={draft.view.type === form}
                 />
               </TooltipTrigger>
-              <TooltipPopup>{allowed ? label : unavailableReason(form, label)}</TooltipPopup>
+              <TooltipPopup>{allowed ? label : unavailableText(availability, label)}</TooltipPopup>
             </Tooltip>
           );
         })}

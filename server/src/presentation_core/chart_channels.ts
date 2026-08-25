@@ -8,13 +8,6 @@ import type { PresentationType } from "../semantic_core/presentation_type.js";
 /** 走通道装箱的形态；表格不在其中——它的行列轴是结果余数，归另一份契约。 */
 export type ChannelForm = Exclude<PresentationType, "table">;
 
-/** 经图表编译器出图的形态；指标卡不画图表，只受容量表的维度约束。 */
-export const CHART_FORMS = ["line", "bar", "pie"] as const satisfies readonly ChannelForm[];
-
-export function isChannelForm(type: PresentationType): type is ChannelForm {
-  return type !== "table";
-}
-
 type ChannelSpec = {
   /** 主轴吃什么：none 与 time 都不占维度，dimension 必须吃掉一个维度。 */
   axis: "none" | "time" | "dimension";

@@ -21,7 +21,7 @@ import {
   settlePreview,
   settleSaved,
 } from "./analysis_draft";
-import { sensibleForms } from "@shape";
+import { formAvailability } from "@shape";
 
 const catalog: CatalogPayload = {
   access_scope: { id: "organization", title: "组织" },
@@ -271,7 +271,7 @@ describe("analysis draft 三层状态", () => {
       row_count: 4,
       query_notes: [],
     };
-    expect(sensibleForms(result)).toContain("line");
+    expect(formAvailability(result, "line")).toEqual({ state: "available" });
     expect(defaultSemanticViewIntent(begin(), "line", catalog, result)).toMatchObject({
       type: "line",
       series: ["measure:active_employee_count"],

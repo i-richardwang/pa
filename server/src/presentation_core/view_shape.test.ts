@@ -1,6 +1,7 @@
 /** 表格重排与图表声明彼此独立；任何图表都必须由显式 ChartDecl 触发。 */
 import { describe, expect, test } from "bun:test";
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
+import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
 import type { ChartDecl } from "./chart_decl.js";
 import { type Cell, viewBlock } from "../test_support/view_block.js";
 import {
@@ -9,13 +10,19 @@ import {
   compileChart,
   compileTableWithStatus,
   compileTotalBand,
+  formAvailability,
   proposeChartDecl,
   renderShapeOfView,
-  sensibleForms,
   structureTitle,
 } from "./view_shape.js";
 
 const payload = viewBlock;
+
+/** 可选形态 = 逐个问 formAvailability；产品里没有第二处清单。 */
+const sensibleForms = (view: ViewBlock) =>
+  PRESENTATION_TYPE_SCHEMA.options.filter(
+    (form) => formAvailability(view, form).state === "available",
+  );
 
 const titleOf = (column: string) => column;
 const percent = (...columns: string[]): Record<string, ColumnFormat> =>
@@ -713,6 +720,33 @@ describe("显式呈现能力与形态标签", () => {
     });
     expect(sensibleForms(view)).toContain("line");
     expect(renderShapeOfView(view, proposal as ChartDecl)).toBe("line");
+  });
+
+  test("不可选时说得出卡在哪一关：通道装不下，还是装得下但形态撑不起", () => {
+    const twoDimensions = payload(
+      ["year", "month", "organization_name", "job_level", "active_employee_count"],
+      [
+        [2026, 1, "A", "P5", 10],
+        [2026, 1, "B", "P6", 20],
+        [2026, 2, "A", "P5", 11],
+        [2026, 2, "B", "P6", 21],
+      ],
+    );
+    expect(formAvailability(twoDimensions, "line")).toEqual({
+      state: "channels_unmet",
+      dimensions: 2,
+      measures: 1,
+    });
+    // 通道装得下六个系列，但超过折线的感知极限，卡在编译那一关
+    const manyMeasures = payload(
+      ["year", "month", "m1", "m2", "m3", "m4", "m5", "m6"],
+      [
+        [2026, 1, 1, 2, 3, 4, 5, 6],
+        [2026, 2, 2, 3, 4, 5, 6, 7],
+      ],
+    );
+    expect(formAvailability(manyMeasures, "line")).toEqual({ state: "shape_unsupported" });
+    expect(formAvailability(twoDimensions, "table")).toEqual({ state: "available" });
   });
 
   test("通道装不下的形态不进候选：两个维度没有第二个拆分通道", () => {

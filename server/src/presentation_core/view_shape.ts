@@ -26,7 +26,6 @@ import type { RenderShape } from "./render_shape.js";
 import type { ChartDecl, TableAxis } from "./chart_decl.js";
 import {
   assignChannels,
-  CHART_FORMS,
   type ChannelForm,
   type ChannelPool,
   type ChannelPreferences,
@@ -1502,10 +1501,8 @@ export function canCompileKpi(
   return !view.columns.some((column) => view.column_roles[column] === "dimension");
 }
 
-export type SensibleForm = PresentationType;
-
 /** 结果侧的通道池：能上轴的分类维度（取值 ≥2）与主度量，名字用声明词表的载荷列短名。 */
-export function resultChannelPool(
+function resultChannelPool(
   view: ViewBlock,
   shape: ResultShape = analyzeResultShape(view),
 ): ChannelPool {
@@ -1531,13 +1528,33 @@ export function proposeChartDecl(
   return compileChart(view, makeTitleOf(view), decl, shape) ? decl : null;
 }
 
-export function sensibleForms(view: ViewBlock): SensibleForm[] {
-  const shape = analyzeResultShape(view);
-  return [
-    "table",
-    ...(canCompileKpi(view, shape) ? (["kpi"] as const) : []),
-    ...CHART_FORMS.filter((type) => proposeChartDecl(view, type, {}, shape)),
-  ];
+/**
+ * 形态在当前结果上成不成立，以及不成立时卡在哪一关：通道装不下，还是装得下但结果形态撑不起。
+ * 可用性与它的理由是同一个返回值——调用方不必也不该再算一遍。文案归界面，这里只给事实。
+ */
+export type FormAvailability =
+  | { state: "available" }
+  | { state: "channels_unmet"; dimensions: number; measures: number }
+  | { state: "shape_unsupported" };
+
+export function formAvailability(
+  view: ViewBlock,
+  form: PresentationType,
+  shape: ResultShape = analyzeResultShape(view),
+): FormAvailability {
+  // 表格容得下任意结果，因此恒是兜底形态。
+  if (form === "table") return { state: "available" };
+  const pool = resultChannelPool(view, shape);
+  if (!assignChannels(form, pool)) {
+    return {
+      state: "channels_unmet",
+      dimensions: pool.dimensions.length,
+      measures: pool.measures.length,
+    };
+  }
+  const compiles =
+    form === "kpi" ? canCompileKpi(view, shape) : proposeChartDecl(view, form, {}, shape) !== null;
+  return compiles ? { state: "available" } : { state: "shape_unsupported" };
 }
 
 export function renderShapeOfView(view: ViewBlock, decl: ChartDecl): RenderShape | null {
