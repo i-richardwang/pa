@@ -1,6 +1,7 @@
 /** 表格重排与图表声明彼此独立；任何图表都必须由显式 ChartDecl 触发。 */
 import { describe, expect, test } from "bun:test";
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
+import type { ChartDecl } from "./chart_decl.js";
 import { type Cell, viewBlock } from "../test_support/view_block.js";
 import {
   analyzeResultShape,
@@ -8,6 +9,7 @@ import {
   compileChart,
   compileTableWithStatus,
   compileTotalBand,
+  proposeChartDecl,
   renderShapeOfView,
   sensibleForms,
   structureTitle,
@@ -691,6 +693,65 @@ describe("显式呈现能力与形态标签", () => {
         y: ["active_employee_count"],
       }),
     ).toBe("bar");
+  });
+
+  test("图型可选性与点击后的默认是同一次装箱：单维度趋势的折线按维度拆线", () => {
+    const view = payload(
+      ["year", "month", "organization_name", "active_employee_count"],
+      [
+        [2026, 1, "A", 10],
+        [2026, 1, "B", 20],
+        [2026, 2, "A", 11],
+        [2026, 2, "B", 21],
+      ],
+    );
+    const proposal = proposeChartDecl(view, "line");
+    expect(proposal).toEqual({
+      type: "line",
+      y: ["active_employee_count"],
+      groupBy: "organization_name",
+    });
+    expect(sensibleForms(view)).toContain("line");
+    expect(renderShapeOfView(view, proposal as ChartDecl)).toBe("line");
+  });
+
+  test("通道装不下的形态不进候选：两个维度没有第二个拆分通道", () => {
+    const view = payload(
+      ["year", "month", "organization_name", "job_level", "active_employee_count"],
+      [
+        [2026, 1, "A", "P5", 10],
+        [2026, 1, "B", "P6", 20],
+        [2026, 2, "A", "P5", 11],
+        [2026, 2, "B", "P6", 21],
+      ],
+    );
+    expect(proposeChartDecl(view, "line")).toBeNull();
+    expect(sensibleForms(view)).toEqual(["table"]);
+  });
+
+  test("取值唯一的维度分裂不出系列，声明它拆线按未声明处理而不是退表格", () => {
+    const view = payload(
+      ["year", "month", "organization_name", "active_employee_count"],
+      [
+        [2026, 1, "A", 10],
+        [2026, 2, "A", 11],
+      ],
+    );
+    expect(
+      renderShapeOfView(view, {
+        type: "line",
+        y: ["active_employee_count"],
+        groupBy: "organization_name",
+      }),
+    ).toBe("line");
+    // 引用不存在的成员仍然 fail-closed
+    expect(
+      compileChart(view, titleOf, {
+        type: "line",
+        y: ["active_employee_count"],
+        groupBy: "no_such_dimension",
+      }),
+    ).toBeNull();
   });
 
   test("空结果无运行时形态，声明仍由规格保留", () => {

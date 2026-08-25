@@ -24,6 +24,13 @@ import {
 } from "./table_shading.js";
 import type { RenderShape } from "./render_shape.js";
 import type { ChartDecl, TableAxis } from "./chart_decl.js";
+import {
+  assignChannels,
+  CHANNEL_CHART_TYPES,
+  type ChannelChartType,
+  type ChannelPool,
+  type ChannelPreferences,
+} from "./chart_channels.js";
 
 /** 感知极限：折线超出此系列数缠绕不可读，声明的折线编译失败并退回表格 */
 export const MAX_LINE_SERIES = 5;
@@ -736,6 +743,14 @@ function pieChart(
   };
 }
 
+/** 声明的维度在结果里存在但取值唯一：它上不了分类轴（catIdx 只收 ≥2 取值），也分裂不出系列。 */
+function constantDimension(view: ViewBlock, roles: Roles, name: string): boolean {
+  if (declaredIdx(view, roles.catIdx, name) !== undefined) return false;
+  return view.columns.some(
+    (column) => view.column_roles[column] === "dimension" && memberShortName(column) === name,
+  );
+}
+
 /** 声明列（载荷列短名）→ 结果列下标；引擎折叠或全空列匹配不上时返回 undefined */
 function declaredIdx(view: ViewBlock, pool: number[], name: string): number | undefined {
   const idx = pool.find((i) => memberShortName(view.columns[i]) === name);
@@ -1349,10 +1364,16 @@ function declaredChart(
           }),
         );
 
+  // 取值唯一的维度不分裂任何东西，与没声明等价；只有引用不存在的成员才 fail-closed。
+  const groupBy =
+    decl.groupBy !== undefined && constantDimension(view, roles, decl.groupBy)
+      ? undefined
+      : decl.groupBy;
+
   if (decl.type === "line") {
     if (roles.timePoints.length < 2) return null;
-    if (decl.groupBy !== undefined) {
-      const catIdx = declaredIdx(view, roles.catIdx, decl.groupBy);
+    if (groupBy !== undefined) {
+      const catIdx = declaredIdx(view, roles.catIdx, groupBy);
       if (catIdx === undefined || measures.length !== 1) return null;
       return groupedLine(view, roles, catIdx, measures[0]);
     }
@@ -1365,8 +1386,8 @@ function declaredChart(
   if (decl.type === "bar") {
     const axisIdx = decl.x !== undefined ? declaredIdx(view, roles.catIdx, decl.x) : undefined;
     if (axisIdx === undefined) return null;
-    if (decl.groupBy !== undefined) {
-      const seriesIdx = declaredIdx(view, roles.catIdx, decl.groupBy);
+    if (groupBy !== undefined) {
+      const seriesIdx = declaredIdx(view, roles.catIdx, groupBy);
       if (seriesIdx === undefined || seriesIdx === axisIdx || measures.length !== 1) return null;
       return categorySeriesBar(
         view,
@@ -1483,49 +1504,39 @@ export function canCompileKpi(
 
 export type SensibleForm = PresentationType;
 
+/** 结果侧的通道池：能上轴的分类维度（取值 ≥2）与主度量，名字用声明词表的载荷列短名。 */
+export function resultChannelPool(
+  view: ViewBlock,
+  shape: ResultShape = analyzeResultShape(view),
+): ChannelPool {
+  return {
+    dimensions: shape.detected.catIdx.map((index) => memberShortName(view.columns[index])),
+    measures: shape.roles.measureIdx.map((index) => memberShortName(view.columns[index])),
+  };
+}
+
+/**
+ * 形态在当前结果上的候选声明：通道装得下（结构）且编译得出来（数据前提与可读预算）才成立。
+ * 「这个图型可不可选」与「选了之后绑什么」是这一次装箱的同一个返回值，不存第二份默认。
+ */
+export function proposeChartDecl(
+  view: ViewBlock,
+  type: ChannelChartType,
+  preferences: ChannelPreferences = {},
+  shape: ResultShape = analyzeResultShape(view),
+): ChartDecl | null {
+  const assignment = assignChannels(type, resultChannelPool(view, shape), preferences);
+  if (!assignment) return null;
+  const decl: ChartDecl = { type, ...assignment };
+  return compileChart(view, makeTitleOf(view), decl, shape) ? decl : null;
+}
+
 export function sensibleForms(view: ViewBlock): SensibleForm[] {
   const shape = analyzeResultShape(view);
-  const { roles } = shape;
-  const measures = roles.measureIdx.map((index) => view.columns[index]);
-  const categories = roles.catIdx.map((index) => view.columns[index]);
-  const candidates: Array<{
-    form: Exclude<SensibleForm, "table" | "kpi">;
-    decl: ChartDecl;
-  }> = [];
-  if (roles.timePoints.length >= 2 && measures.length) {
-    candidates.push({
-      form: "line",
-      decl: {
-        type: "line",
-        y: categories.length ? [measures[0]] : measures,
-        ...(categories.length === 1 ? { groupBy: categories[0] } : {}),
-      },
-    });
-  }
-  if (roles.timePoints.length < 2 && categories.length && measures.length) {
-    candidates.push({
-      form: "bar",
-      decl: {
-        type: "bar",
-        x: categories[0],
-        y: categories.length === 1 ? measures : [measures[0]],
-        ...(categories.length === 2 ? { groupBy: categories[1] } : {}),
-      },
-    });
-    if (categories.length === 1 && measures.length === 1) {
-      candidates.push({
-        form: "pie",
-        decl: { type: "pie", x: categories[0], y: [measures[0]] },
-      });
-    }
-  }
-  const titleOf = makeTitleOf(view);
   return [
     "table",
     ...(canCompileKpi(view, shape) ? (["kpi"] as const) : []),
-    ...candidates.flatMap(({ form, decl }) => {
-      return compileChart(view, titleOf, decl, shape) ? [form] : [];
-    }),
+    ...CHANNEL_CHART_TYPES.filter((type) => proposeChartDecl(view, type, {}, shape)),
   ];
 }
 

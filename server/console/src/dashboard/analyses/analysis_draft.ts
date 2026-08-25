@@ -9,6 +9,10 @@ import {
   type AnalysisDefinition,
 } from "@semantic-analysis";
 import type { ViewPreferences } from "@view-preferences";
+import { assignChannels } from "@channels";
+import { memberShortName } from "@member";
+import type { ViewBlock } from "@payload";
+import { proposeChartDecl } from "@shape";
 import { canonicalJson } from "@canonical-json";
 import type { TimeCapabilities, TimeIntent } from "@time";
 
@@ -226,6 +230,23 @@ export function semanticViewContext(
   return { measures, dimensions };
 }
 
+/** 结构占比是分子指标的辅助标注，不占值通道；只有柱状读它，派生视图没有口径关系可查。 */
+function shareAnnotations(
+  type: SemanticViewIntent["type"],
+  view: SemanticAnalysisView,
+  catalog: CatalogPayload,
+  series: string[],
+): string[] {
+  if (type !== "bar" || isSemanticDerivedView(view)) return [];
+  return semanticViewContext(view, catalog).measures.filter((member) => {
+    const local = view.calculations?.find((calculation) => calculation.id === member);
+    const relation = local
+      ? { kind: "structure_share" as const, numerator_id: local.measure }
+      : catalog.measures.find((candidate) => candidate.id === member)?.relation;
+    return relation?.kind === "structure_share" && series.includes(relation.numerator_id);
+  });
+}
+
 function repairedViewIntent(
   chart: SemanticViewIntent,
   view: SemanticAnalysisView,
@@ -249,41 +270,25 @@ function repairedViewIntent(
   }
   const retainedSeries = (chart.series ?? measures).filter((member) => measures.includes(member));
   const selectedSeries = retainedSeries.length ? retainedSeries : measures;
-  const annotations =
-    chart.type === "bar" && !isSemanticDerivedView(view)
-      ? measures.filter((member) => {
-          const local = view.calculations?.find((calculation) => calculation.id === member);
-          const relation = local
-            ? { kind: "structure_share" as const, numerator_id: local.measure }
-            : catalog.measures.find((candidate) => candidate.id === member)?.relation;
-          return (
-            relation?.kind === "structure_share" && selectedSeries.includes(relation.numerator_id)
-          );
-        })
-      : [];
+  const annotations = shareAnnotations(chart.type, view, catalog, selectedSeries);
   const auxiliary = new Set(annotations);
-  const series = selectedSeries.filter((member) => !auxiliary.has(member));
-  const category =
-    chart.type === "line"
-      ? undefined
-      : chart.category && dimensions.includes(chart.category)
-        ? chart.category
-        : dimensions[0];
-  const groupBy =
-    chart.group_by && dimensions.includes(chart.group_by) && chart.group_by !== category
-      ? chart.group_by
-      : undefined;
-  // 只修成员引用，不判数据形态：结果能不能画折线由结果说了算（图型选择器读 sensibleForms，
-  // 渲染期不满足则忠实退表格）。
-  if (!series.length || ((chart.type === "bar" || chart.type === "pie") && !category)) {
-    return { type: "table" };
-  }
+  // 通道装箱是唯一判据：已有绑定装得下就沿用，装不下按容量重排，一个维度都装不下即无此形态。
+  const assignment = assignChannels(
+    chart.type,
+    { dimensions, measures: measures.filter((member) => !auxiliary.has(member)) },
+    {
+      x: chart.category,
+      y: selectedSeries.filter((member) => !auxiliary.has(member)),
+      groupBy: chart.group_by,
+    },
+  );
+  if (!assignment) return { type: "table" };
   return {
     ...chart,
-    category,
-    series: chart.type === "pie" || groupBy ? series.slice(0, 1) : series,
+    category: assignment.x,
+    series: assignment.y,
     ...(annotations.length ? { annotations } : { annotations: undefined }),
-    group_by: groupBy,
+    group_by: assignment.groupBy,
   };
 }
 
@@ -457,25 +462,43 @@ export function replaceSemanticQueryDimension(
   };
 }
 
+/**
+ * 切图型时的默认绑定：取结果侧那一次装箱的候选（就是让这个图型可选的同一份），
+ * 再翻回语义成员名。结果缺席或翻不回来时退到声明侧装箱。
+ */
 export function defaultSemanticViewIntent(
   draft: AnalysisEditState,
   type: SemanticViewIntent["type"],
   catalog: CatalogPayload,
+  result?: ViewBlock,
 ): SemanticViewIntent {
   const viewId = semanticAnalysisSink(draft.analysis.views);
   const view = draft.analysis.views.find((candidate) => candidate.id === viewId);
   if (!view || type === "table") return { type: "table" };
   if (type === "kpi") return repairedViewIntent({ type }, view, catalog);
   const { measures, dimensions } = semanticViewContext(view, catalog);
-  if (type === "line") {
-    return repairedViewIntent({ type, series: measures }, view, catalog);
+  const proposal = result ? proposeChartDecl(result, type) : null;
+  const semantic = (column: string, pool: string[]) =>
+    pool.find((member) => memberShortName(member) === column);
+  const category = proposal?.x ? semantic(proposal.x, dimensions) : undefined;
+  const groupBy = proposal?.groupBy ? semantic(proposal.groupBy, dimensions) : undefined;
+  const series = proposal?.y.flatMap((column) => semantic(column, measures) ?? []) ?? [];
+  if (
+    !proposal ||
+    (proposal.x && !category) ||
+    (proposal.groupBy && !groupBy) ||
+    series.length !== proposal.y.length
+  ) {
+    return repairedViewIntent({ type, category: dimensions[0], series: measures }, view, catalog);
   }
-  if (type === "pie") {
-    return repairedViewIntent(
-      { type, category: dimensions[0], series: measures.slice(0, 1) },
-      view,
-      catalog,
-    );
-  }
-  return repairedViewIntent({ type, category: dimensions[0], series: measures }, view, catalog);
+  // 结果侧的装箱说了算，不再过声明侧的 repair：查询声明了维度而结果只有一个取值时，
+  // 该维度分裂不出系列，按它拆线只会退表格。
+  const annotations = shareAnnotations(type, view, catalog, series);
+  return {
+    type,
+    category,
+    series,
+    ...(annotations.length ? { annotations } : {}),
+    group_by: groupBy,
+  };
 }

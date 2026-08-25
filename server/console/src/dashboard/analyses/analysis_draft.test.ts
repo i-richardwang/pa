@@ -21,6 +21,7 @@ import {
   settlePreview,
   settleSaved,
 } from "./analysis_draft";
+import { sensibleForms } from "@shape";
 
 const catalog: CatalogPayload = {
   access_scope: { id: "organization", title: "组织" },
@@ -249,6 +250,78 @@ describe("analysis draft 三层状态", () => {
       category: "dimension:organization_name",
       series: ["measure:active_employee_count", "measure:new_hire_count"],
     });
+  });
+
+  test("切图型时的默认绑定与图型可选性同源：趋势结果上的折线按维度拆线", () => {
+    const result = {
+      id: "result",
+      columns: ["year", "month", "dimension:organization_name", "measure:active_employee_count"],
+      column_roles: {
+        year: "time" as const,
+        month: "time" as const,
+        "dimension:organization_name": "dimension" as const,
+        "measure:active_employee_count": "measure" as const,
+      },
+      rows: [
+        [2026, 1, "甲", 10],
+        [2026, 1, "乙", 20],
+        [2026, 2, "甲", 11],
+        [2026, 2, "乙", 21],
+      ],
+      row_count: 4,
+      query_notes: [],
+    };
+    expect(sensibleForms(result)).toContain("line");
+    expect(defaultSemanticViewIntent(begin(), "line", catalog, result)).toMatchObject({
+      type: "line",
+      series: ["measure:active_employee_count"],
+      group_by: "dimension:organization_name",
+    });
+  });
+
+  test("查询声明的维度在结果里只有一个取值时不拿它拆线，指标各成一条", () => {
+    const single = {
+      id: "result",
+      columns: ["year", "month", "dimension:organization_name", "measure:active_employee_count"],
+      column_roles: {
+        year: "time" as const,
+        month: "time" as const,
+        "dimension:organization_name": "dimension" as const,
+        "measure:active_employee_count": "measure" as const,
+      },
+      rows: [
+        [2026, 1, "甲", 10],
+        [2026, 2, "甲", 11],
+      ],
+      row_count: 2,
+      query_notes: [],
+    };
+    expect(defaultSemanticViewIntent(begin(), "line", catalog, single)).toMatchObject({
+      type: "line",
+      series: ["measure:active_employee_count"],
+      group_by: undefined,
+    });
+  });
+
+  test("查询加到两个维度时折线没有第二个拆分通道，呈现退回表格", () => {
+    const draft = begin();
+    const query = semanticSinkQueryView(draft.analysis)!;
+    const line = setSemanticViewIntent(
+      draft,
+      { type: "line", series: ["measure:active_employee_count"] },
+      catalog,
+    );
+    expect(line.view.type).toBe("line");
+    const widened = setSemanticQueryView(
+      line,
+      query.id,
+      {
+        ...query,
+        dimensions: ["dimension:organization_name", "dimension:department_name"],
+      },
+      catalog,
+    );
+    expect(widened.view).toEqual({ type: "table" });
   });
 
   test("空白定义是合法编辑中间态，但没有成员前不可执行", () => {

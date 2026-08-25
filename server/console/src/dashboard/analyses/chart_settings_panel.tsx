@@ -16,6 +16,7 @@ import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog
 import type { ReplayPayload } from "@contracts/replay_contract";
 import { SERIES_COLORS } from "@charts";
 import { type ChartSpecContext, normalizeTableColumns, type TableAxis } from "@chart-spec";
+import { assignChannels, isChannelChartType, splitCandidates } from "@channels";
 import { memberShortName } from "@member";
 import { isSemanticDerivedView, type SemanticViewIntent } from "@semantic-analysis";
 import type { SeriesPreferences, TableShadingPreferences } from "@view-preferences";
@@ -23,6 +24,7 @@ import {
   analyzeResultShape,
   makeTitleOf,
   resolveTableLayout,
+  resultChannelPool,
   sensibleForms,
   type SensibleForm,
   tableShadingDefaults,
@@ -125,7 +127,17 @@ type PanelProps = {
 };
 
 export function ChartTypeBar({ draft, replay, onChange, catalog }: PanelProps) {
-  const forms = new Set(sensibleForms(replay.payload.view));
+  const resultView = replay.payload.view;
+  const forms = new Set(sensibleForms(resultView));
+  const pool = resultChannelPool(resultView);
+  /** 不可选时说缺什么：通道装不下几个维度，还是装得下但结果形态撑不起。 */
+  const unavailableReason = (form: SensibleForm, label: string) => {
+    if (form === "kpi") return "指标卡只呈现没有维度的单行结果";
+    if (!isChannelChartType(form)) return `${label}不适用于当前结果`;
+    return assignChannels(form, pool) === null
+      ? `${label}的通道装不下当前结果的 ${pool.dimensions.length} 个维度`
+      : `当前结果的形态不支持${label}`;
+  };
   return (
     <section className={INSPECTOR_SECTION_CLASS}>
       <ChartTypePicker>
@@ -144,7 +156,7 @@ export function ChartTypeBar({ draft, replay, onChange, catalog }: PanelProps) {
                     onChange(
                       setSemanticViewIntent(
                         draft,
-                        defaultSemanticViewIntent(draft, form, catalog),
+                        defaultSemanticViewIntent(draft, form, catalog, resultView),
                         catalog,
                       ),
                     )
@@ -152,7 +164,7 @@ export function ChartTypeBar({ draft, replay, onChange, catalog }: PanelProps) {
                   selected={draft.view.type === form}
                 />
               </TooltipTrigger>
-              <TooltipPopup>{allowed ? label : `${label}不适用于当前结果`}</TooltipPopup>
+              <TooltipPopup>{allowed ? label : unavailableReason(form, label)}</TooltipPopup>
             </Tooltip>
           );
         })}
@@ -228,20 +240,21 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
     chart.type === "table" || chart.type === "kpi" ? [] : (chart.annotations ?? []);
   const series = draft.view_preferences.series ?? {};
   // 「显示」的各项各有各的前提；全不成立时**整节不出现**，不留一个空节题。
-  const canSplitSeries = (chart.type === "line" || chart.type === "bar") && dimensions.length > 1;
+  // 拆分通道的取值不是偏好而是装箱的结果：余数维度必须上通道，所以没有「不拆分」；
+  // 候选只有一个即无可选之事，不出选择器。
+  const splitOptions =
+    chart.type === "line" || chart.type === "bar"
+      ? splitCandidates(chart.type, { dimensions, measures })
+      : [];
+  const canSplitSeries = splitOptions.length > 1;
   // 饼图的扇区归属即取值，没有逐系列样式；此时指标行只留「上不上轴」。
   const canStyleSeries = (chart.type === "line" || chart.type === "bar") && !chart.group_by;
   const valueLabelItems: Record<string, string> = chart.group_by
     ? { none: "不显示", all: "全部" }
     : { none: "不显示", main: "仅主指标", all: "全部" };
-  const splitSeriesItems: Record<string, string> = {
-    none: "不拆分",
-    ...Object.fromEntries(
-      dimensions
-        .filter((member) => member !== chart.category)
-        .map((member) => [member, titleOf(member)]),
-    ),
-  };
+  const splitSeriesItems: Record<string, string> = Object.fromEntries(
+    splitOptions.map((member) => [member, titleOf(member)]),
+  );
   const canStack = chart.type === "bar" && Boolean(chart.group_by);
   const canValueLabels = chart.type === "line" || chart.type === "bar";
   const showDisplaySection = canSplitSeries || canStack || canSummarize || canValueLabels;
@@ -559,15 +572,8 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
             <SelectRow
               items={splitSeriesItems}
               label="拆分系列"
-              onValueChange={(value) => {
-                const groupBy = value === "none" ? undefined : value;
-                update({
-                  ...chart,
-                  series: groupBy ? y.slice(0, 1) : y,
-                  group_by: groupBy,
-                });
-              }}
-              value={chart.group_by ?? "none"}
+              onValueChange={(value) => update({ ...chart, group_by: value })}
+              value={chart.group_by ?? splitOptions[0]}
             />
           ) : null}
 

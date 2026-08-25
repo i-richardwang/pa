@@ -12,6 +12,7 @@
       "@payload": ["../src/semantic_core/query_payload.ts"],
       "@charts": ["../src/presentation_core/chart_config.ts"],
       "@chart-spec": ["../src/presentation_core/chart_spec.ts"],
+      "@channels": ["../src/presentation_core/chart_channels.ts"],
       "@shape": ["../src/presentation_core/view_shape.ts"],
       "@format": ["../src/presentation_core/view_format.ts"],
       "@member": ["../src/semantic_core/member_name.ts"],
