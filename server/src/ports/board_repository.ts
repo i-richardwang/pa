@@ -10,7 +10,7 @@ export type BoardRecord = {
   name: string;
   tiles: StoredTile[];
   created_by: string;
-  /** 删除是可逆的：置时间戳即从清单撤下，置回 null 即复原，记录本身不销毁。 */
+  /** 置时间戳即从清单撤下，置回 null 即复原；记录与瓦片不销毁。 */
   archived_at: string | null;
   revision: number;
   created_at: string;

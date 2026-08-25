@@ -246,5 +246,23 @@ describe("dashboard board routes", () => {
       (await alice.request(`/api/boards/${created.id}/items/${report.id}/replay`)).status,
     ).toBe(200);
     expect(await reportRepository.get(report.id)).toMatchObject({ render_shape: "table" });
+
+    expect((await alice.request(`/api/boards/${created.id}`, { method: "DELETE" })).status).toBe(
+      200,
+    );
+    expect((await alice.request(`/api/boards/${created.id}`)).status).toBe(404);
+    expect(
+      (await alice.request(`/api/boards/${created.id}/items/${report.id}/replay`)).status,
+    ).toBe(404);
+    expect(
+      (await bob.request(`/api/boards/${created.id}/restore`, { method: "POST" })).status,
+    ).toBe(403);
+    const restored = await alice.request(`/api/boards/${created.id}/restore`, { method: "POST" });
+    expect(restored.status).toBe(200);
+    expect(BOARD_PAYLOAD_SCHEMA.parse(await restored.json())).toMatchObject({
+      id: created.id,
+      tiles: [{ kind: "report", report_id: report.id }],
+    });
+    expect((await alice.request(`/api/boards/${created.id}`)).status).toBe(200);
   });
 });

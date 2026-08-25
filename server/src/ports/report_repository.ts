@@ -25,7 +25,7 @@ export type ReportRevision = {
 export class ReportNotFoundError extends Error {}
 export class ReportConflictError extends Error {}
 
-/** 归档不是删除：清单按归档与否分面，`all` 只给播种这类需要连归档一起认领的场合。 */
+/** 清单按归档与否分面；`all` 只给播种这类需要连归档一起认领的场合。 */
 export type ReportListScope = "active" | "archived" | "all";
 
 export type ReportRepository = {

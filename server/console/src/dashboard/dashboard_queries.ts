@@ -189,7 +189,6 @@ export function useDeleteBusinessTerm() {
   });
 }
 
-/** 删除的逆操作：回执上的「撤销」调它。 */
 export function useRestoreBusinessTerm() {
   return useBusinessTermMutation((id: string) =>
     postJson(
@@ -376,7 +375,6 @@ export function useDeleteBoard() {
   });
 }
 
-/** 删除的逆操作：回执上的「撤销」调它。 */
 export function useRestoreBoard() {
   const queryClient = useQueryClient();
   return useMutation({

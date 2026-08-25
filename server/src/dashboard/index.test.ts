@@ -507,7 +507,6 @@ describe("dashboard app routes and access control", () => {
     expect(
       (await admin.request(`/api/admin/business_terms/${id}`, { method: "DELETE" })).status,
     ).toBe(200);
-    // 删除可逆：撤销走恢复端点，删除本身在点下时就已落库。
     expect(
       (await admin.request(`/api/admin/business_terms/${id}/restore`, { method: "POST" })).status,
     ).toBe(200);

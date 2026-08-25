@@ -70,7 +70,6 @@ export function createBusinessTermService(deps: {
     return row;
   }
 
-  /** 删除的逆操作：撤销即调它，删除本身在用户点下时就已落库。 */
   async function restore(principal: Principal, id: string) {
     assertAdmin(principal);
     const row = await deps.registry.restore(id);

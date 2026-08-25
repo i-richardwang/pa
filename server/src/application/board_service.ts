@@ -112,12 +112,15 @@ export function createBoardService(deps: {
     return board;
   }
 
-  async function owned(id: string, principal: Principal): Promise<BoardRecord> {
-    const board = await live(id);
+  function creatorOnly(board: BoardRecord, principal: Principal, action: string): BoardRecord {
     if (board.created_by !== principal.email) {
-      throw new ForbiddenError("只有创建者可以修改这个看板");
+      throw new ForbiddenError(`只有创建者可以${action}这个看板`);
     }
     return board;
+  }
+
+  async function owned(id: string, principal: Principal): Promise<BoardRecord> {
+    return creatorOnly(await live(id), principal, "修改");
   }
 
   async function log(owner: string, title: string): Promise<void> {
@@ -232,14 +235,11 @@ export function createBoardService(deps: {
     await log(principal.email, `删除看板：${board.name}`);
   }
 
-  /** 删除的逆操作：撤销即调它，界面不必替用户攥着尚未提交的删除。 */
   async function restore(principal: Principal, id: string): Promise<BoardPayload> {
     assertId(id);
     const board = await deps.boards.get(id);
     if (!board) throw new NotFoundError("看板不存在");
-    if (board.created_by !== principal.email) {
-      throw new ForbiddenError("只有创建者可以恢复这个看板");
-    }
+    creatorOnly(board, principal, "恢复");
     await deps.boards.restore(board.id);
     await log(principal.email, `恢复看板：${board.name}`);
     return document({ ...board, archived_at: null });

@@ -573,7 +573,6 @@ describe("dashboard report routes", () => {
     });
     expect((await app.request(`/api/reports/${report.id}`)).status).toBe(200);
 
-    // 归档面按 archived=1 单独取，撤销归档走 unarchive：界面不必替用户攥着未提交的归档。
     const archivedList = REPORTS_PAYLOAD_SCHEMA.parse(
       await (await app.request("/api/reports?archived=1")).json(),
     );

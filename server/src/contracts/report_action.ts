@@ -19,7 +19,6 @@ export const RESTORE_REPORT_ACTION = z
 
 export const ARCHIVE_REPORT_ACTION = z.object({ type: z.literal("archive") }).strict();
 
-/** 归档的逆操作：撤销归档走它，界面无需把「已归档」这件事扣在自己手里等待提交。 */
 export const UNARCHIVE_REPORT_ACTION = z.object({ type: z.literal("unarchive") }).strict();
 
 /** 应用服务的完整领域动作；各呈现面只从这些成员组装自己的公开子集。 */

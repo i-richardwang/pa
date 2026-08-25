@@ -137,7 +137,7 @@ export function parseRoute(hash: string): Route {
  */
 let leaveGuard: { dirty: () => boolean; confirm: () => Promise<boolean> } | null = null;
 
-/** `dirty` 是现问现答的判定，不是快照：镜像成布尔会滞后一拍，落库后的跳转会被自己拦下。 */
+/** 传入的 `dirty` 每次导航都会被调用，必须现问现答：落库后的那一拍就要答「不脏」。 */
 export function useLeaveBlocker(dirty: () => boolean, confirm: () => Promise<boolean>): void {
   const live = useRef({ dirty, confirm });
   live.current = { dirty, confirm };
