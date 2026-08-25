@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { CompilerCatalog, CompilerCatalogMember } from "../semantic_core/compiler_catalog.js";
 import { compileAnalysisView } from "./semantic_analysis_compiler.js";
-import { parseAnalysisDefinition } from "../semantic_core/semantic_analysis.js";
+import {
+  parseAnalysisDefinition,
+  type SemanticViewIntent,
+} from "../semantic_core/semantic_analysis.js";
 import { isDerivedViewSpec, type QueryViewSpec } from "../semantic_core/analysis_spec.js";
 
 const parseDefinitionFrom = (input: { analysis: unknown }) =>
@@ -1053,12 +1056,13 @@ describe("semantic analysis compiler", () => {
             },
           ],
         },
+        // 意图联合已让这个组合不可表达，此处刻意越过类型验运行时边界仍在拦。
         view: {
           type: "bar",
           columns: ["二级组织"],
           category: "一级组织",
           series: ["在职人数"],
-        },
+        } as unknown as SemanticViewIntent,
       }),
     ).toThrow(/Unrecognized key.*columns/);
   });

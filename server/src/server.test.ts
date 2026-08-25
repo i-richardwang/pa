@@ -304,10 +304,9 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     columns: [columnAxis],
   });
   const executedPivot = (analysisId: string, viewId: string, intent: SemanticViewIntent) => {
+    const declaredAxis = intent.type === "table" ? intent.columns?.[0] : undefined;
     const columnAxis =
-      intent.columns?.[0] === "dimension:organization_name"
-        ? "organization_name"
-        : "department_name";
+      declaredAxis === "dimension:organization_name" ? "organization_name" : "department_name";
     const view = {
       id: "result",
       columns: ["organization_name", "department_name", "active_employee_count"],

@@ -257,32 +257,19 @@ function compileBoundChart(
   bind: ChartMemberBinder,
   calculated: ReadonlyMap<string, CalculatedMeasure> = new Map(),
 ): ChartDeclInput {
-  if (chart.type === "table" || chart.type === "kpi") {
-    if (
-      chart.category ||
-      chart.series ||
-      chart.annotations?.length ||
-      chart.group_by ||
-      chart.stack !== undefined ||
-      (chart.type === "kpi" && chart.columns)
-    ) {
-      throw new ViewIntentError(`${chart.type} 呈现不接受数据通道绑定`);
-    }
+  if (chart.type === "kpi") return { type: "kpi" };
+  if (chart.type === "table") {
     return {
-      type: chart.type,
-      ...(chart.type === "table" && chart.columns
+      type: "table",
+      ...(chart.columns
         ? {
             columns: chart.columns.map((axis) =>
               axis === "time" || axis === "metrics" ? axis : bind(axis, "dimension"),
             ),
           }
         : {}),
-      ...(chart.type === "table" && style.table_shading ? { shading: style.table_shading } : {}),
+      ...(style.table_shading ? { shading: style.table_shading } : {}),
     };
-  }
-  if (chart.columns) throw new ViewIntentError("columns 仅支持 table 呈现");
-  if (chart.type === "line" && chart.category) {
-    throw new ViewIntentError("line 呈现的横轴恒为时间，不接受 category 通道");
   }
   const queried = [...(intent.measures ?? []), ...calculated.keys()];
   const relationOf = (id: string) => {
@@ -299,10 +286,7 @@ function compileBoundChart(
       return !(relation?.kind === "structure_share" && queried.includes(relation.numerator_id));
     });
   if (!series.length) throw new ViewIntentError(`${chart.type} 呈现至少需要一个主系列`);
-  const annotations = chart.annotations ?? [];
-  if (chart.type !== "bar" && annotations.length) {
-    throw new ViewIntentError("辅助标注通道只支持 bar 呈现");
-  }
+  const annotations = chart.type === "bar" ? (chart.annotations ?? []) : [];
   if (annotations.some((id) => series.includes(id))) {
     throw new ViewIntentError("同一指标不能同时是主系列和辅助标注");
   }
@@ -344,15 +328,17 @@ function compileBoundChart(
         ),
       }
     : undefined;
+  const category = chart.type === "line" ? undefined : chart.category;
+  const groupBy = chart.type === "pie" ? undefined : chart.group_by;
   return {
     type: chart.type,
-    ...(chart.category ? { x: bind(chart.category, "dimension") } : {}),
+    ...(category ? { x: bind(category, "dimension") } : {}),
     y: series.map((id) => bind(id, "measure")),
     ...(chart.type === "bar" || chart.type === "line"
       ? { annotations: annotations.map((id) => bind(id, "measure")) }
       : {}),
-    ...(chart.group_by ? { group_by: bind(chart.group_by, "dimension") } : {}),
-    ...(chart.stack !== undefined ? { stack: chart.stack } : {}),
+    ...(groupBy ? { group_by: bind(groupBy, "dimension") } : {}),
+    ...(chart.type === "bar" && chart.stack !== undefined ? { stack: chart.stack } : {}),
     ...(display ? { display } : {}),
     ...(style.value_labels ? { value_labels: style.value_labels } : {}),
   };
@@ -490,37 +476,30 @@ function compileDerivedView(
 }
 
 function compileDerivedChart(chart: SemanticViewIntent, style: ViewPreferences): ChartDeclInput {
-  if (chart.type === "table" || chart.type === "kpi") {
-    if (
-      chart.category ||
-      chart.series ||
-      chart.annotations?.length ||
-      chart.group_by ||
-      chart.stack !== undefined ||
-      (chart.type === "kpi" && chart.columns)
-    ) {
-      throw new ViewIntentError(`${chart.type} 呈现不接受数据通道绑定`);
-    }
+  if (chart.type === "kpi") return { type: "kpi" };
+  if (chart.type === "table") {
     return {
-      type: chart.type,
-      ...(chart.type === "table" && chart.columns ? { columns: chart.columns } : {}),
-      ...(chart.type === "table" && style.table_shading ? { shading: style.table_shading } : {}),
+      type: "table",
+      ...(chart.columns ? { columns: chart.columns } : {}),
+      ...(style.table_shading ? { shading: style.table_shading } : {}),
     };
   }
-  if (chart.columns) throw new ViewIntentError("columns 仅支持 table 呈现");
   if (style.series && chart.series) {
     const unknown = Object.keys(style.series).find((id) => !chart.series?.includes(id));
     if (unknown) {
       throw new ViewIntentError(`系列视觉设置引用的派生列「${unknown}」不在当前主系列中`);
     }
   }
+  const category = chart.type === "line" ? undefined : chart.category;
+  const groupBy = chart.type === "pie" ? undefined : chart.group_by;
+  const annotations = chart.type === "bar" ? chart.annotations : undefined;
   return {
     type: chart.type,
-    ...(chart.category ? { x: chart.category } : {}),
+    ...(category ? { x: category } : {}),
     ...(chart.series ? { y: chart.series } : {}),
-    ...(chart.annotations?.length ? { annotations: chart.annotations } : {}),
-    ...(chart.group_by ? { group_by: chart.group_by } : {}),
-    ...(chart.stack !== undefined ? { stack: chart.stack } : {}),
+    ...(annotations?.length ? { annotations } : {}),
+    ...(groupBy ? { group_by: groupBy } : {}),
+    ...(chart.type === "bar" && chart.stack !== undefined ? { stack: chart.stack } : {}),
     ...(style.series
       ? {
           display: {

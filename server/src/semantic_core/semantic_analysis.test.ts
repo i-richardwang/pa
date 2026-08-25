@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { PRESENTATION_TYPE_SCHEMA } from "./presentation_type.js";
 import { parseAnalysisDefinition, SEMANTIC_VIEW_INTENT_INPUT } from "./semantic_analysis.js";
 
 const specWithFilters = (filters: unknown[]) => ({
@@ -230,6 +231,27 @@ describe("语义呈现意图边界", () => {
       expect(SEMANTIC_VIEW_INTENT_INPUT.safeParse({ type: "table", ...visual }).success).toBe(
         false,
       );
+    }
+  });
+
+  test("图型全集逐个有变体：新增呈现形态不能漏写通道声明", () => {
+    for (const type of PRESENTATION_TYPE_SCHEMA.options) {
+      expect(SEMANTIC_VIEW_INTENT_INPUT.safeParse({ type }).success).toBe(true);
+    }
+  });
+
+  test("通道只属于声明了它的图型", () => {
+    const rejected = [
+      { type: "table", category: "dimension:organization_name" },
+      { type: "kpi", series: ["measure:active_employee_count"] },
+      { type: "line", category: "dimension:organization_name" },
+      { type: "pie", group_by: "dimension:organization_name" },
+      { type: "line", annotations: ["measure:active_employee_count"] },
+      { type: "line", stack: true },
+      { type: "line", columns: ["metrics"] },
+    ];
+    for (const intent of rejected) {
+      expect(SEMANTIC_VIEW_INTENT_INPUT.safeParse(intent).success).toBe(false);
     }
   });
 });

@@ -247,6 +247,32 @@ function shareAnnotations(
   });
 }
 
+/** 按图型只挂它声明过的通道：哪个通道属于哪个图型出自意图联合，这里不另立一套。 */
+function chartIntent(
+  type: "line" | "bar" | "pie",
+  channels: {
+    category?: string;
+    series: string[];
+    groupBy?: string;
+    annotations?: string[];
+    stack?: boolean;
+  },
+): SemanticViewIntent {
+  const category = channels.category ? { category: channels.category } : {};
+  const groupBy = channels.groupBy ? { group_by: channels.groupBy } : {};
+  if (type === "line") return { type, series: channels.series, ...groupBy };
+  if (type === "pie") return { type, series: channels.series, ...category };
+  return {
+    type,
+    series: channels.series,
+    ...category,
+    ...groupBy,
+    ...(channels.annotations?.length ? { annotations: channels.annotations } : {}),
+    // 堆叠是拆分通道的读法：没拆出系列就没有可堆叠的段。
+    ...(channels.groupBy && channels.stack !== undefined ? { stack: channels.stack } : {}),
+  };
+}
+
 function repairedViewIntent(
   chart: SemanticViewIntent,
   view: SemanticAnalysisView,
@@ -277,19 +303,19 @@ function repairedViewIntent(
     chart.type,
     { dimensions, measures: measures.filter((member) => !auxiliary.has(member)) },
     {
-      x: chart.category,
+      ...(chart.type !== "line" && chart.category ? { x: chart.category } : {}),
       y: selectedSeries.filter((member) => !auxiliary.has(member)),
-      groupBy: chart.group_by,
+      ...(chart.type !== "pie" && chart.group_by ? { groupBy: chart.group_by } : {}),
     },
   );
   if (!assignment) return { type: "table" };
-  return {
-    ...chart,
-    category: assignment.x,
+  return chartIntent(chart.type, {
+    ...(assignment.x ? { category: assignment.x } : {}),
     series: assignment.y,
-    ...(annotations.length ? { annotations } : { annotations: undefined }),
-    group_by: assignment.groupBy,
-  };
+    ...(assignment.groupBy ? { groupBy: assignment.groupBy } : {}),
+    annotations,
+    ...(chart.type === "bar" && chart.stack !== undefined ? { stack: chart.stack } : {}),
+  });
 }
 
 function repairedViewPreferences(
@@ -489,16 +515,19 @@ export function defaultSemanticViewIntent(
     (proposal.groupBy && !groupBy) ||
     series.length !== proposal.y.length
   ) {
-    return repairedViewIntent({ type, category: dimensions[0], series: measures }, view, catalog);
+    return repairedViewIntent(
+      chartIntent(type, { category: dimensions[0], series: measures }),
+      view,
+      catalog,
+    );
   }
   // 结果侧的装箱说了算，不再过声明侧的 repair：查询声明了维度而结果只有一个取值时，
   // 该维度分裂不出系列，按它拆线只会退表格。
   const annotations = shareAnnotations(type, view, catalog, series);
-  return {
-    type,
-    category,
+  return chartIntent(type, {
+    ...(category ? { category } : {}),
     series,
-    ...(annotations.length ? { annotations } : {}),
-    group_by: groupBy,
-  };
+    ...(groupBy ? { groupBy } : {}),
+    annotations,
+  });
 }

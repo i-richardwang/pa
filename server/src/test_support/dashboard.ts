@@ -266,11 +266,15 @@ export const semanticPlanningStub = {
           }
         : {
             type: declared.type,
-            ...(declared.category ? { x: declared.category } : {}),
+            ...(declared.type !== "line" && declared.category ? { x: declared.category } : {}),
             y: declared.series ?? [],
-            ...(declared.annotations ? { annotations: declared.annotations } : {}),
-            ...(declared.group_by ? { groupBy: declared.group_by } : {}),
-            ...(declared.stack !== undefined ? { stack: declared.stack } : {}),
+            ...(declared.type === "bar" && declared.annotations
+              ? { annotations: declared.annotations }
+              : {}),
+            ...(declared.type !== "pie" && declared.group_by ? { groupBy: declared.group_by } : {}),
+            ...(declared.type === "bar" && declared.stack !== undefined
+              ? { stack: declared.stack }
+              : {}),
             ...(preferences.series
               ? {
                   display: Object.fromEntries(

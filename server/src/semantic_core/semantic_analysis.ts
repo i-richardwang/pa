@@ -8,7 +8,6 @@ import { analysisGraphSink, validateDerivedGraphView } from "./analysis_graph.js
 import { GRAND_TOTAL_DESCRIPTION, MAX_PLAN_NODES } from "./analysis_spec.js";
 import { COLUMN_FORMATS, type ColumnFormat } from "./query_payload.js";
 import { TIME_INTENT_INPUT } from "./time_contract.js";
-import type { PresentationType } from "./presentation_type.js";
 
 const SEMANTIC_MEMBER_ID = z.string().min(1).max(120);
 const SEMANTIC_MEASURE_ID = SEMANTIC_MEMBER_ID.describe(
@@ -301,17 +300,7 @@ const PRESENTATION_CATEGORY = PRESENTATION_FIELD.optional().describe(
 const PRESENTATION_GROUP_BY = PRESENTATION_FIELD.optional().describe(
   "拆分系列的第二个分类维度；与多个主指标互斥",
 );
-export type SemanticViewIntent = {
-  type: PresentationType;
-  columns?: string[];
-  category?: string;
-  series?: string[];
-  annotations?: string[];
-  group_by?: string;
-  stack?: boolean;
-};
-
-export const SEMANTIC_VIEW_INTENT_INPUT: z.ZodType<SemanticViewIntent> = z
+export const SEMANTIC_VIEW_INTENT_INPUT = z
   .discriminatedUnion("type", [
     z
       .object({
@@ -382,6 +371,9 @@ export const SEMANTIC_VIEW_INTENT_INPUT: z.ZodType<SemanticViewIntent> = z
       });
     }
   });
+
+/** 呈现意图按图型判别：哪些通道属于哪个图型出自这一份形状，下游不再复述适用性。 */
+export type SemanticViewIntent = z.infer<typeof SEMANTIC_VIEW_INTENT_INPUT>;
 
 export const ANALYSIS_DEFINITION_INPUT = z
   .object({

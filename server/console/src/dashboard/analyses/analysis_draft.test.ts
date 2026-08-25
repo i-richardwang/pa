@@ -304,10 +304,9 @@ describe("analysis draft 三层状态", () => {
       row_count: 2,
       query_notes: [],
     };
-    expect(defaultSemanticViewIntent(begin(), "line", catalog, single)).toMatchObject({
+    expect(defaultSemanticViewIntent(begin(), "line", catalog, single)).toEqual({
       type: "line",
       series: ["measure:active_employee_count"],
-      group_by: undefined,
     });
   });
 

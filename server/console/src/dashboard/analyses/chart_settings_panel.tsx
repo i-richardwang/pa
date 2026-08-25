@@ -237,26 +237,26 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   const tableRowSummary = tableLayout.rows.map(tableLayoutAxisLabel).join(" · ") || "无";
   const remainingTableAxes = tableAxisCandidates.filter((axis) => !tableColumns.includes(axis));
   const y = chart.type === "table" || chart.type === "kpi" ? [] : (chart.series ?? measures);
-  const annotations =
-    chart.type === "table" || chart.type === "kpi" ? [] : (chart.annotations ?? []);
+  const annotations = chart.type === "bar" ? (chart.annotations ?? []) : [];
+  // 拆分与堆叠只属于声明了这两个通道的图型；收窄一次，后面的读写都用它。
+  const splittable = chart.type === "line" || chart.type === "bar" ? chart : null;
+  const stackable = chart.type === "bar" ? chart : null;
+  const groupBy = splittable?.group_by;
   const series = draft.view_preferences.series ?? {};
   // 「显示」的各项各有各的前提；全不成立时**整节不出现**，不留一个空节题。
   // 拆分通道的取值不是偏好而是装箱的结果：余数维度必须上通道，所以没有「不拆分」；
   // 候选只有一个即无可选之事，不出选择器。
-  const splitOptions =
-    chart.type === "line" || chart.type === "bar"
-      ? splitCandidates(chart.type, { dimensions, measures })
-      : [];
+  const splitOptions = splittable ? splitCandidates(splittable.type, { dimensions, measures }) : [];
   const canSplitSeries = splitOptions.length > 1;
   // 饼图的扇区归属即取值，没有逐系列样式；此时指标行只留「上不上轴」。
-  const canStyleSeries = (chart.type === "line" || chart.type === "bar") && !chart.group_by;
-  const valueLabelItems: Record<string, string> = chart.group_by
+  const canStyleSeries = splittable !== null && !groupBy;
+  const valueLabelItems: Record<string, string> = groupBy
     ? { none: "不显示", all: "全部" }
     : { none: "不显示", main: "仅主指标", all: "全部" };
   const splitSeriesItems: Record<string, string> = Object.fromEntries(
     splitOptions.map((member) => [member, titleOf(member)]),
   );
-  const canStack = chart.type === "bar" && Boolean(chart.group_by);
+  const canStack = Boolean(stackable?.group_by);
   const canValueLabels = chart.type === "line" || chart.type === "bar";
   const showDisplaySection = canSplitSeries || canStack || canSummarize || canValueLabels;
 
@@ -312,11 +312,15 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
     if (chart.type === "table" || chart.type === "kpi") return;
     const next = y.includes(member) ? y.filter((item) => item !== member) : [...y, member];
     if (!next.length) return;
-    update({
-      ...chart,
-      series: chart.type === "pie" ? [member] : next,
-      annotations: annotations.filter((item) => item !== member),
-    });
+    if (chart.type === "pie") return update({ ...chart, series: [member] });
+    if (chart.type === "bar") {
+      return update({
+        ...chart,
+        series: next,
+        annotations: annotations.filter((item) => item !== member),
+      });
+    }
+    update({ ...chart, series: next });
   }
 
   function setSeriesPreferences(member: string, patch: Partial<SeriesPreferences>) {
@@ -565,25 +569,25 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
         <InspectorSection
           collapsible
           contentClassName={ROWS_CONTENT_CLASS}
-          defaultExpanded={!!chart.group_by || chart.stack === true || summaryEnabled}
+          defaultExpanded={!!groupBy || stackable?.stack === true || summaryEnabled}
           icon={<EyeIcon />}
           title="显示"
         >
-          {canSplitSeries ? (
+          {splittable && canSplitSeries ? (
             <SelectRow
               items={splitSeriesItems}
               label="拆分系列"
-              onValueChange={(value) => update({ ...chart, group_by: value })}
-              value={chart.group_by ?? splitOptions[0]}
+              onValueChange={(value) => update({ ...splittable, group_by: value })}
+              value={groupBy ?? splitOptions[0]}
             />
           ) : null}
 
-          {canStack ? (
+          {stackable && canStack ? (
             <SwitchField
-              checked={chart.stack === true}
+              checked={stackable.stack === true}
               indent
               label="堆叠显示"
-              onCheckedChange={(checked) => update({ ...chart, stack: checked })}
+              onCheckedChange={(checked) => update({ ...stackable, stack: checked })}
             />
           ) : null}
 
