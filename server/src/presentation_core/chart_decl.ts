@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
+import { chartChannels } from "./chart_channels.js";
 import { TABLE_SHADING_PREFERENCES_INPUT } from "./view_preferences.js";
 
 export const TABLE_AXIS_SCHEMA = z.discriminatedUnion("kind", [
@@ -74,15 +75,21 @@ export const CHART_DECL_SCHEMA = z
     if (!decl.y.length) issue(`${decl.type} 呈现至少需要一个图表系列`);
     if (decl.tableColumns !== undefined) issue(`${decl.type} 呈现不能包含表格列轴`);
     if (decl.shading !== undefined) issue(`${decl.type} 呈现不能包含表格着色`);
-    if (decl.type === "line" && decl.x !== undefined) issue("line 呈现的时间横轴无需声明 x");
-    if ((decl.type === "bar" || decl.type === "pie") && !decl.x) {
-      issue(`${decl.type} 呈现缺少分类轴 x`);
+    // 通道该不该出现、值通道容得下几个，都问容量表，不在这里另立一套。
+    const channels = chartChannels(decl.type);
+    if (channels.axis === "dimension" && !decl.x) issue(`${decl.type} 呈现缺少分类轴 x`);
+    if (channels.axis !== "dimension" && decl.x !== undefined) {
+      issue("line 呈现的时间横轴无需声明 x");
+    }
+    if (!channels.split && decl.groupBy !== undefined) {
+      issue(`${decl.type} 呈现没有拆分通道`);
+    }
+    if ((channels.singleValue || decl.groupBy !== undefined) && decl.y.length !== 1) {
+      issue(`${decl.type} 呈现的值通道只容一个系列`);
     }
     if (decl.type === "pie") {
-      if (decl.y.length !== 1) issue("pie 呈现必须且只能包含一个系列");
       if (
         decl.annotations !== undefined ||
-        decl.groupBy !== undefined ||
         decl.stack !== undefined ||
         decl.display !== undefined ||
         decl.valueLabels !== undefined

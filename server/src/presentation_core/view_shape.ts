@@ -26,8 +26,8 @@ import type { RenderShape } from "./render_shape.js";
 import type { ChartDecl, TableAxis } from "./chart_decl.js";
 import {
   assignChannels,
-  CHANNEL_CHART_TYPES,
-  type ChannelChartType,
+  CHART_FORMS,
+  type ChannelForm,
   type ChannelPool,
   type ChannelPreferences,
 } from "./chart_channels.js";
@@ -1521,7 +1521,7 @@ export function resultChannelPool(
  */
 export function proposeChartDecl(
   view: ViewBlock,
-  type: ChannelChartType,
+  type: Exclude<ChannelForm, "kpi">,
   preferences: ChannelPreferences = {},
   shape: ResultShape = analyzeResultShape(view),
 ): ChartDecl | null {
@@ -1536,7 +1536,7 @@ export function sensibleForms(view: ViewBlock): SensibleForm[] {
   return [
     "table",
     ...(canCompileKpi(view, shape) ? (["kpi"] as const) : []),
-    ...CHANNEL_CHART_TYPES.filter((type) => proposeChartDecl(view, type, {}, shape)),
+    ...CHART_FORMS.filter((type) => proposeChartDecl(view, type, {}, shape)),
   ];
 }
 

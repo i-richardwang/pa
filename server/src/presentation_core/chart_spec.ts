@@ -6,6 +6,7 @@
 import { z } from "zod";
 import { memberShortName } from "../semantic_core/member_name.js";
 import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
+import { chartChannels } from "./chart_channels.js";
 import type { ChartDecl, TableAxis } from "./chart_decl.js";
 
 export type { TableAxis } from "./chart_decl.js";
@@ -283,7 +284,8 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
           }),
         );
 
-  if (input.type === "line") {
+  const channels = chartChannels(input.type);
+  if (channels.axis !== "dimension") {
     // 横轴恒为输出时间轴：x 引用时间成员是无害确认，归一丢弃；引用分类维度才是真歧义
     if (input.x !== undefined && !isTimeAxisRef(input.x)) {
       throw new Error(
@@ -321,15 +323,13 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
     );
   }
 
-  if (input.type === "pie") {
-    if (groupBy !== undefined) {
-      throw new Error("presentation.type=pie 不接受 group_by；切片维度用 x 指定");
-    }
-    if (y.length !== 1) {
-      throw new Error("presentation.type=pie 需要唯一度量；请用 y 指定一个可加计数度量");
-    }
-    return { type: "pie", x, y };
+  if (!channels.split && groupBy !== undefined) {
+    throw new Error(`presentation.type=${input.type} 不接受 group_by；切片维度用 x 指定`);
   }
+  if (channels.singleValue && y.length !== 1) {
+    throw new Error(`presentation.type=${input.type} 需要唯一度量；请用 y 指定一个可加计数度量`);
+  }
+  if (input.type === "pie") return { type: "pie", x, y };
 
   return {
     type: "bar",

@@ -279,6 +279,14 @@ describe("analysis draft 三层状态", () => {
     });
   });
 
+  test("指标卡没有任何维度通道：查询带分组维度时退回表格", () => {
+    const draft = begin();
+    const query = semanticSinkQueryView(draft.analysis)!;
+    expect(defaultSemanticViewIntent(draft, "kpi", catalog)).toEqual({ type: "table" });
+    const flat = setSemanticQueryView(draft, query.id, { ...query, dimensions: [] }, catalog);
+    expect(defaultSemanticViewIntent(flat, "kpi", catalog)).toMatchObject({ type: "kpi" });
+  });
+
   test("查询声明的维度在结果里只有一个取值时不拿它拆线，指标各成一条", () => {
     const single = {
       id: "result",

@@ -16,7 +16,7 @@ import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog
 import type { ReplayPayload } from "@contracts/replay_contract";
 import { SERIES_COLORS } from "@charts";
 import { type ChartSpecContext, normalizeTableColumns, type TableAxis } from "@chart-spec";
-import { assignChannels, isChannelChartType, splitCandidates } from "@channels";
+import { assignChannels, isChannelForm, splitCandidates } from "@channels";
 import { memberShortName } from "@member";
 import { isSemanticDerivedView, type SemanticViewIntent } from "@semantic-analysis";
 import type { SeriesPreferences, TableShadingPreferences } from "@view-preferences";
@@ -132,8 +132,7 @@ export function ChartTypeBar({ draft, replay, onChange, catalog }: PanelProps) {
   const pool = resultChannelPool(resultView);
   /** 不可选时说缺什么：通道装不下几个维度，还是装得下但结果形态撑不起。 */
   const unavailableReason = (form: SensibleForm, label: string) => {
-    if (form === "kpi") return "指标卡只呈现没有维度的单行结果";
-    if (!isChannelChartType(form)) return `${label}不适用于当前结果`;
+    if (!isChannelForm(form)) return `${label}不适用于当前结果`;
     return assignChannels(form, pool) === null
       ? `${label}的通道装不下当前结果的 ${pool.dimensions.length} 个维度`
       : `当前结果的形态不支持${label}`;

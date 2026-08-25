@@ -266,7 +266,7 @@ function repairedViewIntent(
     };
   }
   if (chart.type === "kpi") {
-    return measures.length > 0 && dimensions.length === 0 ? chart : { type: "table" };
+    return assignChannels("kpi", { dimensions, measures }) ? chart : { type: "table" };
   }
   const retainedSeries = (chart.series ?? measures).filter((member) => measures.includes(member));
   const selectedSeries = retainedSeries.length ? retainedSeries : measures;

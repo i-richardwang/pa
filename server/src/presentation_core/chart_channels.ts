@@ -5,37 +5,41 @@
  */
 import type { PresentationType } from "../semantic_core/presentation_type.js";
 
-/** 走通道装箱的形态；table 的轴由结果余数裁决，kpi 不接受任何维度。 */
-export type ChannelChartType = Exclude<PresentationType, "table" | "kpi">;
+/** 走通道装箱的形态；表格不在其中——它的行列轴是结果余数，归另一份契约。 */
+export type ChannelForm = Exclude<PresentationType, "table">;
 
-export const CHANNEL_CHART_TYPES = ["line", "bar", "pie"] as const satisfies readonly [
-  ChannelChartType,
-  ...ChannelChartType[],
-];
+/** 经图表编译器出图的形态；指标卡不画图表，只受容量表的维度约束。 */
+export const CHART_FORMS = ["line", "bar", "pie"] as const satisfies readonly ChannelForm[];
 
-export function isChannelChartType(type: PresentationType): type is ChannelChartType {
-  return type !== "table" && type !== "kpi";
+export function isChannelForm(type: PresentationType): type is ChannelForm {
+  return type !== "table";
 }
 
 type ChannelSpec = {
-  /** 主轴吃什么：time 出自结果、不占维度；dimension 必须吃掉一个维度。 */
-  axis: "time" | "dimension";
+  /** 主轴吃什么：none 与 time 都不占维度，dimension 必须吃掉一个维度。 */
+  axis: "none" | "time" | "dimension";
   /** 拆分通道能吃几个维度。 */
   split: 0 | 1;
   /** 值通道是否只容一个度量。 */
   singleValue?: true;
 };
 
-const CHART_CHANNELS: Record<ChannelChartType, ChannelSpec> = {
+const CHART_CHANNELS: Record<ChannelForm, ChannelSpec> = {
+  kpi: { axis: "none", split: 0 },
   line: { axis: "time", split: 1 },
   bar: { axis: "dimension", split: 1 },
   pie: { axis: "dimension", split: 0, singleValue: true },
 };
 
+/** 形态的通道容量；校验面按它判某个通道该不该出现，不另立一套。 */
+export function chartChannels(type: ChannelForm): Readonly<ChannelSpec> {
+  return CHART_CHANNELS[type];
+}
+
 /** 装箱输入。名字用调用方自己的词表（结果列短名或语义成员 id），分配原样用同一套名字回来。 */
 export type ChannelPool = { dimensions: string[]; measures: string[] };
 
-export type ChannelAssignment = { x?: string; y: string[]; groupBy?: string };
+type ChannelAssignment = { x?: string; y: string[]; groupBy?: string };
 
 /** 调用方已有的绑定，装得下就沿用；装不下按容量重排。 */
 export type ChannelPreferences = { x?: string; y?: string[]; groupBy?: string };
@@ -45,7 +49,7 @@ export type ChannelPreferences = { x?: string; y?: string[]; groupBy?: string };
  * 只能靠聚合抹平，而呈现层不许改数。度量不受此约束：没上轴的度量只是没画，不产生错数。
  */
 export function assignChannels(
-  type: ChannelChartType,
+  type: ChannelForm,
   pool: ChannelPool,
   preferences: ChannelPreferences = {},
 ): ChannelAssignment | null {
@@ -74,7 +78,7 @@ export function assignChannels(
 }
 
 /** 拆分通道的候选维度：装得下才算候选。候选唯一即无可选之事，调用方据此决定出不出选择器。 */
-export function splitCandidates(type: ChannelChartType, pool: ChannelPool): string[] {
+export function splitCandidates(type: ChannelForm, pool: ChannelPool): string[] {
   return pool.dimensions.filter(
     (dimension) => assignChannels(type, pool, { groupBy: dimension })?.groupBy === dimension,
   );
