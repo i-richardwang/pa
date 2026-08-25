@@ -6,7 +6,6 @@
 import { z } from "zod";
 import { memberShortName } from "../semantic_core/member_name.js";
 import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
-import { resolveTimeOutputGrain, type TimeInput } from "../semantic_core/time_contract.js";
 import type { ChartDecl, TableAxis } from "./chart_decl.js";
 
 export type { TableAxis } from "./chart_decl.js";
@@ -92,7 +91,6 @@ export type ChartDeclInput = z.infer<typeof CHART_INPUT>;
 export type ChartSpecContext = {
   measures?: string[];
   dimensions?: string[];
-  time?: TimeInput;
 };
 
 function resolveMember(name: string, pool: string[]): string | undefined {
@@ -293,15 +291,6 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
       );
     }
 
-    // 粒度走 resolveTimeOutputGrain 解析，不读声明字段。
-    const grain = resolveTimeOutputGrain(spec.time ?? {}, undefined, {
-      grouped: (spec.dimensions ?? []).length > 0,
-    });
-    if (grain !== "month" && grain !== "year") {
-      throw new Error(
-        "presentation.type=line 需要时间轴：请选择连续期间，并把时间粒度设为按月或按年",
-      );
-    }
     return {
       type: "line",
       y,

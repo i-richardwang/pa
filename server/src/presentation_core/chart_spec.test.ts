@@ -5,13 +5,11 @@ import { validateChartDecl, type ChartSpecContext } from "./chart_spec.js";
 const TREND: ChartSpecContext = {
   measures: ["test_people_metrics.new_hire_count", "test_people_metrics.leave_count"],
   dimensions: [],
-  time: { range: { from: "2026-01", to: "2026-07" }, grain: "month" },
 };
 
 const CATEGORY: ChartSpecContext = {
   measures: ["test_people_metrics.active_employee_count"],
   dimensions: ["test_people_metrics.organization_name", "test_people_metrics.job_level_band"],
-  time: {},
 };
 
 describe("归一与缺省补齐", () => {
@@ -54,7 +52,6 @@ describe("归一与缺省补齐", () => {
         {
           measures: ["test_people_metrics.new_hire_count"],
           dimensions: ["test_people_metrics.organization_name"],
-          time: { range: { from: "2026-01", to: "2026-07" }, grain: "month" },
         },
       ),
     ).toThrow(/value_labels=main 与 group_by 互斥/);
@@ -113,7 +110,6 @@ describe("归一与缺省补齐", () => {
         {
           measures: ["test_people_metrics.active_employee_count"],
           dimensions: ["test_people_metrics.organization_name"],
-          time: {},
         },
       ),
     ).toMatchObject({ type: "pie", x: "organization_name", y: ["active_employee_count"] });
@@ -226,25 +222,6 @@ describe("可行动报错", () => {
     expect(() =>
       validateChartDecl({ type: "line", group_by: "year", y: ["new_hire_count"] }, TREND),
     ).toThrow(/group_by 不能引用时间成员/);
-  });
-
-  test("line 需要按月或按年的连续期间", () => {
-    expect(() =>
-      validateChartDecl({ type: "line", y: ["active_employee_count"] }, CATEGORY),
-    ).toThrow(/连续期间.*按月或按年/);
-    expect(() =>
-      validateChartDecl({ type: "line" }, { ...TREND, time: { cutoff: "2026-07" } }),
-    ).toThrow(/连续期间.*按月或按年/);
-  });
-
-  test("省略显示方式的连续窗口使用默认粒度", () => {
-    // 近 N 月默认按月：判据取解析后的粒度，不是声明里有没有写 grain。
-    expect(
-      validateChartDecl({ type: "line" }, { ...TREND, time: { last: { months: 12 } } }),
-    ).toMatchObject({ type: "line" });
-    expect(
-      validateChartDecl({ type: "line" }, { ...TREND, time: { last: { years: 3 } } }),
-    ).toMatchObject({ type: "line" });
   });
 
   test("group_by 与多度量互斥", () => {
@@ -388,7 +365,7 @@ describe("可行动报错", () => {
           y: ["active_employee_count"],
           annotations: ["active_employee_share"],
         },
-        { ...context, time: TREND.time },
+        context,
       ),
     ).toThrow(/annotations 仅支持 type=bar/);
   });

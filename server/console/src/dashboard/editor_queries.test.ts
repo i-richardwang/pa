@@ -67,7 +67,10 @@ const baseReplay = () =>
     ],
   }) as unknown as ReplayPayload;
 
-function stubMaterialize(): { calls: { path: string; body: unknown }[]; restore: () => void } {
+function stubMaterialize(renderDecl: unknown = TABLE_DECL): {
+  calls: { path: string; body: unknown }[];
+  restore: () => void;
+} {
   const calls: { path: string; body: unknown }[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (path: string, init?: RequestInit) => {
@@ -79,7 +82,7 @@ function stubMaterialize(): { calls: { path: string; body: unknown }[]; restore:
         view_id: NEXT_IDS.view,
         view: { type: "table" },
         view_preferences: {},
-        render_decl: TABLE_DECL,
+        render_decl: renderDecl,
         record_projection_bindings: { views: [] },
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
@@ -130,6 +133,29 @@ test("沿用基线时结果行不重取，呈现按新声明重编，上一版�
     expect(next.render_bundle.view).toBe(base.render_bundle.view);
     expect(next.presentation_notes).toBeUndefined();
     expect(next.presentation.type).toBe("table");
+  } finally {
+    stub.restore();
+  }
+});
+
+test("只改呈现也重算降级说明：结果撑不起新声明时，本地重编同样给出说明", async () => {
+  const stub = stubMaterialize({ type: "line", y: ["active_employee_count"] });
+  try {
+    const base = baseReplay();
+    const next = await runDraft({
+      analysis: base.analysis,
+      view: { type: "line" },
+      view_preferences: {},
+      base,
+    });
+    expect(next.presentation.type).toBe("table");
+    expect(next.presentation_notes).toEqual([
+      {
+        result_view_id: "result",
+        kind: "unsupported_shape",
+        note: "查询已成功，但当前结果形态不支持声明的呈现，本次已按表格呈现。",
+      },
+    ]);
   } finally {
     stub.restore();
   }

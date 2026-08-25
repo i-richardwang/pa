@@ -23,7 +23,7 @@ import {
   type TableShading,
 } from "./table_shading.js";
 import type { RenderShape } from "./render_shape.js";
-import type { ChartDecl, ChartRenderDecl, TableAxis } from "./chart_decl.js";
+import type { ChartDecl, TableAxis } from "./chart_decl.js";
 
 /** 感知极限：折线超出此系列数缠绕不可读，声明的折线编译失败并退回表格 */
 export const MAX_LINE_SERIES = 5;
@@ -1330,7 +1330,7 @@ function declaredChart(
   view: ViewBlock,
   roles: Roles,
   titleOf: (c: string) => string,
-  decl: ChartRenderDecl,
+  decl: ChartDecl,
 ): ChartSpec | null {
   const measureIdx = decl.y.map((y) => declaredIdx(view, roles.measureIdx, y));
   if (measureIdx.some((i) => i === undefined)) return null;
@@ -1461,7 +1461,7 @@ export function tableShadingDefaults(view: ViewBlock): TableShadingDefaults | nu
 export function compileChart(
   view: ViewBlock,
   titleOf: (c: string) => string,
-  decl: ChartRenderDecl,
+  decl: ChartDecl,
   shape: ResultShape = analyzeResultShape(view),
 ): ChartSpec | null {
   if (decl.type === "table" || decl.type === "kpi" || !view.rows.length) return null;
@@ -1490,7 +1490,7 @@ export function sensibleForms(view: ViewBlock): SensibleForm[] {
   const categories = roles.catIdx.map((index) => view.columns[index]);
   const candidates: Array<{
     form: Exclude<SensibleForm, "table" | "kpi">;
-    decl: ChartRenderDecl;
+    decl: ChartDecl;
   }> = [];
   if (roles.timePoints.length >= 2 && measures.length) {
     candidates.push({

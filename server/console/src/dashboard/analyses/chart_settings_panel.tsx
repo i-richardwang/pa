@@ -186,9 +186,6 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   const tableSpec: ChartSpecContext = { measures, dimensions };
   const resultShape = analyzeResultShape(resultView);
   const temporal = resultShape.temporal;
-  const monthly = resultView.columns.some(
-    (column) => resultView.column_roles[column] === "time" && memberShortName(column) === "month",
-  );
   const tableLayout =
     chart.type === "table"
       ? resolveTableLayout(
@@ -202,16 +199,21 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
     axis.kind === "field"
       ? (dimensions.find((member) => memberShortName(member) === axis.column) ?? axis.column)
       : axis.kind;
-  const tableAxisLabel = (axis: string) =>
-    axis === "time" ? (monthly ? "时间" : "年份") : axis === "metrics" ? "指标" : titleOf(axis);
-  const tableLayoutAxisLabel = (axis: TableAxis) =>
-    axis.kind === "time"
-      ? axis.level === "year"
-        ? "年份"
-        : axis.level === "month"
-          ? "月份"
-          : tableAxisLabel("time")
-      : tableAxisLabel(tableAxisName(axis));
+  /** 轴名即表头名：层级出自解析后的布局，与渲染出的表头同一套说法。 */
+  const tableLayoutAxisLabel = (axis: TableAxis): string => {
+    if (axis.kind === "metrics") return "指标";
+    if (axis.kind === "field") return titleOf(tableAxisName(axis));
+    return axis.level === "year" ? "年份" : axis.level === "month" ? "月份" : "时间";
+  };
+  const resolvedTimeAxis = [...tableLayout.rows, ...tableLayout.columns].find(
+    (axis) => axis.kind === "time",
+  );
+  const tableAxisLabel = (name: string) =>
+    name === "metrics"
+      ? "指标"
+      : name === "time"
+        ? (resolvedTimeAxis && tableLayoutAxisLabel(resolvedTimeAxis)) || "时间"
+        : titleOf(name);
   const tableColumns = tableLayout.columns.map(tableAxisName);
   const tableAxisCandidates = [
     ...(measures.length ? ["metrics"] : []),

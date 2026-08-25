@@ -16,17 +16,9 @@ export type PresentationSpec = ChartDecl;
 export function chartContextForView(
   view: AnalysisViewSpec,
   analysis?: AnalysisSpec,
-): {
-  measures: string[];
-  dimensions: string[];
-  time?: import("../semantic_core/time_contract.js").TimeInput;
-} {
+): { measures: string[]; dimensions: string[] } {
   if (!isDerivedViewSpec(view)) {
-    return {
-      measures: view.measures ?? [],
-      dimensions: view.dimensions ?? [],
-      time: view.time,
-    };
+    return { measures: view.measures ?? [], dimensions: view.dimensions ?? [] };
   }
   const measures: string[] = [];
   const dimensions: string[] = [];

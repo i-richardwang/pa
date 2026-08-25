@@ -93,6 +93,3 @@ export const CHART_DECL_SCHEMA = z
   });
 
 export type ChartDecl = z.infer<typeof CHART_DECL_SCHEMA>;
-
-/** 图表编译器只消费图形通道。 */
-export type ChartRenderDecl = ChartDecl;

@@ -10,12 +10,7 @@ import {
 } from "@semantic-analysis";
 import type { ViewPreferences } from "@view-preferences";
 import { canonicalJson } from "@canonical-json";
-import {
-  compileTimeIntent,
-  resolveTimeOutputGrain,
-  type TimeCapabilities,
-  type TimeIntent,
-} from "@time";
+import type { TimeCapabilities, TimeIntent } from "@time";
 
 export type AnalysisEditState = {
   name: string;
@@ -208,12 +203,11 @@ export function setSemanticSummary(
 export function semanticViewContext(
   view: SemanticAnalysisView,
   catalog: CatalogPayload,
-): { measures: string[]; dimensions: string[]; time?: SemanticQueryView["time"] } {
+): { measures: string[]; dimensions: string[] } {
   if (!isSemanticDerivedView(view)) {
     return {
       measures: [...(view.measures ?? []), ...(view.calculations ?? []).map(({ id }) => id)],
       dimensions: view.dimensions ?? [],
-      time: view.time,
     };
   }
   const measures: string[] = [];
@@ -237,7 +231,7 @@ function repairedViewIntent(
   view: SemanticAnalysisView,
   catalog: CatalogPayload,
 ): SemanticViewIntent {
-  const { measures, dimensions, time } = semanticViewContext(view, catalog);
+  const { measures, dimensions } = semanticViewContext(view, catalog);
   if (chart.type === "table") {
     // 时间轴留给结果裁决：输出粒度由引擎按指标时间契约与数据边界决定，这里预测不出来。
     const columns = chart.columns?.filter((axis) => {
@@ -279,16 +273,9 @@ function repairedViewIntent(
     chart.group_by && dimensions.includes(chart.group_by) && chart.group_by !== category
       ? chart.group_by
       : undefined;
-  const grain = time
-    ? resolveTimeOutputGrain(compileTimeIntent(time), catalog.data_as_of, {
-        grouped: dimensions.length > 0,
-      })
-    : undefined;
-  if (
-    !series.length ||
-    ((chart.type === "bar" || chart.type === "pie") && !category) ||
-    (chart.type === "line" && grain !== "month" && grain !== "year")
-  ) {
+  // 只修成员引用，不判数据形态：结果能不能画折线由结果说了算（图型选择器读 sensibleForms，
+  // 渲染期不满足则忠实退表格）。
+  if (!series.length || ((chart.type === "bar" || chart.type === "pie") && !category)) {
     return { type: "table" };
   }
   return {

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { z } from "zod";
 import { skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { compilePresentationBlock } from "@charts";
+import { compilePresentationBlock, presentationFallbacks } from "@charts";
 import {
   CHART_DECL_SCHEMA,
   REPLAY_PAYLOAD_SCHEMA,
@@ -211,6 +211,15 @@ export async function runDraft(input: DraftRunInput): Promise<ReplayPayload> {
     { analysis_id: base.analysis_id, view, view_preferences },
     MATERIALIZED_VIEW_SCHEMA,
   );
+  const resultView = base.render_bundle.view;
+  const presentation = compilePresentationBlock(resultView, materialized.render_decl);
+  // 降级说明与呈现同源重算：只改呈现时不回服务端，说明也必须跟着新声明一起出。
+  const notes = presentationFallbacks(
+    resultView.id,
+    presentation,
+    materialized.render_decl,
+    resultView.rows.length,
+  );
   return {
     ...base,
     at: new Date().toISOString(),
@@ -224,9 +233,9 @@ export async function runDraft(input: DraftRunInput): Promise<ReplayPayload> {
       analysis_id: materialized.analysis_id,
       view_id: materialized.view_id,
     },
-    render_bundle: { view: base.render_bundle.view, decl: materialized.render_decl },
-    presentation: compilePresentationBlock(base.render_bundle.view, materialized.render_decl),
-    presentation_notes: undefined,
+    render_bundle: { view: resultView, decl: materialized.render_decl },
+    presentation,
+    presentation_notes: notes.length ? notes : undefined,
   };
 }
 

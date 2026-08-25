@@ -26,7 +26,7 @@ import {
   type TotalBand,
   type TrendSpec,
 } from "./view_shape.js";
-import type { ChartDecl, ChartRenderDecl, SeriesDisplay } from "./chart_decl.js";
+import type { ChartDecl, SeriesDisplay } from "./chart_decl.js";
 import { formatSeriesValue, toNumber } from "./view_format.js";
 import { CHART_CHROME, CHART_SERIES, FONT_FAMILY } from "./design_tokens.js";
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
@@ -725,7 +725,7 @@ function lastIndexWhere(length: number, test: (index: number) => boolean): numbe
 }
 
 /** 纯时间趋势 / 柱线组合：时间恒占 x 轴；混量纲时量画柱（主轴）、率画线（副轴） */
-function trendOption(spec: TrendSpec, decl: ChartRenderDecl): ViewChart {
+function trendOption(spec: TrendSpec, decl: ChartDecl): ViewChart {
   const categories = spec.rows.map((r) => String(r.t ?? ""));
   const series = resolveSeries(spec.series, spec.rows, decl.display, (s) => ({
     mark: s.mark === "bar" ? "bar" : "line",
@@ -749,7 +749,7 @@ function trendOption(spec: TrendSpec, decl: ChartRenderDecl): ViewChart {
 }
 
 /** 分类柱线组合：分类占 x 轴，绝对量画柱（左轴），率画线（右轴）。 */
-function categoryComboOption(spec: CategoryComboSpec, decl: ChartRenderDecl): ViewChart {
+function categoryComboOption(spec: CategoryComboSpec, decl: ChartDecl): ViewChart {
   const series = resolveSeries(spec.series, spec.rows, decl.display, (s) => ({
     mark: s.isRate ? "line" : "bar",
     axis: s.isRate ? 1 : 0,
@@ -770,7 +770,7 @@ function categoryComboOption(spec: CategoryComboSpec, decl: ChartRenderDecl): Vi
 }
 
 /** 分类条形（横排容纳中文长标签）：多系列并列、双分类构成堆叠；占比注释随读数卡 */
-function barOption(spec: BarSpec, decl: ChartRenderDecl): ViewChart {
+function barOption(spec: BarSpec, decl: ChartDecl): ViewChart {
   const categories = spec.rows.map((r) => String(r.label ?? ""));
   const series = resolveSeries(spec.series, spec.rows, decl.display, () => ({
     mark: "bar",
@@ -893,7 +893,7 @@ function pieOption(spec: PieSpec): ViewChart {
 /** 按显式声明编译图表配置；不声明图表的 table/kpi 直接返回 null。 */
 export function buildViewChart(
   view: ViewBlock,
-  decl: ChartRenderDecl,
+  decl: ChartDecl,
   resultShape: ResultShape = analyzeResultShape(view),
 ): ViewChart | null {
   const chart = compileChart(view, makeTitleOf(view), decl, resultShape);

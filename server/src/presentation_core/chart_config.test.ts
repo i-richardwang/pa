@@ -682,6 +682,20 @@ describe("无图形态与回答级块", () => {
     ).toBeNull();
   });
 
+  test("结果没有时间轴时，声明的折线忠实退表格", () => {
+    const flat = view(
+      ["organization_name", "active_employee_count"],
+      [
+        ["甲", 10],
+        ["乙", 20],
+      ],
+    );
+    expect(buildViewChart(flat, { type: "line", y: ["active_employee_count"] })).toBeNull();
+    expect(
+      compilePresentationBlock(flat, { type: "line", y: ["active_employee_count"] }),
+    ).toMatchObject({ type: "table" });
+  });
+
   test("完整呈现块始终带表格，图表只在声明成立时出现", () => {
     const kpi = compilePresentationBlock(view(["active_employee_count"], [[1]]), {
       type: "kpi",
