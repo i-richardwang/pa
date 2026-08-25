@@ -39,10 +39,6 @@ describe("PresentationSpec", () => {
       type: "bar",
       x: "organization_name",
       y: ["本期人数"],
-      tableLayout: {
-        rows: [{ kind: "field", column: "organization_name" }],
-        columns: [{ kind: "metrics" }],
-      },
     });
   });
 

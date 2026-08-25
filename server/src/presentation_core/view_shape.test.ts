@@ -16,9 +16,9 @@ import {
 const payload = viewBlock;
 
 const titleOf = (column: string) => column;
-const tableLayout = { rows: [], columns: [] };
 const percent = (...columns: string[]): Record<string, ColumnFormat> =>
   Object.fromEntries(columns.map((column) => [column, "percent"]));
+const DEFAULT_TABLE = { type: "table" as const, y: [] };
 const headerPathsOf = (table: { columns: { headerPath: Array<{ label: string }> }[] }) =>
   table.columns.map((column) => column.headerPath.map((part) => part.label));
 
@@ -73,10 +73,7 @@ describe("compileTableWithStatus", () => {
     const compiled = compileTableWithStatus(view, titleOf, {
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [{ kind: "field", column: "organization_name" }],
-        columns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
-      },
+      tableColumns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
     });
     expect(compiled.layout).toEqual({ state: "applied", leafColumns: 3 });
     expect(headerPathsOf(compiled.table)).toEqual([
@@ -109,13 +106,7 @@ describe("compileTableWithStatus", () => {
     const table = compileTableWithStatus(view, titleOf, {
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [
-          { kind: "field", column: "organization_name" },
-          { kind: "field", column: "department_name" },
-        ],
-        columns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
-      },
+      tableColumns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
     }).table;
     expect(headerPathsOf(table)).toEqual([
       ["organization_name"],
@@ -141,10 +132,7 @@ describe("compileTableWithStatus", () => {
       {
         type: "table",
         y: [],
-        tableLayout: {
-          rows: [{ kind: "time", level: "month" }],
-          columns: [{ kind: "time", level: "year" }, { kind: "metrics" }],
-        },
+        tableColumns: [{ kind: "time", level: "year" }, { kind: "metrics" }],
       },
     ).table;
     expect(headerPathsOf(table)).toEqual([
@@ -156,6 +144,87 @@ describe("compileTableWithStatus", () => {
       [1, 20251, 20261],
       [2, 20252, 20262],
       [3, 20253, null],
+    ]);
+  });
+
+  test("结果带时间轴而声明只提到维度与指标：时间落行轴，不因坐标重复降级", () => {
+    const view = payload(
+      ["year", "organization_name", "active_employee_count", "ytd_voluntary_turnover_rate"],
+      [2024, 2025, 2026].flatMap((year) =>
+        ["甲", "乙"].map((organization, index): Cell[] => [
+          year,
+          organization,
+          100 + index + year,
+          0.1 + index / 100,
+        ]),
+      ),
+      {
+        roles: {
+          year: "time",
+          organization_name: "dimension",
+          active_employee_count: "measure",
+          ytd_voluntary_turnover_rate: "measure",
+        },
+      },
+    );
+    const compiled = compileTableWithStatus(view, titleOf, {
+      type: "table",
+      y: [],
+      tableColumns: [{ kind: "field", column: "organization_name" }, { kind: "metrics" }],
+    });
+    expect(compiled.layout).toEqual({ state: "applied", leafColumns: 4 });
+    expect(headerPathsOf(compiled.table)[0]).toEqual(["时间"]);
+    expect(compiled.table.rows.map((row) => row[0])).toEqual(["2024", "2025", "2026"]);
+  });
+
+  test("缺省列轴：维度成行、指标与时间成列；结果无时间轴时只留指标", () => {
+    const rows: Cell[][] = [2025, 2026].flatMap((year) =>
+      ["甲", "乙"].map((organization): Cell[] => [year, organization, year]),
+    );
+    const temporal = payload(["year", "organization_name", "active_employee_count"], rows, {
+      roles: {
+        year: "time",
+        organization_name: "dimension",
+        active_employee_count: "measure",
+      },
+    });
+    expect(headerPathsOf(compileTableWithStatus(temporal, titleOf, DEFAULT_TABLE).table)).toEqual([
+      ["organization_name"],
+      ["active_employee_count", "2025"],
+      ["active_employee_count", "2026"],
+    ]);
+    const flat = payload(
+      ["organization_name", "active_employee_count"],
+      [
+        ["甲", 10],
+        ["乙", 20],
+      ],
+      { roles: { organization_name: "dimension", active_employee_count: "measure" } },
+    );
+    expect(headerPathsOf(compileTableWithStatus(flat, titleOf, DEFAULT_TABLE).table)).toEqual([
+      ["organization_name"],
+      ["active_employee_count"],
+    ]);
+  });
+
+  test("声明的时间轴在结果里不存在：显式不可用并退回长表", () => {
+    const flat = payload(
+      ["organization_name", "active_employee_count"],
+      [
+        ["甲", 10],
+        ["乙", 20],
+      ],
+      { roles: { organization_name: "dimension", active_employee_count: "measure" } },
+    );
+    const compiled = compileTableWithStatus(flat, titleOf, {
+      type: "table",
+      y: [],
+      tableColumns: [{ kind: "metrics" }, { kind: "time", level: "bucket" }],
+    });
+    expect(compiled.layout).toMatchObject({ state: "unavailable", reason: "missing_axis" });
+    expect(headerPathsOf(compiled.table)).toEqual([
+      ["organization_name"],
+      ["active_employee_count"],
     ]);
   });
 
@@ -207,10 +276,7 @@ describe("compileTableWithStatus", () => {
     const compiled = compileTableWithStatus(view, titleOf, {
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [{ kind: "field", column: "degree" }],
-        columns: [{ kind: "field", column: "organization_name" }, { kind: "metrics" }],
-      },
+      tableColumns: [{ kind: "field", column: "organization_name" }, { kind: "metrics" }],
     });
     expect(compiled.layout).toEqual({ state: "applied", leafColumns: 3 });
     expect(headerPathsOf(compiled.table)).toEqual([
@@ -231,10 +297,7 @@ describe("compileTableWithStatus", () => {
       renderShapeOfView(view, {
         type: "table",
         y: [],
-        tableLayout: {
-          rows: [{ kind: "field", column: "degree" }],
-          columns: [{ kind: "field", column: "organization_name" }, { kind: "metrics" }],
-        },
+        tableColumns: [{ kind: "field", column: "organization_name" }, { kind: "metrics" }],
       }),
     ).toBe("crosstab");
   });
@@ -264,10 +327,7 @@ describe("compileTableWithStatus", () => {
       {
         type: "table",
         y: [],
-        tableLayout: {
-          rows: [{ kind: "field", column: "organization_name" }],
-          columns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
-        },
+        tableColumns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
       },
     );
     expect(compiled.layout).toEqual({ state: "applied", leafColumns: 4 });
@@ -301,10 +361,7 @@ describe("compileTableWithStatus", () => {
     const compiled = compileTableWithStatus(view, titleOf, {
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [{ kind: "field", column: "organization_name" }],
-        columns: [{ kind: "metrics" }, { kind: "time", level: "bucket" }],
-      },
+      tableColumns: [{ kind: "metrics" }, { kind: "time", level: "bucket" }],
     });
     expect(headerPathsOf(compiled.table)).toEqual([
       ["organization_name"],
@@ -336,10 +393,7 @@ describe("compileTableWithStatus", () => {
     const duplicateCompilation = compileTableWithStatus(duplicate, titleOf, {
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [{ kind: "field", column: "organization_name" }],
-        columns: [{ kind: "field", column: "degree" }, { kind: "metrics" }],
-      },
+      tableColumns: [{ kind: "field", column: "degree" }, { kind: "metrics" }],
     });
     expect(duplicateCompilation.layout).toMatchObject({
       state: "unavailable",
@@ -379,14 +433,11 @@ describe("compileTableWithStatus", () => {
         },
       },
     );
-    const layout = {
-      rows: [{ kind: "field" as const, column: "organization_name" }],
-      columns: [{ kind: "field" as const, column: "degree" }, { kind: "metrics" as const }],
-    };
+    const layout = [{ kind: "field" as const, column: "degree" }, { kind: "metrics" as const }];
     const wideCompilation = compileTableWithStatus(wide, titleOf, {
       type: "table",
       y: [],
-      tableLayout: layout,
+      tableColumns: layout,
     });
     expect(wideCompilation.layout).toEqual({
       state: "applied",
@@ -397,7 +448,7 @@ describe("compileTableWithStatus", () => {
       compileTableWithStatus(singleton, titleOf, {
         type: "table",
         y: [],
-        tableLayout: layout,
+        tableColumns: layout,
       }).layout,
     ).toEqual({ state: "applied", leafColumns: 1 });
   });
@@ -418,10 +469,7 @@ describe("compileTableWithStatus", () => {
     const compiled = compileTableWithStatus(view, titleOf, {
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [{ kind: "field", column: "organization_name" }],
-        columns: [{ kind: "field", column: "degree" }, { kind: "metrics" }],
-      },
+      tableColumns: [{ kind: "field", column: "degree" }, { kind: "metrics" }],
     });
     expect(compiled.layout).toMatchObject({
       state: "unavailable",
@@ -460,10 +508,7 @@ describe("compileTableWithStatus", () => {
     const table = compileTableWithStatus(view, titleOf, {
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [{ kind: "field", column: "organization_name" }],
-        columns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
-      },
+      tableColumns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
     }).table;
     expect(table.summaryRows).toEqual([["总体", 30, 34]]);
     expect(table.sourceRows?.[0]).toEqual([null, 0, 1]);
@@ -506,10 +551,7 @@ describe("compileChart", () => {
         compileTableWithStatus(view, titleOf, {
           type: "table",
           y: [],
-          tableLayout: {
-            rows: [{ kind: "field", column: "organization_name" }],
-            columns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
-          },
+          tableColumns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
         }).table,
       ),
     ).toEqual([
@@ -628,8 +670,8 @@ describe("显式呈现能力与形态标签", () => {
     const view = payload(["active_employee_count"], [[12345]]);
     expect(canCompileKpi(view)).toBe(true);
     expect(sensibleForms(view)).toEqual(["table", "kpi"]);
-    expect(renderShapeOfView(view, { type: "table", y: [], tableLayout })).toBe("table");
-    expect(renderShapeOfView(view, { type: "kpi", y: [], tableLayout })).toBe("kpi");
+    expect(renderShapeOfView(view, { type: "table", y: [] })).toBe("table");
+    expect(renderShapeOfView(view, { type: "kpi", y: [] })).toBe("kpi");
   });
 
   test("推荐候选不拥有执行权：同一结果按声明分别得到表格或柱图", () => {
@@ -641,13 +683,12 @@ describe("显式呈现能力与形态标签", () => {
       ],
     );
     expect(sensibleForms(view)).toEqual(["table", "bar", "pie"]);
-    expect(renderShapeOfView(view, { type: "table", y: [], tableLayout })).toBe("table");
+    expect(renderShapeOfView(view, { type: "table", y: [] })).toBe("table");
     expect(
       renderShapeOfView(view, {
         type: "bar",
         x: "organization_name",
         y: ["active_employee_count"],
-        tableLayout,
       }),
     ).toBe("bar");
   });
@@ -657,7 +698,6 @@ describe("显式呈现能力与形态标签", () => {
       renderShapeOfView(payload(["active_employee_count"], []), {
         type: "kpi",
         y: [],
-        tableLayout,
       }),
     ).toBeNull();
   });
@@ -770,10 +810,7 @@ describe("对照期呈现", () => {
   const yearLayout = {
     type: "table" as const,
     y: [],
-    tableLayout: {
-      rows: [],
-      columns: [{ kind: "metrics" as const }, { kind: "time" as const, level: "year" as const }],
-    },
+    tableColumns: [{ kind: "metrics" as const }, { kind: "time" as const, level: "year" as const }],
   };
 
   test("率指标的对照差值按百分点派生，紧随对照列且不参与下钻", () => {
@@ -798,13 +835,10 @@ describe("对照期呈现", () => {
     const bucketLayout = {
       type: "table" as const,
       y: [],
-      tableLayout: {
-        rows: [],
-        columns: [
-          { kind: "metrics" as const },
-          { kind: "time" as const, level: "bucket" as const },
-        ],
-      },
+      tableColumns: [
+        { kind: "metrics" as const },
+        { kind: "time" as const, level: "bucket" as const },
+      ],
     };
     const compiled = compileTableWithStatus(
       monthly(YEAR_OVER_YEAR, ROWS, { turnover_rate: "percent" }),
@@ -856,10 +890,7 @@ describe("月×年交叉表的时间键归一", () => {
   const crosstab = {
     type: "table" as const,
     y: [],
-    tableLayout: {
-      rows: [{ kind: "time" as const, level: "month" as const }],
-      columns: [{ kind: "metrics" as const }, { kind: "time" as const, level: "year" as const }],
-    },
+    tableColumns: [{ kind: "metrics" as const }, { kind: "time" as const, level: "year" as const }],
   };
   const trailing = (rows: Cell[][]): ViewBlock => ({
     ...payload(["year", "month", "active_employee_count"], rows),
@@ -1063,10 +1094,7 @@ describe("列声明的小数位随列走", () => {
     const table = compileTableWithStatus(view, titleOf, {
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [{ kind: "field", column: "organization_name" }],
-        columns: [{ kind: "field", column: "year" }, { kind: "metrics" }],
-      },
+      tableColumns: [{ kind: "field", column: "year" }, { kind: "metrics" }],
     }).table;
     const surveyColumns = table.columns.filter((column) => column.formatKey === "survey_score");
     expect(surveyColumns.length).toBeGreaterThan(0);

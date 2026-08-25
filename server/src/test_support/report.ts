@@ -79,7 +79,6 @@ export function semanticAnalysisOf(
   presentation: PresentationSpec = {
     type: "table",
     y: [],
-    tableLayout: { rows: [], columns: [] },
   },
 ): { analysis: AnalysisDefinition; view: SemanticViewIntent } {
   const queryViews = analysis.views.filter(

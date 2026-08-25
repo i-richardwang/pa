@@ -33,13 +33,11 @@ const compiled = {
     type: "bar" as const,
     x: "category_level",
     y: ["active_employee_count"],
-    tableLayout: { rows: [], columns: [] },
   },
   render_decl: {
     type: "bar" as const,
     x: "category_level",
     y: ["active_employee_count"],
-    tableLayout: { rows: [], columns: [] },
   },
   routes: [{ status: "direct" as const, result_view_id: "structure" }],
   record_projection_bindings: { views: [] },
@@ -65,24 +63,18 @@ const pivotCompiled = {
   presentation: {
     type: "table" as const,
     y: [],
-    tableLayout: {
-      rows: [{ kind: "field" as const, column: "organization_name" }],
-      columns: [
-        { kind: "field" as const, column: "department_name" },
-        { kind: "metrics" as const },
-      ],
-    },
+    tableColumns: [
+      { kind: "field" as const, column: "department_name" },
+      { kind: "metrics" as const },
+    ],
   },
   render_decl: {
     type: "table" as const,
     y: [],
-    tableLayout: {
-      rows: [{ kind: "field" as const, column: "organization_name" }],
-      columns: [
-        { kind: "field" as const, column: "department_name" },
-        { kind: "metrics" as const },
-      ],
-    },
+    tableColumns: [
+      { kind: "field" as const, column: "department_name" },
+      { kind: "metrics" as const },
+    ],
   },
 };
 
@@ -124,12 +116,10 @@ function serviceWith(rows: ViewBlock["rows"]) {
             presentation: {
               type: "table" as const,
               y: [],
-              tableLayout: { rows: [], columns: [] },
             },
             render_decl: {
               type: "table" as const,
               y: [],
-              tableLayout: { rows: [], columns: [] },
             },
           }
         : compiled,

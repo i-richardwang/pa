@@ -15,8 +15,8 @@ import { compilePresentationBlock } from "../../../src/presentation_core/chart_c
 import type { QueryPayload, ViewBlock } from "../../../src/semantic_core/query_payload.js";
 
 const NO_ACTIONS = {};
-const TABLE_DECL = { type: "table" as const, y: [], tableLayout: { rows: [], columns: [] } };
-const KPI_DECL = { type: "kpi" as const, y: [], tableLayout: { rows: [], columns: [] } };
+const TABLE_DECL = { type: "table" as const, y: [] };
+const KPI_DECL = { type: "kpi" as const, y: [] };
 
 function view(overrides: Partial<ViewBlock> = {}): ViewBlock {
   const columns = overrides.columns ?? ["hr.organization_name", "hr.active_employee_count"];

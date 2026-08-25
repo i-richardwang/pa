@@ -19,10 +19,6 @@ describe("归一与缺省补齐", () => {
     expect(validateChartDecl({ type: "line" }, TREND)).toEqual({
       type: "line",
       y: ["new_hire_count", "leave_count"],
-      tableLayout: {
-        rows: [{ kind: "time", level: "month" }],
-        columns: [{ kind: "metrics" }, { kind: "time", level: "year" }],
-      },
     });
   });
 
@@ -136,18 +132,8 @@ describe("归一与缺省补齐", () => {
     });
   });
 
-  test("table：缺省把全部业务维度铺成行轴，指标占列轴", () => {
-    expect(validateChartDecl({ type: "table" }, CATEGORY)).toEqual({
-      type: "table",
-      y: [],
-      tableLayout: {
-        rows: [
-          { kind: "field", column: "organization_name" },
-          { kind: "field", column: "job_level_band" },
-        ],
-        columns: [{ kind: "metrics" }],
-      },
-    });
+  test("table：不声明列轴即不进声明——缺省布局由结果裁决", () => {
+    expect(validateChartDecl({ type: "table" }, CATEGORY)).toEqual({ type: "table", y: [] });
   });
 
   test("table：columns 绑定有序列轴并归一为内部布局", () => {
@@ -162,10 +148,7 @@ describe("归一与缺省补齐", () => {
     ).toEqual({
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [{ kind: "field", column: "organization_name" }],
-        columns: [{ kind: "field", column: "job_level_band" }, { kind: "metrics" }],
-      },
+      tableColumns: [{ kind: "field", column: "job_level_band" }, { kind: "metrics" }],
     });
   });
 
@@ -173,29 +156,15 @@ describe("归一与缺省补齐", () => {
     expect(validateChartDecl({ type: "table", columns: ["time", "metrics"] }, TREND)).toEqual({
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [],
-        columns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
-      },
+      tableColumns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
     });
   });
 
-  test("table：缺省和省略 metrics 时均优先使用指标外层、年份内层", () => {
-    expect(validateChartDecl({ type: "table" }, TREND)).toEqual({
-      type: "table" as const,
-      y: [],
-      tableLayout: {
-        rows: [{ kind: "time", level: "month" }],
-        columns: [{ kind: "metrics" as const }, { kind: "time" as const, level: "year" as const }],
-      },
-    });
+  test("table：省略 metrics 时指标轴自动补在外层", () => {
     expect(validateChartDecl({ type: "table", columns: ["time"] }, TREND)).toEqual({
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [],
-        columns: [{ kind: "metrics" }, { kind: "time", level: "bucket" }],
-      },
+      tableColumns: [{ kind: "metrics" }, { kind: "time", level: "bucket" }],
     });
   });
 
@@ -208,7 +177,6 @@ describe("归一与缺省补齐", () => {
     ).toEqual({
       type: "kpi",
       y: [],
-      tableLayout: { rows: [], columns: [{ kind: "metrics" }] },
     });
     expect(() => validateChartDecl({ type: "kpi" }, CATEGORY)).toThrow(/不接受分组维度/);
   });
@@ -344,9 +312,10 @@ describe("可行动报错", () => {
     expect(() => validateChartDecl({ type: "table", columns: ["degree"] }, CATEGORY)).toThrow(
       /columns 的「degree」不是 time、metrics 或本视图 dimensions 中的成员/,
     );
-    expect(() => validateChartDecl({ type: "table", columns: ["time"] }, CATEGORY)).toThrow(
-      /使用 time 时查询时间必须按年或按月呈现/,
-    );
+    // 时间轴不在此裁决：输出粒度出自引擎，结果没有时间轴时由呈现层降级说明。
+    expect(validateChartDecl({ type: "table", columns: ["time"] }, CATEGORY)).toMatchObject({
+      tableColumns: [{ kind: "metrics" }, { kind: "time", level: "bucket" }],
+    });
     expect(() =>
       validateChartDecl({ type: "table", columns: ["metrics", "metrics"] }, CATEGORY),
     ).toThrow(/不能包含重复列轴/);

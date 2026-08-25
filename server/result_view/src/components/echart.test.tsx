@@ -45,8 +45,6 @@ Object.assign(globalThis, {
   window: { matchMedia: () => ({ matches: false }) },
 });
 
-const TABLE_LAYOUT = { rows: [], columns: [] };
-
 /** 两个系列的柱图：单系列不出读数条，得有两条才验得到版式。 */
 const CHART_VIEW = {
   id: "result",
@@ -76,7 +74,6 @@ const CHART_PRESENTATION = compilePresentationBlock(CHART_VIEW, {
   type: "bar",
   x: "organization_name",
   y: ["active_employee_count", "new_hire_count"],
-  tableLayout: TABLE_LAYOUT,
 });
 const CHART = CHART_PRESENTATION.chart;
 
@@ -94,7 +91,6 @@ test("渲染器忠实呈现声明的图或表", () => {
       presentation={compilePresentationBlock(CHART_VIEW, {
         type: "table",
         y: [],
-        tableLayout: TABLE_LAYOUT,
       })}
       scene="page"
     />,
@@ -110,7 +106,6 @@ test("结果面的场地按场景定，图与表同框", () => {
   const tablePresentation = compilePresentationBlock(CHART_VIEW, {
     type: "table",
     y: [],
-    tableLayout: TABLE_LAYOUT,
   });
   const render = (presentation: typeof CHART_PRESENTATION, scene: "card" | "tile" | "page") =>
     renderToStaticMarkup(
@@ -140,7 +135,6 @@ test("热力着色随 table 声明：指标格铺色片、字色随底色、仅�
   const shaded = compilePresentationBlock(CHART_VIEW, {
     type: "table",
     y: [],
-    tableLayout: TABLE_LAYOUT,
     shading: { palette: SERIES_COLORS[0] },
   });
   const html = renderToStaticMarkup(
@@ -158,7 +152,6 @@ test("热力着色随 table 声明：指标格铺色片、字色随底色、仅�
   const colorsOnly = compilePresentationBlock(CHART_VIEW, {
     type: "table",
     y: [],
-    tableLayout: TABLE_LAYOUT,
     shading: { palette: SERIES_COLORS[0], values: false },
   });
   const hidden = renderToStaticMarkup(
@@ -175,7 +168,6 @@ test("热力着色随 table 声明：指标格铺色片、字色随底色、仅�
       presentation={compilePresentationBlock(CHART_VIEW, {
         type: "table",
         y: [],
-        tableLayout: TABLE_LAYOUT,
       })}
       scene="page"
     />,
@@ -215,7 +207,6 @@ test("读数条、题名与 plot 框左缘同轴", () => {
         presentation={compilePresentationBlock(CHART_VIEW, {
           type: "table",
           y: [],
-          tableLayout: TABLE_LAYOUT,
         })}
         scene="card"
       />,
@@ -264,7 +255,6 @@ test("触屏上图例兼作读数位：末桶的值与桶名随图例交付，�
   const trend = compilePresentationBlock(TREND_VIEW, {
     type: "line",
     y: ["active_employee_count", "new_hire_count"],
-    tableLayout: TABLE_LAYOUT,
   }).chart;
   if (!trend) throw new Error("趋势图没编译出来，下面全部落空");
   const html = renderToStaticMarkup(<ViewChartCanvas chart={trend} scene="page" />);
@@ -397,7 +387,6 @@ test("排行版式逐行陈述：条长按本屏最大值归一，且不落 echa
       type: "bar",
       x: "organization_name",
       y: ["active_employee_count"],
-      tableLayout: TABLE_LAYOUT,
     },
   ).chart;
   expect(rank?.layout, "单系列横排条形没走排行版式").toBe("rank");
@@ -419,7 +408,6 @@ test("排行版式逐行陈述：条长按本屏最大值归一，且不落 echa
 const LINE_CHART = compilePresentationBlock(TREND_VIEW, {
   type: "line",
   y: ["active_employee_count", "new_hire_count"],
-  tableLayout: TABLE_LAYOUT,
 }).chart;
 
 test("值轴档数随绘图区尺度走，不是编译期那个定数", () => {

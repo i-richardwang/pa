@@ -21,7 +21,6 @@ const principal: Principal = {
 const TABLE_PRESENTATION: PresentationSpec = {
   type: "table",
   y: [],
-  tableLayout: { rows: [], columns: [] },
 };
 const VIEW = "test_people_metrics";
 const TIME_SOURCE = "workforce";

@@ -12,7 +12,7 @@
 更新后新建会话，让 agent 重新扫描 Skill。确认服务可达后即可直接用自然语言提问。
 
 ```sh
-curl http://127.0.0.1:8788/healthz
+curl http://127.0.0.1:8789/healthz
 ```
 
 ## 布局

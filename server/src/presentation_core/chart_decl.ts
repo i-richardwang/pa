@@ -15,14 +15,11 @@ export const TABLE_AXIS_SCHEMA = z.discriminatedUnion("kind", [
 
 export type TableAxis = z.infer<typeof TABLE_AXIS_SCHEMA>;
 
-export const TABLE_LAYOUT_DECL_SCHEMA = z
-  .object({
-    rows: z.array(TABLE_AXIS_SCHEMA),
-    columns: z.array(TABLE_AXIS_SCHEMA),
-  })
-  .strict();
-
-export type TableLayoutDecl = z.infer<typeof TABLE_LAYOUT_DECL_SCHEMA>;
+/**
+ * 交叉表的列轴声明，从外到内。行轴不在声明里：它是结果的余数，由呈现层按实际结果裁决——
+ * 输出时间粒度出自引擎（指标时间契约与数据边界都只有它知道），意图层预测不出来。
+ */
+export const TABLE_COLUMNS_DECL_SCHEMA = z.array(TABLE_AXIS_SCHEMA);
 
 export const SERIES_DISPLAY_SCHEMA = z
   .object({
@@ -41,7 +38,7 @@ export type SeriesDisplay = z.infer<typeof SERIES_DISPLAY_SCHEMA>;
 export const CHART_DECL_SCHEMA = z
   .object({
     type: PRESENTATION_TYPE_SCHEMA,
-    tableLayout: TABLE_LAYOUT_DECL_SCHEMA,
+    tableColumns: TABLE_COLUMNS_DECL_SCHEMA.optional(),
     x: z.string().min(1).optional(),
     y: z.array(z.string().min(1)),
     annotations: z.array(z.string().min(1)).optional(),
@@ -69,9 +66,13 @@ export const CHART_DECL_SCHEMA = z
       if (decl.type === "kpi" && decl.shading !== undefined) {
         issue("kpi 呈现不能包含表格着色");
       }
+      if (decl.type === "kpi" && decl.tableColumns !== undefined) {
+        issue("kpi 呈现不能包含表格列轴");
+      }
       return;
     }
     if (!decl.y.length) issue(`${decl.type} 呈现至少需要一个图表系列`);
+    if (decl.tableColumns !== undefined) issue(`${decl.type} 呈现不能包含表格列轴`);
     if (decl.shading !== undefined) issue(`${decl.type} 呈现不能包含表格着色`);
     if (decl.type === "line" && decl.x !== undefined) issue("line 呈现的时间横轴无需声明 x");
     if ((decl.type === "bar" || decl.type === "pie") && !decl.x) {
@@ -93,6 +94,5 @@ export const CHART_DECL_SCHEMA = z
 
 export type ChartDecl = z.infer<typeof CHART_DECL_SCHEMA>;
 
-/** 图表编译器只消费图形通道；完整公共声明仍必须携带表格布局。 */
-export type ChartRenderDecl = Omit<ChartDecl, "tableLayout"> &
-  Partial<Pick<ChartDecl, "tableLayout">>;
+/** 图表编译器只消费图形通道。 */
+export type ChartRenderDecl = ChartDecl;

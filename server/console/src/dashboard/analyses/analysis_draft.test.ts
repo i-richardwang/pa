@@ -116,7 +116,7 @@ function replay(view: ReplayPayload["view"] = { type: "table" }): ReplayPayload 
     },
     render_bundle: {
       view: rawView,
-      decl: { type: "table", y: [], tableLayout: { rows: [], columns: [] } },
+      decl: { type: "table", y: [] },
     },
     presentation: {
       type: "table",
@@ -207,6 +207,15 @@ describe("analysis draft 三层状态", () => {
     const previewed = settlePreview(changed, replay());
     expect(isPreviewCurrent(previewed)).toBe(true);
     expect(isAnalysisEditDirty(settleSaved(previewed))).toBe(false);
+  });
+
+  test("声明的时间列轴不被意图层剔除：输出粒度由引擎按指标契约裁决", () => {
+    const next = setSemanticViewIntent(
+      begin(),
+      { type: "table", columns: ["metrics", "time"] },
+      catalog,
+    );
+    expect(next.view).toEqual({ type: "table", columns: ["metrics", "time"] });
   });
 
   test("省略 series 表示默认通道，不会误删已有系列配色", () => {

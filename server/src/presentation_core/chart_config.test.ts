@@ -14,13 +14,8 @@ import {
 import { isPresentationBlock } from "./presentation_guard.js";
 import type { ViewBlock } from "../semantic_core/query_payload.js";
 import { type Cell, viewBlock } from "../test_support/view_block.js";
-import type { ChartDecl, SeriesDisplay } from "./chart_decl.js";
+import type { SeriesDisplay } from "./chart_decl.js";
 import { compileChart, makeTitleOf } from "./view_shape.js";
-
-const completeDecl = (decl: Omit<ChartDecl, "tableLayout">): ChartDecl => ({
-  ...decl,
-  tableLayout: { rows: [], columns: [] },
-});
 
 const QUERY_NOTES = [
   { member: "active_employee_count", title: "在职人数", text: "" },
@@ -667,7 +662,7 @@ describe("无图形态与回答级块", () => {
           ["2026-02", 102],
         ],
       ),
-      completeDecl({ type: "table", y: [] }),
+      { type: "table", y: [] },
     );
     expect(block.structure_title).toBe("在职人数");
     expect(isPresentationBlock({ ...block, structure_title: 3 })).toBe(false);
@@ -688,10 +683,10 @@ describe("无图形态与回答级块", () => {
   });
 
   test("完整呈现块始终带表格，图表只在声明成立时出现", () => {
-    const kpi = compilePresentationBlock(
-      view(["active_employee_count"], [[1]]),
-      completeDecl({ type: "kpi", y: [] }),
-    );
+    const kpi = compilePresentationBlock(view(["active_employee_count"], [[1]]), {
+      type: "kpi",
+      y: [],
+    });
     expect(kpi).toMatchObject({ type: "kpi", table: { rows: [[1]] } });
     const block = compilePresentationBlock(
       view(
@@ -701,7 +696,7 @@ describe("无图形态与回答级块", () => {
           [2026, 2],
         ],
       ),
-      completeDecl({ type: "line", y: ["active_employee_count"] }),
+      { type: "line", y: ["active_employee_count"] },
     );
     expect(block).toMatchObject({ type: "line", chart: { form: "line" } });
     expect(isPresentationBlock(block)).toBe(true);
@@ -721,10 +716,7 @@ describe("无图形态与回答级块", () => {
       {
         type: "table",
         y: [],
-        tableLayout: {
-          rows: [{ kind: "field", column: "organization_name" }],
-          columns: [{ kind: "field", column: "degree" }, { kind: "metrics" }],
-        },
+        tableColumns: [{ kind: "field", column: "degree" }, { kind: "metrics" }],
       },
     );
     expect(applied).toMatchObject({
@@ -750,10 +742,7 @@ describe("无图形态与回答级块", () => {
       {
         type: "table",
         y: [],
-        tableLayout: {
-          rows: [{ kind: "field", column: "organization_name" }],
-          columns: [{ kind: "field", column: "degree" }, { kind: "metrics" }],
-        },
+        tableColumns: [{ kind: "field", column: "degree" }, { kind: "metrics" }],
       },
     );
     expect(unavailable.table_layout).toMatchObject({
@@ -763,10 +752,10 @@ describe("无图形态与回答级块", () => {
   });
 
   test("完整呈现块的声明类型必须与编译图表一致", () => {
-    const table = compilePresentationBlock(
-      view(["active_employee_count"], [[10]]),
-      completeDecl({ type: "table", y: [] }),
-    ).table;
+    const table = compilePresentationBlock(view(["active_employee_count"], [[10]]), {
+      type: "table",
+      y: [],
+    }).table;
     expect(
       isPresentationBlock({
         type: "line",
@@ -796,10 +785,10 @@ describe("无图形态与回答级块", () => {
   });
 
   test("table_layout 只接受完整的 applied/unavailable 状态", () => {
-    const table = compilePresentationBlock(
-      view(["active_employee_count"], [[10]]),
-      completeDecl({ type: "table", y: [] }),
-    ).table;
+    const table = compilePresentationBlock(view(["active_employee_count"], [[10]]), {
+      type: "table",
+      y: [],
+    }).table;
     expect(
       isPresentationBlock({
         type: "table",
@@ -1123,19 +1112,14 @@ describe("服务端物理呈现声明", () => {
   });
 
   test("compilePresentationBlock 使用唯一结果的呈现声明", () => {
-    expect(
-      compilePresentationBlock(trendView, completeDecl({ type: "table", y: [] })),
-    ).toMatchObject({
+    expect(compilePresentationBlock(trendView, { type: "table", y: [] })).toMatchObject({
       type: "table",
     });
     expect(
-      compilePresentationBlock(
-        trendView,
-        completeDecl({
-          type: "line",
-          y: ["new_hire_count", "leave_count"],
-        }),
-      ),
+      compilePresentationBlock(trendView, {
+        type: "line",
+        y: ["new_hire_count", "leave_count"],
+      }),
     ).toMatchObject({ type: "line", chart: { form: "line" } });
   });
 });
@@ -1168,13 +1152,10 @@ describe("对照叠加折线的交付形态", () => {
   };
 
   test("两个期间成两条系列，横轴八个位置，下钻点位逐系列回指原行", () => {
-    const block = compilePresentationBlock(
-      comparisonView,
-      completeDecl({
-        type: "line",
-        y: ["ytd_primary_event_rate"],
-      }),
-    );
+    const block = compilePresentationBlock(comparisonView, {
+      type: "line",
+      y: ["ytd_primary_event_rate"],
+    });
     expect(block.type).toBe("line");
     const option = block.chart?.option as {
       series: { name: string; data: (number | null | { value: number | null })[] }[];
@@ -1208,10 +1189,7 @@ describe("对照叠加折线的交付形态", () => {
     const block = compilePresentationBlock(comparisonView, {
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [{ kind: "time", level: "month" }],
-        columns: [{ kind: "metrics" }, { kind: "time", level: "year" }],
-      },
+      tableColumns: [{ kind: "metrics" }, { kind: "time", level: "year" }],
     });
     expect(block.table.rows).toHaveLength(8);
     expect(block.table.columns.map((column) => column.label)).toEqual([
@@ -1251,19 +1229,16 @@ describe("整窗读数进呈现块", () => {
   });
 
   test("整窗读数只随指标卡下发：图与表之上不摆第二个口径的读数", () => {
-    const kpi = compilePresentationBlock(seriesView(), completeDecl({ type: "kpi", y: [] }));
+    const kpi = compilePresentationBlock(seriesView(), { type: "kpi", y: [] });
     expect(kpi.type).toBe("kpi");
     expect(kpi.totals?.metrics[0]).toMatchObject({
       value: 22,
       period: { label: "2026年1—2月", from: "2026-01", to: "2026-02" },
     });
-    const line = compilePresentationBlock(
-      seriesView(),
-      completeDecl({ type: "line", y: ["turnover_count"] }),
-    );
+    const line = compilePresentationBlock(seriesView(), { type: "line", y: ["turnover_count"] });
     expect(line.type).toBe("line");
     expect(line.totals).toBeUndefined();
-    const table = compilePresentationBlock(seriesView(), completeDecl({ type: "table", y: [] }));
+    const table = compilePresentationBlock(seriesView(), { type: "table", y: [] });
     expect(table.totals).toBeUndefined();
     expect(isPresentationBlock(line)).toBe(true);
     expect(isPresentationBlock(kpi)).toBe(true);
@@ -1272,7 +1247,7 @@ describe("整窗读数进呈现块", () => {
   });
 
   test("宿主边界拒收残缺整窗读数，也拒收没有数可读的指标卡", () => {
-    const block = compilePresentationBlock(seriesView(), completeDecl({ type: "kpi", y: [] }));
+    const block = compilePresentationBlock(seriesView(), { type: "kpi", y: [] });
     expect(isPresentationBlock({ ...block, totals: undefined })).toBe(false);
     expect(
       isPresentationBlock({
@@ -1421,10 +1396,8 @@ test("每种形态一律照同一道取色式置灰：折线、柱线组合、�
     ],
     [
       "对照叠加",
-      compilePresentationBlock(
-        comparisonView,
-        completeDecl({ type: "line", y: ["ytd_primary_event_rate"] }),
-      ).chart ?? null,
+      compilePresentationBlock(comparisonView, { type: "line", y: ["ytd_primary_event_rate"] })
+        .chart ?? null,
     ],
     [
       "饼图",

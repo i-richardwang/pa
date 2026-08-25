@@ -4,11 +4,10 @@
  */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { defaultTableLayout } from "@chart-spec";
+import { detectRoles, resolveTableLayout } from "@shape";
 import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
 import type { ReplayPayload } from "@contracts/replay_contract";
 import type { AnalysisDefinition } from "@semantic-analysis";
-import { compileTimeIntent } from "@time";
 import { beginAnalysisEdit } from "./analysis_draft";
 import { ChartOptionsPanel } from "./chart_settings_panel";
 
@@ -32,10 +31,10 @@ const analysis: AnalysisDefinition = {
 
 const rawView = {
   id: "result",
-  columns: ["month", MEASURE],
-  column_roles: { month: "time" as const, [MEASURE]: "measure" as const },
-  rows: [["2026-01", 120]],
-  row_count: 1,
+  columns: ["year", "month", MEASURE],
+  column_roles: { year: "time" as const, month: "time" as const, [MEASURE]: "measure" as const },
+  rows: [1, 2, 3, 4, 5, 6].map((month) => [2026, month, 120 + month]),
+  row_count: 6,
   query_notes: [],
 };
 
@@ -71,18 +70,14 @@ const replay: ReplayPayload = {
   },
   render_bundle: {
     view: rawView,
-    decl: { type: "table", y: [], tableLayout: { rows: [], columns: [] } },
+    decl: { type: "table", y: [] },
   },
 };
 
 const textOf = (html: string) => html.replace(/<[^>]+>/g, "|");
 
-test("纯月度无分类结果：面板默认行列与服务端 defaultTableLayout 一致（月份在行、年份在列）", () => {
-  const server = defaultTableLayout({
-    measures: [MEASURE],
-    dimensions: [],
-    time: compileTimeIntent(MONTHLY_TIME),
-  });
+test("纯月度无分类结果：面板行列与编译器同一条规则（月份在行、年份在列）", () => {
+  const server = resolveTableLayout(rawView, detectRoles(rawView));
   expect(server).toEqual({
     rows: [{ kind: "time", level: "month" }],
     columns: [{ kind: "metrics" }, { kind: "time", level: "year" }],

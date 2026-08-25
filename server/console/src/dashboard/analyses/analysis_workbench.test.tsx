@@ -91,7 +91,7 @@ const tableReplay: ReplayPayload = {
   },
   render_bundle: {
     view: rawView,
-    decl: { type: "table", y: [], tableLayout: { rows: [], columns: [] } },
+    decl: { type: "table", y: [] },
   },
 };
 

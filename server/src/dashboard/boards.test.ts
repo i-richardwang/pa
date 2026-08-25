@@ -32,7 +32,6 @@ describe("dashboard board routes", () => {
     const fixture = semanticAnalysisOf(STRUCTURE_ARGS, {
       type: "table",
       y: [],
-      tableLayout: { rows: [], columns: [] },
     });
     const analysis = await analysisRepository.create("alice@x", fixture.analysis, fixture.view);
     const report = await reportRepository.create({
@@ -85,7 +84,7 @@ describe("dashboard board routes", () => {
           view,
         },
         fullRowViewBlock: view,
-        decl: { type: "table" as const, y: [], tableLayout: { rows: [], columns: [] } },
+        decl: { type: "table" as const, y: [] },
       }),
       usage,
     });

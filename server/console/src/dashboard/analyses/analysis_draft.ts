@@ -239,14 +239,9 @@ function repairedViewIntent(
 ): SemanticViewIntent {
   const { measures, dimensions, time } = semanticViewContext(view, catalog);
   if (chart.type === "table") {
-    const temporal =
-      !isSemanticDerivedView(view) &&
-      !!time &&
-      resolveTimeOutputGrain(compileTimeIntent(time), catalog.data_as_of, {
-        grouped: dimensions.length > 0,
-      }) !== "total";
+    // 时间轴留给结果裁决：输出粒度由引擎按指标时间契约与数据边界决定，这里预测不出来。
     const columns = chart.columns?.filter((axis) => {
-      if (axis === "time") return temporal;
+      if (axis === "time") return true;
       if (axis === "metrics") return measures.length > 0;
       return dimensions.includes(axis) && !view.summary;
     });

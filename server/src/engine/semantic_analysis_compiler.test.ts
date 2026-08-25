@@ -433,11 +433,7 @@ describe("semantic analysis compiler", () => {
       },
       view: { type: "kpi" },
     });
-    expect(compiled.presentation).toEqual({
-      type: "kpi",
-      y: [],
-      tableLayout: { rows: [], columns: [{ kind: "metrics" }] },
-    });
+    expect(compiled.presentation).toEqual({ type: "kpi", y: [] });
   });
 
   test("table 的语义列轴绑定编译为内部行列布局", () => {
@@ -457,10 +453,7 @@ describe("semantic analysis compiler", () => {
     expect(compiled.presentation).toMatchObject({
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [{ kind: "field", column: "organization_name" }],
-        columns: [{ kind: "field", column: "department_name" }, { kind: "metrics" }],
-      },
+      tableColumns: [{ kind: "field", column: "department_name" }, { kind: "metrics" }],
     });
   });
 
@@ -536,10 +529,7 @@ describe("semantic analysis compiler", () => {
       view: { type: "table", columns: ["time", "metrics"] },
     });
     expect(temporal.presentation).toMatchObject({
-      tableLayout: {
-        rows: [{ kind: "field", column: "organization_name" }],
-        columns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
-      },
+      tableColumns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
     });
     expect(() =>
       compileAnalysisView(catalog, {
@@ -761,17 +751,7 @@ describe("semantic analysis compiler", () => {
       dimensions: ["test_people_metrics.organization_name", "test_people_metrics.department_name"],
       order: [{ member: "test_people_metrics.active_employee_count", direction: "desc" }],
     });
-    expect(compiled.presentation).toMatchObject({
-      type: "table",
-      y: [],
-      tableLayout: {
-        rows: [
-          { kind: "field", column: "organization_name" },
-          { kind: "field", column: "department_name" },
-        ],
-        columns: [{ kind: "metrics" }],
-      },
-    });
+    expect(compiled.presentation).toMatchObject({ type: "table", y: [] });
   });
 
   test("人员与编制直查与明细共用单值上级过滤后的有效分组", () => {
@@ -1045,10 +1025,7 @@ describe("semantic analysis compiler", () => {
     expect(compiled.presentation).toEqual({
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [{ kind: "field", column: "一级组织" }],
-        columns: [{ kind: "field", column: "二级组织" }, { kind: "metrics" }],
-      },
+      tableColumns: [{ kind: "field", column: "二级组织" }, { kind: "metrics" }],
     });
   });
 

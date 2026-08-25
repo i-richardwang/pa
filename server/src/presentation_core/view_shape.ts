@@ -23,7 +23,7 @@ import {
   type TableShading,
 } from "./table_shading.js";
 import type { RenderShape } from "./render_shape.js";
-import type { ChartDecl, ChartRenderDecl, TableAxis, TableLayoutDecl } from "./chart_decl.js";
+import type { ChartDecl, ChartRenderDecl, TableAxis } from "./chart_decl.js";
 
 /** 感知极限：折线超出此系列数缠绕不可读，声明的折线编译失败并退回表格 */
 export const MAX_LINE_SERIES = 5;
@@ -177,6 +177,9 @@ export type TableLayoutStatus =
       reason: "duplicate_coordinate" | "resource_limit" | "missing_axis";
       message: string;
     };
+
+/** 解析后的交叉表轴：列轴出自声明或缺省，行轴恒为余数。 */
+export type TableLayout = { rows: TableAxis[]; columns: TableAxis[] };
 
 export type TableCompilation = {
   table: TableModel;
@@ -1111,6 +1114,49 @@ function unavailableTable(
   };
 }
 
+/** 结果里角色为 dimension 的列，按结果列序。 */
+function dimensionColumns(view: ViewBlock): string[] {
+  return view.columns.filter((column) => view.column_roles[column] === "dimension");
+}
+
+const tableAxisKey = (axis: TableAxis): string =>
+  axis.kind === "field" ? `field:${memberShortName(axis.column)}` : axis.kind;
+
+/**
+ * 表格布局出自结果本身：声明只说哪些轴上列轴，其余（维度与时间）落行轴。
+ * 输出时间粒度由引擎按指标时间契约与数据边界裁决，意图层预测不出来，因此这里不问声明问结果。
+ */
+export function resolveTableLayout(
+  view: ViewBlock,
+  roles: Roles,
+  declared?: TableAxis[],
+): TableLayout {
+  const temporal = roles.timePoints.length >= 2;
+  const monthly = timeColumnIndex(view, "year") >= 0 && timeColumnIndex(view, "month") >= 0;
+  const dimensions = dimensionColumns(view);
+  const columns =
+    declared ??
+    (!tableValueIndices(roles).length
+      ? []
+      : temporal && monthly && !dimensions.length
+        ? [{ kind: "metrics" } as TableAxis, { kind: "time", level: "year" } as TableAxis]
+        : [
+            { kind: "metrics" } as TableAxis,
+            ...(temporal ? [{ kind: "time", level: "bucket" } as TableAxis] : []),
+          ]);
+  const onColumns = new Set(columns.map(tableAxisKey));
+  const rows: TableAxis[] = dimensions
+    .filter((column) => !onColumns.has(`field:${memberShortName(column)}`))
+    .map((column): TableAxis => ({ kind: "field", column }));
+  const timeOnColumns = columns.find((axis) => axis.kind === "time");
+  if (temporal && !timeOnColumns) rows.push({ kind: "time", level: "bucket" });
+  // 年份上了列轴而结果按月：月份就是那一层余数。
+  if (timeOnColumns?.kind === "time" && timeOnColumns.level === "year" && monthly) {
+    rows.push({ kind: "time", level: "month" });
+  }
+  return { rows, columns };
+}
+
 /**
  * 每个轴只负责坐标，指标值始终来自模型结果原值。稀疏矩阵留空；
  * 重复坐标无法忠实表达时返回 unavailable，不做聚合或静默换形。
@@ -1119,8 +1165,9 @@ function compileTableLayout(
   view: ViewBlock,
   roles: Roles,
   titleOf: (c: string) => string,
-  layout: TableLayoutDecl,
+  declared: TableAxis[] | undefined,
 ): TableCompilation {
+  const layout = resolveTableLayout(view, roles, declared);
   const valueIdx = tableValueIndices(roles);
   if (!valueIdx.length || !layout.columns.length) {
     return {
@@ -1368,7 +1415,7 @@ export function compileTableWithStatus(
 ): TableCompilation {
   const roles = shape.detected;
   const compiled = decl
-    ? compileTableLayout(view, roles, titleOf, decl.tableLayout)
+    ? compileTableLayout(view, roles, titleOf, decl.tableColumns)
     : {
         table: flatTable(view, titleOf),
         layout: { state: "applied" as const, leafColumns: tableValueIndices(roles).length },

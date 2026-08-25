@@ -4,19 +4,13 @@ import type { PresentationSpec } from "../presentation_core/presentation_spec.js
 import type { ViewBlock } from "../semantic_core/query_payload.js";
 import { createPresentationService } from "./presentation_service.js";
 
-const flatTableLayout = { rows: [], columns: [] };
-
 const presentation: PresentationSpec = {
   type: "bar",
   x: "organization_name",
   y: ["active_employee_count"],
-  tableLayout: flatTableLayout,
 };
 
-const tableLayout = {
-  rows: [{ kind: "field" as const, column: "organization_name" }],
-  columns: [{ kind: "field" as const, column: "degree" }, { kind: "metrics" as const }],
-};
+const tableColumns = [{ kind: "field" as const, column: "degree" }, { kind: "metrics" as const }];
 
 const block = (rows: ViewBlock["rows"]): ViewBlock => ({
   id: "result",
@@ -45,7 +39,6 @@ const result = (rows: ViewBlock["rows"]): QueryRunResult => {
       type: "bar",
       x: "organization_name",
       y: ["active_employee_count"],
-      tableLayout: flatTableLayout,
     },
   };
 };
@@ -68,7 +61,7 @@ const pivotResult = (rows: ViewBlock["rows"]): QueryRunResult => {
       view,
     },
     fullRowViewBlock: view,
-    decl: { type: "table", y: [], tableLayout },
+    decl: { type: "table", y: [], tableColumns },
   };
 };
 
@@ -130,7 +123,7 @@ describe("presentation service runtime fallback", () => {
     expect(
       service.runtimeFallbacks(executed, {
         type: "table",
-        tableLayout,
+        tableColumns,
         y: [],
       }),
     ).toEqual([]);
@@ -140,7 +133,7 @@ describe("presentation service runtime fallback", () => {
     const service = createPresentationService();
     const presentation: PresentationSpec = {
       type: "table",
-      tableLayout,
+      tableColumns,
       y: [],
     };
     const degraded = pivotResult([

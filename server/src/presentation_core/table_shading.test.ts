@@ -5,7 +5,6 @@ import { compileTableWithStatus, tableShadingDefaults } from "./view_shape.js";
 import type { ViewBlock } from "../semantic_core/query_payload.js";
 
 const BLUE = CHART_SERIES[0].light;
-const tableLayout = { rows: [], columns: [] };
 
 const columns = [
   { formatKey: "org" },
@@ -158,13 +157,12 @@ describe("随表格模型下发", () => {
     const shaded = compileTableWithStatus(view, titleOf, {
       type: "table",
       y: [],
-      tableLayout,
       shading: { palette: BLUE },
     });
     expect(shaded.table.shading?.scales).toEqual({
       "hr.headcount": { min: 20, mid: 70, max: 120 },
     });
-    const plain = compileTableWithStatus(view, titleOf, { type: "table", y: [], tableLayout });
+    const plain = compileTableWithStatus(view, titleOf, { type: "table", y: [] });
     expect(plain.table.shading).toBeUndefined();
   });
 
@@ -172,10 +170,7 @@ describe("随表格模型下发", () => {
     const crosstab = compileTableWithStatus(view, titleOf, {
       type: "table",
       y: [],
-      tableLayout: {
-        rows: [{ kind: "field", column: "org" }],
-        columns: [{ kind: "metrics" }, { kind: "time", level: "year" }],
-      },
+      tableColumns: [{ kind: "metrics" }, { kind: "time", level: "year" }],
       shading: { palette: "red_blue" },
     });
     expect(crosstab.table.columns.map((column) => column.formatKey)).toEqual([

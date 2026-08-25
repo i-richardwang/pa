@@ -9,7 +9,7 @@ dependencies:
       value: "pa"
       description: "PA 组织与人才数据查询服务"
       transport: "streamable_http"
-      url: "http://127.0.0.1:8788/mcp"
+      url: "http://127.0.0.1:8789/mcp"
 
 policy:
   allow_implicit_invocation: true

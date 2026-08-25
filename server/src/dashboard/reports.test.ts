@@ -70,7 +70,7 @@ const result = {
     view: emptyStructureView,
   },
   fullRowViewBlock: emptyStructureView,
-  decl: { type: "table" as const, y: [], tableLayout: { rows: [], columns: [] } },
+  decl: { type: "table" as const, y: [] },
 };
 
 const emptyChartResult = {
@@ -79,7 +79,6 @@ const emptyChartResult = {
     type: "bar" as const,
     x: "test_people_metrics.category_level",
     y: ["test_people_metrics.active_employee_count"],
-    tableLayout: { rows: [], columns: [] },
   },
 };
 
@@ -247,7 +246,6 @@ describe("dashboard report routes", () => {
       type: "bar" as const,
       x: "test_people_metrics.category_level",
       y: ["test_people_metrics.active_employee_count"],
-      tableLayout: { rows: [], columns: [] },
     };
     const plannedFor: string[] = [];
     const semanticPlanning = {

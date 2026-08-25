@@ -15,17 +15,18 @@ import {
 import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
 import type { ReplayPayload } from "@contracts/replay_contract";
 import { SERIES_COLORS } from "@charts";
-import {
-  type ChartSpecContext,
-  normalizeTableLayout,
-  type TableAxis,
-  tableLayoutGrain,
-} from "@chart-spec";
+import { type ChartSpecContext, normalizeTableColumns, type TableAxis } from "@chart-spec";
 import { memberShortName } from "@member";
 import { isSemanticDerivedView, type SemanticViewIntent } from "@semantic-analysis";
 import type { SeriesPreferences, TableShadingPreferences } from "@view-preferences";
-import { makeTitleOf, sensibleForms, type SensibleForm, tableShadingDefaults } from "@shape";
-import { compileTimeIntent } from "@time";
+import {
+  analyzeResultShape,
+  makeTitleOf,
+  resolveTableLayout,
+  sensibleForms,
+  type SensibleForm,
+  tableShadingDefaults,
+} from "@shape";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -181,17 +182,20 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
     semanticView && !isSemanticDerivedView(semanticView) && semanticView.calculations?.length
       ? "已有构成占比，各类合计就是总体"
       : undefined;
-  // 表格布局与服务端同一条规则：行列归属出自 normalizeTableLayout，面板只排版、只写回列轴声明。
-  const tableSpec: ChartSpecContext = {
-    measures,
-    dimensions,
-    ...(context?.time ? { time: compileTimeIntent(context.time) } : {}),
-  };
-  const tableGrain = tableLayoutGrain(tableSpec);
-  const temporal = tableGrain !== "total";
+  // 表格布局与服务端同一条规则：轴的归属出自 resolveTableLayout，面板只排版、只写回列轴声明。
+  const tableSpec: ChartSpecContext = { measures, dimensions };
+  const resultShape = analyzeResultShape(resultView);
+  const temporal = resultShape.temporal;
+  const monthly = resultView.columns.some(
+    (column) => resultView.column_roles[column] === "time" && memberShortName(column) === "month",
+  );
   const tableLayout =
     chart.type === "table"
-      ? normalizeTableLayout(chart.columns, tableSpec)
+      ? resolveTableLayout(
+          resultView,
+          resultShape.detected,
+          normalizeTableColumns(chart.columns, tableSpec),
+        )
       : { rows: [] as TableAxis[], columns: [] as TableAxis[] };
   /** 列轴声明里的轴名：指标 / 时间 / 维度成员 id。 */
   const tableAxisName = (axis: TableAxis): string =>
@@ -199,13 +203,7 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
       ? (dimensions.find((member) => memberShortName(member) === axis.column) ?? axis.column)
       : axis.kind;
   const tableAxisLabel = (axis: string) =>
-    axis === "time"
-      ? tableGrain === "year"
-        ? "年份"
-        : "时间"
-      : axis === "metrics"
-        ? "指标"
-        : titleOf(axis);
+    axis === "time" ? (monthly ? "时间" : "年份") : axis === "metrics" ? "指标" : titleOf(axis);
   const tableLayoutAxisLabel = (axis: TableAxis) =>
     axis.kind === "time"
       ? axis.level === "year"

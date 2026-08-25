@@ -260,14 +260,12 @@ export const semanticPlanningStub = {
         ? {
             type: declared.type,
             y: [],
-            tableLayout: { rows: [], columns: [] },
             ...(declared.type === "table" && preferences.table_shading
               ? { shading: preferences.table_shading }
               : {}),
           }
         : {
             type: declared.type,
-            tableLayout: { rows: [], columns: [] },
             ...(declared.category ? { x: declared.category } : {}),
             y: declared.series ?? [],
             ...(declared.annotations ? { annotations: declared.annotations } : {}),

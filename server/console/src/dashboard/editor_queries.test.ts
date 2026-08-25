@@ -48,7 +48,7 @@ const VIEW_BLOCK = {
   query_notes: [],
 } as unknown as ReplayPayload["render_bundle"]["view"];
 
-const TABLE_DECL = { type: "table", y: [], tableLayout: { rows: [], columns: [] } };
+const TABLE_DECL = { type: "table", y: [] };
 
 const baseReplay = () =>
   ({

@@ -205,7 +205,6 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     type: "bar" as const,
     x: "organization_name",
     y: ["active_employee_count"],
-    tableLayout: { rows: [], columns: [] },
   };
   const db = createTestAppDatabase(join(tmpdir(), `pa_server_${randomUUID()}.db`));
   const cube: CubeGateway = {
@@ -309,7 +308,6 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
       intent.columns?.[0] === "dimension:organization_name"
         ? "organization_name"
         : "department_name";
-    const rowAxis = columnAxis === "organization_name" ? "department_name" : "organization_name";
     const view = {
       id: "result",
       columns: ["organization_name", "department_name", "active_employee_count"],
@@ -341,17 +339,17 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
         { member: "measure:active_employee_count", title: "在职人数", text: "在职人数。" },
       ],
     };
-    const tableLayout = {
-      rows: [{ kind: "field" as const, column: rowAxis }],
-      columns: [{ kind: "field" as const, column: columnAxis }, { kind: "metrics" as const }],
-    };
+    const tableColumns = [
+      { kind: "field" as const, column: columnAxis },
+      { kind: "metrics" as const },
+    ];
     return {
       analysis_id: analysisId,
       view_id: viewId,
       definition: pivotDefinition,
       intent,
       preferences: {},
-      presentation: { type: "table" as const, y: [], tableLayout },
+      presentation: { type: "table" as const, y: [], tableColumns },
       payload: {
         analysis_id: analysisId,
         view_id: viewId,
@@ -361,7 +359,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
         view,
       },
       fullRowViewBlock: view,
-      decl: { type: "table" as const, y: [], tableLayout },
+      decl: { type: "table" as const, y: [], tableColumns },
       record_projection_bindings: { views: [] },
     };
   };

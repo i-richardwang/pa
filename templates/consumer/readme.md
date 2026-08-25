@@ -32,7 +32,7 @@ export PA_MCP_API_KEY="<个人 API key>"
 确认服务已启动：
 
 ```sh
-curl http://127.0.0.1:8788/healthz
+curl http://127.0.0.1:8789/healthz
 ```
 
 返回 `{"ok":true}` 后直接提问即可。查询方法与字段协议由当前 `pa-analytics` Skill 和 MCP

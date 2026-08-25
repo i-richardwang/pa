@@ -6,14 +6,10 @@
 import { z } from "zod";
 import { memberShortName } from "../semantic_core/member_name.js";
 import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
-import {
-  resolveTimeOutputGrain,
-  type TimeInput,
-  type TimeOutputGrain,
-} from "../semantic_core/time_contract.js";
-import type { ChartDecl, TableAxis, TableLayoutDecl } from "./chart_decl.js";
+import { resolveTimeOutputGrain, type TimeInput } from "../semantic_core/time_contract.js";
+import type { ChartDecl, TableAxis } from "./chart_decl.js";
 
-export type { TableAxis, TableLayoutDecl } from "./chart_decl.js";
+export type { TableAxis } from "./chart_decl.js";
 import { TABLE_SHADING_PREFERENCES_INPUT } from "./view_preferences.js";
 
 export const CHART_INPUT = z
@@ -29,8 +25,8 @@ export const CHART_INPUT = z
       .optional()
       .describe(
         "table 专用有序列轴：time=逻辑时间桶，metrics=指标轴，其他值须为本视图 dimensions；" +
-          "未进入列轴的维度留在行轴；指标与时间同在列轴时默认 metrics 在外、time 在内，" +
-          "显式顺序仍按声明生效，省略 columns 时使用确定性默认布局",
+          "未进入列轴的维度与时间留在行轴；指标与时间同在列轴时默认 metrics 在外、time 在内，" +
+          "显式顺序仍按声明生效，省略 columns 时按结果给确定性默认布局",
       ),
     x: z
       .string()
@@ -109,55 +105,20 @@ const tableFieldAxis = (member: string): TableAxis => ({
   column: memberShortName(member),
 });
 
-/** 表格布局所依据的输出时间粒度：分组结果不默认按月展开。 */
-export function tableLayoutGrain(spec: ChartSpecContext): TimeOutputGrain {
-  return resolveTimeOutputGrain(spec.time ?? {}, undefined, {
-    grouped: (spec.dimensions ?? []).length > 0,
-  });
-}
-
-/** 未声明列轴时的确定性表格布局；编辑器与编译器共用这一条规则。 */
-export function defaultTableLayout(spec: ChartSpecContext): TableLayoutDecl {
-  const dimensions = spec.dimensions ?? [];
-  const measures = spec.measures ?? [];
-  const grain = tableLayoutGrain(spec);
-  const rows: TableAxis[] = dimensions.map(tableFieldAxis);
-  if (!measures.length) return { rows, columns: [] };
-  if (grain === "month" && !dimensions.length) {
-    return {
-      rows: [{ kind: "time", level: "month" }],
-      columns: [{ kind: "metrics" }, { kind: "time", level: "year" }],
-    };
-  }
-  return {
-    rows,
-    columns: [
-      { kind: "metrics" },
-      ...(grain === "total" ? [] : ([{ kind: "time", level: "bucket" }] satisfies TableAxis[])),
-    ],
-  };
-}
-
-/** 声明的列轴归一为表格布局：指标轴自动补位、剩余维度与时间留在行轴，非法声明抛错。 */
-export function normalizeTableLayout(
+/** 声明的列轴归一：指标轴自动补位，非法声明抛错。行轴不在此裁决——它是结果的余数。 */
+export function normalizeTableColumns(
   columns: string[] | undefined,
   spec: ChartSpecContext,
-): TableLayoutDecl {
-  if (!columns) return defaultTableLayout(spec);
+): TableAxis[] | undefined {
+  if (!columns) return undefined;
   const dimensions = spec.dimensions ?? [];
   const measures = spec.measures ?? [];
-  const temporal = tableLayoutGrain(spec) !== "total";
   const columnAxes: TableAxis[] = columns.map((axis) => {
     if (axis === "metrics") {
       if (!measures.length) throw new Error("presentation.columns 使用 metrics 时查询必须包含指标");
       return { kind: "metrics" };
     }
-    if (axis === "time") {
-      if (!temporal) {
-        throw new Error("presentation.columns 使用 time 时查询时间必须按年或按月呈现");
-      }
-      return { kind: "time", level: "bucket" };
-    }
+    if (axis === "time") return { kind: "time", level: "bucket" };
     const resolved = resolveMember(axis, dimensions);
     if (!resolved) {
       throw new Error(
@@ -176,16 +137,7 @@ export function normalizeTableLayout(
     const timeIndex = columnAxes.findIndex((axis) => axis.kind === "time");
     columnAxes.splice(timeIndex < 0 ? columnAxes.length : timeIndex, 0, { kind: "metrics" });
   }
-  const columnFields = new Set(
-    columnAxes.flatMap((axis) => (axis.kind === "field" ? [axis.column] : [])),
-  );
-  const rows: TableAxis[] = dimensions
-    .filter((member) => !columnFields.has(memberShortName(member)))
-    .map(tableFieldAxis);
-  if (temporal && !columnAxes.some((axis) => axis.kind === "time")) {
-    rows.push({ kind: "time", level: "bucket" });
-  }
-  return { rows, columns: columnAxes };
+  return columnAxes;
 }
 
 /** 输出时间轴的成员名（与 time_plan 的 raw time 成员一致）；接受全名或短名 */
@@ -195,7 +147,6 @@ const isTimeAxisRef = (name: string) => TIME_AXIS_PARTS.includes(memberShortName
 export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext): ChartDecl {
   const measures = spec.measures ?? [];
   const dimensions = spec.dimensions ?? [];
-  const tableLayout = defaultTableLayout(spec);
 
   if (input.columns !== undefined && input.type !== "table") {
     throw new Error("presentation.columns 仅支持 type=table；其他图型请删除 columns");
@@ -241,14 +192,16 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
         throw new Error("presentation.type=kpi 不接受分组维度；分组结果请使用 table 或图表");
       }
     }
+    const tableColumns =
+      input.type === "table" ? normalizeTableColumns(input.columns, spec) : undefined;
     return input.type === "table"
       ? {
           type: "table",
           y: [],
-          tableLayout: normalizeTableLayout(input.columns, spec),
+          ...(tableColumns ? { tableColumns } : {}),
           ...(input.shading ? { shading: input.shading } : {}),
         }
-      : { type: "kpi", y: [], tableLayout };
+      : { type: "kpi", y: [] };
   }
 
   const y = (input.y ?? measures).map((name) => {
@@ -352,7 +305,6 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
     return {
       type: "line",
       y,
-      tableLayout,
       ...(groupBy !== undefined ? { groupBy } : {}),
       ...(display !== undefined ? { display } : {}),
       ...(input.value_labels !== undefined ? { valueLabels: input.value_labels } : {}),
@@ -387,14 +339,13 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
     if (y.length !== 1) {
       throw new Error("presentation.type=pie 需要唯一度量；请用 y 指定一个可加计数度量");
     }
-    return { type: "pie", x, y, tableLayout };
+    return { type: "pie", x, y };
   }
 
   return {
     type: "bar",
     x,
     y,
-    tableLayout,
     ...(groupBy !== undefined ? { groupBy } : {}),
     ...(input.stack !== undefined ? { stack: input.stack } : {}),
     ...(display !== undefined ? { display } : {}),

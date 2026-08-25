@@ -15,7 +15,6 @@ const principal: Principal = {
 const TABLE_PRESENTATION: PresentationSpec = {
   type: "table",
   y: [],
-  tableLayout: { rows: [], columns: [] },
 };
 
 const publicView: CubeView = {
@@ -227,13 +226,10 @@ test("交付边界把执行成员一次性投影为语义列与语义口径引�
       {
         type: "table",
         y: [],
-        tableLayout: {
-          rows: [{ kind: "field", column: "test_people_metrics.organization_name" }],
-          columns: [
-            { kind: "field", column: "test_people_metrics.category_level" },
-            { kind: "metrics" },
-          ],
-        },
+        tableColumns: [
+          { kind: "field", column: "test_people_metrics.category_level" },
+          { kind: "metrics" },
+        ],
       },
       [projectionView],
     ),
@@ -242,10 +238,7 @@ test("交付边界把执行成员一次性投影为语义列与语义口径引�
   expect(result.decl).toEqual({
     type: "table",
     y: [],
-    tableLayout: {
-      rows: [{ kind: "field", column: DIMENSION }],
-      columns: [{ kind: "field", column: PIVOT_DIMENSION }, { kind: "metrics" }],
-    },
+    tableColumns: [{ kind: "field", column: PIVOT_DIMENSION }, { kind: "metrics" }],
   });
   const noteMembers = result.payload.view.query_notes.map((note) => note.member);
   expect(noteMembers).toEqual(expect.arrayContaining([METRIC, DIMENSION]));

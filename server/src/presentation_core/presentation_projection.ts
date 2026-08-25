@@ -25,14 +25,13 @@ export function projectPresentation(
   const project = (column: string) => requiredPublicColumnId(delivery, column, outputId);
   return {
     ...declaration,
-    tableLayout: {
-      rows: declaration.tableLayout.rows.map((axis) =>
-        axis.kind === "field" ? { ...axis, column: project(axis.column) } : axis,
-      ),
-      columns: declaration.tableLayout.columns.map((axis) =>
-        axis.kind === "field" ? { ...axis, column: project(axis.column) } : axis,
-      ),
-    },
+    ...(declaration.tableColumns
+      ? {
+          tableColumns: declaration.tableColumns.map((axis) =>
+            axis.kind === "field" ? { ...axis, column: project(axis.column) } : axis,
+          ),
+        }
+      : {}),
     ...(declaration.x ? { x: project(declaration.x) } : {}),
     y: declaration.y.map(project),
     ...(declaration.annotations ? { annotations: declaration.annotations.map(project) } : {}),
