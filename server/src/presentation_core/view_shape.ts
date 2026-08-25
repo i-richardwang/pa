@@ -23,7 +23,7 @@ import {
   type TableShading,
 } from "./table_shading.js";
 import type { RenderShape } from "./render_shape.js";
-import type { ChartDecl, TableAxis } from "./chart_decl.js";
+import type { ChartDecl, ChartTypeOf, TableAxis } from "./chart_decl.js";
 import {
   assignChannels,
   type ChannelForm,
@@ -1344,30 +1344,33 @@ function declaredChart(
   view: ViewBlock,
   roles: Roles,
   titleOf: (c: string) => string,
-  decl: ChartDecl,
+  decl: ChartTypeOf<"line" | "bar" | "pie">,
 ): ChartSpec | null {
   const measureIdx = decl.y.map((y) => declaredIdx(view, roles.measureIdx, y));
   if (measureIdx.some((i) => i === undefined)) return null;
+  // 辅助标注通道在场即说明调用方已裁定过主系列；缺席时才由本层按关系推断。
+  const declaredAnnotations = decl.type === "pie" ? undefined : decl.annotations;
   const measures =
-    decl.annotations === undefined
+    declaredAnnotations === undefined
       ? primaryMeasureIndices(view, measureIdx as number[])
       : (measureIdx as number[]);
   if (!measures.length) return null;
   const annotations =
-    decl.annotations === undefined
+    declaredAnnotations === undefined
       ? undefined
       : new Set(
-          decl.annotations.flatMap((name) => {
+          declaredAnnotations.flatMap((name) => {
             const index = declaredIdx(view, roles.measureIdx, name);
             return index === undefined ? [] : [index];
           }),
         );
 
   // 取值唯一的维度不分裂任何东西，与没声明等价；只有引用不存在的成员才 fail-closed。
+  const declaredGroupBy = decl.type === "pie" ? undefined : decl.groupBy;
   const groupBy =
-    decl.groupBy !== undefined && constantDimension(view, roles, decl.groupBy)
+    declaredGroupBy !== undefined && constantDimension(view, roles, declaredGroupBy)
       ? undefined
-      : decl.groupBy;
+      : declaredGroupBy;
 
   if (decl.type === "line") {
     if (roles.timePoints.length < 2) return null;
@@ -1383,7 +1386,7 @@ function declaredChart(
   }
 
   if (decl.type === "bar") {
-    const axisIdx = decl.x !== undefined ? declaredIdx(view, roles.catIdx, decl.x) : undefined;
+    const axisIdx = declaredIdx(view, roles.catIdx, decl.x);
     if (axisIdx === undefined) return null;
     if (groupBy !== undefined) {
       const seriesIdx = declaredIdx(view, roles.catIdx, groupBy);
@@ -1401,13 +1404,9 @@ function declaredChart(
     return categoryBar(view, roles, titleOf, axisIdx, measures, annotations);
   }
 
-  if (decl.type === "pie") {
-    const catIdx = decl.x !== undefined ? declaredIdx(view, roles.catIdx, decl.x) : undefined;
-    if (catIdx === undefined || measures.length !== 1) return null;
-    return pieChart(view, roles, titleOf, catIdx, measures[0]);
-  }
-
-  return null;
+  const catIdx = declaredIdx(view, roles.catIdx, decl.x);
+  if (catIdx === undefined || measures.length !== 1) return null;
+  return pieChart(view, roles, titleOf, catIdx, measures[0]);
 }
 
 export type ResultShape = {
@@ -1435,7 +1434,12 @@ export function compileTableWithStatus(
 ): TableCompilation {
   const roles = shape.detected;
   const compiled = decl
-    ? compileTableLayout(view, roles, titleOf, decl.tableColumns)
+    ? compileTableLayout(
+        view,
+        roles,
+        titleOf,
+        decl.type === "table" ? decl.tableColumns : undefined,
+      )
     : {
         table: flatTable(view, titleOf),
         layout: { state: "applied" as const, leafColumns: tableValueIndices(roles).length },
@@ -1521,10 +1525,18 @@ export function proposeChartDecl(
   type: Exclude<ChannelForm, "kpi">,
   preferences: ChannelPreferences = {},
   shape: ResultShape = analyzeResultShape(view),
-): ChartDecl | null {
+): ChartTypeOf<"line" | "bar" | "pie"> | null {
   const assignment = assignChannels(type, resultChannelPool(view, shape), preferences);
   if (!assignment) return null;
-  const decl: ChartDecl = { type, ...assignment };
+  const groupBy = assignment.groupBy !== undefined ? { groupBy: assignment.groupBy } : {};
+  // 分类轴是 bar/pie 的必备通道；装箱填不上它时上一行已经返回了 null。
+  if (type !== "line" && assignment.x === undefined) return null;
+  const decl: ChartTypeOf<"line" | "bar" | "pie"> =
+    type === "line"
+      ? { type, y: assignment.y, ...groupBy }
+      : type === "pie"
+        ? { type, x: assignment.x as string, y: assignment.y }
+        : { type, x: assignment.x as string, y: assignment.y, ...groupBy };
   return compileChart(view, makeTitleOf(view), decl, shape) ? decl : null;
 }
 

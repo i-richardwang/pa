@@ -70,7 +70,7 @@ const result = {
     view: emptyStructureView,
   },
   fullRowViewBlock: emptyStructureView,
-  decl: { type: "table" as const, y: [] },
+  decl: { type: "table" as const },
 };
 
 const emptyChartResult = {

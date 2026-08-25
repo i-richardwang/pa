@@ -17,22 +17,12 @@ function requiredPublicColumnId(
   return id;
 }
 
-export function projectPresentation(
-  declaration: ChartDecl,
-  delivery: OutputDelivery,
-  outputId: string,
-): ChartDecl {
-  const project = (column: string) => requiredPublicColumnId(delivery, column, outputId);
+/** 系列侧通道的投影：line 与 bar 共用同一组通道，只有分类轴与堆叠是 bar 独有。 */
+function projectSeriesChannels(
+  declaration: Extract<ChartDecl, { type: "line" | "bar" }>,
+  project: (column: string) => string,
+) {
   return {
-    ...declaration,
-    ...(declaration.tableColumns
-      ? {
-          tableColumns: declaration.tableColumns.map((axis) =>
-            axis.kind === "field" ? { ...axis, column: project(axis.column) } : axis,
-          ),
-        }
-      : {}),
-    ...(declaration.x ? { x: project(declaration.x) } : {}),
     y: declaration.y.map(project),
     ...(declaration.annotations ? { annotations: declaration.annotations.map(project) } : {}),
     ...(declaration.groupBy ? { groupBy: project(declaration.groupBy) } : {}),
@@ -47,4 +37,37 @@ export function projectPresentation(
         }
       : {}),
   };
+}
+
+export function projectPresentation(
+  declaration: ChartDecl,
+  delivery: OutputDelivery,
+  outputId: string,
+): ChartDecl {
+  const project = (column: string) => requiredPublicColumnId(delivery, column, outputId);
+  switch (declaration.type) {
+    case "kpi":
+      return declaration;
+    case "table":
+      return {
+        ...declaration,
+        ...(declaration.tableColumns
+          ? {
+              tableColumns: declaration.tableColumns.map((axis) =>
+                axis.kind === "field" ? { ...axis, column: project(axis.column) } : axis,
+              ),
+            }
+          : {}),
+      };
+    case "pie":
+      return { ...declaration, x: project(declaration.x), y: declaration.y.map(project) };
+    case "line":
+      return { ...declaration, ...projectSeriesChannels(declaration, project) };
+    case "bar":
+      return {
+        ...declaration,
+        x: project(declaration.x),
+        ...projectSeriesChannels(declaration, project),
+      };
+  }
 }

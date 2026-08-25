@@ -724,10 +724,13 @@ function lastIndexWhere(length: number, test: (index: number) => boolean): numbe
   return -1;
 }
 
+/** 图表的视觉覆盖：只有折线与柱状声明这两个通道，饼图两者都没有。 */
+type ChartStyle = { display?: Record<string, SeriesDisplay>; valueLabels?: "main" | "all" };
+
 /** 纯时间趋势 / 柱线组合：时间恒占 x 轴；混量纲时量画柱（主轴）、率画线（副轴） */
-function trendOption(spec: TrendSpec, decl: ChartDecl): ViewChart {
+function trendOption(spec: TrendSpec, style: ChartStyle): ViewChart {
   const categories = spec.rows.map((r) => String(r.t ?? ""));
-  const series = resolveSeries(spec.series, spec.rows, decl.display, (s) => ({
+  const series = resolveSeries(spec.series, spec.rows, style.display, (s) => ({
     mark: s.mark === "bar" ? "bar" : "line",
     axis: spec.mixedAxes && s.mark !== "bar" ? 1 : 0,
   }));
@@ -744,13 +747,13 @@ function trendOption(spec: TrendSpec, decl: ChartDecl): ViewChart {
     rows: spec.rows,
     sourceRows: spec.sourceRows,
     ...(latestIndex >= 0 ? { latest: { index: latestIndex, label: categories[latestIndex] } } : {}),
-    valueLabels: decl.valueLabels,
+    valueLabels: style.valueLabels,
   });
 }
 
 /** 分类柱线组合：分类占 x 轴，绝对量画柱（左轴），率画线（右轴）。 */
-function categoryComboOption(spec: CategoryComboSpec, decl: ChartDecl): ViewChart {
-  const series = resolveSeries(spec.series, spec.rows, decl.display, (s) => ({
+function categoryComboOption(spec: CategoryComboSpec, style: ChartStyle): ViewChart {
+  const series = resolveSeries(spec.series, spec.rows, style.display, (s) => ({
     mark: s.isRate ? "line" : "bar",
     axis: s.isRate ? 1 : 0,
   }));
@@ -765,14 +768,14 @@ function categoryComboOption(spec: CategoryComboSpec, decl: ChartDecl): ViewChar
     ...(shareKey
       ? { share: { title: "占比", values: spec.rows.map((row) => cellNumber(row[shareKey])) } }
       : {}),
-    valueLabels: decl.valueLabels,
+    valueLabels: style.valueLabels,
   });
 }
 
 /** 分类条形（横排容纳中文长标签）：多系列并列、双分类构成堆叠；占比注释随读数卡 */
-function barOption(spec: BarSpec, decl: ChartDecl): ViewChart {
+function barOption(spec: BarSpec, style: ChartStyle): ViewChart {
   const categories = spec.rows.map((r) => String(r.label ?? ""));
-  const series = resolveSeries(spec.series, spec.rows, decl.display, () => ({
+  const series = resolveSeries(spec.series, spec.rows, style.display, () => ({
     mark: "bar",
     axis: 0,
   }));
@@ -802,7 +805,7 @@ function barOption(spec: BarSpec, decl: ChartDecl): ViewChart {
     multi: series.length > 1,
     orientation: "horizontal",
     stacked: spec.stacked,
-    valueLabels: decl.valueLabels,
+    valueLabels: style.valueLabels,
   };
   const gutter = { left: labelColumnWidth(categories) + LABEL_COLUMN.gap };
   return {
@@ -898,13 +901,20 @@ export function buildViewChart(
 ): ViewChart | null {
   const chart = compileChart(view, makeTitleOf(view), decl, resultShape);
   if (!chart) return null;
+  const style: ChartStyle =
+    decl.type === "line" || decl.type === "bar"
+      ? {
+          ...(decl.display ? { display: decl.display } : {}),
+          ...(decl.valueLabels ? { valueLabels: decl.valueLabels } : {}),
+        }
+      : {};
   switch (chart.kind) {
     case "line":
-      return trendOption(chart, decl);
+      return trendOption(chart, style);
     case "bar":
-      return barOption(chart, decl);
+      return barOption(chart, style);
     case "category_combo":
-      return categoryComboOption(chart, decl);
+      return categoryComboOption(chart, style);
     case "pie":
       return pieOption(chart);
   }

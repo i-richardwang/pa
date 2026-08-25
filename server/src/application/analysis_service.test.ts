@@ -62,7 +62,6 @@ const pivotCompiled = {
   ...compiled,
   presentation: {
     type: "table" as const,
-    y: [],
     tableColumns: [
       { kind: "field" as const, column: "department_name" },
       { kind: "metrics" as const },
@@ -70,7 +69,6 @@ const pivotCompiled = {
   },
   render_decl: {
     type: "table" as const,
-    y: [],
     tableColumns: [
       { kind: "field" as const, column: "department_name" },
       { kind: "metrics" as const },
@@ -115,11 +113,9 @@ function serviceWith(rows: ViewBlock["rows"]) {
             ...compiled,
             presentation: {
               type: "table" as const,
-              y: [],
             },
             render_decl: {
               type: "table" as const,
-              y: [],
             },
           }
         : compiled,

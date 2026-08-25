@@ -117,7 +117,7 @@ function replay(view: ReplayPayload["view"] = { type: "table" }): ReplayPayload 
     },
     render_bundle: {
       view: rawView,
-      decl: { type: "table", y: [] },
+      decl: { type: "table" },
     },
     presentation: {
       type: "table",

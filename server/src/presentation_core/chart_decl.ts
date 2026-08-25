@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
-import { chartChannels } from "./chart_channels.js";
 import { TABLE_SHADING_PREFERENCES_INPUT } from "./view_preferences.js";
 
 export const TABLE_AXIS_SCHEMA = z.discriminatedUnion("kind", [
@@ -35,68 +33,58 @@ export const SERIES_DISPLAY_SCHEMA = z
 
 export type SeriesDisplay = z.infer<typeof SERIES_DISPLAY_SCHEMA>;
 
-/** 编译后的公共呈现声明；这是服务端与浏览器之间唯一的运行时合同。 */
+const MEMBER = z.string().min(1);
+const SERIES = z.array(MEMBER).min(1);
+const DISPLAY = z.record(MEMBER, SERIES_DISPLAY_SCHEMA);
+const VALUE_LABELS = z.enum(["main", "all"]);
+
+/**
+ * 编译后的公共呈现声明；这是服务端与浏览器之间唯一的运行时合同。
+ * 通道按图型判别：哪个通道属于哪个图型出自这份形状本身，不靠另一套规则复述。
+ */
 export const CHART_DECL_SCHEMA = z
-  .object({
-    type: PRESENTATION_TYPE_SCHEMA,
-    tableColumns: TABLE_COLUMNS_DECL_SCHEMA.optional(),
-    x: z.string().min(1).optional(),
-    y: z.array(z.string().min(1)),
-    annotations: z.array(z.string().min(1)).optional(),
-    groupBy: z.string().min(1).optional(),
-    stack: z.boolean().optional(),
-    display: z.record(z.string().min(1), SERIES_DISPLAY_SCHEMA).optional(),
-    valueLabels: z.enum(["main", "all"]).optional(),
-    shading: TABLE_SHADING_PREFERENCES_INPUT.optional(),
-  })
-  .strict()
+  .discriminatedUnion("type", [
+    z
+      .object({
+        type: z.literal("table"),
+        tableColumns: TABLE_COLUMNS_DECL_SCHEMA.optional(),
+        shading: TABLE_SHADING_PREFERENCES_INPUT.optional(),
+      })
+      .strict(),
+    z.object({ type: z.literal("kpi") }).strict(),
+    z
+      .object({
+        type: z.literal("line"),
+        y: SERIES,
+        annotations: z.array(MEMBER).optional(),
+        groupBy: MEMBER.optional(),
+        display: DISPLAY.optional(),
+        valueLabels: VALUE_LABELS.optional(),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("bar"),
+        x: MEMBER,
+        y: SERIES,
+        annotations: z.array(MEMBER).optional(),
+        groupBy: MEMBER.optional(),
+        stack: z.boolean().optional(),
+        display: DISPLAY.optional(),
+        valueLabels: VALUE_LABELS.optional(),
+      })
+      .strict(),
+    z.object({ type: z.literal("pie"), x: MEMBER, y: z.array(MEMBER).length(1) }).strict(),
+  ])
   .superRefine((decl, context) => {
-    const issue = (message: string) => context.addIssue({ code: z.ZodIssueCode.custom, message });
-    if (decl.type === "table" || decl.type === "kpi") {
-      if (decl.y.length) issue(`${decl.type} 呈现不能包含图表系列`);
-      if (
-        decl.x !== undefined ||
-        decl.annotations !== undefined ||
-        decl.groupBy !== undefined ||
-        decl.stack !== undefined ||
-        decl.display !== undefined ||
-        decl.valueLabels !== undefined
-      ) {
-        issue(`${decl.type} 呈现包含不适用的图表字段`);
-      }
-      if (decl.type === "kpi" && decl.shading !== undefined) {
-        issue("kpi 呈现不能包含表格着色");
-      }
-      if (decl.type === "kpi" && decl.tableColumns !== undefined) {
-        issue("kpi 呈现不能包含表格列轴");
-      }
-      return;
-    }
-    if (!decl.y.length) issue(`${decl.type} 呈现至少需要一个图表系列`);
-    if (decl.tableColumns !== undefined) issue(`${decl.type} 呈现不能包含表格列轴`);
-    if (decl.shading !== undefined) issue(`${decl.type} 呈现不能包含表格着色`);
-    // 通道该不该出现、值通道容得下几个，都问容量表，不在这里另立一套。
-    const channels = chartChannels(decl.type);
-    if (channels.axis === "dimension" && !decl.x) issue(`${decl.type} 呈现缺少分类轴 x`);
-    if (channels.axis !== "dimension" && decl.x !== undefined) {
-      issue("line 呈现的时间横轴无需声明 x");
-    }
-    if (!channels.split && decl.groupBy !== undefined) {
-      issue(`${decl.type} 呈现没有拆分通道`);
-    }
-    if ((channels.singleValue || decl.groupBy !== undefined) && decl.y.length !== 1) {
-      issue(`${decl.type} 呈现的值通道只容一个系列`);
-    }
-    if (decl.type === "pie") {
-      if (
-        decl.annotations !== undefined ||
-        decl.stack !== undefined ||
-        decl.display !== undefined ||
-        decl.valueLabels !== undefined
-      ) {
-        issue("pie 呈现包含不适用的图表字段");
-      }
+    // 唯一跨通道的约束：拆分通道占掉了系列的来源，值通道就只剩一个位置。
+    if ((decl.type === "line" || decl.type === "bar") && decl.groupBy && decl.y.length !== 1) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${decl.type} 呈现声明拆分通道时值通道只容一个系列`,
+      });
     }
   });
 
 export type ChartDecl = z.infer<typeof CHART_DECL_SCHEMA>;
+export type ChartTypeOf<T extends ChartDecl["type"]> = Extract<ChartDecl, { type: T }>;

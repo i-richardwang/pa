@@ -348,7 +348,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
       definition: pivotDefinition,
       intent,
       preferences: {},
-      presentation: { type: "table" as const, y: [], tableColumns },
+      presentation: { type: "table" as const, tableColumns },
       payload: {
         analysis_id: analysisId,
         view_id: viewId,
@@ -358,7 +358,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
         view,
       },
       fullRowViewBlock: view,
-      decl: { type: "table" as const, y: [], tableColumns },
+      decl: { type: "table" as const, tableColumns },
       record_projection_bindings: { views: [] },
     };
   };

@@ -48,8 +48,8 @@ const semanticPlanning = {
       ...(semantic.title ? { title: semantic.title } : {}),
       views: semantic.views.filter((view) => !("from" in view)),
     } as AnalysisSpec),
-    presentation: { type: "table" as const, y: [] },
-    render_decl: { type: "table" as const, y: [] },
+    presentation: { type: "table" as const },
+    render_decl: { type: "table" as const },
     routes: [],
     record_projection_bindings: { views: [] },
     access: semanticAccessStub(caller),
@@ -190,11 +190,9 @@ describe("report aggregate", () => {
           plan: planExecution(spec()),
           presentation: {
             type: "table" as const,
-            y: [],
           },
           render_decl: {
             type: "table" as const,
-            y: [],
           },
           routes: [],
           record_projection_bindings: { views: [] },

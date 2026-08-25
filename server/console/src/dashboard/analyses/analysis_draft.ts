@@ -506,13 +506,15 @@ export function defaultSemanticViewIntent(
   const proposal = result ? proposeChartDecl(result, type) : null;
   const semantic = (column: string, pool: string[]) =>
     pool.find((member) => memberShortName(member) === column);
-  const category = proposal?.x ? semantic(proposal.x, dimensions) : undefined;
-  const groupBy = proposal?.groupBy ? semantic(proposal.groupBy, dimensions) : undefined;
+  const axis = proposal && proposal.type !== "line" ? proposal.x : undefined;
+  const split = proposal && proposal.type !== "pie" ? proposal.groupBy : undefined;
+  const category = axis ? semantic(axis, dimensions) : undefined;
+  const groupBy = split ? semantic(split, dimensions) : undefined;
   const series = proposal?.y.flatMap((column) => semantic(column, measures) ?? []) ?? [];
   if (
     !proposal ||
-    (proposal.x && !category) ||
-    (proposal.groupBy && !groupBy) ||
+    (axis && !category) ||
+    (split && !groupBy) ||
     series.length !== proposal.y.length
   ) {
     return repairedViewIntent(

@@ -20,7 +20,6 @@ const principal: Principal = {
 };
 const TABLE_PRESENTATION: PresentationSpec = {
   type: "table",
-  y: [],
 };
 const VIEW = "test_people_metrics";
 const TIME_SOURCE = "workforce";

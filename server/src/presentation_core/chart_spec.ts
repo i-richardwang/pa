@@ -196,11 +196,10 @@ export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext)
     return input.type === "table"
       ? {
           type: "table",
-          y: [],
           ...(tableColumns ? { tableColumns } : {}),
           ...(input.shading ? { shading: input.shading } : {}),
         }
-      : { type: "kpi", y: [] };
+      : { type: "kpi" };
   }
 
   const y = (input.y ?? measures).map((name) => {

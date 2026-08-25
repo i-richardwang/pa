@@ -32,12 +32,14 @@ describe("归一与缺省补齐", () => {
           },
         },
         TREND,
-      ).display,
-    ).toEqual({ new_hire_count: { color: "#123abc" } });
+      ),
+    ).toEqual(expect.objectContaining({ display: { new_hire_count: { color: "#123abc" } } }));
   });
 
   test("value_labels：line/bar 透传，table 拒绝，main 与 group_by 互斥", () => {
-    expect(validateChartDecl({ type: "line", value_labels: "all" }, TREND).valueLabels).toBe("all");
+    expect(validateChartDecl({ type: "line", value_labels: "all" }, TREND)).toEqual(
+      expect.objectContaining({ valueLabels: "all" }),
+    );
     expect(() => validateChartDecl({ type: "table", value_labels: "all" }, TREND)).toThrow(
       /value_labels 仅支持 type=line 或 bar/,
     );
@@ -129,7 +131,7 @@ describe("归一与缺省补齐", () => {
   });
 
   test("table：不声明列轴即不进声明——缺省布局由结果裁决", () => {
-    expect(validateChartDecl({ type: "table" }, CATEGORY)).toEqual({ type: "table", y: [] });
+    expect(validateChartDecl({ type: "table" }, CATEGORY)).toEqual({ type: "table" });
   });
 
   test("table：columns 绑定有序列轴并归一为内部布局", () => {
@@ -143,7 +145,6 @@ describe("归一与缺省补齐", () => {
       ),
     ).toEqual({
       type: "table",
-      y: [],
       tableColumns: [{ kind: "field", column: "job_level_band" }, { kind: "metrics" }],
     });
   });
@@ -151,7 +152,6 @@ describe("归一与缺省补齐", () => {
   test("table：年份与指标可组成两层列轴", () => {
     expect(validateChartDecl({ type: "table", columns: ["time", "metrics"] }, TREND)).toEqual({
       type: "table",
-      y: [],
       tableColumns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
     });
   });
@@ -159,7 +159,6 @@ describe("归一与缺省补齐", () => {
   test("table：省略 metrics 时指标轴自动补在外层", () => {
     expect(validateChartDecl({ type: "table", columns: ["time"] }, TREND)).toEqual({
       type: "table",
-      y: [],
       tableColumns: [{ kind: "metrics" }, { kind: "time", level: "bucket" }],
     });
   });
@@ -172,7 +171,6 @@ describe("归一与缺省补齐", () => {
       ),
     ).toEqual({
       type: "kpi",
-      y: [],
     });
     expect(() => validateChartDecl({ type: "kpi" }, CATEGORY)).toThrow(/不接受分组维度/);
   });
@@ -187,8 +185,10 @@ describe("可行动报错", () => {
       validateChartDecl(
         { type: "table", shading: { palette: "red_blue", flipped: true, values: false } },
         CATEGORY,
-      ).shading,
-    ).toEqual({ palette: "red_blue", flipped: true, values: false });
+      ),
+    ).toEqual(
+      expect.objectContaining({ shading: { palette: "red_blue", flipped: true, values: false } }),
+    );
   });
 
   test("y 引用未查询度量", () => {

@@ -88,10 +88,7 @@ test("渲染器忠实呈现声明的图或表", () => {
     <ViewRenderer
       actions={{}}
       payload={PAYLOAD}
-      presentation={compilePresentationBlock(CHART_VIEW, {
-        type: "table",
-        y: [],
-      })}
+      presentation={compilePresentationBlock(CHART_VIEW, { type: "table" })}
       scene="page"
     />,
   );
@@ -103,10 +100,7 @@ test("渲染器忠实呈现声明的图或表", () => {
 test("结果面的场地按场景定，图与表同框", () => {
   const surfaceOf = (html: string) =>
     html.match(/<div[^>]*data-slot="plot-surface"[^>]*>/)?.[0] ?? "";
-  const tablePresentation = compilePresentationBlock(CHART_VIEW, {
-    type: "table",
-    y: [],
-  });
+  const tablePresentation = compilePresentationBlock(CHART_VIEW, { type: "table" });
   const render = (presentation: typeof CHART_PRESENTATION, scene: "card" | "tile" | "page") =>
     renderToStaticMarkup(
       <ViewRenderer actions={{}} payload={PAYLOAD} presentation={presentation} scene={scene} />,
@@ -134,7 +128,6 @@ test("结果面的场地按场景定，图与表同框", () => {
 test("热力着色随 table 声明：指标格铺色片、字色随底色、仅颜色档不印数", () => {
   const shaded = compilePresentationBlock(CHART_VIEW, {
     type: "table",
-    y: [],
     shading: { palette: SERIES_COLORS[0] },
   });
   const html = renderToStaticMarkup(
@@ -151,7 +144,6 @@ test("热力着色随 table 声明：指标格铺色片、字色随底色、仅�
 
   const colorsOnly = compilePresentationBlock(CHART_VIEW, {
     type: "table",
-    y: [],
     shading: { palette: SERIES_COLORS[0], values: false },
   });
   const hidden = renderToStaticMarkup(
@@ -165,10 +157,7 @@ test("热力着色随 table 声明：指标格铺色片、字色随底色、仅�
     <ViewRenderer
       actions={{}}
       payload={PAYLOAD}
-      presentation={compilePresentationBlock(CHART_VIEW, {
-        type: "table",
-        y: [],
-      })}
+      presentation={compilePresentationBlock(CHART_VIEW, { type: "table" })}
       scene="page"
     />,
   );
@@ -204,10 +193,7 @@ test("读数条、题名与 plot 框左缘同轴", () => {
       <ViewRenderer
         actions={{}}
         payload={PAYLOAD}
-        presentation={compilePresentationBlock(CHART_VIEW, {
-          type: "table",
-          y: [],
-        })}
+        presentation={compilePresentationBlock(CHART_VIEW, { type: "table" })}
         scene="card"
       />,
     ).match(/<div class="((?:px|pt|pb)-[^"]*)">\s*<div class="flex min-w-0/)?.[1] ?? "";

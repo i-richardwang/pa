@@ -188,6 +188,53 @@ const testExpression = (node: SemanticExprNode): ExprNode => ({
   right: testExpressionOperand(node.right),
 });
 
+/** 语义意图 → 物理声明的测试替身：与编译器同形，但不过 catalog 路由。 */
+function stubPresentation(
+  declared: SemanticViewIntent,
+  preferences: ViewPreferences,
+): PresentationSpec {
+  if (declared.type === "kpi") return { type: "kpi" };
+  if (declared.type === "table") {
+    return {
+      type: "table",
+      ...(preferences.table_shading ? { shading: preferences.table_shading } : {}),
+    };
+  }
+  const y = declared.series ?? [];
+  if (declared.type === "pie") {
+    if (!declared.category) throw new Error("pie 呈现替身缺少分类轴");
+    return { type: "pie", x: declared.category, y };
+  }
+  const style = {
+    ...(preferences.series
+      ? {
+          display: Object.fromEntries(
+            Object.entries(preferences.series).map(([member, seriesStyle]) => [
+              member,
+              {
+                ...(seriesStyle.color ? { color: seriesStyle.color } : {}),
+                ...(seriesStyle.mark ? { type: seriesStyle.mark } : {}),
+                ...(seriesStyle.axis ? { yAxis: seriesStyle.axis } : {}),
+              },
+            ]),
+          ),
+        }
+      : {}),
+    ...(preferences.value_labels ? { valueLabels: preferences.value_labels } : {}),
+    ...(declared.group_by ? { groupBy: declared.group_by } : {}),
+  };
+  if (declared.type === "line") return { type: "line", y, ...style };
+  if (!declared.category) throw new Error("bar 呈现替身缺少分类轴");
+  return {
+    type: "bar",
+    x: declared.category,
+    y,
+    ...(declared.annotations ? { annotations: declared.annotations } : {}),
+    ...(declared.stack !== undefined ? { stack: declared.stack } : {}),
+    ...style,
+  };
+}
+
 export const semanticPlanningStub = {
   plan: async (
     principal: Principal,
@@ -255,42 +302,7 @@ export const semanticPlanningStub = {
         };
       }),
     };
-    const presentation: PresentationSpec =
-      declared.type === "table" || declared.type === "kpi"
-        ? {
-            type: declared.type,
-            y: [],
-            ...(declared.type === "table" && preferences.table_shading
-              ? { shading: preferences.table_shading }
-              : {}),
-          }
-        : {
-            type: declared.type,
-            ...(declared.type !== "line" && declared.category ? { x: declared.category } : {}),
-            y: declared.series ?? [],
-            ...(declared.type === "bar" && declared.annotations
-              ? { annotations: declared.annotations }
-              : {}),
-            ...(declared.type !== "pie" && declared.group_by ? { groupBy: declared.group_by } : {}),
-            ...(declared.type === "bar" && declared.stack !== undefined
-              ? { stack: declared.stack }
-              : {}),
-            ...(preferences.series
-              ? {
-                  display: Object.fromEntries(
-                    Object.entries(preferences.series).map(([member, style]) => [
-                      member,
-                      {
-                        ...(style.color ? { color: style.color } : {}),
-                        ...(style.mark ? { type: style.mark } : {}),
-                        ...(style.axis ? { yAxis: style.axis } : {}),
-                      },
-                    ]),
-                  ),
-                }
-              : {}),
-            ...(preferences.value_labels ? { valueLabels: preferences.value_labels } : {}),
-          };
+    const presentation = stubPresentation(declared, preferences);
     const plan = planExecution(analysis);
     return {
       plan,

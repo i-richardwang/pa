@@ -14,7 +14,6 @@ const principal: Principal = {
 };
 const TABLE_PRESENTATION: PresentationSpec = {
   type: "table",
-  y: [],
 };
 
 const publicView: CubeView = {
@@ -225,7 +224,6 @@ test("交付边界把执行成员一次性投影为语义列与语义口径引�
       plan,
       {
         type: "table",
-        y: [],
         tableColumns: [
           { kind: "field", column: "test_people_metrics.category_level" },
           { kind: "metrics" },
@@ -237,7 +235,6 @@ test("交付边界把执行成员一次性投影为语义列与语义口径引�
   expect(result.payload.view.columns).toEqual([DIMENSION, PIVOT_DIMENSION, METRIC]);
   expect(result.decl).toEqual({
     type: "table",
-    y: [],
     tableColumns: [{ kind: "field", column: PIVOT_DIMENSION }, { kind: "metrics" }],
   });
   const noteMembers = result.payload.view.query_notes.map((note) => note.member);

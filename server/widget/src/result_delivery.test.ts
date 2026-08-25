@@ -43,7 +43,7 @@ describe("result delivery", () => {
           },
           [PRESENTATION_META_KEY]: compilePresentationBlock(
             { ...payload.view, rows: fullRows },
-            { type: "table", y: [] },
+            { type: "table" },
           ),
         },
       }),

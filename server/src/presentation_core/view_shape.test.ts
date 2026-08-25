@@ -27,7 +27,7 @@ const sensibleForms = (view: ViewBlock) =>
 const titleOf = (column: string) => column;
 const percent = (...columns: string[]): Record<string, ColumnFormat> =>
   Object.fromEntries(columns.map((column) => [column, "percent"]));
-const DEFAULT_TABLE = { type: "table" as const, y: [] };
+const DEFAULT_TABLE = { type: "table" as const };
 const headerPathsOf = (table: { columns: { headerPath: Array<{ label: string }> }[] }) =>
   table.columns.map((column) => column.headerPath.map((part) => part.label));
 
@@ -81,7 +81,6 @@ describe("compileTableWithStatus", () => {
     );
     const compiled = compileTableWithStatus(view, titleOf, {
       type: "table",
-      y: [],
       tableColumns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
     });
     expect(compiled.layout).toEqual({ state: "applied", leafColumns: 3 });
@@ -114,7 +113,6 @@ describe("compileTableWithStatus", () => {
     );
     const table = compileTableWithStatus(view, titleOf, {
       type: "table",
-      y: [],
       tableColumns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
     }).table;
     expect(headerPathsOf(table)).toEqual([
@@ -140,7 +138,6 @@ describe("compileTableWithStatus", () => {
       titleOf,
       {
         type: "table",
-        y: [],
         tableColumns: [{ kind: "time", level: "year" }, { kind: "metrics" }],
       },
     ).table;
@@ -178,7 +175,6 @@ describe("compileTableWithStatus", () => {
     );
     const compiled = compileTableWithStatus(view, titleOf, {
       type: "table",
-      y: [],
       tableColumns: [{ kind: "field", column: "organization_name" }, { kind: "metrics" }],
     });
     expect(compiled.layout).toEqual({ state: "applied", leafColumns: 4 });
@@ -227,7 +223,6 @@ describe("compileTableWithStatus", () => {
     );
     const compiled = compileTableWithStatus(flat, titleOf, {
       type: "table",
-      y: [],
       tableColumns: [{ kind: "metrics" }, { kind: "time", level: "bucket" }],
     });
     expect(compiled.layout).toMatchObject({ state: "unavailable", reason: "missing_axis" });
@@ -284,7 +279,6 @@ describe("compileTableWithStatus", () => {
     );
     const compiled = compileTableWithStatus(view, titleOf, {
       type: "table",
-      y: [],
       tableColumns: [{ kind: "field", column: "organization_name" }, { kind: "metrics" }],
     });
     expect(compiled.layout).toEqual({ state: "applied", leafColumns: 3 });
@@ -305,7 +299,6 @@ describe("compileTableWithStatus", () => {
     expect(
       renderShapeOfView(view, {
         type: "table",
-        y: [],
         tableColumns: [{ kind: "field", column: "organization_name" }, { kind: "metrics" }],
       }),
     ).toBe("crosstab");
@@ -335,7 +328,6 @@ describe("compileTableWithStatus", () => {
       titleOf,
       {
         type: "table",
-        y: [],
         tableColumns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
       },
     );
@@ -369,7 +361,6 @@ describe("compileTableWithStatus", () => {
     );
     const compiled = compileTableWithStatus(view, titleOf, {
       type: "table",
-      y: [],
       tableColumns: [{ kind: "metrics" }, { kind: "time", level: "bucket" }],
     });
     expect(headerPathsOf(compiled.table)).toEqual([
@@ -401,7 +392,6 @@ describe("compileTableWithStatus", () => {
     );
     const duplicateCompilation = compileTableWithStatus(duplicate, titleOf, {
       type: "table",
-      y: [],
       tableColumns: [{ kind: "field", column: "degree" }, { kind: "metrics" }],
     });
     expect(duplicateCompilation.layout).toMatchObject({
@@ -445,7 +435,6 @@ describe("compileTableWithStatus", () => {
     const layout = [{ kind: "field" as const, column: "degree" }, { kind: "metrics" as const }];
     const wideCompilation = compileTableWithStatus(wide, titleOf, {
       type: "table",
-      y: [],
       tableColumns: layout,
     });
     expect(wideCompilation.layout).toEqual({
@@ -456,7 +445,6 @@ describe("compileTableWithStatus", () => {
     expect(
       compileTableWithStatus(singleton, titleOf, {
         type: "table",
-        y: [],
         tableColumns: layout,
       }).layout,
     ).toEqual({ state: "applied", leafColumns: 1 });
@@ -477,7 +465,6 @@ describe("compileTableWithStatus", () => {
     );
     const compiled = compileTableWithStatus(view, titleOf, {
       type: "table",
-      y: [],
       tableColumns: [{ kind: "field", column: "degree" }, { kind: "metrics" }],
     });
     expect(compiled.layout).toMatchObject({
@@ -516,7 +503,6 @@ describe("compileTableWithStatus", () => {
     );
     const table = compileTableWithStatus(view, titleOf, {
       type: "table",
-      y: [],
       tableColumns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
     }).table;
     expect(table.summaryRows).toEqual([["总体", 30, 34]]);
@@ -559,7 +545,6 @@ describe("compileChart", () => {
       headerPathsOf(
         compileTableWithStatus(view, titleOf, {
           type: "table",
-          y: [],
           tableColumns: [{ kind: "time", level: "bucket" }, { kind: "metrics" }],
         }).table,
       ),
@@ -679,8 +664,8 @@ describe("显式呈现能力与形态标签", () => {
     const view = payload(["active_employee_count"], [[12345]]);
     expect(canCompileKpi(view)).toBe(true);
     expect(sensibleForms(view)).toEqual(["table", "kpi"]);
-    expect(renderShapeOfView(view, { type: "table", y: [] })).toBe("table");
-    expect(renderShapeOfView(view, { type: "kpi", y: [] })).toBe("kpi");
+    expect(renderShapeOfView(view, { type: "table" })).toBe("table");
+    expect(renderShapeOfView(view, { type: "kpi" })).toBe("kpi");
   });
 
   test("推荐候选不拥有执行权：同一结果按声明分别得到表格或柱图", () => {
@@ -692,7 +677,7 @@ describe("显式呈现能力与形态标签", () => {
       ],
     );
     expect(sensibleForms(view)).toEqual(["table", "bar", "pie"]);
-    expect(renderShapeOfView(view, { type: "table", y: [] })).toBe("table");
+    expect(renderShapeOfView(view, { type: "table" })).toBe("table");
     expect(
       renderShapeOfView(view, {
         type: "bar",
@@ -792,7 +777,6 @@ describe("显式呈现能力与形态标签", () => {
     expect(
       renderShapeOfView(payload(["active_employee_count"], []), {
         type: "kpi",
-        y: [],
       }),
     ).toBeNull();
   });
@@ -904,7 +888,6 @@ describe("对照期呈现", () => {
   });
   const yearLayout = {
     type: "table" as const,
-    y: [],
     tableColumns: [{ kind: "metrics" as const }, { kind: "time" as const, level: "year" as const }],
   };
 
@@ -929,7 +912,6 @@ describe("对照期呈现", () => {
   test("bucket 级时间列轴逐桶成列，期间与列值非一一对应：不派生差值", () => {
     const bucketLayout = {
       type: "table" as const,
-      y: [],
       tableColumns: [
         { kind: "metrics" as const },
         { kind: "time" as const, level: "bucket" as const },
@@ -984,7 +966,6 @@ describe("对照期呈现", () => {
 describe("月×年交叉表的时间键归一", () => {
   const crosstab = {
     type: "table" as const,
-    y: [],
     tableColumns: [{ kind: "metrics" as const }, { kind: "time" as const, level: "year" as const }],
   };
   const trailing = (rows: Cell[][]): ViewBlock => ({
@@ -1188,7 +1169,6 @@ describe("列声明的小数位随列走", () => {
     );
     const table = compileTableWithStatus(view, titleOf, {
       type: "table",
-      y: [],
       tableColumns: [{ kind: "field", column: "year" }, { kind: "metrics" }],
     }).table;
     const surveyColumns = table.columns.filter((column) => column.formatKey === "survey_score");

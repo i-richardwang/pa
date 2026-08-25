@@ -61,7 +61,7 @@ const pivotResult = (rows: ViewBlock["rows"]): QueryRunResult => {
       view,
     },
     fullRowViewBlock: view,
-    decl: { type: "table", y: [], tableColumns },
+    decl: { type: "table", tableColumns },
   };
 };
 
@@ -124,7 +124,6 @@ describe("presentation service runtime fallback", () => {
       service.runtimeFallbacks(executed, {
         type: "table",
         tableColumns,
-        y: [],
       }),
     ).toEqual([]);
   });
@@ -134,7 +133,6 @@ describe("presentation service runtime fallback", () => {
     const presentation: PresentationSpec = {
       type: "table",
       tableColumns,
-      y: [],
     };
     const degraded = pivotResult([
       ["研发", "本科", 10],

@@ -662,7 +662,7 @@ describe("无图形态与回答级块", () => {
           ["2026-02", 102],
         ],
       ),
-      { type: "table", y: [] },
+      { type: "table" },
     );
     expect(block.structure_title).toBe("在职人数");
     expect(isPresentationBlock({ ...block, structure_title: 3 })).toBe(false);
@@ -670,9 +670,7 @@ describe("无图形态与回答级块", () => {
   });
 
   test("指标卡 / 空结果 → null", () => {
-    expect(
-      buildViewChart(view(["active_employee_count"], [[12345]]), { type: "kpi", y: [] }),
-    ).toBeNull();
+    expect(buildViewChart(view(["active_employee_count"], [[12345]]), { type: "kpi" })).toBeNull();
     expect(
       buildViewChart(view(["organization_name", "active_employee_count"], []), {
         type: "bar",
@@ -699,7 +697,6 @@ describe("无图形态与回答级块", () => {
   test("完整呈现块始终带表格，图表只在声明成立时出现", () => {
     const kpi = compilePresentationBlock(view(["active_employee_count"], [[1]]), {
       type: "kpi",
-      y: [],
     });
     expect(kpi).toMatchObject({ type: "kpi", table: { rows: [[1]] } });
     const block = compilePresentationBlock(
@@ -729,7 +726,6 @@ describe("无图形态与回答级块", () => {
       ),
       {
         type: "table",
-        y: [],
         tableColumns: [{ kind: "field", column: "degree" }, { kind: "metrics" }],
       },
     );
@@ -755,7 +751,6 @@ describe("无图形态与回答级块", () => {
       ),
       {
         type: "table",
-        y: [],
         tableColumns: [{ kind: "field", column: "degree" }, { kind: "metrics" }],
       },
     );
@@ -768,7 +763,6 @@ describe("无图形态与回答级块", () => {
   test("完整呈现块的声明类型必须与编译图表一致", () => {
     const table = compilePresentationBlock(view(["active_employee_count"], [[10]]), {
       type: "table",
-      y: [],
     }).table;
     expect(
       isPresentationBlock({
@@ -801,7 +795,6 @@ describe("无图形态与回答级块", () => {
   test("table_layout 只接受完整的 applied/unavailable 状态", () => {
     const table = compilePresentationBlock(view(["active_employee_count"], [[10]]), {
       type: "table",
-      y: [],
     }).table;
     expect(
       isPresentationBlock({
@@ -1021,7 +1014,7 @@ describe("服务端物理呈现声明", () => {
   });
 
   test("声明 table：显式只出表格（压掉自动出图）", () => {
-    expect(buildViewChart(trendView, { type: "table", y: [] })).toBeNull();
+    expect(buildViewChart(trendView, { type: "table" })).toBeNull();
   });
 
   test("声明 pie：环形图不出外标和引线、不设悬停态，身份进 model.legend，环比 48/80", () => {
@@ -1126,7 +1119,7 @@ describe("服务端物理呈现声明", () => {
   });
 
   test("compilePresentationBlock 使用唯一结果的呈现声明", () => {
-    expect(compilePresentationBlock(trendView, { type: "table", y: [] })).toMatchObject({
+    expect(compilePresentationBlock(trendView, { type: "table" })).toMatchObject({
       type: "table",
     });
     expect(
@@ -1202,7 +1195,6 @@ describe("对照叠加折线的交付形态", () => {
   test("同一结果的月度交叉表在对照列旁给出差值列", () => {
     const block = compilePresentationBlock(comparisonView, {
       type: "table",
-      y: [],
       tableColumns: [{ kind: "metrics" }, { kind: "time", level: "year" }],
     });
     expect(block.table.rows).toHaveLength(8);
@@ -1243,7 +1235,7 @@ describe("整窗读数进呈现块", () => {
   });
 
   test("整窗读数只随指标卡下发：图与表之上不摆第二个口径的读数", () => {
-    const kpi = compilePresentationBlock(seriesView(), { type: "kpi", y: [] });
+    const kpi = compilePresentationBlock(seriesView(), { type: "kpi" });
     expect(kpi.type).toBe("kpi");
     expect(kpi.totals?.metrics[0]).toMatchObject({
       value: 22,
@@ -1252,7 +1244,7 @@ describe("整窗读数进呈现块", () => {
     const line = compilePresentationBlock(seriesView(), { type: "line", y: ["turnover_count"] });
     expect(line.type).toBe("line");
     expect(line.totals).toBeUndefined();
-    const table = compilePresentationBlock(seriesView(), { type: "table", y: [] });
+    const table = compilePresentationBlock(seriesView(), { type: "table" });
     expect(table.totals).toBeUndefined();
     expect(isPresentationBlock(line)).toBe(true);
     expect(isPresentationBlock(kpi)).toBe(true);
@@ -1261,7 +1253,7 @@ describe("整窗读数进呈现块", () => {
   });
 
   test("宿主边界拒收残缺整窗读数，也拒收没有数可读的指标卡", () => {
-    const block = compilePresentationBlock(seriesView(), { type: "kpi", y: [] });
+    const block = compilePresentationBlock(seriesView(), { type: "kpi" });
     expect(isPresentationBlock({ ...block, totals: undefined })).toBe(false);
     expect(
       isPresentationBlock({

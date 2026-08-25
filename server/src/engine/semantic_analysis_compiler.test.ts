@@ -436,7 +436,7 @@ describe("semantic analysis compiler", () => {
       },
       view: { type: "kpi" },
     });
-    expect(compiled.presentation).toEqual({ type: "kpi", y: [] });
+    expect(compiled.presentation).toEqual({ type: "kpi" });
   });
 
   test("table 的语义列轴绑定编译为内部行列布局", () => {
@@ -455,7 +455,6 @@ describe("semantic analysis compiler", () => {
     });
     expect(compiled.presentation).toMatchObject({
       type: "table",
-      y: [],
       tableColumns: [{ kind: "field", column: "department_name" }, { kind: "metrics" }],
     });
   });
@@ -754,7 +753,7 @@ describe("semantic analysis compiler", () => {
       dimensions: ["test_people_metrics.organization_name", "test_people_metrics.department_name"],
       order: [{ member: "test_people_metrics.active_employee_count", direction: "desc" }],
     });
-    expect(compiled.presentation).toMatchObject({ type: "table", y: [] });
+    expect(compiled.presentation).toMatchObject({ type: "table" });
   });
 
   test("人员与编制直查与明细共用单值上级过滤后的有效分组", () => {
@@ -882,7 +881,9 @@ describe("semantic analysis compiler", () => {
         series: [ACTIVE_EMPLOYEE_SHARE],
       },
     });
-    expect(compiled.presentation.y).toEqual(["active_employee_share"]);
+    expect(compiled.presentation).toEqual(
+      expect.objectContaining({ y: ["active_employee_share"] }),
+    );
   });
 
   test("趋势图中的分子与结构占比都是显式主系列", () => {
@@ -1027,7 +1028,6 @@ describe("semantic analysis compiler", () => {
     });
     expect(compiled.presentation).toEqual({
       type: "table",
-      y: [],
       tableColumns: [{ kind: "field", column: "二级组织" }, { kind: "metrics" }],
     });
   });

@@ -156,20 +156,18 @@ describe("随表格模型下发", () => {
   test("只有 table 声明才带刻度；刻度只算指标列、总体带不参与", () => {
     const shaded = compileTableWithStatus(view, titleOf, {
       type: "table",
-      y: [],
       shading: { palette: BLUE },
     });
     expect(shaded.table.shading?.scales).toEqual({
       "hr.headcount": { min: 20, mid: 70, max: 120 },
     });
-    const plain = compileTableWithStatus(view, titleOf, { type: "table", y: [] });
+    const plain = compileTableWithStatus(view, titleOf, { type: "table" });
     expect(plain.table.shading).toBeUndefined();
   });
 
   test("交叉表的值列沿用度量键，同一指标横跨多列共用一把刻度", () => {
     const crosstab = compileTableWithStatus(view, titleOf, {
       type: "table",
-      y: [],
       tableColumns: [{ kind: "metrics" }, { kind: "time", level: "year" }],
       shading: { palette: "red_blue" },
     });

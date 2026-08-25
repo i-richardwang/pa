@@ -51,7 +51,6 @@ const analysis = () => ({
 });
 const presentation = () => ({
   type: "table" as const,
-  y: [],
 });
 
 const place = (x: number, y: number, w = 12, h = 5) => ({ x, y, w, h });

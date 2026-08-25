@@ -76,10 +76,7 @@ function testTimeIntent(time: TimeInput, grouped: boolean): TimeIntent {
 /** 为不关心 catalog 路由的存储与 HTTP 测试构造同成员名语义规格。 */
 export function semanticAnalysisOf(
   analysis: AnalysisSpec,
-  presentation: PresentationSpec = {
-    type: "table",
-    y: [],
-  },
+  presentation: PresentationSpec = { type: "table" },
 ): { analysis: AnalysisDefinition; view: SemanticViewIntent } {
   const queryViews = analysis.views.filter(
     (view): view is QueryViewSpec => !isDerivedViewSpec(view),
@@ -183,10 +180,21 @@ export function semanticAnalysisOf(
     if (presentation.type === "table" || presentation.type === "kpi") {
       return { type: presentation.type };
     }
+    const series = presentation.y.map(reference);
+    if (presentation.type === "line") {
+      return {
+        type: "line",
+        series,
+        ...(presentation.groupBy ? { group_by: reference(presentation.groupBy) } : {}),
+      };
+    }
+    if (presentation.type === "pie") {
+      return { type: "pie", series, category: reference(presentation.x) };
+    }
     return {
-      type: presentation.type,
-      ...(presentation.x ? { category: reference(presentation.x) } : {}),
-      series: presentation.y.map(reference),
+      type: "bar",
+      series,
+      category: reference(presentation.x),
       ...(presentation.annotations ? { annotations: presentation.annotations.map(reference) } : {}),
       ...(presentation.groupBy ? { group_by: reference(presentation.groupBy) } : {}),
       ...(presentation.stack !== undefined ? { stack: presentation.stack } : {}),
