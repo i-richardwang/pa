@@ -1,4 +1,4 @@
-import { CHART_INPUT, validateChartDecl } from "./chart_spec.js";
+import { bindChartDecl, type UnboundChart } from "./chart_spec.js";
 import {
   analysisSink,
   derivedColumnName,
@@ -7,7 +7,6 @@ import {
   type AnalysisViewSpec,
 } from "../semantic_core/analysis_spec.js";
 import { memberShortName } from "../semantic_core/member_name.js";
-import { ViewIntentError } from "../semantic_core/semantic_analysis.js";
 import type { ChartDecl } from "./chart_decl.js";
 
 /** 编译后的物理呈现规格：字段绑定已归一，执行器只消费这一份声明。 */
@@ -42,23 +41,9 @@ export function chartContextForView(
   return { measures, dimensions };
 }
 
-export function parsePresentationSpec(value: unknown, analysis: AnalysisSpec): PresentationSpec {
-  const parsed = CHART_INPUT.safeParse(value);
-  if (!parsed.success) {
-    throw new ViewIntentError(
-      `呈现规格无效：${parsed.error.issues.map((issue) => issue.message).join("；")}`,
-    );
-  }
+export function bindPresentation(chart: UnboundChart, analysis: AnalysisSpec): PresentationSpec {
   const outputId = analysisSink(analysis.views);
   const view = analysis.views.find((candidate) => candidate.id === outputId);
   if (!view) throw new Error(`结果视图 ${outputId} 不存在`);
-  try {
-    return validateChartDecl(parsed.data, chartContextForView(view, analysis));
-  } catch (error) {
-    if (error instanceof ViewIntentError) throw error;
-    throw new ViewIntentError(
-      `结果呈现声明无效：${error instanceof Error ? error.message : String(error)}`,
-      { cause: error },
-    );
-  }
+  return bindChartDecl(chart, chartContextForView(view, analysis));
 }

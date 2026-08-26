@@ -1,92 +1,44 @@
 /**
- * ViewIntent 与 ViewPreferences 合成的物理呈现输入；不进入 MCP 或持久化合同，
- * 也不参与分析指纹内容哈希。实际数据不满足声明时只退回忠实表格，不静默改写数据。
- * 时间轴由时间执行器合成；个体名单恒为表格。
+ * 图表声明与交付结果的绑定层：编译器按图型定形的声明在这里对着结果视图核对成员、
+ * 归一为载荷列短名，并补齐只有看到结果才知道的缺省（指标列轴补位、唯一维度的分类轴）。
+ * 不进入 MCP 或持久化合同，也不参与分析指纹内容哈希。
  */
-import { z } from "zod";
 import { memberShortName } from "../semantic_core/member_name.js";
-import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
-import { chartChannels } from "./chart_channels.js";
-import type { ChartDecl, TableAxis } from "./chart_decl.js";
+import { ViewIntentError } from "../semantic_core/semantic_analysis.js";
+import type { ChartDecl, SeriesDisplay, TableAxis } from "./chart_decl.js";
+import type { TableShadingPreferences } from "./view_preferences.js";
 
 export type { TableAxis } from "./chart_decl.js";
-import { TABLE_SHADING_PREFERENCES_INPUT } from "./view_preferences.js";
 
-export const CHART_INPUT = z
-  .object({
-    type: PRESENTATION_TYPE_SCHEMA.describe(
-      "必填呈现形态：table=表格；kpi=单行指标卡；line=时间趋势折线（时间恒为横轴）；" +
-        "bar=分类柱形或条形，数量与比例混合时自动使用柱线双轴；" +
-        "pie=构成饼图（仅可加计数度量）。服务端只编译声明的形态，不自动改选其他图表",
-    ),
-    columns: z
-      .array(z.string().min(1))
-      .min(1)
-      .optional()
-      .describe(
-        "table 专用有序列轴：time=逻辑时间桶，metrics=指标轴，其他值须为本视图 dimensions；" +
-          "未进入列轴的维度与时间留在行轴；指标与时间同在列轴时默认 metrics 在外、time 在内，" +
-          "显式顺序仍按声明生效，省略 columns 时按结果给确定性默认布局",
-      ),
-    x: z
-      .string()
-      .optional()
-      .describe(
-        "横轴绑定：bar/pie 填本视图 dimensions 中的分类（切片）维度成员，只查了一个维度时" +
-          "可省略；line 的横轴恒为时间且自动绑定，x 可省略（写时间成员亦可，视为确认）",
-      ),
-    y: z
-      .array(z.string())
-      .min(1)
-      .optional()
-      .describe("参与画图的度量成员子集（保序）；省略时使用本视图全部 measures"),
-    annotations: z
-      .array(z.string())
-      .optional()
-      .describe("bar 的辅助标注度量；不占 Y 轴系列，只随对应主系列进入标签或读数卡"),
-    group_by: z
-      .string()
-      .optional()
-      .describe(
-        "拆系列的分类维度成员（须与 x 不同）：line=每分类值一条折线，bar=每分类值一段/一组；" +
-          "与多度量互斥（拆系列时 y 须收窄到一个度量）",
-      ),
-    stack: z
-      .boolean()
-      .optional()
-      .describe("bar 专用且需同时声明 group_by：true=段堆叠（仅计数度量），缺省并列分组"),
-    display: z
-      .object({
-        series: z
-          .record(
-            z.string(),
-            z
-              .object({
-                color: z
-                  .string()
-                  .regex(/^#[0-9a-fA-F]{6}$/)
-                  .optional()
-                  .describe("十六进制系列颜色，例如 #5b8fd9"),
-                type: z.enum(["line", "bar"]).optional().describe("系列呈现为折线或柱形"),
-                yAxis: z.enum(["left", "right"]).optional().describe("系列归属左轴或右轴"),
-              })
-              .strict(),
-          )
-          .optional()
-          .describe("按度量字段 id 设置每系列视觉样式"),
-      })
-      .strict()
-      .optional()
-      .describe("line/bar 图的可选系列视觉覆盖"),
-    value_labels: z
-      .enum(["main", "all"])
-      .optional()
-      .describe("line/bar 图级数值标签：main=仅第一主系列，all=全部系列（含拆分系列）；缺省不印"),
-    shading: TABLE_SHADING_PREFERENCES_INPUT.optional().describe("table 专用热力着色"),
-  })
-  .strict();
+type ValueLabels = "main" | "all";
+type Display = Record<string, SeriesDisplay>;
 
-export type ChartDeclInput = z.infer<typeof CHART_INPUT>;
+/**
+ * 编译器产出的图表声明：通道按图型定形，哪个通道属于哪个图型出自这份形状本身，
+ * 绑定层不再复述适用性。成员名还是编译期的绑定结果，尚未对着交付视图核对。
+ */
+export type UnboundChart =
+  | { type: "table"; columns?: string[]; shading?: TableShadingPreferences }
+  | { type: "kpi" }
+  | {
+      type: "line";
+      y?: string[];
+      annotations?: string[];
+      group_by?: string;
+      display?: Display;
+      value_labels?: ValueLabels;
+    }
+  | {
+      type: "bar";
+      x?: string;
+      y?: string[];
+      annotations?: string[];
+      group_by?: string;
+      stack?: boolean;
+      display?: Display;
+      value_labels?: ValueLabels;
+    }
+  | { type: "pie"; x?: string; y?: string[] };
 
 /** 校验呈现声明所需的分析视图切面。 */
 export type ChartSpecContext = {
@@ -97,6 +49,13 @@ export type ChartSpecContext = {
 function resolveMember(name: string, pool: string[]): string | undefined {
   const key = memberShortName(name);
   return pool.find((member) => memberShortName(member) === key);
+}
+
+/** 通道引用的成员必须是这次查询交付的成员；归一为载荷列短名。 */
+function boundMember(channel: string, name: string, pool: string[]): string {
+  const resolved = resolveMember(name, pool);
+  if (!resolved) throw new ViewIntentError(`${channel}的「${name}」不在这次查询的结果里`);
+  return memberShortName(resolved);
 }
 
 const tableFieldAxis = (member: string): TableAxis => ({
@@ -114,23 +73,22 @@ export function normalizeTableColumns(
   const measures = spec.measures ?? [];
   const columnAxes: TableAxis[] = columns.map((axis) => {
     if (axis === "metrics") {
-      if (!measures.length) throw new Error("presentation.columns 使用 metrics 时查询必须包含指标");
+      if (!measures.length) throw new ViewIntentError("列轴放指标时这次查询必须查了指标");
       return { kind: "metrics" };
     }
     if (axis === "time") return { kind: "time", level: "bucket" };
     const resolved = resolveMember(axis, dimensions);
     if (!resolved) {
-      throw new Error(
-        `presentation.columns 的「${axis}」不是 time、metrics 或本视图 dimensions 中的成员`,
-      );
+      throw new ViewIntentError(`列轴的「${axis}」不是时间、指标，也不是这次查询的维度`);
     }
     return tableFieldAxis(resolved);
   });
+  // 语义层已去过重；两个语义维度绑到同一列时只有这里看得见。
   const axisKeys = columnAxes.map((axis) =>
     axis.kind === "field" ? `field:${memberShortName(axis.column)}` : axis.kind,
   );
   if (new Set(axisKeys).size !== axisKeys.length) {
-    throw new Error("presentation.columns 不能包含重复列轴");
+    throw new ViewIntentError("列轴不能重复");
   }
   if (measures.length && !columnAxes.some((axis) => axis.kind === "metrics")) {
     const timeIndex = columnAxes.findIndex((axis) => axis.kind === "time");
@@ -143,201 +101,98 @@ export function normalizeTableColumns(
 const TIME_AXIS_PARTS = ["year", "month", "period_month"];
 const isTimeAxisRef = (name: string) => TIME_AXIS_PARTS.includes(memberShortName(name));
 
-export function validateChartDecl(input: ChartDeclInput, spec: ChartSpecContext): ChartDecl {
+export function bindChartDecl(chart: UnboundChart, spec: ChartSpecContext): ChartDecl {
   const measures = spec.measures ?? [];
   const dimensions = spec.dimensions ?? [];
 
-  if (input.columns !== undefined && input.type !== "table") {
-    throw new Error("presentation.columns 仅支持 type=table；其他图型请删除 columns");
-  }
-  if (input.shading !== undefined && input.type !== "table") {
-    throw new Error("presentation.shading 仅支持 type=table；其他图型请删除 shading");
-  }
-
-  if (
-    input.display !== undefined &&
-    (input.type === "table" || input.type === "kpi" || input.type === "pie")
-  ) {
-    throw new Error(
-      "presentation.display 仅支持 type=line 或 bar；table/kpi/pie 请删除 display 字段",
-    );
-  }
-  if (
-    input.value_labels !== undefined &&
-    (input.type === "table" || input.type === "kpi" || input.type === "pie")
-  ) {
-    throw new Error(
-      "presentation.value_labels 仅支持 type=line 或 bar；table/kpi/pie 请删除 value_labels 字段",
-    );
-  }
-
-  if (input.type === "table" || input.type === "kpi") {
-    if (
-      input.x !== undefined ||
-      input.y !== undefined ||
-      input.annotations !== undefined ||
-      input.group_by !== undefined ||
-      input.stack !== undefined
-    ) {
-      throw new Error(
-        `presentation.type=${input.type} 不接受 x/y/annotations/group_by/stack；请删除多余字段`,
-      );
+  if (chart.type === "kpi") {
+    if (!measures.length) throw new ViewIntentError("指标卡需要至少一个指标");
+    if (dimensions.length) {
+      throw new ViewIntentError("指标卡不接受分组维度；分组结果请改用表格或图表");
     }
-    if (input.type === "kpi") {
-      if (!measures.length) {
-        throw new Error("presentation.type=kpi 需要至少一个度量");
-      }
-      if (dimensions.length) {
-        throw new Error("presentation.type=kpi 不接受分组维度；分组结果请使用 table 或图表");
-      }
-    }
-    const tableColumns =
-      input.type === "table" ? normalizeTableColumns(input.columns, spec) : undefined;
-    return input.type === "table"
-      ? {
-          type: "table",
-          ...(tableColumns ? { tableColumns } : {}),
-          ...(input.shading ? { shading: input.shading } : {}),
-        }
-      : { type: "kpi" };
+    return { type: "kpi" };
   }
-
-  const y = (input.y ?? measures).map((name) => {
-    const resolved = resolveMember(name, measures);
-    if (!resolved) {
-      throw new Error(
-        `presentation.y 的「${name}」不在本视图 measures 中；y 只能引用本视图已查询的度量成员`,
-      );
-    }
-    return memberShortName(resolved);
-  });
-  if (!y.length) {
-    throw new Error(
-      `presentation.type=${input.type} 需要至少一个度量；请在 measures 中加入度量成员`,
-    );
-  }
-  const annotations = input.annotations?.map((name) => {
-    const resolved = resolveMember(name, measures);
-    if (!resolved) {
-      throw new Error(
-        `presentation.annotations 的「${name}」不在本视图 measures 中；只能引用已查询的度量成员`,
-      );
-    }
-    return memberShortName(resolved);
-  });
-  if (annotations?.some((name) => y.includes(name))) {
-    throw new Error("同一度量不能同时进入 presentation.y 与 presentation.annotations");
-  }
-  if (annotations?.length && input.type !== "bar") {
-    throw new Error("presentation.annotations 仅支持 type=bar");
-  }
-
-  const resolveDim = (field: "x" | "group_by", name: string): string => {
-    if (isTimeAxisRef(name)) {
-      throw new Error(
-        field === "group_by"
-          ? "presentation.group_by 不能引用时间成员；拆系列用分类维度，时间轴已恒为 line 的横轴"
-          : `presentation.x 引用了时间成员；时间轴只在 line 中呈现且自动绑定，` +
-              `时间趋势请改用 type:"line"，分类对比用 x 指定分类维度`,
-      );
-    }
-    const resolved = resolveMember(name, dimensions);
-    if (!resolved) {
-      throw new Error(
-        `presentation.${field} 的「${name}」不在本视图 dimensions 中；只能引用本视图已查询的分组维度成员`,
-      );
-    }
-    return memberShortName(resolved);
-  };
-
-  const groupBy = input.group_by !== undefined ? resolveDim("group_by", input.group_by) : undefined;
-  if (groupBy !== undefined && y.length > 1) {
-    throw new Error(
-      "presentation.group_by（分类拆系列）只支持单一度量；请用 y 收窄到一个度量，或去掉 group_by",
-    );
-  }
-  if (input.stack !== undefined && (input.type !== "bar" || groupBy === undefined)) {
-    throw new Error("presentation.stack 仅用于 bar 且需同时声明 group_by（堆叠段来源维度）");
-  }
-  if (input.display !== undefined && groupBy !== undefined) {
-    throw new Error("presentation.display 与 group_by 互斥；请移除其中一个字段");
-  }
-  if (input.value_labels === "main" && groupBy !== undefined) {
-    throw new Error(
-      "presentation.value_labels=main 与 group_by 互斥；拆分系列没有主系列，请改用 all 或删除",
-    );
-  }
-  const display =
-    input.display === undefined
-      ? undefined
-      : Object.fromEntries(
-          Object.entries(input.display.series ?? {}).map(([name, value]) => {
-            const resolved = resolveMember(name, measures);
-            if (!resolved) {
-              throw new Error(
-                `presentation.display.series 的「${name}」不在本视图 measures 中；` +
-                  "series 键只能引用本视图已查询的度量成员",
-              );
-            }
-            return [memberShortName(resolved), value];
-          }),
-        );
-
-  const channels = chartChannels(input.type);
-  if (channels.axis !== "dimension") {
-    // 横轴恒为输出时间轴：x 引用时间成员是无害确认，归一丢弃；引用分类维度才是真歧义
-    if (input.x !== undefined && !isTimeAxisRef(input.x)) {
-      throw new Error(
-        "presentation.type=line 的横轴恒为时间（自动绑定，x 可省略）；按分类拆线请改用 group_by",
-      );
-    }
-
+  if (chart.type === "table") {
+    const tableColumns = normalizeTableColumns(chart.columns, spec);
     return {
-      type: "line",
-      y,
-      ...(groupBy !== undefined ? { groupBy } : {}),
-      ...(display !== undefined ? { display } : {}),
-      ...(input.value_labels !== undefined ? { valueLabels: input.value_labels } : {}),
-      ...(annotations !== undefined ? { annotations } : {}),
+      type: "table",
+      ...(tableColumns ? { tableColumns } : {}),
+      ...(chart.shading ? { shading: chart.shading } : {}),
     };
   }
 
-  const axisCandidates = dimensions
-    .map((name) => memberShortName(name))
-    .filter((key) => key !== groupBy);
-  const x =
-    input.x !== undefined
-      ? resolveDim("x", input.x)
-      : axisCandidates.length === 1
-        ? axisCandidates[0]
-        : undefined;
-  if (x === undefined) {
-    throw new Error(
-      `presentation.type=${input.type} 无法确定分类轴：请用 x 指定 dimensions 中的一个维度成员`,
-    );
+  const y = (chart.y ?? measures).map((name) => boundMember("值通道", name, measures));
+  if (!y.length) throw new ViewIntentError(`${chart.type} 呈现至少需要一个指标`);
+
+  const dimension = (channel: string, name: string): string => {
+    if (isTimeAxisRef(name)) {
+      throw new ViewIntentError(
+        channel === "拆分维度"
+          ? "拆分维度不能用时间；时间已经是折线的横轴"
+          : "分类轴不能用时间；看时间趋势请改用折线",
+      );
+    }
+    return boundMember(channel, name, dimensions);
+  };
+
+  if (chart.type === "pie") {
+    if (y.length !== 1) throw new ViewIntentError("饼图只能画一个指标");
+    return { type: "pie", x: categoryAxis(chart.x, dimensions, dimension, undefined, "饼图"), y };
   }
+
+  const groupBy = chart.group_by !== undefined ? dimension("拆分维度", chart.group_by) : undefined;
+  if (groupBy !== undefined && y.length > 1) {
+    throw new ViewIntentError("按维度拆系列时只能画一个指标；请把值通道收窄到一个，或去掉拆分");
+  }
+  const annotations = chart.annotations?.map((name) => boundMember("辅助标注", name, measures));
+  if (annotations?.some((name) => y.includes(name))) {
+    throw new ViewIntentError("同一指标不能同时是主系列和辅助标注");
+  }
+  const display =
+    chart.display === undefined
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(chart.display).map(([name, value]) => [
+            boundMember("系列视觉设置", name, measures),
+            value,
+          ]),
+        );
+
+  const style = {
+    ...(groupBy !== undefined ? { groupBy } : {}),
+    ...(annotations !== undefined ? { annotations } : {}),
+    ...(display !== undefined ? { display } : {}),
+    ...(chart.value_labels !== undefined ? { valueLabels: chart.value_labels } : {}),
+  };
+  if (chart.type === "line") return { type: "line", y, ...style };
+
+  const x = categoryAxis(chart.x, dimensions, dimension, groupBy, "柱状图");
   if (x === groupBy) {
-    throw new Error(
-      "presentation.x 与 presentation.group_by 不能是同一维度；请分别指定分类轴与拆系列维度",
-    );
+    throw new ViewIntentError("分类轴与拆分维度不能是同一个维度");
   }
-
-  if (!channels.split && groupBy !== undefined) {
-    throw new Error(`presentation.type=${input.type} 不接受 group_by；切片维度用 x 指定`);
-  }
-  if (channels.singleValue && y.length !== 1) {
-    throw new Error(`presentation.type=${input.type} 需要唯一度量；请用 y 指定一个可加计数度量`);
-  }
-  if (input.type === "pie") return { type: "pie", x, y };
-
   return {
     type: "bar",
     x,
     y,
-    ...(groupBy !== undefined ? { groupBy } : {}),
-    ...(input.stack !== undefined ? { stack: input.stack } : {}),
-    ...(display !== undefined ? { display } : {}),
-    ...(input.value_labels !== undefined ? { valueLabels: input.value_labels } : {}),
-    ...(annotations !== undefined ? { annotations } : {}),
+    ...style,
+    ...(chart.stack !== undefined ? { stack: chart.stack } : {}),
   };
+}
+
+/** 分类轴是 bar/pie 的必备通道；只剩一个候选维度时不必声明。 */
+function categoryAxis(
+  declared: string | undefined,
+  dimensions: string[],
+  dimension: (channel: string, name: string) => string,
+  groupBy: string | undefined,
+  form: string,
+): string {
+  if (declared !== undefined) return dimension("分类轴", declared);
+  const candidates = dimensions
+    .map((name) => memberShortName(name))
+    .filter((key) => key !== groupBy);
+  if (candidates.length !== 1) {
+    throw new ViewIntentError(`${form}需要指定一个分类维度`);
+  }
+  return candidates[0];
 }

@@ -1337,7 +1337,7 @@ function compileTableLayout(
 }
 
 /**
- * 绑定名已在 chart_spec 校验层归一补齐，这里只剩数据完整性守卫：
+ * 绑定名已在 chart_spec 绑定层归一补齐，这里只剩数据完整性守卫：
  * 前提不满足时返回 null 退表格。
  */
 function declaredChart(

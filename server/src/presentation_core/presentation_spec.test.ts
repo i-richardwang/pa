@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseAnalysisSpec } from "../semantic_core/analysis_spec.js";
-import { chartContextForView, parsePresentationSpec } from "./presentation_spec.js";
+import { bindPresentation, chartContextForView } from "./presentation_spec.js";
 
 const analysis = parseAnalysisSpec({
   views: [
@@ -34,7 +34,7 @@ const analysis = parseAnalysisSpec({
 describe("PresentationSpec", () => {
   test("呈现声明直接绑定唯一结果", () => {
     expect(
-      parsePresentationSpec({ type: "bar", x: "organization_name", y: ["本期人数"] }, analysis),
+      bindPresentation({ type: "bar", x: "organization_name", y: ["本期人数"] }, analysis),
     ).toEqual({
       type: "bar",
       x: "organization_name",
@@ -49,8 +49,8 @@ describe("PresentationSpec", () => {
   });
 
   test("保存前完整校验交付结果的图表字段绑定", () => {
-    expect(() => parsePresentationSpec({ type: "bar", x: "missing_dimension" }, analysis)).toThrow(
-      /presentation\.x.*不在本视图 dimensions/,
+    expect(() => bindPresentation({ type: "bar", x: "missing_dimension" }, analysis)).toThrow(
+      /分类轴的「missing_dimension」不在这次查询的结果里/,
     );
   });
 });

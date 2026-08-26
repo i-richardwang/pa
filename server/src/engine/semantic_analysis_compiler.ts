@@ -11,17 +11,14 @@ import {
   type QueryViewSpec,
 } from "../semantic_core/analysis_spec.js";
 import type { CompilerCatalog, CompilerCatalogMember } from "../semantic_core/compiler_catalog.js";
-import type { ChartDeclInput } from "../presentation_core/chart_spec.js";
+import type { UnboundChart } from "../presentation_core/chart_spec.js";
 import {
   planExecution,
   type ExecutionPlan,
   type OutputDelivery,
   type OutputProvenance,
 } from "../semantic_core/execution_plan.js";
-import {
-  parsePresentationSpec,
-  type PresentationSpec,
-} from "../presentation_core/presentation_spec.js";
+import { bindPresentation, type PresentationSpec } from "../presentation_core/presentation_spec.js";
 import {
   parseAnalysisDefinition,
   parseSemanticViewIntent,
@@ -256,7 +253,7 @@ function compileBoundChart(
   style: ViewPreferences,
   bind: ChartMemberBinder,
   calculated: ReadonlyMap<string, CalculatedMeasure> = new Map(),
-): ChartDeclInput {
+): UnboundChart {
   if (chart.type === "kpi") return { type: "kpi" };
   if (chart.type === "table") {
     return {
@@ -310,37 +307,40 @@ function compileBoundChart(
     throw new ViewIntentError("结构占比与分子同查时必须进入辅助标注通道");
   }
   const display = style.series
-    ? {
-        series: Object.fromEntries(
-          Object.entries(style.series).map(([id, value]) => {
-            if (!series.includes(id)) {
-              throw new ViewIntentError(`系列视觉设置引用的指标「${titleOf(id)}」不在当前主系列中`);
-            }
-            return [
-              bind(id, "measure"),
-              {
-                ...(value.color ? { color: value.color } : {}),
-                ...(value.mark ? { type: value.mark } : {}),
-                ...(value.axis ? { yAxis: value.axis } : {}),
-              },
-            ];
-          }),
-        ),
-      }
+    ? Object.fromEntries(
+        Object.entries(style.series).map(([id, value]) => {
+          if (!series.includes(id)) {
+            throw new ViewIntentError(`系列视觉设置引用的指标「${titleOf(id)}」不在当前主系列中`);
+          }
+          return [
+            bind(id, "measure"),
+            {
+              ...(value.color ? { color: value.color } : {}),
+              ...(value.mark ? { type: value.mark } : {}),
+              ...(value.axis ? { yAxis: value.axis } : {}),
+            },
+          ];
+        }),
+      )
     : undefined;
-  const category = chart.type === "line" ? undefined : chart.category;
-  const groupBy = chart.type === "pie" ? undefined : chart.group_by;
-  return {
-    type: chart.type,
-    ...(category ? { x: bind(category, "dimension") } : {}),
-    y: series.map((id) => bind(id, "measure")),
-    ...(chart.type === "bar" || chart.type === "line"
-      ? { annotations: annotations.map((id) => bind(id, "measure")) }
-      : {}),
-    ...(groupBy ? { group_by: bind(groupBy, "dimension") } : {}),
-    ...(chart.type === "bar" && chart.stack !== undefined ? { stack: chart.stack } : {}),
+  const y = series.map((id) => bind(id, "measure"));
+  if (chart.type === "pie") {
+    return { type: "pie", ...(chart.category ? { x: bind(chart.category, "dimension") } : {}), y };
+  }
+  const seriesChannels = {
+    y,
+    // 空数组不是「没有」：辅助标注通道在场即说明主系列已由这里裁定过，呈现层据此不再推断。
+    annotations: annotations.map((id) => bind(id, "measure")),
+    ...(chart.group_by ? { group_by: bind(chart.group_by, "dimension") } : {}),
     ...(display ? { display } : {}),
     ...(style.value_labels ? { value_labels: style.value_labels } : {}),
+  };
+  if (chart.type === "line") return { type: "line", ...seriesChannels };
+  return {
+    type: "bar",
+    ...(chart.category ? { x: bind(chart.category, "dimension") } : {}),
+    ...seriesChannels,
+    ...(chart.stack !== undefined ? { stack: chart.stack } : {}),
   };
 }
 
@@ -350,7 +350,7 @@ function compileSemanticChart(
   physical: QueryViewSpec,
   chart: SemanticViewIntent,
   style: ViewPreferences,
-): ChartDeclInput {
+): UnboundChart {
   return compileBoundChart(catalog, intent, chart, style, (reference, kind) =>
     bindSemantic(catalog, intent, physical, reference, kind),
   );
@@ -475,7 +475,7 @@ function compileDerivedView(
   };
 }
 
-function compileDerivedChart(chart: SemanticViewIntent, style: ViewPreferences): ChartDeclInput {
+function compileDerivedChart(chart: SemanticViewIntent, style: ViewPreferences): UnboundChart {
   if (chart.type === "kpi") return { type: "kpi" };
   if (chart.type === "table") {
     return {
@@ -490,33 +490,39 @@ function compileDerivedChart(chart: SemanticViewIntent, style: ViewPreferences):
       throw new ViewIntentError(`系列视觉设置引用的派生列「${unknown}」不在当前主系列中`);
     }
   }
-  const category = chart.type === "line" ? undefined : chart.category;
-  const groupBy = chart.type === "pie" ? undefined : chart.group_by;
-  const annotations = chart.type === "bar" ? chart.annotations : undefined;
-  return {
-    type: chart.type,
-    ...(category ? { x: category } : {}),
+  if (chart.type === "pie") {
+    return {
+      type: "pie",
+      ...(chart.category ? { x: chart.category } : {}),
+      ...(chart.series ? { y: chart.series } : {}),
+    };
+  }
+  const seriesChannels = {
     ...(chart.series ? { y: chart.series } : {}),
-    ...(annotations?.length ? { annotations } : {}),
-    ...(groupBy ? { group_by: groupBy } : {}),
-    ...(chart.type === "bar" && chart.stack !== undefined ? { stack: chart.stack } : {}),
+    ...(chart.group_by ? { group_by: chart.group_by } : {}),
     ...(style.series
       ? {
-          display: {
-            series: Object.fromEntries(
-              Object.entries(style.series).map(([id, value]) => [
-                id,
-                {
-                  ...(value.color ? { color: value.color } : {}),
-                  ...(value.mark ? { type: value.mark } : {}),
-                  ...(value.axis ? { yAxis: value.axis } : {}),
-                },
-              ]),
-            ),
-          },
+          display: Object.fromEntries(
+            Object.entries(style.series).map(([id, value]) => [
+              id,
+              {
+                ...(value.color ? { color: value.color } : {}),
+                ...(value.mark ? { type: value.mark } : {}),
+                ...(value.axis ? { yAxis: value.axis } : {}),
+              },
+            ]),
+          ),
         }
       : {}),
     ...(style.value_labels ? { value_labels: style.value_labels } : {}),
+  };
+  if (chart.type === "line") return { type: "line", ...seriesChannels };
+  return {
+    type: "bar",
+    ...(chart.category ? { x: chart.category } : {}),
+    ...seriesChannels,
+    ...(chart.annotations?.length ? { annotations: chart.annotations } : {}),
+    ...(chart.stack !== undefined ? { stack: chart.stack } : {}),
   };
 }
 
@@ -690,7 +696,7 @@ function compilePercentOfTotalAnalysis(
     return memberShortName(bindSemantic(catalog, intent, numeratorQuery, reference, kind));
   };
   validateSemanticTableLayout(intent, viewIntent);
-  const presentation = parsePresentationSpec(
+  const presentation = bindPresentation(
     compileBoundChart(catalog, intent, viewIntent, preferences, bind, calculated),
     analysis,
   );
@@ -792,7 +798,7 @@ export function compileAnalysisView(
   const outputPhysical = analysis.views.find((view) => view.id === outputId);
   if (!outputIntent || !outputPhysical) throw new Error(`结果视图 ${outputId} 不存在`);
   validateSemanticTableLayout(outputIntent, intent);
-  const presentation = parsePresentationSpec(
+  const presentation = bindPresentation(
     isSemanticDerivedView(outputIntent) && isDerivedViewSpec(outputPhysical)
       ? compileDerivedChart(intent, preferences)
       : !isSemanticDerivedView(outputIntent) && !isDerivedViewSpec(outputPhysical)
