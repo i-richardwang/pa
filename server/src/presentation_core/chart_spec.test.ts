@@ -25,6 +25,26 @@ describe("绑定与缺省补齐", () => {
     });
   });
 
+  test("y2 绑定为副轴系列；y 缺省时补齐为副轴之外的全部度量", () => {
+    expect(bindChartDecl({ type: "line", y2: ["test_people_metrics.leave_count"] }, TREND)).toEqual(
+      {
+        type: "line",
+        y: ["new_hire_count"],
+        y2: ["leave_count"],
+      },
+    );
+    expect(() =>
+      bindChartDecl({ type: "line", y: ["leave_count"], y2: ["leave_count"] }, TREND),
+    ).toThrow(/同时在主轴与副轴/);
+    expect(() =>
+      bindChartDecl(
+        { type: "line", y: ["new_hire_count"], y2: ["leave_count"], group_by: "organization_name" },
+        SPLIT,
+      ),
+    ).toThrow(/只能画一个指标/);
+    expect(() => bindChartDecl({ type: "line", y2: ["gone"] }, TREND)).toThrow(/副轴系列/);
+  });
+
   test("绑定接受成员全名或列短名，归一为短名", () => {
     expect(
       bindChartDecl(

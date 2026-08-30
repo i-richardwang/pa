@@ -294,6 +294,14 @@ const PRESENTATION_SERIES = z
   .min(1)
   .optional()
   .describe("有序主指标系列；每项是语义指标 id，派生结果则是输出列名；省略时使用已查询指标");
+const PRESENTATION_SECONDARY_SERIES = z
+  .array(PRESENTATION_FIELD)
+  .min(1)
+  .optional()
+  .describe(
+    "画在右轴的指标（第二把尺子）；省略时按量纲自动分侧：量在左、率在右。" +
+      "每侧只容一种量纲；不能与 series 重复；与 group_by 互斥",
+  );
 const PRESENTATION_CATEGORY = PRESENTATION_FIELD.optional().describe(
   "分类轴维度；直接查询使用 dimensions 中的语义维度 id，只有一个分类维度时可省略",
 );
@@ -325,6 +333,7 @@ export const SEMANTIC_VIEW_INTENT_INPUT = z
       .object({
         type: z.literal("line").describe("按月或按年的连续时间趋势；横轴恒为时间"),
         series: PRESENTATION_SERIES,
+        secondary_series: PRESENTATION_SECONDARY_SERIES,
         group_by: PRESENTATION_GROUP_BY,
       })
       .strict(),
@@ -333,6 +342,7 @@ export const SEMANTIC_VIEW_INTENT_INPUT = z
         type: z.literal("bar").describe("有限类别的比较或排行"),
         category: PRESENTATION_CATEGORY,
         series: PRESENTATION_SERIES,
+        secondary_series: PRESENTATION_SECONDARY_SERIES,
         annotations: z
           .array(PRESENTATION_FIELD)
           .optional()
@@ -360,6 +370,22 @@ export const SEMANTIC_VIEW_INTENT_INPUT = z
           code: z.ZodIssueCode.custom,
           path: ["columns"],
           message: "presentation.columns 不能包含重复列轴",
+        });
+      }
+    }
+    if ((chart.type === "line" || chart.type === "bar") && chart.secondary_series) {
+      if (chart.group_by) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["secondary_series"],
+          message: "presentation.secondary_series 与 group_by 互斥：拆分系列只画一个指标",
+        });
+      }
+      if (chart.series?.some((member) => chart.secondary_series?.includes(member))) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["secondary_series"],
+          message: "presentation.secondary_series 不能与 series 重复",
         });
       }
     }

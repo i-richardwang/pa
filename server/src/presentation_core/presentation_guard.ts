@@ -35,6 +35,7 @@ const CHART_LEGEND_ITEM_SCHEMA = z
     format: COLUMN_FORMAT_SCHEMA,
     decimals: COLUMN_DECIMALS_SCHEMA.optional(),
     values: z.array(z.number().finite().nullable()),
+    axis: z.union([z.literal(0), z.literal(1)]),
     baseline: z.number().int().nonnegative().optional(),
   })
   .strict();

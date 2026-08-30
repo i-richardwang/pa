@@ -19,7 +19,6 @@ export const SERIES_PREFERENCES_INPUT = z
       .transform((color) => color.toLowerCase())
       .optional(),
     mark: z.enum(["line", "bar"]).optional(),
-    axis: z.enum(["left", "right"]).optional(),
   })
   .strict();
 

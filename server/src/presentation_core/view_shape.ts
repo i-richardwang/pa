@@ -7,7 +7,6 @@ import {
   columnDecimals,
   columnFormat,
   isBlankCell,
-  isRateColumn,
   isRateFormat,
   isTimeColumn,
   toNumber,
@@ -26,6 +25,7 @@ import type { RenderShape } from "./render_shape.js";
 import type { ChartDecl, ChartTypeOf, TableAxis } from "./chart_decl.js";
 import {
   assignChannels,
+  splitScales,
   type ChannelForm,
   type ChannelPool,
   type ChannelPreferences,
@@ -37,11 +37,11 @@ export const MAX_LINE_SERIES = 5;
 /** 感知极限：堆叠段超出此数不可辨，退回交叉表呈现 */
 export const MAX_STACK_SERIES = 5;
 
-/** 感知极限：柱线组合图中并排柱的系列数上限——时间点密集时分组柱超两组即糊，超出退长表 */
-export const MAX_COMBO_BAR_SERIES = 2;
+/** 感知极限：纵向分类轴上并排柱的系列数上限——类目密集时分组柱超两组即糊，超出退表格 */
+export const MAX_GROUPED_BAR_SERIES = 2;
 
-/** 阅读预算：固定高度分类柱线组合图的横轴分类上限，超出后标签与折线点过密，退回表格 */
-export const MAX_CATEGORY_COMBO_CATEGORIES = 30;
+/** 阅读预算：固定高度纵向分类轴的类目上限，超出后标签与折线点过密，退回表格 */
+export const MAX_VERTICAL_CATEGORIES = 30;
 
 /** 总览预算：条形图自然高度上限（px）——单指标排行 ~30 分类在限内，多指标并列 ~12 分类在限内 */
 export const MAX_BAR_CHART_HEIGHT = 1000;
@@ -70,9 +70,8 @@ export type SeriesDef = {
   format: ColumnFormat;
   /** 模型为该列声明的小数位；未声明则缺席，呈现层按格式取默认位数。 */
   decimals?: number;
-  isRate: boolean;
-  /** 趋势图专用：混量纲时绝对量系列画柱（量纲定标记），缺省画线；条形图不读此字段 */
-  mark?: "bar";
+  /** 落在哪把尺子上：0 主轴、1 副轴；出自声明或按量纲的缺省分侧。 */
+  axis: 0 | 1;
   /** 条形图专用：本系列对应的结构占比值在 ChartRow 中的键。 */
   shareKey?: string;
   /** 所对照系列的 `key`（同期叠加各对照期都对到主期）；「谁减谁」在编排期定。 */
@@ -90,12 +89,6 @@ export type TrendSpec = {
   rows: ChartRow[];
   sourceRows: ChartSourceRow[];
   series: SeriesDef[];
-  /** 量与率并存 → 双 y 轴，量系列带 mark="bar"（柱线组合） */
-  mixedAxes: boolean;
-  /** 全为率指标 → 主轴按百分数标注 */
-  allRate: boolean;
-  /** 率轴的确切显示单位；百分比与百分点不能共用同一坐标轴。 */
-  rateFormat: ColumnFormat;
 };
 
 export type BarSpec = {
@@ -104,24 +97,12 @@ export type BarSpec = {
   rows: ChartRow[];
   sourceRows: ChartSourceRow[];
   series: SeriesDef[];
-  /** 全系列共用的确切显示单位。 */
+  /** 主轴系列共用的确切显示单位。 */
   format: ColumnFormat;
-  /** 全系列同量纲，百分比或百分点时为 true。 */
-  isRate: boolean;
   /** 双分类构成呈现：系列堆叠在同一条上（仅计数度量） */
   stacked: boolean;
   /** rows 带结构占比值时读数卡随附占比 */
   hasShare: boolean;
-};
-
-export type CategoryComboSpec = {
-  kind: "category_combo";
-  /** { label: 分类值, s0: 值, … } 保持查询返回顺序。 */
-  rows: ChartRow[];
-  sourceRows: ChartSourceRow[];
-  series: SeriesDef[];
-  countFormat: ColumnFormat;
-  rateFormat: ColumnFormat;
 };
 
 /** 饼图（仅声明路径产出）：部分-整体构成，只接受可加计数度量（率不构成整体） */
@@ -192,7 +173,7 @@ export type TableCompilation = {
   layout: TableLayoutStatus;
 };
 
-export type ChartSpec = TrendSpec | BarSpec | CategoryComboSpec | PieSpec;
+export type ChartSpec = TrendSpec | BarSpec | PieSpec;
 
 export type Roles = {
   /** year/month 列（无论取值是否变化） */
@@ -302,6 +283,7 @@ function timeSeriesLine(
   roles: Roles,
   titleOf: (c: string) => string,
   measureIdx: number[] = roles.measureIdx,
+  secondary: ReadonlySet<number> = new Set(),
 ): TrendSpec | null {
   if (measureIdx.length > MAX_LINE_SERIES) return null;
   if (new Set(roles.timeOfRow.map((t) => t.key)).size !== view.rows.length) return null;
@@ -311,7 +293,7 @@ function timeSeriesLine(
     column: view.columns[colIdx],
     format: columnFormat(view.columns[colIdx], view.column_formats),
     ...declaredDecimals(view, colIdx),
-    isRate: isRateColumn(view.columns[colIdx], view.column_formats),
+    axis: secondary.has(colIdx) ? (1 as const) : (0 as const),
   }));
   const byKey = new Map(
     view.rows.map((r, ri) => [
@@ -327,7 +309,7 @@ function timeSeriesLine(
     return { t: t.label, ...source?.values };
   });
   const sourceRows = roles.timePoints.map((t) => ({ row: byKey.get(t.key)?.source }));
-  return withAxes(rows, sourceRows, series);
+  return withScales(rows, sourceRows, series);
 }
 
 type ResultTime = NonNullable<ViewBlock["time"]>;
@@ -402,7 +384,7 @@ function comparisonLine(
     column: view.columns[valIdx],
     format,
     ...declaredDecimals(view, valIdx),
-    isRate: isRateColumn(view.columns[valIdx], view.column_formats),
+    axis: 0 as const,
     ...(index === 0 ? {} : { baselineKey: "s0" }),
   }));
   const at = new Map<number, { seriesKey: string; position: number }>();
@@ -435,7 +417,7 @@ function comparisonLine(
     sourceRows.push(Object.keys(sources).length ? { series: sources } : {});
     return row;
   });
-  return withAxes(rows, sourceRows, series);
+  return withScales(rows, sourceRows, series);
 }
 
 /** 分组趋势折线：单分类 × 单度量，分类值各成一系列 */
@@ -449,14 +431,13 @@ function groupedLine(
   if (!names) return null;
   if (names.length > MAX_LINE_SERIES) return null;
   const format = columnFormat(view.columns[valIdx], view.column_formats);
-  const isRate = format !== "number";
   const series = names.map((name, i) => ({
     key: `s${i}`,
     name,
     column: view.columns[valIdx],
     format,
     ...declaredDecimals(view, valIdx),
-    isRate,
+    axis: 0 as const,
   }));
   const keyByName = new Map(names.map((n, i) => [n, `s${i}`]));
   const valueAt = new Map<string, number | null>();
@@ -482,32 +463,28 @@ function groupedLine(
     sourceRows.push(Object.keys(sources).length ? { series: sources } : {});
     return row;
   });
-  return withAxes(rows, sourceRows, series);
+  return withScales(rows, sourceRows, series);
 }
 
-function withAxes(
+/**
+ * 两把尺子的可读性裁决：每侧只容一种显示单位（百分比与百分点不能共轴）；
+ * 开了副轴时主轴画柱，并排柱超过感知极限即不可读。
+ */
+function scalesReadable(series: SeriesDef[]): boolean {
+  for (const axis of [0, 1] as const) {
+    const formats = new Set(series.filter((s) => s.axis === axis).map((s) => s.format));
+    if (formats.size > 1) return false;
+  }
+  const dual = series.some((s) => s.axis === 1);
+  return !dual || series.filter((s) => s.axis === 0).length <= MAX_GROUPED_BAR_SERIES;
+}
+
+function withScales(
   rows: ChartRow[],
   sourceRows: ChartSourceRow[],
   series: SeriesDef[],
 ): TrendSpec | null {
-  const hasRate = series.some((s) => s.isRate);
-  const hasCount = series.some((s) => !s.isRate);
-  const rateFormats = [...new Set(series.filter((s) => s.isRate).map((s) => s.format))];
-  if (rateFormats.length > 1) return null;
-  const mixed = hasRate && hasCount;
-  if (mixed) {
-    if (series.filter((s) => !s.isRate).length > MAX_COMBO_BAR_SERIES) return null;
-    series = series.map((s) => (s.isRate ? s : { ...s, mark: "bar" as const }));
-  }
-  return {
-    kind: "line",
-    rows,
-    sourceRows,
-    series,
-    mixedAxes: mixed,
-    allRate: hasRate && !hasCount,
-    rateFormat: rateFormats[0] ?? "number",
-  };
+  return scalesReadable(series) ? { kind: "line", rows, sourceRows, series } : null;
 }
 
 type SharePair = { measureIdx: number; numeratorIdx: number };
@@ -570,7 +547,7 @@ export function structureTitle(view: ViewBlock, titleOf: (c: string) => string):
   return parts.join(" · ");
 }
 
-/** 分类对比图：同量纲画条形；量+率混合时量画柱、率画线并使用双轴。 */
+/** 分类对比图：一把尺子横排条形；开了副轴时改纵向，主轴画柱、副轴画线。 */
 function categoryBar(
   view: ViewBlock,
   roles: Roles,
@@ -578,7 +555,8 @@ function categoryBar(
   catIdx: number = roles.catIdx[0],
   measureIdx: number[] = roles.measureIdx,
   annotations?: Set<number>,
-): BarSpec | CategoryComboSpec | null {
+  secondary: ReadonlySet<number> = new Set(),
+): BarSpec | null {
   const names = roles.valuesOf.get(catIdx) as string[] | undefined;
   if (!names) return null;
   if (names.length !== view.rows.length) return null;
@@ -591,7 +569,7 @@ function categoryBar(
       column: view.columns[colIdx],
       format: formats[si],
       ...declaredDecimals(view, colIdx),
-      isRate: formats[si] !== "number",
+      axis: secondary.has(colIdx) ? (1 as const) : (0 as const),
       ...(shareCol >= 0 ? { shareKey: `p${si}` } : {}),
     };
   });
@@ -604,31 +582,20 @@ function categoryBar(
     });
     return row;
   });
-  const rateFormats = [...new Set(series.filter((item) => item.isRate).map((item) => item.format))];
-  const hasRate = series.some((item) => item.isRate);
-  const hasCount = series.some((item) => !item.isRate);
-  if (rateFormats.length > 1) return null;
-  if (hasRate && hasCount) {
-    if (names.length > MAX_CATEGORY_COMBO_CATEGORIES) return null;
-    if (series.filter((item) => !item.isRate).length > MAX_COMBO_BAR_SERIES) return null;
-    return {
-      kind: "category_combo",
-      rows,
-      sourceRows: view.rows.map((_, row) => ({ row })),
-      series,
-      countFormat: series.find((item) => !item.isRate)?.format ?? "number",
-      rateFormat: rateFormats[0],
-    };
+  if (!scalesReadable(series)) return null;
+  const primary = series.find((item) => item.axis === 0);
+  if (!primary) return null;
+  if (series.some((item) => item.axis === 1)) {
+    if (names.length > MAX_VERTICAL_CATEGORIES) return null;
+  } else if (barChartHeight(names.length, measureIdx.length) > MAX_BAR_CHART_HEIGHT) {
+    return null;
   }
-  if (new Set(formats).size > 1) return null;
-  if (barChartHeight(names.length, measureIdx.length) > MAX_BAR_CHART_HEIGHT) return null;
   return {
     kind: "bar",
     rows,
     sourceRows: view.rows.map((_, row) => ({ row })),
     series,
-    format: formats[0],
-    isRate: formats[0] !== "number",
+    format: primary.format,
     stacked: false,
     hasShare: series.some((item) => item.shareKey !== undefined),
   };
@@ -666,7 +633,7 @@ function categorySeriesBar(
     column: view.columns[valIdx],
     format,
     ...declaredDecimals(view, valIdx),
-    isRate,
+    axis: 0 as const,
   }));
   const keyByName = new Map(seriesNames.map((n, i) => [n, `s${i}`]));
   const shareCol = declaredShareIdx(view, valIdx, annotations);
@@ -707,7 +674,6 @@ function categorySeriesBar(
     sourceRows: labels.map((label) => ({ series: sourcesByLabel.get(label) ?? {} })),
     series,
     format,
-    isRate,
     stacked,
     hasShare: shareCol >= 0,
   };
@@ -1350,11 +1316,14 @@ function declaredChart(
   if (measureIdx.some((i) => i === undefined)) return null;
   // 辅助标注通道在场即说明调用方已裁定过主系列；缺席时才由本层按关系推断。
   const declaredAnnotations = decl.type === "pie" ? undefined : decl.annotations;
-  const measures =
+  const primary =
     declaredAnnotations === undefined
       ? primaryMeasureIndices(view, measureIdx as number[])
       : (measureIdx as number[]);
-  if (!measures.length) return null;
+  if (!primary.length) return null;
+  const sides = secondaryScale(view, roles, primary, decl.type === "pie" ? undefined : decl.y2);
+  if (!sides) return null;
+  const { measures, secondary } = sides;
   const annotations =
     declaredAnnotations === undefined
       ? undefined
@@ -1382,7 +1351,7 @@ function declaredChart(
     // 同期对照优先叠加成期间系列；不成立（相邻周期、异长窗口、多指标）时退回单一时间轴。
     const periods = measures.length === 1 ? overlayPeriods(view.time) : null;
     const overlay = periods ? comparisonLine(view, roles, measures[0], periods) : null;
-    return overlay ?? timeSeriesLine(view, roles, titleOf, measures);
+    return overlay ?? timeSeriesLine(view, roles, titleOf, measures, secondary);
   }
 
   if (decl.type === "bar") {
@@ -1401,12 +1370,37 @@ function declaredChart(
         annotations,
       );
     }
-    return categoryBar(view, roles, titleOf, axisIdx, measures, annotations);
+    return categoryBar(view, roles, titleOf, axisIdx, measures, annotations, secondary);
   }
 
   const catIdx = declaredIdx(view, roles.catIdx, decl.x);
   if (catIdx === undefined || measures.length !== 1) return null;
   return pieChart(view, roles, titleOf, catIdx, measures[0]);
+}
+
+/**
+ * 副轴的成员：声明了就照声明（能不能读交给编译裁决），没声明按量纲分侧——量纲只有结果知道，
+ * 是「看到结果才知道的缺省」。返回上轴系列（声明了副轴时主在前、副在后）与副轴列下标集。
+ */
+function secondaryScale(
+  view: ViewBlock,
+  roles: Roles,
+  primary: number[],
+  declaredY2: string[] | undefined,
+): { measures: number[]; secondary: ReadonlySet<number> } | null {
+  const scaleOf = (index: number) => columnFormat(view.columns[index], view.column_formats);
+  if (declaredY2 !== undefined) {
+    const y2 = declaredY2.map((name) => declaredIdx(view, roles.measureIdx, name));
+    if (y2.some((index) => index === undefined)) return null;
+    const secondary = new Set(y2 as number[]);
+    return { measures: [...primary.filter((i) => !secondary.has(i)), ...secondary], secondary };
+  }
+  const sides = splitScales(
+    primary.map((index) => String(index)),
+    (key) => scaleOf(Number(key)),
+  );
+  if (!sides) return null;
+  return { measures: primary, secondary: new Set((sides.y2 ?? []).map(Number)) };
 }
 
 export type ResultShape = {
@@ -1513,6 +1507,12 @@ function resultChannelPool(
   return {
     dimensions: shape.detected.catIdx.map((index) => memberShortName(view.columns[index])),
     measures: shape.roles.measureIdx.map((index) => memberShortName(view.columns[index])),
+    scales: Object.fromEntries(
+      shape.roles.measureIdx.map((index) => [
+        memberShortName(view.columns[index]),
+        columnFormat(view.columns[index], view.column_formats),
+      ]),
+    ),
   };
 }
 
@@ -1529,14 +1529,15 @@ export function proposeChartDecl(
   const assignment = assignChannels(type, resultChannelPool(view, shape), preferences);
   if (!assignment) return null;
   const groupBy = assignment.groupBy !== undefined ? { groupBy: assignment.groupBy } : {};
+  const y2 = assignment.y2 !== undefined ? { y2: assignment.y2 } : {};
   // 分类轴是 bar/pie 的必备通道；装箱填不上它时上一行已经返回了 null。
   if (type !== "line" && assignment.x === undefined) return null;
   const decl: ChartTypeOf<"line" | "bar" | "pie"> =
     type === "line"
-      ? { type, y: assignment.y, ...groupBy }
+      ? { type, y: assignment.y, ...y2, ...groupBy }
       : type === "pie"
         ? { type, x: assignment.x as string, y: assignment.y }
-        : { type, x: assignment.x as string, y: assignment.y, ...groupBy };
+        : { type, x: assignment.x as string, y: assignment.y, ...y2, ...groupBy };
   return compileChart(view, makeTitleOf(view), decl, shape) ? decl : null;
 }
 
@@ -1575,7 +1576,7 @@ export function renderShapeOfView(view: ViewBlock, decl: ChartDecl): RenderShape
   if (decl.type === "kpi" && canCompileKpi(view, shape)) return "kpi";
   const titleOf = makeTitleOf(view);
   const chart = compileChart(view, titleOf, decl, shape);
-  if (chart) return chart.kind === "category_combo" ? "bar" : chart.kind;
+  if (chart) return chart.kind;
   const table = compileTableWithStatus(view, titleOf, decl, shape).table;
   return table.columns.some((column) => column.headerPath.length > 1) ? "crosstab" : "table";
 }

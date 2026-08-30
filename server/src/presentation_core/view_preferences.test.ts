@@ -11,7 +11,6 @@ describe("view preferences", () => {
             "measure:active_employee_count": {
               color: "#509ee3",
               mark: "bar",
-              axis: "right",
             },
           },
           value_labels: "all",
@@ -22,7 +21,6 @@ describe("view preferences", () => {
         "measure:active_employee_count": {
           color: "#509ee3",
           mark: "bar",
-          axis: "right",
         },
       },
       value_labels: "all",

@@ -214,13 +214,13 @@ function stubPresentation(
               {
                 ...(seriesStyle.color ? { color: seriesStyle.color } : {}),
                 ...(seriesStyle.mark ? { type: seriesStyle.mark } : {}),
-                ...(seriesStyle.axis ? { yAxis: seriesStyle.axis } : {}),
               },
             ]),
           ),
         }
       : {}),
     ...(preferences.value_labels ? { valueLabels: preferences.value_labels } : {}),
+    ...(declared.secondary_series ? { y2: declared.secondary_series } : {}),
     ...(declared.group_by ? { groupBy: declared.group_by } : {}),
   };
   if (declared.type === "line") return { type: "line", y, ...style };

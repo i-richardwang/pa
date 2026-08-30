@@ -24,6 +24,7 @@ function projectSeriesChannels(
 ) {
   return {
     y: declaration.y.map(project),
+    ...(declaration.y2 ? { y2: declaration.y2.map(project) } : {}),
     ...(declaration.annotations ? { annotations: declaration.annotations.map(project) } : {}),
     ...(declaration.groupBy ? { groupBy: project(declaration.groupBy) } : {}),
     ...(declaration.display

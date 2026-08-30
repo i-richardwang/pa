@@ -480,6 +480,19 @@ describe("semantic analysis compiler", () => {
     ).toThrow(/只支持 table/);
   });
 
+  test("副轴系列与主系列一样投影为公共列身份，交付端才对得上结果列", () => {
+    const compiled = compileAnalysisView(catalog, {
+      analysis: {
+        views: [
+          { id: "result", measures: [ACTIVE_EMPLOYEE, YTD_EVENT_RATE], time: JAN_TO_JULY_2026 },
+        ],
+      },
+      view: { type: "line", series: [ACTIVE_EMPLOYEE], secondary_series: [YTD_EVENT_RATE] },
+    });
+    expect(compiled.render_decl).toMatchObject({ type: "line", y2: [YTD_EVENT_RATE] });
+    expect(compiled.render_decl).toMatchObject({ y: [ACTIVE_EMPLOYEE] });
+  });
+
   test("人类系列样式按语义 id 绑定为物理图表设置", () => {
     const compiled = compileAnalysisView(
       catalog,
@@ -498,7 +511,7 @@ describe("semantic analysis compiler", () => {
       },
       {
         series: {
-          [ACTIVE_EMPLOYEE]: { color: "#509ee3", mark: "line", axis: "right" },
+          [ACTIVE_EMPLOYEE]: { color: "#509ee3", mark: "line" },
         },
         value_labels: "main",
       },
@@ -509,7 +522,6 @@ describe("semantic analysis compiler", () => {
         active_employee_count: {
           color: "#509ee3",
           type: "line",
-          yAxis: "right",
         },
       },
       valueLabels: "main",

@@ -23,6 +23,7 @@ export type UnboundChart =
   | {
       type: "line";
       y?: string[];
+      y2?: string[];
       annotations?: string[];
       group_by?: string;
       display?: Display;
@@ -32,6 +33,7 @@ export type UnboundChart =
       type: "bar";
       x?: string;
       y?: string[];
+      y2?: string[];
       annotations?: string[];
       group_by?: string;
       stack?: boolean;
@@ -121,8 +123,17 @@ export function bindChartDecl(chart: UnboundChart, spec: ChartSpecContext): Char
     };
   }
 
-  const y = (chart.y ?? measures).map((name) => boundMember("值通道", name, measures));
+  const y2 =
+    chart.type === "pie" || chart.y2 === undefined
+      ? undefined
+      : chart.y2.map((name) => boundMember("副轴系列", name, measures));
+  const y = (chart.y ?? measures.filter((name) => !y2?.includes(memberShortName(name)))).map(
+    (name) => boundMember("值通道", name, measures),
+  );
   if (!y.length) throw new ViewIntentError(`${chart.type} 呈现至少需要一个指标`);
+  if (y2?.some((name) => y.includes(name))) {
+    throw new ViewIntentError("同一指标不能同时在主轴与副轴");
+  }
 
   const dimension = (channel: string, name: string): string => {
     if (isTimeAxisRef(name)) {
@@ -141,7 +152,7 @@ export function bindChartDecl(chart: UnboundChart, spec: ChartSpecContext): Char
   }
 
   const groupBy = chart.group_by !== undefined ? dimension("拆分维度", chart.group_by) : undefined;
-  if (groupBy !== undefined && y.length > 1) {
+  if (groupBy !== undefined && (y.length > 1 || y2)) {
     throw new ViewIntentError("按维度拆系列时只能画一个指标；请把值通道收窄到一个，或去掉拆分");
   }
   const annotations = chart.annotations?.map((name) => boundMember("辅助标注", name, measures));
@@ -159,6 +170,7 @@ export function bindChartDecl(chart: UnboundChart, spec: ChartSpecContext): Char
         );
 
   const style = {
+    ...(y2?.length ? { y2 } : {}),
     ...(groupBy !== undefined ? { groupBy } : {}),
     ...(annotations !== undefined ? { annotations } : {}),
     ...(display !== undefined ? { display } : {}),

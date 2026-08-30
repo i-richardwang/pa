@@ -249,6 +249,30 @@ describe("语义呈现意图边界", () => {
       { type: "line", annotations: ["measure:active_employee_count"] },
       { type: "line", stack: true },
       { type: "line", columns: ["metrics"] },
+      { type: "pie", secondary_series: ["measure:active_employee_count"] },
+    ];
+    for (const intent of rejected) {
+      expect(SEMANTIC_VIEW_INTENT_INPUT.safeParse(intent).success).toBe(false);
+    }
+  });
+
+  test("副轴系列是值通道的第二把尺子：不与主系列重复，拆分在场时没有它", () => {
+    const rate = "measure:ytd_primary_event_rate";
+    const count = "measure:active_employee_count";
+    expect(
+      SEMANTIC_VIEW_INTENT_INPUT.safeParse({
+        type: "line",
+        series: [count],
+        secondary_series: [rate],
+      }).success,
+    ).toBe(true);
+    expect(
+      SEMANTIC_VIEW_INTENT_INPUT.safeParse({ type: "bar", secondary_series: [rate] }).success,
+    ).toBe(true);
+    const rejected = [
+      { type: "line", series: [count, rate], secondary_series: [rate] },
+      { type: "bar", secondary_series: [rate], group_by: "dimension:organization_name" },
+      { type: "line", secondary_series: [] },
     ];
     for (const intent of rejected) {
       expect(SEMANTIC_VIEW_INTENT_INPUT.safeParse(intent).success).toBe(false);

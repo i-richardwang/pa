@@ -15,7 +15,6 @@ import {
   makeTitleOf,
   structureTitle,
   type BarSpec,
-  type CategoryComboSpec,
   type ChartRow,
   type ChartSourceRow,
   type PieSpec,
@@ -65,6 +64,8 @@ export type ChartLegendItem = {
   /** 模型声明的小数位；未声明缺席，走呈现层默认 */
   decimals?: number;
   values: (number | null)[];
+  /** 落在哪把尺子上：0 主轴、1 副轴；面板按它回显归属，不读声明缺省。 */
+  axis: 0 | 1;
   /** 所对照单元的序号（同期叠加里各对照期都指向主期）；读数卡据此附差值。 */
   baseline?: number;
 };
@@ -464,12 +465,17 @@ function cellNumber(value: string | number | null | undefined): number | null {
 
 type Mark = "line" | "bar";
 
-/** 一条系列画出来要知道的全部：形态出自量纲、色出自色板，都可被显式声明覆盖——但只解析这一次。 */
-type ResolvedSeries = Omit<SeriesDef, "mark"> & {
+/** 一条系列画出来要知道的全部：形态出自尺子、色出自色板，都可被显式声明覆盖——但只解析这一次。 */
+type ResolvedSeries = SeriesDef & {
   mark: Mark;
   color: string;
-  axis: number;
   values: (number | null)[];
+};
+
+/** 两把尺子都在用时主轴画柱、副轴画线；只有一把尺子时照形态缺省。 */
+const markOf = (series: SeriesDef[], single: Mark) => {
+  const dual = series.some((s) => s.axis === 1);
+  return (s: SeriesDef): Mark => (dual ? (s.axis === 1 ? "line" : "bar") : single);
 };
 
 /** 解析在建 option 之前完成一次；同一条系列的色只有这一个来源。 */
@@ -477,15 +483,13 @@ function resolveSeries(
   series: SeriesDef[],
   rows: ChartRow[],
   display: Record<string, SeriesDisplay> | undefined,
-  defaults: (s: SeriesDef) => { mark: Mark; axis: number },
+  defaultMark: (s: SeriesDef) => Mark,
 ): ResolvedSeries[] {
   return series.map((s, i) => {
     const intent = (s.column && display?.[s.column]) || {};
-    const base = defaults(s);
     return {
       ...s,
-      mark: intent.type ?? base.mark,
-      axis: intent.yAxis === undefined ? base.axis : intent.yAxis === "right" ? 1 : 0,
+      mark: intent.type ?? defaultMark(s),
       color: intent.color ?? seriesColorAt(i),
       values: rows.map((row) => cellNumber(row[s.key])),
     };
@@ -520,6 +524,7 @@ function legendOf(series: ResolvedSeries[], all: SeriesDef[]): ChartLegendItem[]
     format: s.format,
     ...(s.decimals === undefined ? {} : { decimals: s.decimals }),
     values: s.values,
+    axis: s.axis,
     ...(s.baselineKey && seriesIndexOf(all, s.baselineKey) !== null
       ? { baseline: seriesIndexOf(all, s.baselineKey) as number }
       : {}),
@@ -727,13 +732,10 @@ function lastIndexWhere(length: number, test: (index: number) => boolean): numbe
 /** 图表的视觉覆盖：只有折线与柱状声明这两个通道，饼图两者都没有。 */
 type ChartStyle = { display?: Record<string, SeriesDisplay>; valueLabels?: "main" | "all" };
 
-/** 纯时间趋势 / 柱线组合：时间恒占 x 轴；混量纲时量画柱（主轴）、率画线（副轴） */
+/** 时间趋势：时间恒占 x 轴。 */
 function trendOption(spec: TrendSpec, style: ChartStyle): ViewChart {
   const categories = spec.rows.map((r) => String(r.t ?? ""));
-  const series = resolveSeries(spec.series, spec.rows, style.display, (s) => ({
-    mark: s.mark === "bar" ? "bar" : "line",
-    axis: spec.mixedAxes && s.mark !== "bar" ? 1 : 0,
-  }));
+  const series = resolveSeries(spec.series, spec.rows, style.display, markOf(spec.series, "line"));
   // 「最新」取每条系列都有值的最后一个桶，不是单纯的最后一行：当月未完时存量已有数而流量
   // 还空着，取最后一行会让同一断面的读数缺几个。
   const latestIndex = lastIndexWhere(spec.rows.length, (i) =>
@@ -751,34 +753,28 @@ function trendOption(spec: TrendSpec, style: ChartStyle): ViewChart {
   });
 }
 
-/** 分类柱线组合：分类占 x 轴，绝对量画柱（左轴），率画线（右轴）。 */
-function categoryComboOption(spec: CategoryComboSpec, style: ChartStyle): ViewChart {
-  const series = resolveSeries(spec.series, spec.rows, style.display, (s) => ({
-    mark: s.isRate ? "line" : "bar",
-    axis: s.isRate ? 1 : 0,
-  }));
-  const shareKey = spec.series.find((s) => s.shareKey !== undefined)?.shareKey;
-  return cartesianOption({
-    form: "bar",
-    categories: spec.rows.map((row) => String(row.label ?? "")),
-    series,
-    all: spec.series,
-    rows: spec.rows,
-    sourceRows: spec.sourceRows,
-    ...(shareKey
-      ? { share: { title: "占比", values: spec.rows.map((row) => cellNumber(row[shareKey])) } }
-      : {}),
-    valueLabels: style.valueLabels,
-  });
-}
-
-/** 分类条形（横排容纳中文长标签）：多系列并列、双分类构成堆叠；占比注释随读数卡 */
+/**
+ * 分类对比：一把尺子时横排条形（容纳中文长标签），多系列并列、双分类构成堆叠；
+ * 两把尺子时改纵向笛卡尔，分类占 x 轴，两根 y 轴各自成尺。占比注释随读数卡。
+ */
 function barOption(spec: BarSpec, style: ChartStyle): ViewChart {
   const categories = spec.rows.map((r) => String(r.label ?? ""));
-  const series = resolveSeries(spec.series, spec.rows, style.display, () => ({
-    mark: "bar",
-    axis: 0,
-  }));
+  const series = resolveSeries(spec.series, spec.rows, style.display, markOf(spec.series, "bar"));
+  if (spec.series.some((s) => s.axis === 1)) {
+    const shareKey = spec.series.find((s) => s.shareKey !== undefined)?.shareKey;
+    return cartesianOption({
+      form: "bar",
+      categories,
+      series,
+      all: spec.series,
+      rows: spec.rows,
+      sourceRows: spec.sourceRows,
+      ...(shareKey
+        ? { share: { title: "占比", values: spec.rows.map((row) => cellNumber(row[shareKey])) } }
+        : {}),
+      valueLabels: style.valueLabels,
+    });
+  }
   const declared = series.flatMap((s) => (s.decimals === undefined ? [] : [s.decimals]));
   const shareKey = spec.stacked ? "share" : (spec.series[0]?.shareKey ?? "share");
   const model: ChartModel = {
@@ -856,6 +852,7 @@ function pieOption(spec: PieSpec): ViewChart {
     format: spec.format,
     ...(spec.decimals === undefined ? {} : { decimals: spec.decimals }),
     values: [r.value],
+    axis: 0 as const,
   }));
   return {
     form: "pie",
@@ -913,8 +910,6 @@ export function buildViewChart(
       return trendOption(chart, style);
     case "bar":
       return barOption(chart, style);
-    case "category_combo":
-      return categoryComboOption(chart, style);
     case "pie":
       return pieOption(chart);
   }

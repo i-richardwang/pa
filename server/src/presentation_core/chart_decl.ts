@@ -27,7 +27,6 @@ export const SERIES_DISPLAY_SCHEMA = z
       .regex(/^#[0-9a-fA-F]{6}$/)
       .optional(),
     type: z.enum(["line", "bar"]).optional(),
-    yAxis: z.enum(["left", "right"]).optional(),
   })
   .strict();
 
@@ -56,6 +55,7 @@ export const CHART_DECL_SCHEMA = z
       .object({
         type: z.literal("line"),
         y: SERIES,
+        y2: SERIES.optional(),
         annotations: z.array(MEMBER).optional(),
         groupBy: MEMBER.optional(),
         display: DISPLAY.optional(),
@@ -67,6 +67,7 @@ export const CHART_DECL_SCHEMA = z
         type: z.literal("bar"),
         x: MEMBER,
         y: SERIES,
+        y2: SERIES.optional(),
         annotations: z.array(MEMBER).optional(),
         groupBy: MEMBER.optional(),
         stack: z.boolean().optional(),
@@ -77,11 +78,19 @@ export const CHART_DECL_SCHEMA = z
     z.object({ type: z.literal("pie"), x: MEMBER, y: z.array(MEMBER).length(1) }).strict(),
   ])
   .superRefine((decl, context) => {
-    // 唯一跨通道的约束：拆分通道占掉了系列的来源，值通道就只剩一个位置。
-    if ((decl.type === "line" || decl.type === "bar") && decl.groupBy && decl.y.length !== 1) {
+    if (decl.type !== "line" && decl.type !== "bar") return;
+    // 跨通道的约束只有两条：拆分通道占掉了系列的来源，值通道就只剩一个位置（因而也没有副轴）；
+    // 两把尺子不共享系列。
+    if (decl.groupBy && (decl.y.length !== 1 || decl.y2)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: `${decl.type} 呈现声明拆分通道时值通道只容一个系列`,
+      });
+    }
+    if (decl.y2?.some((member) => decl.y.includes(member))) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${decl.type} 呈现声明的同一系列不能同时在主轴与副轴`,
       });
     }
   });

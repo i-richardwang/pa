@@ -23,12 +23,19 @@ function cartesian(
 }
 
 const count = (name: string, values: (number | null)[], extra: Partial<ChartLegendItem> = {}) =>
-  ({ name, color: "#3b6fdb", format: "number", values, ...extra }) as ChartLegendItem;
+  ({ name, color: "#3b6fdb", format: "number", values, axis: 0, ...extra }) as ChartLegendItem;
 
 test("抬头取类目名，逐单元成行，格式与位数随单元声明", () => {
   const chart = cartesian([
     count("在职人数", [1200, 45]),
-    { name: "完成率", color: "#e0857a", format: "percent", decimals: 0, values: [0.2349, 0.5] },
+    {
+      name: "完成率",
+      color: "#e0857a",
+      format: "percent",
+      decimals: 0,
+      values: [0.2349, 0.5],
+      axis: 1,
+    },
   ]);
   const model = readoutModel(chart, 0);
   expect(model.header).toBe("研发");
@@ -56,12 +63,13 @@ test("结构占比随卡附一行，只在这一格有占比时出现", () => {
 test("同期叠加按声明的对照关系读差值：量作差仍是量，率作差是百分点", () => {
   const overlay = (format: "number" | "percent", values: number[][]) =>
     cartesian([
-      { name: "2026 年", color: "#3b6fdb", format, values: values[0] },
+      { name: "2026 年", color: "#3b6fdb", format, values: values[0], axis: 0 },
       {
         name: "2025 年",
         color: "#e0857a",
         format,
         values: values[1],
+        axis: 0,
         baseline: 0,
         ...(format === "percent" ? { decimals: 1 } : {}),
       },

@@ -246,7 +246,7 @@ describe("趋势折线", () => {
     if (!chart) throw new Error("应产出折线配置");
     expect(chart.option.legend).toBeUndefined();
     expect(pa(chart).legend).toEqual([
-      { name: "在职人数", color: "#3b6fdb", format: "number", values: [100, 120, 140] },
+      { name: "在职人数", color: "#3b6fdb", format: "number", values: [100, 120, 140], axis: 0 },
     ]);
     expect(pa(chart).categories).toEqual(["2026-01", "2026-02", "2026-03"]);
     expect(pa(chart).latest).toEqual({ index: 2, label: "2026-03" });
@@ -330,21 +330,22 @@ describe("趋势折线", () => {
   });
 });
 
-describe("柱线组合（量+率混量纲）", () => {
-  const chart = buildViewChart(
-    view(
-      ["year", "turnover_count", "ytd_primary_event_rate"],
-      [
-        [2024, 80, 0.011],
-        [2025, 90, 0.015],
-      ],
-      { formats: { ytd_primary_event_rate: "percent" } },
-    ),
-    { type: "line", y: ["turnover_count", "ytd_primary_event_rate"] },
+describe("时间趋势的第二把尺子", () => {
+  const mixedView = view(
+    ["year", "turnover_count", "ytd_primary_event_rate"],
+    [
+      [2024, 80, 0.011],
+      [2025, 90, 0.015],
+    ],
+    { formats: { ytd_primary_event_rate: "percent" } },
   );
+  const chart = buildViewChart(mixedView, {
+    type: "line",
+    y: ["turnover_count", "ytd_primary_event_rate"],
+  });
 
-  test("量画柱（主轴）、率画线（副轴），双 y 轴各自成尺", () => {
-    if (!chart) throw new Error("应产出组合图配置");
+  test("没声明副轴时按量纲分侧：量画柱（主轴）、率画线（副轴），双 y 轴各自成尺", () => {
+    if (!chart) throw new Error("应产出双轴配置");
     expect(chart.form).toBe("line");
     const series = realSeries<{ type: string; yAxisIndex: number }>(chart);
     expect(series.map((s) => [s.type, s.yAxisIndex])).toEqual([
@@ -355,8 +356,48 @@ describe("柱线组合（量+率混量纲）", () => {
     expect(pa(chart).axes.y).toEqual(["number", "percent"]);
   });
 
+  test("声明的副轴照声明：同量纲也可硬拆两侧，主轴仍画柱", () => {
+    const declared = buildViewChart(
+      view(
+        ["year", "new_hire_count", "leave_count"],
+        [
+          [2024, 30, 10],
+          [2025, 40, 15],
+        ],
+      ),
+      { type: "line", y: ["new_hire_count"], y2: ["leave_count"] },
+    );
+    if (!declared) throw new Error("应产出双轴配置");
+    const series = realSeries<{ type: string; yAxisIndex: number }>(declared);
+    expect(series.map((s) => [s.type, s.yAxisIndex])).toEqual([
+      ["bar", 0],
+      ["line", 1],
+    ]);
+    expect(pa(declared).axes.y).toEqual(["number", "number"]);
+  });
+
+  test("声明把两种量纲留在同一侧时不成立，忠实退回表格", () => {
+    expect(
+      buildViewChart(
+        view(
+          ["year", "turnover_count", "ytd_primary_event_rate", "new_hire_count"],
+          [
+            [2024, 80, 0.011, 5],
+            [2025, 90, 0.015, 6],
+          ],
+          { formats: { ytd_primary_event_rate: "percent" } },
+        ),
+        {
+          type: "line",
+          y: ["turnover_count", "ytd_primary_event_rate"],
+          y2: ["new_hire_count"],
+        },
+      ),
+    ).toBeNull();
+  });
+
   test("有柱就画列高亮带，多系列不填面积", () => {
-    if (!chart) throw new Error("应产出组合图配置");
+    if (!chart) throw new Error("应产出双轴配置");
     const tooltip = chart.option.tooltip as {
       trigger: string;
       axisPointer: { type: string; shadowStyle: { color: string } };
@@ -371,7 +412,7 @@ describe("柱线组合（量+率混量纲）", () => {
   });
 });
 
-describe("分类柱线组合（量+率混量纲）", () => {
+describe("分类对比的第二把尺子", () => {
   const source = view(
     [
       "organization_name",
@@ -391,13 +432,13 @@ describe("分类柱线组合（量+率混量纲）", () => {
     },
   );
 
-  test("分类占横轴，人数画柱、百分比画线，双 y 轴各自成尺", () => {
+  test("开了副轴改纵向：分类占横轴，人数画柱、百分比画线，双 y 轴各自成尺", () => {
     const chart = buildViewChart(source, {
       type: "bar",
       x: "organization_name",
       y: ["active_employee_count", "ytd_primary_event_rate", "period_end_completion_rate"],
     });
-    if (!chart) throw new Error("应产出分类柱线组合图");
+    if (!chart) throw new Error("应产出双轴分类图");
     expect(chart.form).toBe("bar");
     expect((chart.option.xAxis as { data: string[] }).data).toEqual(["研发", "销售"]);
     const series = realSeries<{ type: string; yAxisIndex: number }>(chart);
@@ -471,7 +512,7 @@ describe("分类柱线组合（量+率混量纲）", () => {
         annotations: ["active_employee_share"],
       },
     );
-    if (!chart) throw new Error("应产出分类柱线组合图");
+    if (!chart) throw new Error("应产出双轴分类图");
     expect(pa(chart).share).toEqual({ title: "占比", values: [0.6, 0.4] });
   });
 });
@@ -860,7 +901,7 @@ describe("服务端物理呈现声明", () => {
     expect(line.data.every((v) => v === null || typeof v === "number")).toBe(true);
   });
 
-  test("分类组合里的率线没有「最新」可标：末点实心记号只属时间趋势", () => {
+  test("分类双轴里的率线没有「最新」可标：末点实心记号只属时间趋势", () => {
     const chart = buildViewChart(
       view(
         ["organization_name", "active_employee_count", "ytd_primary_event_rate"],
@@ -877,7 +918,7 @@ describe("服务端物理呈现声明", () => {
         display: { active_employee_count: { type: "line" } },
       },
     );
-    if (!chart) throw new Error("应产出分类柱线组合图");
+    if (!chart) throw new Error("应产出双轴分类图");
     expect(realSeries<{ type: string }>(chart).map((s) => s.type)).toEqual(["line", "line"]);
     expect(realSeries<{ markPoint?: unknown }>(chart).every((s) => s.markPoint === undefined)).toBe(
       true,
@@ -885,13 +926,14 @@ describe("服务端物理呈现声明", () => {
     expect(pa(chart).latest).toBeUndefined();
   });
 
-  test("display 覆盖颜色、型别，value_labels 印数，并为右轴补 option 与 pa 格式", () => {
+  test("display 覆盖颜色、型别，value_labels 印数，并为副轴补 option 与 pa 格式", () => {
     const chart = buildViewChart(trendView, {
       type: "line",
-      y: ["new_hire_count", "leave_count"],
+      y: ["new_hire_count"],
+      y2: ["leave_count"],
       display: {
         new_hire_count: { color: "#123abc", type: "bar" },
-        leave_count: { yAxis: "right" },
+        leave_count: { type: "line" },
       },
       valueLabels: "main",
     });
@@ -1049,8 +1091,8 @@ describe("服务端物理呈现声明", () => {
     expect(chart.option.tooltip).toEqual({ show: false });
     expect(chart.option.legend).toBeUndefined();
     expect(pa(chart).legend).toEqual([
-      { name: "A", color: "#3b6fdb", format: "number", values: [60] },
-      { name: "B", color: "#e0857a", format: "number", values: [40] },
+      { name: "A", color: "#3b6fdb", format: "number", values: [60], axis: 0 },
+      { name: "B", color: "#e0857a", format: "number", values: [40], axis: 0 },
     ]);
     expect(pa(chart).categories).toEqual(["在职人数"]);
     expect(pa(chart).pointer).toBe("item");
@@ -1311,7 +1353,7 @@ describe("小数位随系列进呈现模型", () => {
 });
 
 /** 凡画得出图例的图，落选一律换同一失焦色——按形态清单逐一点名。 */
-test("每种形态一律照同一道取色式置灰：折线、柱线组合、分类柱、堆叠、对照叠加、饼图", () => {
+test("每种形态一律照同一道取色式置灰：折线、双轴、分类柱、堆叠、对照叠加、饼图", () => {
   const comparisonView = {
     ...view(
       ["year", "month", "ytd_primary_event_rate"],
@@ -1353,7 +1395,7 @@ test("每种形态一律照同一道取色式置灰：折线、柱线组合、�
       ),
     ],
     [
-      "柱线组合",
+      "双轴",
       buildViewChart(
         view(
           ["year", "turnover_count", "ytd_primary_event_rate"],

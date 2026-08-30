@@ -253,6 +253,7 @@ function chartIntent(
   channels: {
     category?: string;
     series: string[];
+    secondary?: string[];
     groupBy?: string;
     annotations?: string[];
     stack?: boolean;
@@ -260,11 +261,13 @@ function chartIntent(
 ): SemanticViewIntent {
   const category = channels.category ? { category: channels.category } : {};
   const groupBy = channels.groupBy ? { group_by: channels.groupBy } : {};
-  if (type === "line") return { type, series: channels.series, ...groupBy };
+  const secondary = channels.secondary?.length ? { secondary_series: channels.secondary } : {};
+  if (type === "line") return { type, series: channels.series, ...secondary, ...groupBy };
   if (type === "pie") return { type, series: channels.series, ...category };
   return {
     type,
     series: channels.series,
+    ...secondary,
     ...category,
     ...groupBy,
     ...(channels.annotations?.length ? { annotations: channels.annotations } : {}),
@@ -294,17 +297,25 @@ function repairedViewIntent(
   if (chart.type === "kpi") {
     return assignChannels("kpi", { dimensions, measures }) ? chart : { type: "table" };
   }
-  const retainedSeries = (chart.series ?? measures).filter((member) => measures.includes(member));
+  const secondary = chart.type === "pie" ? [] : (chart.secondary_series ?? []);
+  const retainedSeries = (chart.series ?? measures).filter(
+    (member) => measures.includes(member) && !secondary.includes(member),
+  );
   const selectedSeries = retainedSeries.length ? retainedSeries : measures;
   const annotations = shareAnnotations(chart.type, view, catalog, selectedSeries);
   const auxiliary = new Set(annotations);
   // 通道装箱是唯一判据：已有绑定装得下就沿用，装不下按容量重排，一个维度都装不下即无此形态。
   const assignment = assignChannels(
     chart.type,
-    { dimensions, measures: measures.filter((member) => !auxiliary.has(member)) },
+    {
+      dimensions,
+      measures: measures.filter((member) => !auxiliary.has(member)),
+      scales: measureScales(catalog),
+    },
     {
       ...(chart.type !== "line" && chart.category ? { x: chart.category } : {}),
       y: selectedSeries.filter((member) => !auxiliary.has(member)),
+      y2: secondary.filter((member) => measures.includes(member)),
       ...(chart.type !== "pie" && chart.group_by ? { groupBy: chart.group_by } : {}),
     },
   );
@@ -312,10 +323,18 @@ function repairedViewIntent(
   return chartIntent(chart.type, {
     ...(assignment.x ? { category: assignment.x } : {}),
     series: assignment.y,
+    ...(assignment.y2 ? { secondary: assignment.y2 } : {}),
     ...(assignment.groupBy ? { groupBy: assignment.groupBy } : {}),
     annotations,
     ...(chart.type === "bar" && chart.stack !== undefined ? { stack: chart.stack } : {}),
   });
+}
+
+/** 量纲键即目录声明的显示格式；未声明按普通数值——与结果侧 `column_formats` 的缺省同义。 */
+function measureScales(catalog: CatalogPayload): Record<string, string> {
+  return Object.fromEntries(
+    catalog.measures.map((member) => [member.id, member.format ?? "number"]),
+  );
 }
 
 function repairedViewPreferences(
@@ -331,7 +350,9 @@ function repairedViewPreferences(
   }
   // 省略 series 表示“使用该结果的默认指标通道”，不是空集合；此时保留已有偏好，
   // 由服务端编译器用实际结果成员做最终 fail-closed 绑定。
-  const selected = intent.series ? new Set(intent.series) : null;
+  const selected = intent.series
+    ? new Set([...intent.series, ...(intent.secondary_series ?? [])])
+    : null;
   const series = style.series
     ? Object.fromEntries(
         Object.entries(style.series).filter(([member]) => !selected || selected.has(member)),
@@ -511,11 +532,14 @@ export function defaultSemanticViewIntent(
   const category = axis ? semantic(axis, dimensions) : undefined;
   const groupBy = split ? semantic(split, dimensions) : undefined;
   const series = proposal?.y.flatMap((column) => semantic(column, measures) ?? []) ?? [];
+  const proposedY2 = proposal && proposal.type !== "pie" ? (proposal.y2 ?? []) : [];
+  const secondary = proposedY2.flatMap((column) => semantic(column, measures) ?? []);
   if (
     !proposal ||
     (axis && !category) ||
     (split && !groupBy) ||
-    series.length !== proposal.y.length
+    series.length !== proposal.y.length ||
+    secondary.length !== proposedY2.length
   ) {
     return repairedViewIntent(
       chartIntent(type, { category: dimensions[0], series: measures }),
@@ -529,6 +553,7 @@ export function defaultSemanticViewIntent(
   return chartIntent(type, {
     ...(category ? { category } : {}),
     series,
+    secondary,
     ...(groupBy ? { groupBy } : {}),
     annotations,
   });

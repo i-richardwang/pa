@@ -25,7 +25,7 @@ const item = (
   name: string,
   values: (number | null)[],
   extra: Partial<ChartLegendItem> = {},
-): ChartLegendItem => ({ name, color: "#3b6fdb", format: "number", values, ...extra });
+): ChartLegendItem => ({ name, color: "#3b6fdb", format: "number", values, axis: 0, ...extra });
 
 function chart(
   series: Record<string, unknown>[] = [{ type: "bar", name: "在职人数", data: [120] }],

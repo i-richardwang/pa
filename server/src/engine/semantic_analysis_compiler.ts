@@ -276,13 +276,16 @@ function compileBoundChart(
   };
   const titleOf = (id: string) =>
     calculated.get(id)?.title ?? catalogMember(catalog, id, "measure")?.title ?? id;
+  const secondary = chart.type === "pie" ? [] : (chart.secondary_series ?? []);
   const series =
     chart.series ??
     queried.filter((id) => {
+      if (secondary.includes(id)) return false;
       const relation = relationOf(id);
       return !(relation?.kind === "structure_share" && queried.includes(relation.numerator_id));
     });
   if (!series.length) throw new ViewIntentError(`${chart.type} 呈现至少需要一个主系列`);
+  const plotted = [...series, ...secondary];
   const annotations = chart.type === "bar" ? (chart.annotations ?? []) : [];
   if (annotations.some((id) => series.includes(id))) {
     throw new ViewIntentError("同一指标不能同时是主系列和辅助标注");
@@ -309,15 +312,14 @@ function compileBoundChart(
   const display = style.series
     ? Object.fromEntries(
         Object.entries(style.series).map(([id, value]) => {
-          if (!series.includes(id)) {
-            throw new ViewIntentError(`系列视觉设置引用的指标「${titleOf(id)}」不在当前主系列中`);
+          if (!plotted.includes(id)) {
+            throw new ViewIntentError(`系列视觉设置引用的指标「${titleOf(id)}」不在当前系列中`);
           }
           return [
             bind(id, "measure"),
             {
               ...(value.color ? { color: value.color } : {}),
               ...(value.mark ? { type: value.mark } : {}),
-              ...(value.axis ? { yAxis: value.axis } : {}),
             },
           ];
         }),
@@ -329,6 +331,7 @@ function compileBoundChart(
   }
   const seriesChannels = {
     y,
+    ...(secondary.length ? { y2: secondary.map((id) => bind(id, "measure")) } : {}),
     // 空数组不是「没有」：辅助标注通道在场即说明主系列已由这里裁定过，呈现层据此不再推断。
     annotations: annotations.map((id) => bind(id, "measure")),
     ...(chart.group_by ? { group_by: bind(chart.group_by, "dimension") } : {}),
@@ -484,10 +487,12 @@ function compileDerivedChart(chart: SemanticViewIntent, style: ViewPreferences):
       ...(style.table_shading ? { shading: style.table_shading } : {}),
     };
   }
+  const secondary = chart.type === "pie" ? undefined : chart.secondary_series;
   if (style.series && chart.series) {
-    const unknown = Object.keys(style.series).find((id) => !chart.series?.includes(id));
+    const plotted = [...chart.series, ...(secondary ?? [])];
+    const unknown = Object.keys(style.series).find((id) => !plotted.includes(id));
     if (unknown) {
-      throw new ViewIntentError(`系列视觉设置引用的派生列「${unknown}」不在当前主系列中`);
+      throw new ViewIntentError(`系列视觉设置引用的派生列「${unknown}」不在当前系列中`);
     }
   }
   if (chart.type === "pie") {
@@ -499,6 +504,7 @@ function compileDerivedChart(chart: SemanticViewIntent, style: ViewPreferences):
   }
   const seriesChannels = {
     ...(chart.series ? { y: chart.series } : {}),
+    ...(secondary ? { y2: secondary } : {}),
     ...(chart.group_by ? { group_by: chart.group_by } : {}),
     ...(style.series
       ? {
@@ -508,7 +514,6 @@ function compileDerivedChart(chart: SemanticViewIntent, style: ViewPreferences):
               {
                 ...(value.color ? { color: value.color } : {}),
                 ...(value.mark ? { type: value.mark } : {}),
-                ...(value.axis ? { yAxis: value.axis } : {}),
               },
             ]),
           ),

@@ -33,6 +33,28 @@ describe("public chart declaration", () => {
     expect(parse({ ...table, unexpected: true })).toThrow();
   });
 
+  test("两把尺子不共享系列；拆分在场时没有副轴", () => {
+    expect(() =>
+      CHART_DECL_SCHEMA.parse({
+        type: "bar",
+        x: "organization_name",
+        y: ["active_employee_count"],
+        y2: ["active_employee_count"],
+      }),
+    ).toThrow("bar 呈现声明的同一系列不能同时在主轴与副轴");
+    expect(() =>
+      CHART_DECL_SCHEMA.parse({
+        type: "line",
+        y: ["active_employee_count"],
+        y2: ["ytd_primary_event_rate"],
+        groupBy: "organization_name",
+      }),
+    ).toThrow("line 呈现声明拆分通道时值通道只容一个系列");
+    expect(() =>
+      CHART_DECL_SCHEMA.parse({ type: "pie", x: "organization_name", y: ["a"], y2: ["b"] }),
+    ).toThrow();
+  });
+
   test("拆分通道占掉系列来源时值通道只剩一个位置", () => {
     expect(() =>
       CHART_DECL_SCHEMA.parse({

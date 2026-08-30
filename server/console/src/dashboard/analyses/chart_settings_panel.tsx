@@ -1,6 +1,8 @@
 /** 成员名恒经 makeTitleOf 翻成中文标题后才上屏。 */
 import { useId, useState } from "react";
 import {
+  ArrowLeftToLineIcon,
+  ArrowRightToLineIcon,
   ChartColumnIcon,
   ChartLineIcon,
   ChartPieIcon,
@@ -16,7 +18,7 @@ import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog
 import type { ReplayPayload } from "@contracts/replay_contract";
 import { SERIES_COLORS } from "@charts";
 import { type ChartSpecContext, normalizeTableColumns, type TableAxis } from "@chart-spec";
-import { splitCandidates } from "@channels";
+import { chartChannels, splitCandidates } from "@channels";
 import { memberShortName } from "@member";
 import { isSemanticDerivedView, type SemanticViewIntent } from "@semantic-analysis";
 import type { SeriesPreferences, TableShadingPreferences } from "@view-preferences";
@@ -50,6 +52,7 @@ import { SwitchField } from "@/components/ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   defaultSemanticViewIntent,
+  isPreviewCurrent,
   semanticSummaryEnabled,
   semanticViewContext,
   setSemanticViewIntent,
@@ -82,7 +85,6 @@ function unavailableText(availability: FormAvailability, label: string): string 
     : `${label}的通道装不下当前结果的 ${availability.dimensions} 个维度`;
 }
 
-const AXIS_ITEMS = { left: "左轴", right: "右轴" };
 const SERIES_FORM_ITEMS = { line: "折线", bar: "柱形" };
 const SHADING_STYLE_ITEMS = { none: "不着色", values: "数值与颜色", colors: "仅颜色" };
 
@@ -236,7 +238,12 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   const tableColumnSummary = tableLayout.columns.map(tableLayoutAxisLabel).join(" · ") || "选择";
   const tableRowSummary = tableLayout.rows.map(tableLayoutAxisLabel).join(" · ") || "无";
   const remainingTableAxes = tableAxisCandidates.filter((axis) => !tableColumns.includes(axis));
-  const y = chart.type === "table" || chart.type === "kpi" ? [] : (chart.series ?? measures);
+  const secondarySeries =
+    chart.type === "line" || chart.type === "bar" ? (chart.secondary_series ?? []) : [];
+  const y =
+    chart.type === "table" || chart.type === "kpi"
+      ? []
+      : (chart.series ?? measures.filter((member) => !secondarySeries.includes(member)));
   const annotations = chart.type === "bar" ? (chart.annotations ?? []) : [];
   // 拆分与堆叠只属于声明了这两个通道的图型；收窄一次，后面的读写都用它。
   const splittable = chart.type === "line" || chart.type === "bar" ? chart : null;
@@ -250,6 +257,31 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   const canSplitSeries = splitOptions.length > 1;
   // 饼图的扇区归属即取值，没有逐系列样式；此时指标行只留「上不上轴」。
   const canStyleSeries = splittable !== null && !groupBy;
+  // 系列落在哪把尺子上以编译结果为准（没声明副轴时分侧出自量纲）；预览落后于草稿时只能读声明。
+  const legendOf = (member: string) =>
+    replay.presentation.chart?.model.legend.find((item) => item.name === titleOf(member));
+  const previewCurrent = isPreviewCurrent(draft);
+  const axisOf = (member: string): 0 | 1 =>
+    secondarySeries.includes(member) ? 1 : previewCurrent ? (legendOf(member)?.axis ?? 0) : 0;
+  const plotted = measures.filter(
+    (member) =>
+      !annotations.includes(member) && (y.includes(member) || secondarySeries.includes(member)),
+  );
+  const offAxis = measures.filter(
+    (member) => !annotations.includes(member) && !plotted.includes(member),
+  );
+  const dual = plotted.some((member) => axisOf(member) === 1);
+  const leftCount = plotted.filter((member) => axisOf(member) === 0).length;
+  const secondaryPossible =
+    splittable !== null && !groupBy && chartChannels(splittable.type).scales === 2;
+  // 开了副轴才分组列出；一把尺子时就是一张清单，未上轴的指标恒在最后。
+  const seriesGroups: { axis: 0 | 1 | null; caption?: string; members: string[] }[] = dual
+    ? [
+        { axis: 0, caption: "左轴", members: plotted.filter((member) => axisOf(member) === 0) },
+        { axis: 1, caption: "右轴", members: plotted.filter((member) => axisOf(member) === 1) },
+        { axis: null, members: offAxis },
+      ]
+    : [{ axis: 0, members: [...plotted, ...offAxis] }];
   const valueLabelItems: Record<string, string> = groupBy
     ? { none: "不显示", all: "全部" }
     : { none: "不显示", main: "仅主指标", all: "全部" };
@@ -308,19 +340,43 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
     setTableColumns([...tableColumns, axis]);
   }
 
+  /** 写回两把尺子上的系列；副轴清空即不再声明，让分侧回到量纲缺省。 */
+  function setScales(nextY: string[], nextY2: string[]) {
+    if (chart.type !== "line" && chart.type !== "bar") return;
+    if (!nextY.length) return;
+    const { secondary_series: _dropped, ...rest } = chart;
+    const next = { ...rest, series: nextY, ...(nextY2.length ? { secondary_series: nextY2 } : {}) };
+    update(
+      next.type === "bar"
+        ? {
+            ...next,
+            annotations: annotations.filter(
+              (item) => !nextY.includes(item) && !nextY2.includes(item),
+            ),
+          }
+        : next,
+    );
+  }
+
   function setY(member: string) {
     if (chart.type === "table" || chart.type === "kpi") return;
-    const next = y.includes(member) ? y.filter((item) => item !== member) : [...y, member];
-    if (!next.length) return;
     if (chart.type === "pie") return update({ ...chart, series: [member] });
-    if (chart.type === "bar") {
-      return update({
-        ...chart,
-        series: next,
-        annotations: annotations.filter((item) => item !== member),
-      });
+    if (secondarySeries.includes(member)) {
+      return setScales(
+        y,
+        secondarySeries.filter((item) => item !== member),
+      );
     }
-    update({ ...chart, series: next });
+    const next = y.includes(member) ? y.filter((item) => item !== member) : [...y, member];
+    setScales(next, secondarySeries);
+  }
+
+  /** 按当前实际分侧重写两侧：没声明过副轴时右侧成员出自量纲缺省，移轴后一并落成声明。 */
+  function moveAxis(member: string, axis: 0 | 1) {
+    const side = (target: 0 | 1) =>
+      plotted.filter((item) => item !== member && axisOf(item) === target);
+    if (axis === 1) setScales(side(0), [...side(1), member]);
+    else setScales([...side(0), member], side(1));
   }
 
   function setSeriesPreferences(member: string, patch: Partial<SeriesPreferences>) {
@@ -475,80 +531,92 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   return (
     <>
       <InspectorSection contentClassName={ROWS_CONTENT_CLASS} icon={<ChartLineIcon />} title="系列">
-        {measures
-          .filter((member) => !annotations.includes(member))
-          .map((member) => {
-            const checked = y.includes(member);
-            // 色序出自编译期，面板不另算一份。
-            const intent = series[member] ?? {};
-            const color =
-              intent.color ??
-              replay.presentation.chart?.model.legend.find((item) => item.name === titleOf(member))
-                ?.color;
-            const styleable = canStyleSeries && checked;
-            const open = styleable && expandedSeries === member;
-            const controlId = `${fieldId}-y-${member}`;
-            return (
-              <div key={member}>
-                <InspectorRow
-                  actions={
-                    styleable ? (
-                      <Button
-                        aria-label={open ? "收起系列设置" : "展开系列设置"}
-                        className="text-pa-muted"
-                        onClick={() => setExpandedSeries(open ? null : member)}
-                        size="icon-sm"
-                        variant="subtle"
-                      >
-                        {open ? <ChevronUpIcon /> : <ChevronDownIcon />}
-                      </Button>
-                    ) : undefined
-                  }
-                  icon={
-                    <Checkbox
-                      checked={checked}
-                      id={controlId}
-                      onCheckedChange={() => setY(member)}
-                    />
-                  }
-                  label={
-                    <label className="cursor-pointer" htmlFor={controlId}>
-                      {titleOf(member)}
-                    </label>
-                  }
-                />
-                {open ? (
-                  <>
-                    <InspectorRow indent label="颜色">
-                      <span className="flex flex-wrap justify-end gap-1">
-                        {SERIES_COLORS.map((option) => (
-                          <ColorPill
-                            aria-label={`${titleOf(member)} 颜色 ${option}`}
-                            color={option}
-                            key={option}
-                            onClick={() => setSeriesPreferences(member, { color: option })}
-                            selected={option === color}
-                          />
-                        ))}
-                      </span>
-                    </InspectorRow>
-                    <SelectRow
-                      items={AXIS_ITEMS}
-                      label="坐标轴"
-                      onValueChange={(value) => setSeriesPreferences(member, { axis: value })}
-                      value={intent.axis ?? "left"}
-                    />
-                    <SelectRow
-                      items={SERIES_FORM_ITEMS}
-                      label="形态"
-                      onValueChange={(value) => setSeriesPreferences(member, { mark: value })}
-                      value={intent.mark ?? (chart.type === "line" ? "line" : "bar")}
-                    />
-                  </>
-                ) : null}
-              </div>
-            );
-          })}
+        {seriesGroups.map((group) => (
+          <div key={group.axis ?? "off"}>
+            {group.caption ? <Hint className="px-2 pt-1.5">{group.caption}</Hint> : null}
+            {group.members.map((member) => {
+              const checked = y.includes(member) || secondarySeries.includes(member);
+              // 色序出自编译期，面板不另算一份。
+              const intent = series[member] ?? {};
+              const color = intent.color ?? legendOf(member)?.color;
+              const styleable = canStyleSeries && checked;
+              const open = styleable && expandedSeries === member;
+              const controlId = `${fieldId}-y-${member}`;
+              const onSecondary = axisOf(member) === 1;
+              const canMove = styleable && (onSecondary || (secondaryPossible && leftCount > 1));
+              return (
+                <div key={member}>
+                  <InspectorRow
+                    actions={
+                      styleable ? (
+                        <>
+                          {canMove ? (
+                            <Button
+                              aria-label={onSecondary ? "移到左轴" : "移到右轴"}
+                              className="text-pa-muted"
+                              onClick={() => moveAxis(member, onSecondary ? 0 : 1)}
+                              size="icon-sm"
+                              variant="subtle"
+                            >
+                              {onSecondary ? <ArrowLeftToLineIcon /> : <ArrowRightToLineIcon />}
+                            </Button>
+                          ) : null}
+                          <Button
+                            aria-label={open ? "收起系列设置" : "展开系列设置"}
+                            className="text-pa-muted"
+                            onClick={() => setExpandedSeries(open ? null : member)}
+                            size="icon-sm"
+                            variant="subtle"
+                          >
+                            {open ? <ChevronUpIcon /> : <ChevronDownIcon />}
+                          </Button>
+                        </>
+                      ) : undefined
+                    }
+                    icon={
+                      <Checkbox
+                        checked={checked}
+                        id={controlId}
+                        onCheckedChange={() => setY(member)}
+                      />
+                    }
+                    label={
+                      <label className="cursor-pointer" htmlFor={controlId}>
+                        {titleOf(member)}
+                      </label>
+                    }
+                  />
+                  {open ? (
+                    <>
+                      <InspectorRow indent label="颜色">
+                        <span className="flex flex-wrap justify-end gap-1">
+                          {SERIES_COLORS.map((option) => (
+                            <ColorPill
+                              aria-label={`${titleOf(member)} 颜色 ${option}`}
+                              color={option}
+                              key={option}
+                              onClick={() => setSeriesPreferences(member, { color: option })}
+                              selected={option === color}
+                            />
+                          ))}
+                        </span>
+                      </InspectorRow>
+                      <SelectRow
+                        items={SERIES_FORM_ITEMS}
+                        label="形态"
+                        onValueChange={(value) => setSeriesPreferences(member, { mark: value })}
+                        value={
+                          intent.mark ??
+                          (onSecondary ? "line" : dual ? "bar" : (splittable?.type ?? "bar"))
+                        }
+                      />
+                    </>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </InspectorSection>
 
       {chart.type === "bar" && annotations.length > 0 ? (
