@@ -32,14 +32,15 @@ function ShadeChip({
   value,
   formatKey,
   shading,
+  dark,
   children,
 }: {
   value: string | number | null;
   formatKey: string;
   shading: TableShading;
+  dark: boolean;
   children: React.ReactNode;
 }) {
-  const dark = useDarkTheme();
   const shade = shadeCell(value, formatKey, shading, dark);
   if (!shade) return children;
   return (
@@ -122,6 +123,7 @@ export function DataTable({
   canOpenCell?: (row: number, column: number) => boolean;
   onOpenCell?: (row: number, column: number) => void;
 }) {
+  const dark = useDarkTheme();
   const traits = VIEW_SCENES[scene];
   const { fill } = traits;
   const [sort, setSort] = useState<TableSort | null>(null);
@@ -260,7 +262,7 @@ export function DataTable({
           text
         );
       return model.shading ? (
-        <ShadeChip formatKey={col.formatKey} shading={model.shading} value={value}>
+        <ShadeChip dark={dark} formatKey={col.formatKey} shading={model.shading} value={value}>
           {content}
         </ShadeChip>
       ) : (

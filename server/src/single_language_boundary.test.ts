@@ -330,16 +330,14 @@ describe("互斥维度按共享语义身份解析（fail-closed，无名称关�
     expect(planForward.incompatible_dimensions).toEqual(planSwapped.incompatible_dimensions);
   });
 
-  it("聚焦 View 未投影互斥维度时由结构性不可用替代重复声明", () => {
+  it("聚焦 View 声明未投影的互斥维度时装配失败", () => {
     const views = [
       fixtureView("hc", 1, {
         dimensions: [orgDim("hc")],
         measures: [planMeasure("hc", [{ member: "department_name", reason: "x" }])],
       }),
     ];
-    expect(
-      toCompilerCatalog(buildCatalogDocument(views)).measures[0]?.incompatible_dimensions,
-    ).toBeUndefined();
+    expect(() => toCompilerCatalog(buildCatalogDocument(views))).toThrow("未知的互斥维度");
   });
 
   it("多命中（歧义）目录装配失败", () => {

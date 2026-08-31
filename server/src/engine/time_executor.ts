@@ -2,6 +2,7 @@
 import { compareCells } from "../presentation_core/view_format.js";
 import type {
   CubeGateway,
+  CubeCell,
   CubeQuery,
   CubeSecurityContext,
   LoadResponse,
@@ -12,13 +13,12 @@ const MULTI_QUERY_LIMIT = 5000;
 
 export type ResolvedLoad = LoadResponse;
 
-/** Cube 行取值的静态类型是 unknown；排序前归一到单元格类型，缺失一律视作空值。 */
-const orderCell = (value: unknown): string | number | null =>
+const orderCell = (value: CubeCell): CubeCell =>
   value == null ? null : typeof value === "number" ? value : String(value);
 
 const comparator =
   (order: [string, "asc" | "desc"][]) =>
-  (a: Record<string, unknown>, b: Record<string, unknown>): number => {
+  (a: Record<string, CubeCell>, b: Record<string, CubeCell>): number => {
     for (const [member, direction] of order) {
       const result = compareCells(orderCell(a[member]), orderCell(b[member]));
       if (result) return direction === "desc" ? -result : result;
@@ -27,9 +27,9 @@ const comparator =
   };
 
 export function sortRowsByOrder(
-  rows: Record<string, unknown>[],
+  rows: Record<string, CubeCell>[],
   order: [string, "asc" | "desc"][],
-): Record<string, unknown>[] {
+): Record<string, CubeCell>[] {
   if (order.length) rows.sort(comparator(order));
   return rows;
 }
@@ -54,16 +54,16 @@ function bucketKey(plan: PlannedQuery): string | null {
 
 function shapeRow(
   plan: PlannedQuery,
-  row: Record<string, unknown>,
+  row: Record<string, CubeCell>,
   rangeYear?: number,
-): Record<string, unknown> {
+): Record<string, CubeCell> {
   const bucket = String(
     (bucketKey(plan) && row[bucketKey(plan)!]) ?? row[`${plan.time.view}.period_month`] ?? "",
   );
   const bucketYear = bucket.length >= 4 ? Number(bucket.slice(0, 4)) : Number.NaN;
   const year = Number.isInteger(bucketYear) ? bucketYear : rangeYear;
   const month = Number(bucket.slice(5, 7));
-  const result: Record<string, unknown> = {};
+  const result: Record<string, CubeCell> = {};
   for (const dimension of plan.query.dimensions ?? []) result[dimension] = row[dimension] ?? null;
   for (const part of timeOutputParts(plan)) {
     if (part === "year" && year === undefined) {

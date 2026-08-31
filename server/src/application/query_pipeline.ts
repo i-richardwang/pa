@@ -15,6 +15,7 @@ import type {
   QueryPayload,
   ViewBlock,
 } from "../semantic_core/query_payload.js";
+import { QUERY_PAYLOAD_SCHEMA } from "../semantic_core/query_payload.js";
 import type { ChartDecl } from "../presentation_core/chart_decl.js";
 import { projectPresentation } from "../presentation_core/presentation_projection.js";
 import type { MetricQueryPlan } from "../engine/metric_planner.js";
@@ -276,12 +277,13 @@ export async function runQueryPipeline(
     capabilities = { export: delivery.link };
     exportResource = delivery.resource;
   }
+  const payload = QUERY_PAYLOAD_SCHEMA.parse({
+    ...shared,
+    view: deliveredSampled,
+    ...(capabilities ? { capabilities } : {}),
+  });
   return {
-    payload: {
-      ...shared,
-      view: deliveredSampled,
-      ...(capabilities ? { capabilities } : {}),
-    },
+    payload,
     fullRowViewBlock: deliveredFull,
     decl,
     ...(fullRows ? { fullRows } : {}),

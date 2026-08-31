@@ -35,7 +35,7 @@ export type ExecutionPlan = {
 };
 
 export type PlanOptions = {
-  delivery?: OutputDelivery;
+  delivery: OutputDelivery | "identity";
 };
 
 const TIME_COLUMNS = ["year", "month", "period_month"] as const;
@@ -48,12 +48,12 @@ function identityDelivery(view: AnalysisViewSpec): OutputDelivery {
 }
 
 /** 解析输入规格并产出唯一执行计划。 */
-export function planExecution(input: AnalysisSpec, opts: PlanOptions = {}): ExecutionPlan {
+export function planExecution(input: AnalysisSpec, opts: PlanOptions): ExecutionPlan {
   const spec = parseAnalysisSpec(input);
   const outputId = analysisSink(spec.views);
   const view = spec.views.find((candidate) => candidate.id === outputId);
   if (!view) throw new Error(`交付结果 ${outputId} 没有对应执行节点`);
-  const delivery = opts.delivery ?? identityDelivery(view);
+  const delivery = opts.delivery === "identity" ? identityDelivery(view) : opts.delivery;
   if (!Object.keys(delivery.columns).length) {
     throw new Error(`交付结果 ${outputId} 缺少公共列投影`);
   }

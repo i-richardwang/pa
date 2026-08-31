@@ -44,10 +44,13 @@ const execution = {
 const presentation = { renderShape: () => null };
 const semanticPlanning = {
   plan: async (caller: Principal, semantic: AnalysisDefinition, _intent: SemanticViewIntent) => ({
-    plan: planExecution({
-      ...(semantic.title ? { title: semantic.title } : {}),
-      views: semantic.views.filter((view) => !("from" in view)),
-    } as AnalysisSpec),
+    plan: planExecution(
+      {
+        ...(semantic.title ? { title: semantic.title } : {}),
+        views: semantic.views.filter((view) => !("from" in view)),
+      } as AnalysisSpec,
+      { delivery: "identity" },
+    ),
     presentation: { type: "table" as const },
     render_decl: { type: "table" as const },
     routes: [],
@@ -187,7 +190,7 @@ describe("report aggregate", () => {
       analyses: countingAnalyses,
       semanticPlanning: {
         plan: async (caller) => ({
-          plan: planExecution(spec()),
+          plan: planExecution(spec(), { delivery: "identity" }),
           presentation: {
             type: "table" as const,
           },

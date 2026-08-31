@@ -303,7 +303,7 @@ export const semanticPlanningStub = {
       }),
     };
     const presentation = stubPresentation(declared, preferences);
-    const plan = planExecution(analysis);
+    const plan = planExecution(analysis, { delivery: "identity" });
     return {
       plan,
       presentation,

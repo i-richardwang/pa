@@ -191,8 +191,8 @@ export function setSemanticSummary(
     return rest;
   });
   const resultView = views.find((view) => view.id === viewId);
-  const viewIntent = resultView ? repairedViewIntent(draft.view, resultView, catalog) : draft.view;
-  const preferences = repairedViewPreferences(draft.view_preferences, viewIntent);
+  const viewIntent = resultView ? normalizeViewIntent(draft.view, resultView, catalog) : draft.view;
+  const preferences = normalizeViewPreferences(draft.view_preferences, viewIntent);
   return {
     ...draft,
     analysis: { ...draft.analysis, views },
@@ -276,7 +276,7 @@ function chartIntent(
   };
 }
 
-function repairedViewIntent(
+function normalizeViewIntent(
   chart: SemanticViewIntent,
   view: SemanticAnalysisView,
   catalog: CatalogPayload,
@@ -337,7 +337,7 @@ function measureScales(catalog: CatalogPayload): Record<string, string> {
   );
 }
 
-function repairedViewPreferences(
+function normalizeViewPreferences(
   style: ViewPreferences,
   intent: SemanticViewIntent,
 ): ViewPreferences {
@@ -370,7 +370,7 @@ export function setViewPreferences(
 ): AnalysisEditState {
   return {
     ...draft,
-    view_preferences: repairedViewPreferences(clone(style), draft.view),
+    view_preferences: normalizeViewPreferences(clone(style), draft.view),
     previewed_analysis: null,
     previewed_view: null,
     previewed_view_preferences: null,
@@ -385,10 +385,10 @@ export function setSemanticViewIntent(
   const viewId = semanticAnalysisSink(draft.analysis.views);
   const view = draft.analysis.views.find((candidate) => candidate.id === viewId);
   if (!view) return draft;
-  const normalized = repairedViewIntent(chart, view, catalog);
+  const normalized = normalizeViewIntent(chart, view, catalog);
   return {
     ...draft,
-    view_preferences: repairedViewPreferences(draft.view_preferences, normalized),
+    view_preferences: normalizeViewPreferences(draft.view_preferences, normalized),
     view: clone(normalized),
     previewed_analysis: null,
     previewed_view: null,
@@ -407,12 +407,12 @@ export function setSemanticQueryView(
   const views = draft.analysis.views.map((view) => (view.id === viewId ? clone(nextView) : view));
   const resultId = semanticAnalysisSink(views);
   const viewIntent =
-    resultId === viewId ? repairedViewIntent(draft.view, nextView, catalog) : draft.view;
+    resultId === viewId ? normalizeViewIntent(draft.view, nextView, catalog) : draft.view;
   return {
     ...draft,
     analysis: { ...draft.analysis, views },
     view: viewIntent,
-    view_preferences: repairedViewPreferences(draft.view_preferences, viewIntent),
+    view_preferences: normalizeViewPreferences(draft.view_preferences, viewIntent),
     previewed_analysis: null,
     previewed_view: null,
     previewed_view_preferences: null,
@@ -450,7 +450,7 @@ export function timeCapabilitiesOf(
   };
 }
 
-/** 时间栏落草稿的唯一入口：写入收敛点查询视图，失效与呈现修复同 setSemanticQueryView。 */
+/** 时间栏写入收敛点查询视图，并由 setSemanticQueryView 统一归一呈现状态。 */
 export function setDraftTime(
   draft: AnalysisEditState,
   time: TimeIntent,
@@ -522,7 +522,7 @@ export function defaultSemanticViewIntent(
   const viewId = semanticAnalysisSink(draft.analysis.views);
   const view = draft.analysis.views.find((candidate) => candidate.id === viewId);
   if (!view || type === "table") return { type: "table" };
-  if (type === "kpi") return repairedViewIntent({ type }, view, catalog);
+  if (type === "kpi") return normalizeViewIntent({ type }, view, catalog);
   const { measures, dimensions } = semanticViewContext(view, catalog);
   const proposal = result ? proposeChartDecl(result, type) : null;
   const semantic = (column: string, pool: string[]) =>
@@ -541,14 +541,13 @@ export function defaultSemanticViewIntent(
     series.length !== proposal.y.length ||
     secondary.length !== proposedY2.length
   ) {
-    return repairedViewIntent(
+    return normalizeViewIntent(
       chartIntent(type, { category: dimensions[0], series: measures }),
       view,
       catalog,
     );
   }
-  // 结果侧的装箱说了算，不再过声明侧的 repair：查询声明了维度而结果只有一个取值时，
-  // 该维度分裂不出系列，按它拆线只会退表格。
+  // 结果侧装箱是最终判据：只有一个取值的维度无法拆分系列。
   const annotations = shareAnnotations(type, view, catalog, series);
   return chartIntent(type, {
     ...(category ? { category } : {}),

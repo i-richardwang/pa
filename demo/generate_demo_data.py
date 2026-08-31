@@ -24,7 +24,7 @@ import duckdb
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ID = "pa_demo"
-GENERATOR_VERSION = "demo_v3"
+GENERATOR_VERSION = "demo_v1"
 SEED = 314159
 HISTORY_MONTHS = 60
 SIMULATION_START = date(2018, 1, 1)

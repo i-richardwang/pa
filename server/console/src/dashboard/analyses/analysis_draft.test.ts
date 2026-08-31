@@ -121,7 +121,6 @@ function replay(view: ReplayPayload["view"] = { type: "table" }): ReplayPayload 
     },
     presentation: {
       type: "table",
-      table_layout: { state: "applied", leafColumns: 2 },
       table: {
         columns: [
           {

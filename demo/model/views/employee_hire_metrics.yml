@@ -1,7 +1,7 @@
 views:
   - name: employee_hire_metrics
-    title: 员工入职指标执行面
-    description: 员工入职事件指标的权限受控执行面。
+    title: 员工入职
+    description: 所选期间发生的员工入职事件及人数。
     meta:
       query_surface: metric_source
       time_source: workforce

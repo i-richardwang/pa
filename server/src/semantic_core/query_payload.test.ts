@@ -4,13 +4,23 @@
  */
 import { describe, expect, test } from "bun:test";
 import {
-  isExportResourceLink,
-  isFullRowsBlock,
-  isQueryPayload,
+  EXPORT_RESOURCE_LINK_SCHEMA,
+  FULL_ROWS_BLOCK_SCHEMA,
+  QUERY_PAYLOAD_SCHEMA,
   freshnessLabel,
   mergeFullRows,
   type QueryPayload,
 } from "./query_payload.js";
+
+const isQueryPayload = (value: unknown) => QUERY_PAYLOAD_SCHEMA.safeParse(value).success;
+const isFullRowsBlock = (value: unknown, payload: QueryPayload) => {
+  const parsed = FULL_ROWS_BLOCK_SCHEMA.safeParse(value);
+  return (
+    parsed.success && parsed.data.rows.every((row) => row.length === payload.view.columns.length)
+  );
+};
+const isExportResourceLink = (value: unknown) =>
+  EXPORT_RESOURCE_LINK_SCHEMA.safeParse(value).success;
 
 const view = (rows: (string | number | null)[][], row_count: number) => ({
   id: "result",

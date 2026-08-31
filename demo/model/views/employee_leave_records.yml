@@ -1,7 +1,7 @@
 views:
   - name: employee_leave_records
     title: 离职员工记录
-    description: 离职人数及离职率指标的受控构成记录面。
+    description: 所选期间构成离职人数的员工记录。
     meta:
       query_surface: detail
       time_source: workforce

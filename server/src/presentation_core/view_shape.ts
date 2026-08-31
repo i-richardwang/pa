@@ -74,8 +74,8 @@ export type SeriesDef = {
   axis: 0 | 1;
   /** 条形图专用：本系列对应的结构占比值在 ChartRow 中的键。 */
   shareKey?: string;
-  /** 所对照系列的 `key`（同期叠加各对照期都对到主期）；「谁减谁」在编排期定。 */
-  baselineKey?: string;
+  /** 服务端已计算的对照变化值；渲染端只按声明格式展示。 */
+  comparison?: { key: string; format: ColumnFormat; decimals?: number };
 };
 export type ChartRow = Record<string, Cell>;
 export type ChartSourceRow = {
@@ -109,7 +109,8 @@ export type BarSpec = {
 export type PieSpec = {
   kind: "pie";
   /** { label: 切片分类值, value: 度量值 } 保持查询返回顺序 */
-  rows: { label: string; value: number | null }[];
+  rows: { label: string; value: number | null; share: number | null }[];
+  total: number;
   sourceRows: ChartSourceRow[];
   /** 度量来源列（载荷列短名）；字段绑定消费方（报告呈现编译）只认本字段 */
   column: string;
@@ -378,6 +379,7 @@ function comparisonLine(
   if (periods.length > MAX_LINE_SERIES) return null;
   const format = columnFormat(view.columns[valIdx], view.column_formats);
   // periods[0] 是主期（桶序也由它铺开），其余各期都对照它读差值
+  const rate = isRateFormat(format);
   const series = periods.map((period, index) => ({
     key: `s${index}`,
     name: periodLabel(period),
@@ -385,7 +387,15 @@ function comparisonLine(
     format,
     ...declaredDecimals(view, valIdx),
     axis: 0 as const,
-    ...(index === 0 ? {} : { baselineKey: "s0" }),
+    ...(index === 0
+      ? {}
+      : {
+          comparison: {
+            key: `comparison${index}`,
+            format: rate ? ("percentage_point" as const) : ("percent" as const),
+            ...(rate ? declaredDecimals(view, valIdx) : {}),
+          },
+        }),
   }));
   const at = new Map<number, { seriesKey: string; position: number }>();
   periods.forEach((period, index) => {
@@ -413,6 +423,9 @@ function comparisonLine(
       const cell = cells.get(`${position}|${item.key}`);
       row[item.key] = cell?.value ?? null;
       if (cell) sources[item.key] = cell.source;
+    }
+    for (let index = 1; index < series.length; index += 1) {
+      row[`comparison${index}`] = deltaValue(row.s0 ?? null, row[`s${index}`] ?? null, rate);
     }
     sourceRows.push(Object.keys(sources).length ? { series: sources } : {});
     return row;
@@ -693,12 +706,16 @@ function pieChart(
   if (!names) return null;
   if (names.length > MAX_PIE_SLICES) return null;
   if (names.length !== view.rows.length) return null; // 每分类恰一行才成构成
+  const values = view.rows.map((row) => toNumber(row[valIdx]));
+  const total = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
   return {
     kind: "pie",
-    rows: view.rows.map((r) => ({
+    rows: view.rows.map((r, index) => ({
       label: cellLabel(r[catIdx]),
-      value: toNumber(r[valIdx]),
+      value: values[index],
+      share: values[index] === null || total <= 0 ? null : values[index] / total,
     })),
+    total,
     sourceRows: view.rows.map((_, row) => ({ row })),
     column: view.columns[valIdx],
     categoryColumn: view.columns[catIdx],

@@ -108,7 +108,7 @@ function runtimeViews(): CubeView[] {
   ];
 }
 
-function response(query: CubeQuery, rows: Record<string, unknown>[]): LoadResponse {
+function response(query: CubeQuery, rows: LoadResponse["data"]): LoadResponse {
   return {
     data: rows,
     annotation: {

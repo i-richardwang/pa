@@ -1,21 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import type { QueryRunResult } from "./query_pipeline.js";
-import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
 import type { ViewBlock } from "../semantic_core/query_payload.js";
 import { createPresentationService } from "./presentation_service.js";
-
-const presentation: PresentationSpec = {
-  type: "bar",
-  x: "organization_name",
-  y: ["active_employee_count"],
-};
 
 const tableColumns = [{ kind: "field" as const, column: "degree" }, { kind: "metrics" as const }];
 
 const block = (rows: ViewBlock["rows"]): ViewBlock => ({
   id: "result",
   columns: ["organization_name", "active_employee_count"],
-  column_roles: { organization_name: "dimension", active_employee_count: "measure" },
+  column_roles: {
+    organization_name: "dimension",
+    active_employee_count: "measure",
+  },
   column_formats: { active_employee_count: "number" },
   rows,
   row_count: rows.length,
@@ -70,7 +66,7 @@ describe("presentation service runtime fallback", () => {
     const service = createPresentationService();
     const executed = result([]);
     expect(service.compile(executed)).toMatchObject({ type: "table" });
-    expect(service.runtimeFallbacks(executed, presentation)).toEqual([
+    expect(service.runtimeFallbacks(executed)).toEqual([
       {
         result_view_id: "result",
         kind: "empty_result",
@@ -86,7 +82,7 @@ describe("presentation service runtime fallback", () => {
       ["研发", 8],
     ]);
     expect(service.compile(executed)).toMatchObject({ type: "table" });
-    expect(service.runtimeFallbacks(executed, presentation)).toEqual([
+    expect(service.runtimeFallbacks(executed)).toEqual([
       {
         result_view_id: "result",
         kind: "unsupported_shape",
@@ -105,7 +101,7 @@ describe("presentation service runtime fallback", () => {
       type: "bar",
       chart: { form: "bar" },
     });
-    expect(service.runtimeFallbacks(executed, presentation)).toEqual([]);
+    expect(service.runtimeFallbacks(executed)).toEqual([]);
   });
 
   test("列轴生效时无降级说明", () => {
@@ -118,31 +114,20 @@ describe("presentation service runtime fallback", () => {
     ]);
     expect(service.compile(executed)).toMatchObject({
       type: "table",
-      table_layout: { state: "applied" },
     });
-    expect(
-      service.runtimeFallbacks(executed, {
-        type: "table",
-        tableColumns,
-      }),
-    ).toEqual([]);
+    expect(service.runtimeFallbacks(executed)).toEqual([]);
   });
 
   test("列轴坐标重复时明确说明不可用，空结果保留声明", () => {
     const service = createPresentationService();
-    const presentation: PresentationSpec = {
-      type: "table",
-      tableColumns,
-    };
     const degraded = pivotResult([
       ["研发", "本科", 10],
       ["研发", "本科", 8],
     ]);
     expect(service.compile(degraded)).toMatchObject({
       type: "table",
-      table_layout: { state: "unavailable", reason: "duplicate_coordinate" },
     });
-    expect(service.runtimeFallbacks(degraded, presentation)).toEqual([
+    expect(service.runtimeFallbacks(degraded)).toEqual([
       {
         result_view_id: "result",
         kind: "unsupported_shape",
@@ -151,6 +136,6 @@ describe("presentation service runtime fallback", () => {
     ]);
 
     const empty = pivotResult([]);
-    expect(service.runtimeFallbacks(empty, presentation)).toEqual([]);
+    expect(service.runtimeFallbacks(empty)).toEqual([]);
   });
 });

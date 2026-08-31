@@ -67,7 +67,6 @@ export type RecordProjectionRequestBody = z.infer<typeof RECORD_PROJECTION_REQUE
 export type RecordProjectionPayload = {
   metric_id: string;
   metric_title: string;
-  record_set_id: string;
   record_set_title: string;
   record_set_description: string;
   /** 列显示标题（Cube 注解），与 column_keys / 每行单元格一一对应。 */
@@ -87,7 +86,6 @@ export const RECORD_PROJECTION_PAYLOAD_SCHEMA: z.ZodType<RecordProjectionPayload
   .object({
     metric_id: z.string(),
     metric_title: z.string(),
-    record_set_id: z.string(),
     record_set_title: z.string(),
     record_set_description: z.string(),
     columns: z.array(z.string()),

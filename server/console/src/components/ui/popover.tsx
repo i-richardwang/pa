@@ -1,5 +1,3 @@
-"use client";
-
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import type * as React from "react";
 import { GLASS_POPUP_SURFACE, POPUP_WIDTH, type PopupWidth } from "@/components/ui/surface";

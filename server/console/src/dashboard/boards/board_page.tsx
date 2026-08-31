@@ -66,7 +66,6 @@ import {
 } from "./board_draft";
 import { HeaderTextAction } from "../layout/view_chrome";
 import { useSetDetailCrumb, useSetTitlebarActions } from "../layout/layout_chrome";
-import { CodeCopyButton } from "../kit/copy_button";
 import { boardHash, navigateTo, useLeaveBlocker } from "../router";
 import {
   RecordProjectionDialog,
@@ -279,20 +278,12 @@ export function BoardPage({
     }
     return (
       <>
-        {data && (
-          <CodeCopyButton
-            code={data.id}
-            label="看板 ID"
-            hint="复制看板 ID——看板地址 #/board/<看板 id>，链接可直接转发"
-          />
-        )}
         <BoardTimeOverride dataAsOf={dataAsOf} time={timeOverride} onChange={setTime} />
         {isCreator ? <HeaderTextAction onClick={enterEdit}>编辑看板</HeaderTextAction> : null}
       </>
     );
   }, [
     editing,
-    data,
     dataAsOf,
     timeOverride,
     isCreator,

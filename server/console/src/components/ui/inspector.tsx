@@ -1,5 +1,3 @@
-"use client";
-
 import { useState } from "react";
 import type * as React from "react";
 import { ChevronRightIcon } from "lucide-react";

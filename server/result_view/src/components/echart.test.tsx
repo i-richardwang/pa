@@ -21,8 +21,14 @@ import {
   SERIES_Z,
   haloZ,
   seriesZ,
+  type PresentationBlock,
   type ViewChart,
 } from "../../../src/presentation_core/chart_config.js";
+
+function chartOf(presentation: PresentationBlock): ViewChart {
+  if (!("chart" in presentation)) throw new Error("测试数据未编译成图表");
+  return presentation.chart;
+}
 
 const state = (over: Partial<RenderState> = {}): RenderState => ({
   dark: false,
@@ -75,7 +81,7 @@ const CHART_PRESENTATION = compilePresentationBlock(CHART_VIEW, {
   x: "organization_name",
   y: ["active_employee_count", "new_hire_count"],
 });
-const CHART = CHART_PRESENTATION.chart;
+const CHART = chartOf(CHART_PRESENTATION);
 
 test("渲染器忠实呈现声明的图或表", () => {
   const chart = renderToStaticMarkup(
@@ -238,11 +244,12 @@ const TREND_VIEW = {
 } as unknown as Parameters<typeof compilePresentationBlock>[0];
 
 test("触屏上图例兼作读数位：末桶的值与桶名随图例交付，桌面档不占位", () => {
-  const trend = compilePresentationBlock(TREND_VIEW, {
-    type: "line",
-    y: ["active_employee_count", "new_hire_count"],
-  }).chart;
-  if (!trend) throw new Error("趋势图没编译出来，下面全部落空");
+  const trend = chartOf(
+    compilePresentationBlock(TREND_VIEW, {
+      type: "line",
+      y: ["active_employee_count", "new_hire_count"],
+    }),
+  );
   const html = renderToStaticMarkup(<ViewChartCanvas chart={trend} scene="page" />);
 
   // 值取自铺开的最后一行本身：140/11 就是画面最右那两个点，不是另算的合计
@@ -354,27 +361,29 @@ test("绘图区那块场地是圆角的，且瓦片档不画框", () => {
 });
 
 test("排行版式逐行陈述：条长按本屏最大值归一，且不落 echarts 容器", () => {
-  const rank = compilePresentationBlock(
-    {
-      id: "result",
-      columns: ["hr.organization_name", "hr.active_employee_count"],
-      column_roles: {
-        "hr.organization_name": "dimension",
-        "hr.active_employee_count": "measure",
+  const rank = chartOf(
+    compilePresentationBlock(
+      {
+        id: "result",
+        columns: ["hr.organization_name", "hr.active_employee_count"],
+        column_roles: {
+          "hr.organization_name": "dimension",
+          "hr.active_employee_count": "measure",
+        },
+        rows: [
+          ["研发", 120],
+          ["市场", 30],
+        ],
+        row_count: 2,
+        query_notes: [],
+      } as unknown as Parameters<typeof compilePresentationBlock>[0],
+      {
+        type: "bar",
+        x: "organization_name",
+        y: ["active_employee_count"],
       },
-      rows: [
-        ["研发", 120],
-        ["市场", 30],
-      ],
-      row_count: 2,
-      query_notes: [],
-    } as unknown as Parameters<typeof compilePresentationBlock>[0],
-    {
-      type: "bar",
-      x: "organization_name",
-      y: ["active_employee_count"],
-    },
-  ).chart;
+    ),
+  );
   expect(rank?.layout, "单系列横排条形没走排行版式").toBe("rank");
 
   const html = renderToStaticMarkup(<ViewChartCanvas chart={rank!} scene="card" />);
@@ -391,10 +400,12 @@ test("排行版式逐行陈述：条长按本屏最大值归一，且不落 echa
 });
 
 /** 折线：值轴在纵向——与上面那张横排条形（值轴在横向）恰好互为对照。 */
-const LINE_CHART = compilePresentationBlock(TREND_VIEW, {
-  type: "line",
-  y: ["active_employee_count", "new_hire_count"],
-}).chart;
+const LINE_CHART = chartOf(
+  compilePresentationBlock(TREND_VIEW, {
+    type: "line",
+    y: ["active_employee_count", "new_hire_count"],
+  }),
+);
 
 test("值轴档数随绘图区尺度走，不是编译期那个定数", () => {
   type Axes = { xAxis: { splitNumber?: number }; yAxis: { splitNumber?: number }[] };

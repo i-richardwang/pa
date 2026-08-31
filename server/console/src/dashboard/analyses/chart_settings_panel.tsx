@@ -258,8 +258,9 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   // 饼图的扇区归属即取值，没有逐系列样式；此时指标行只留「上不上轴」。
   const canStyleSeries = splittable !== null && !groupBy;
   // 系列落在哪把尺子上以编译结果为准（没声明副轴时分侧出自量纲）；预览落后于草稿时只能读声明。
+  const previewChart = "chart" in replay.presentation ? replay.presentation.chart : null;
   const legendOf = (member: string) =>
-    replay.presentation.chart?.model.legend.find((item) => item.name === titleOf(member));
+    previewChart?.model.legend.find((item) => item.name === titleOf(member));
   const previewCurrent = isPreviewCurrent(draft);
   const axisOf = (member: string): 0 | 1 =>
     secondarySeries.includes(member) ? 1 : previewCurrent ? (legendOf(member)?.axis ?? 0) : 0;

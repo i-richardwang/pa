@@ -241,12 +241,17 @@ export function CatalogPage() {
                     onDelete={isAdmin ? deleteTerm : undefined}
                   />
                 )}
-                {nothing && !isAdmin && (
+                {nothing && (
                   <EmptyPanel
+                    description={
+                      keyword
+                        ? "换一个名称、业务口径或同义词后重试。"
+                        : "目录仅显示当前账号获准使用的指标、维度和业务术语。"
+                    }
                     text={
                       keyword
                         ? `没有匹配「${keyword}」的指标、维度或业务术语`
-                        : "你的账号在目录中暂无可见成员"
+                        : "当前目录暂无可见成员"
                     }
                   />
                 )}

@@ -13,7 +13,7 @@ export function projectReplayPayload(
     time_override?: "applied" | "unsupported";
   },
 ): ReplayPayload {
-  const notes = presentation.runtimeFallbacks(executed, executed.presentation);
+  const notes = presentation.runtimeFallbacks(executed);
   return {
     ...metadata,
     analysis_id: executed.analysis_id,

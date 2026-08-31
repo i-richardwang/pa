@@ -4,7 +4,6 @@ import {
   COLUMN_DECIMALS_SCHEMA,
   COLUMN_FORMAT_SCHEMA,
 } from "../semantic_core/query_payload.js";
-import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
 import type { PresentationBlock } from "./chart_config.js";
 
 const OPTIONAL_AXIS_FORMATS_SCHEMA = z
@@ -36,7 +35,15 @@ const CHART_LEGEND_ITEM_SCHEMA = z
     decimals: COLUMN_DECIMALS_SCHEMA.optional(),
     values: z.array(z.number().finite().nullable()),
     axis: z.union([z.literal(0), z.literal(1)]),
-    baseline: z.number().int().nonnegative().optional(),
+    comparison: z
+      .object({
+        values: z.array(z.number().finite().nullable()),
+        format: COLUMN_FORMAT_SCHEMA,
+        decimals: COLUMN_DECIMALS_SCHEMA.optional(),
+      })
+      .strict()
+      .optional(),
+    share: z.number().finite().nullable().optional(),
   })
   .strict();
 
@@ -48,6 +55,14 @@ const CHART_MODEL_SCHEMA = z
     axis_decimals: OPTIONAL_AXIS_DECIMALS_SCHEMA.optional(),
     share: z
       .object({ title: z.string(), values: z.array(z.number().finite().nullable()) })
+      .strict()
+      .optional(),
+    total: z
+      .object({
+        value: z.number().finite(),
+        format: COLUMN_FORMAT_SCHEMA,
+        decimals: COLUMN_DECIMALS_SCHEMA.optional(),
+      })
       .strict()
       .optional(),
     latest: z
@@ -70,18 +85,11 @@ const CHART_MODEL_SCHEMA = z
           message: "图例值必须与分类逐项对齐",
         });
       }
-      if (item.baseline !== undefined && item.baseline >= model.legend.length) {
+      if (item.comparison && item.comparison.values.length !== model.categories.length) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ["legend", index, "baseline"],
-          message: "图例对照必须引用现有系列",
-        });
-      }
-      if (item.baseline === index) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["legend", index, "baseline"],
-          message: "图例不能以自身作为对照",
+          path: ["legend", index, "comparison", "values"],
+          message: "对照变化值必须与分类逐项对齐",
         });
       }
     }
@@ -98,6 +106,22 @@ const CHART_MODEL_SCHEMA = z
         path: ["latest", "index"],
         message: "最新分类索引超出范围",
       });
+    }
+    if (model.pointer === "item") {
+      if (!model.total) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["total"],
+          message: "逐项指针图必须交付总计",
+        });
+      }
+      if (model.legend.some((item) => item.share === undefined)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["legend"],
+          message: "逐项指针图必须交付每项占比",
+        });
+      }
     }
     if (model.records) {
       if (model.records.points.length !== model.legend.length) {
@@ -188,18 +212,6 @@ const TABLE_MODEL_SCHEMA = z
     }
   });
 
-const TABLE_LAYOUT_STATUS_SCHEMA = z.discriminatedUnion("state", [
-  z.object({ state: z.literal("applied"), leafColumns: z.number().int().nonnegative() }).strict(),
-  z
-    .object({
-      state: z.literal("unavailable"),
-      leafColumns: z.number().int().nonnegative(),
-      reason: z.enum(["duplicate_coordinate", "resource_limit", "missing_axis"]),
-      message: z.string(),
-    })
-    .strict(),
-]);
-
 const TOTAL_PERIOD_SCHEMA = z
   .object({ label: z.string(), from: z.string(), to: z.string() })
   .strict();
@@ -231,23 +243,40 @@ const TOTAL_BAND_SCHEMA = z
   })
   .strict();
 
-const PRESENTATION_BLOCK_SCHEMA = z
-  .object({
-    type: PRESENTATION_TYPE_SCHEMA,
-    table: TABLE_MODEL_SCHEMA,
-    table_layout: TABLE_LAYOUT_STATUS_SCHEMA,
-    structure_title: z.string().optional(),
-    chart: VIEW_CHART_SCHEMA.optional(),
-    totals: TOTAL_BAND_SCHEMA.optional(),
-  })
-  .strict();
+const PRESENTATION_BASE_SCHEMA = {
+  table: TABLE_MODEL_SCHEMA,
+  structure_title: z.string().optional(),
+};
+
+const PRESENTATION_BLOCK_SCHEMA = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("table"), ...PRESENTATION_BASE_SCHEMA }).strict(),
+  z
+    .object({ type: z.literal("kpi"), ...PRESENTATION_BASE_SCHEMA, totals: TOTAL_BAND_SCHEMA })
+    .strict(),
+  z
+    .object({
+      type: z.literal("line"),
+      ...PRESENTATION_BASE_SCHEMA,
+      chart: VIEW_CHART_SCHEMA.refine((chart) => chart.form === "line"),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("bar"),
+      ...PRESENTATION_BASE_SCHEMA,
+      chart: VIEW_CHART_SCHEMA.refine((chart) => chart.form === "bar"),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("pie"),
+      ...PRESENTATION_BASE_SCHEMA,
+      chart: VIEW_CHART_SCHEMA.refine((chart) => chart.form === "pie"),
+    })
+    .strict(),
+]);
 
 /** 宿主边界校验：浏览器只接受服务端完整编译且形态自洽的呈现块。 */
 export function isPresentationBlock(value: unknown): value is PresentationBlock {
-  const parsed = PRESENTATION_BLOCK_SCHEMA.safeParse(value);
-  if (!parsed.success) return false;
-  const block = parsed.data;
-  if (block.type === "kpi") return block.chart === undefined && block.totals !== undefined;
-  if (block.type === "table") return block.chart === undefined && block.totals === undefined;
-  return block.totals === undefined && block.chart?.form === block.type;
+  return PRESENTATION_BLOCK_SCHEMA.safeParse(value).success;
 }

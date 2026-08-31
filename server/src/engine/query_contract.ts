@@ -9,10 +9,9 @@ import type {
   CubeView,
 } from "../ports/cube_gateway.js";
 import { memberShortName } from "../semantic_core/member_name.js";
+import { parseIncompatibleDimensions } from "./incompatible_dimensions.js";
 
 const isCondition = (filter: CubeFilter): filter is CubeFilterCondition => "member" in filter;
-
-type IncompatibleDimension = string | { member?: unknown; reason?: unknown };
 
 export function filterMembers(filters: CubeFilter[] | undefined): string[] {
   const members: string[] = [];
@@ -89,20 +88,18 @@ export function assertMeasureFilterCompatibility(query: CubeQuery, views: CubeVi
         );
       }
     }
-    const incompatible = measure?.meta?.incompatible_dimensions;
-    if (!Array.isArray(incompatible)) continue;
-    for (const raw of incompatible as IncompatibleDimension[]) {
-      const forbidden = typeof raw === "string" ? raw : raw.member;
-      if (typeof forbidden !== "string") continue;
+    const incompatible = parseIncompatibleDimensions(
+      measure?.meta?.incompatible_dimensions,
+      `指标 ${measure?.title ?? measureName}`,
+    );
+    for (const item of incompatible) {
+      const forbidden = item.member;
       const hit = dimensions.find(
         (member) => member === forbidden || memberShortName(member) === memberShortName(forbidden),
       );
       if (!hit) continue;
       const dimension = findDimension(views, hit);
-      const reason =
-        typeof raw === "object" && raw !== null && typeof raw.reason === "string"
-          ? `：${raw.reason}`
-          : "";
+      const reason = `：${item.reason}`;
       throw new Error(
         `指标「${measure?.title ?? measureName}」不能按维度「${dimension?.title ?? hit}」分组或筛选${reason}；` +
           "请移除该维度及其过滤，或调用 catalog 改选与该维度兼容的指标",

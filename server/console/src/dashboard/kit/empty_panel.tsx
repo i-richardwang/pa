@@ -1,7 +1,13 @@
 import { InboxIcon } from "lucide-react";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 
-export function EmptyPanel({ text }: { text: string }) {
+export function EmptyPanel({ text, description }: { text: string; description?: string }) {
   return (
     <Empty>
       <EmptyHeader>
@@ -9,6 +15,7 @@ export function EmptyPanel({ text }: { text: string }) {
           <InboxIcon />
         </EmptyMedia>
         <EmptyTitle>{text}</EmptyTitle>
+        {description ? <EmptyDescription>{description}</EmptyDescription> : null}
       </EmptyHeader>
     </Empty>
   );

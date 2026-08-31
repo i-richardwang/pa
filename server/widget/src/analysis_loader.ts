@@ -1,4 +1,5 @@
 import { viewIdFrom, type ToolResult } from "./result_delivery.js";
+import { createRequestCoordinator } from "./request_coordinator.js";
 
 export type AnalysisLoaderPort = {
   call(viewId: string): Promise<ToolResult>;
@@ -13,23 +14,25 @@ export type AnalysisLoaderPort = {
  */
 export function createAnalysisLoader(port: AnalysisLoaderPort) {
   let connected = false;
-  let closed = false;
+  const requests = createRequestCoordinator();
   let pendingViewId: string | null = null;
   let loadedViewId: string | null = null;
   const loading = new Set<string>();
 
   async function load(viewId: string): Promise<void> {
-    if (closed || !connected || loading.has(viewId) || loadedViewId === viewId) {
+    if (requests.isClosed() || !connected || loading.has(viewId) || loadedViewId === viewId) {
       return;
     }
+    const token = requests.begin();
+    if (token === null) return;
     loading.add(viewId);
     port.waiting();
     try {
       const result = await port.call(viewId);
-      if (closed || pendingViewId !== viewId) return;
+      if (!requests.isCurrent(token) || pendingViewId !== viewId) return;
       if (port.apply(result)) loadedViewId = viewId;
     } catch (error) {
-      if (closed || pendingViewId !== viewId) return;
+      if (!requests.isCurrent(token) || pendingViewId !== viewId) return;
       port.fail(`无法加载分析结果：${error instanceof Error ? error.message : String(error)}`);
     } finally {
       loading.delete(viewId);
@@ -42,18 +45,19 @@ export function createAnalysisLoader(port: AnalysisLoaderPort) {
       if (!pendingViewId) port.fail("结果卡缺少有效的 view_id。");
       return;
     }
+    if (pendingViewId !== viewId) requests.invalidate();
     pendingViewId = viewId;
     void load(viewId);
   }
 
   async function connect(): Promise<void> {
-    if (closed) return;
+    if (requests.isClosed()) return;
     connected = true;
     if (pendingViewId) await load(pendingViewId);
   }
 
   function close(): void {
-    closed = true;
+    requests.close();
     connected = false;
   }
 

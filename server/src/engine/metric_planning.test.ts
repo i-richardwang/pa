@@ -128,7 +128,7 @@ const security: CubeSecurityContext = {
   accessScope: { kind: "all" },
 };
 
-function response(query: CubeQuery, rows: Record<string, unknown>[]): LoadResponse {
+function response(query: CubeQuery, rows: LoadResponse["data"]): LoadResponse {
   return {
     data: rows,
     annotation: {

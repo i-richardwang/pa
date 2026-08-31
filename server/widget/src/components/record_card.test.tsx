@@ -6,7 +6,6 @@ import type { RecordProjectionPayload } from "@records";
 const payload: RecordProjectionPayload = {
   metric_id: "hr.active_employee_count",
   metric_title: "在职人数",
-  record_set_id: "hr.employee_roster",
   record_set_title: "在职人员名单",
   record_set_description: "口径内的每一位在职员工",
   columns: ["姓名", "组织"],

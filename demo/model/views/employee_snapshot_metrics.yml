@@ -1,7 +1,7 @@
 views:
   - name: employee_snapshot_metrics
-    title: 员工快照指标执行面
-    description: 月末人员规模与结构指标的权限受控执行面。
+    title: 月末人员规模与结构
+    description: 每月最后一天的在职人数及人员结构。
     meta:
       query_surface: metric_source
       time_source: workforce

@@ -9,16 +9,29 @@ import { GRAND_TOTAL_DESCRIPTION, MAX_PLAN_NODES } from "./analysis_spec.js";
 import { COLUMN_FORMATS, type ColumnFormat } from "./query_payload.js";
 import { TIME_INTENT_INPUT } from "./time_contract.js";
 
-const SEMANTIC_MEMBER_ID = z.string().min(1).max(120);
-const SEMANTIC_MEASURE_ID = SEMANTIC_MEMBER_ID.describe(
-  "catalog 搜索响应 measures[].id 中的语义指标 id；不接受中文标题或物理字段名",
-);
-const SEMANTIC_DIMENSION_ID = SEMANTIC_MEMBER_ID.describe(
-  "catalog 搜索响应 dimensions[].id 中的语义维度 id；不接受中文标题或物理字段名",
-);
-const SEMANTIC_QUERY_MEMBER_ID = SEMANTIC_MEMBER_ID.describe(
-  "catalog 搜索响应中的语义成员 id；指标或维度类型必须符合字段用途",
-);
+const SEMANTIC_MEMBER_NAME = /^[a-z][a-z0-9_]*$/;
+const SEMANTIC_MEASURE_ID = z
+  .string()
+  .regex(/^measure:[a-z][a-z0-9_]*$/)
+  .max(120)
+  .describe("catalog 搜索响应 measures[].id 中的语义指标 id；不接受中文标题或物理字段名");
+const SEMANTIC_DIMENSION_ID = z
+  .string()
+  .regex(/^dimension:[a-z][a-z0-9_]*$/)
+  .max(120)
+  .describe("catalog 搜索响应 dimensions[].id 中的语义维度 id；不接受中文标题或物理字段名");
+const SEMANTIC_QUERY_MEMBER_ID = z
+  .string()
+  .max(120)
+  .refine((value) => {
+    const [kind, name, extra] = value.split(":");
+    return (
+      extra === undefined &&
+      (kind === "measure" || kind === "dimension") &&
+      SEMANTIC_MEMBER_NAME.test(name ?? "")
+    );
+  })
+  .describe("catalog 搜索响应中的语义成员 id；指标或维度类型必须符合字段用途");
 const SEMANTIC_FILTER_VALUES = z
   .array(z.string().trim().min(1).describe("values_of 返回的真实分类值；不接受空字符串"))
   .min(1)

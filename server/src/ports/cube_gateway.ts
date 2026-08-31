@@ -14,6 +14,7 @@ export class CubeGatewayError extends Error {
 }
 
 export type SqlParameter = string | number | boolean | null;
+export type CubeCell = string | number | null;
 
 export type GeneratedSqlStatement = {
   window: { from: string; to: string } | null;
@@ -85,7 +86,7 @@ export interface CubeQuery {
 }
 
 export interface LoadResponse {
-  data: Record<string, unknown>[];
+  data: Record<string, CubeCell>[];
   annotation: {
     measures: Record<string, { title: string; description?: string }>;
     dimensions: Record<string, { title: string; description?: string }>;

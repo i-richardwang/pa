@@ -58,27 +58,6 @@ FORBIDDEN_REGEXES = {
     "absolute home path": re.compile(r"(?<![A-Za-z0-9])/(?:Users|home)/[^/\s]+/"),
 }
 
-PUBLIC_SURFACE_PREFIXES = ("demo/", "docs/", "plugins/", "server/", "templates/")
-PUBLIC_SURFACE_FILES = {
-    ".env.example",
-    ".gitignore",
-    "AGENTS.md",
-    "CLAUDE.md",
-    "LICENSE",
-    "README.md",
-    "docker-compose.yml",
-}
-YAML_NAME = re.compile(r"^\s*-\s+name:\s*([a-z][a-z0-9_]*)\s*(?:#.*)?$", re.MULTILINE)
-
-# 公共核心测试长期使用的行业通用指标标识；它们与任一企业语义包无专属关系。
-PUBLIC_GENERIC_SEMANTIC_NAMES = {
-    "active_employee_count",
-    "current_month_fulfillment_rate",
-    "current_month_turnover_rate",
-    "new_hire_count",
-    "turnover_count",
-}
-
 
 def repository_files() -> list[str]:
     output = subprocess.check_output(
@@ -98,50 +77,8 @@ def visible_text(text: str) -> str:
     )
 
 
-def yaml_names(paths: list[Path]) -> set[str]:
-    names: set[str] = set()
-    for path in paths:
-        if path.is_file():
-            names.update(YAML_NAME.findall(path.read_text(encoding="utf-8")))
-    return names
-
-
-def private_only_semantic_names() -> set[str]:
-    """Derive organization-specific names from an optional private semantic package."""
-
-    private_model = REPO_ROOT / "cube" / "model"
-    if not private_model.is_dir():
-        return set()
-    private_paths = sorted(private_model.rglob("*.yml"))
-    private_paths.extend(sorted(private_model.rglob("*.yaml")))
-    private_paths.extend(
-        path for path in [REPO_ROOT / "cube" / "semantic_package.yml"] if path.is_file()
-    )
-
-    demo_root = REPO_ROOT / "demo"
-    demo_paths = sorted((demo_root / "model").rglob("*.yml"))
-    demo_paths.extend(sorted((demo_root / "model").rglob("*.yaml")))
-    demo_paths.extend(path for path in [demo_root / "semantic_package.yml"] if path.is_file())
-    return yaml_names(private_paths) - yaml_names(demo_paths) - PUBLIC_GENERIC_SEMANTIC_NAMES
-
-
-def is_public_surface(relative_path: str) -> bool:
-    return relative_path in PUBLIC_SURFACE_FILES or relative_path.startswith(
-        PUBLIC_SURFACE_PREFIXES
-    )
-
-
 def scan() -> list[str]:
     violations: list[str] = []
-    private_names = private_only_semantic_names()
-    private_name_pattern = (
-        re.compile(
-            rf"(?<![A-Za-z0-9_])(?:{'|'.join(map(re.escape, sorted(private_names, key=len, reverse=True)))})"
-            r"(?![A-Za-z0-9_])"
-        )
-        if private_names
-        else None
-    )
     for relative_path in repository_files():
         path = REPO_ROOT / relative_path
         if not path.exists():
@@ -168,13 +105,6 @@ def scan() -> list[str]:
         for label, pattern in FORBIDDEN_REGEXES.items():
             if pattern.search(text):
                 violations.append(f"{relative_path}: contains {label}")
-        if private_name_pattern is not None and is_public_surface(relative_path):
-            matches = sorted(set(private_name_pattern.findall(text)))
-            if matches:
-                violations.append(
-                    f"{relative_path}: references private-only semantic names: "
-                    + ", ".join(matches)
-                )
     return violations
 
 

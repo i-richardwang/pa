@@ -2,6 +2,7 @@
 import { SignJWT } from "jose";
 import { z } from "zod";
 import { accessScopeValues } from "../contracts/access_scope.js";
+import { CELL_SCHEMA } from "../semantic_core/query_payload.js";
 import { parseKnownTimeSourceId, type TimeSourceRegistry } from "../semantic_core/time_source.js";
 import { CubeGatewayError } from "../ports/cube_gateway.js";
 import type {
@@ -175,7 +176,7 @@ const ANNOTATION_MEMBERS_SCHEMA = z.record(
 );
 
 const LOAD_RESPONSE_SCHEMA = z.object({
-  data: z.array(z.record(z.string(), z.unknown())),
+  data: z.array(z.record(z.string(), CELL_SCHEMA)),
   annotation: z.object({
     measures: ANNOTATION_MEMBERS_SCHEMA,
     dimensions: ANNOTATION_MEMBERS_SCHEMA,

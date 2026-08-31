@@ -15,8 +15,6 @@ import {
   type AnalysisDefinition,
 } from "../semantic_core/semantic_analysis.js";
 
-export const QUERY_FINGERPRINT_PATTERN = /^q-[0-9a-f]{10}$/;
-
 /** 规格无效（归一失败）时返回 undefined：报错调用没有可统计的分析规格。 */
 export function queryFingerprint(input: unknown): string | undefined {
   let definition: AnalysisDefinition;

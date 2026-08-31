@@ -1,7 +1,7 @@
 views:
   - name: employee_hire_records
     title: 入职员工记录
-    description: 入职人数及入职率指标的受控构成记录面。
+    description: 所选期间构成入职人数的员工记录。
     meta:
       query_surface: detail
       time_source: workforce

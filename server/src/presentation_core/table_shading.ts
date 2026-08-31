@@ -9,7 +9,7 @@
  * 字色按底色与承载面合成后的对比度选墨色或反白，与外部参照的可读性判据一致（WCAG 相对亮度）。
  * 本模块只算颜色，不改数值，也不产生任何要印出来的数。
  */
-import { CHART_SERIES } from "./design_tokens.js";
+import { CHART_SERIES, TABLE_SHADING_TOKENS } from "./design_tokens.js";
 import type { ShadingPaletteName, TableShadingPreferences } from "./view_preferences.js";
 import { toNumber } from "./view_format.js";
 
@@ -29,38 +29,7 @@ type DivergingPalette = { label: string; stops: readonly [Stop, Stop, Stop] };
 
 /** 双向色阶三停（下限、中点、上限），明暗各一份；键即声明面的色阶名。 */
 export const DIVERGING_PALETTES: Record<ShadingPaletteName, DivergingPalette> = {
-  traffic_lights: {
-    label: "红黄绿",
-    stops: [
-      { light: "#e0857a", dark: "#e8998f" },
-      { light: "#f5e6a3", dark: "#5c4a12" },
-      { light: "#3fa08f", dark: "#4fb8a5" },
-    ],
-  },
-  red_blue: {
-    label: "红蓝",
-    stops: [
-      { light: "#f25494", dark: "#f25494" },
-      { light: "#f7e5ff", dark: "#34004d" },
-      { light: "#91a1ff", dark: "#91a1ff" },
-    ],
-  },
-  viridis: {
-    label: "翠绿",
-    stops: [
-      { light: "#fff6a5", dark: "#5b1f6a" },
-      { light: "#4da198", dark: "#4da198" },
-      { light: "#5b1f6a", dark: "#fff6a5" },
-    ],
-  },
-  magma: {
-    label: "熔岩",
-    stops: [
-      { light: "#fcfdbf", dark: "#1b1b79" },
-      { light: "#d65b8f", dark: "#d65b8f" },
-      { light: "#1b1b79", dark: "#fcfdbf" },
-    ],
-  },
+  ...TABLE_SHADING_TOKENS.palettes,
 };
 
 export function divergingPalette(palette: string): DivergingPalette | undefined {
@@ -185,8 +154,8 @@ function luminance(color: Rgb): number {
 
 /** 承载面（表格所在的 pa-bg）：底色带透明度时先与它合成再判字色。 */
 const SURFACE: Record<"light" | "dark", Rgb> = {
-  light: hexToRgb("#ffffff"),
-  dark: hexToRgb("#171717"),
+  light: hexToRgb(TABLE_SHADING_TOKENS.surface.light),
+  dark: hexToRgb(TABLE_SHADING_TOKENS.surface.dark),
 };
 
 /** 单色在暗色主题下换到该系列色的暗色档；不在系列表里的十六进制值两档同色。 */

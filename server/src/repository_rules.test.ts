@@ -14,9 +14,6 @@ const skillDomainGuardrails = "plugins/pa/skills/pa-analytics/references/domain_
 const agentsSkillEntry = ".agents/skills/pa-analytics/SKILL.md";
 const claudeSkillEntry = ".claude/skills/pa-analytics/SKILL.md";
 const claudeSkillReferences = ".claude/skills/pa-analytics/references";
-const consumerReadmeTemplate = "templates/consumer/readme.md";
-const consumerSkillReadmeTemplate = "templates/consumer/skill_readme.md";
-const consumerCursorTemplate = "templates/consumer/cursor_mcp.json";
 
 const containsDemoBusinessLiteral = (source: string): boolean =>
   /["'](?:workforce|headcount_plan|survey|q12)["']/i.test(source);
@@ -267,36 +264,16 @@ test("pa-analytics 教学使用正式指标与 Breakdown 排名契约", async ()
   }
 });
 
-test("消费目录模板只保留接入文件，不复制查询教程或 Agent 入口", async () => {
-  const readme = await readFile(new URL(consumerReadmeTemplate, root), "utf8");
-  const skillReadme = await readFile(new URL(consumerSkillReadmeTemplate, root), "utf8");
-  const cursor = await readFile(new URL(consumerCursorTemplate, root), "utf8");
-  const corpus = `${readme}\n${skillReadme}`;
-  const templates = await readdir(new URL("templates/consumer", root));
-  for (const duplicatedProtocol of ["run_analysis", "group_sort:", "query_patterns"]) {
-    expect(
-      corpus.includes(duplicatedProtocol),
-      `消费目录模板复制了 Skill 协议「${duplicatedProtocol}」`,
-    ).toBe(false);
-  }
-  expect(corpus).toContain("pa-analytics");
-  expect(corpus).toContain("工具 Schema");
-  expect(templates.sort()).toEqual(["cursor_mcp.json", "readme.md", "skill_readme.md"]);
-  expect(cursor).toContain("Bearer $" + "{env:PA_MCP_API_KEY}");
-  expect(cursor).not.toMatch(/Bearer pa_[A-Za-z0-9]+/);
-});
-
-test("插件同步发布消费模板", async () => {
-  const script = await readFile(new URL("scripts/sync_consumer_plugin.sh", root), "utf8");
-  for (const expected of [
-    'rsync -a --delete "$SOURCE_PLUGIN/" "$DEST_PLUGIN/"',
-    'cp "$SOURCE_MARKETPLACE" "$DEST_MARKETPLACE"',
-    'cp "$SOURCE_TEMPLATES/readme.md" "$DEST_ROOT/README.md"',
-    'cp "$SOURCE_TEMPLATES/cursor_mcp.json" "$DEST_ROOT/.cursor/mcp.json"',
-    'rm -f "$DEST_ROOT/AGENTS.md" "$DEST_ROOT/CLAUDE.md"',
-  ]) {
-    expect(script.includes(expected), `插件同步缺少消费目录动作：${expected}`).toBe(true);
-  }
+test("PA 插件是自有边界完整的公共制品", async () => {
+  const manifest = JSON.parse(
+    await readFile(new URL("plugins/pa/.codex-plugin/plugin.json", root), "utf8"),
+  ) as { name: string; skills: string; mcpServers: string };
+  const mcp = await readFile(new URL("plugins/pa/.mcp.json", root), "utf8");
+  const marketplace = await readFile(new URL(".agents/plugins/marketplace.json", root), "utf8");
+  expect(manifest).toMatchObject({ name: "pa", skills: "./skills/", mcpServers: "./.mcp.json" });
+  expect(mcp).toContain("http://127.0.0.1:8788/mcp");
+  expect(mcp).not.toContain("8789");
+  expect(marketplace).toContain('"path": "./plugins/pa"');
 });
 
 test("every git-tracked symlink target exists", async () => {

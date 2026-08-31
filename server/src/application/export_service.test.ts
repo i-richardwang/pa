@@ -19,7 +19,9 @@ const query = (id: string) => ({
 
 describe("export capability", () => {
   test("唯一结果是直查节点时可导出", () => {
-    expect(exportableOutput(planExecution({ views: [query("only")] }))?.id).toBe("only");
+    expect(
+      exportableOutput(planExecution({ views: [query("only")] }, { delivery: "identity" }))?.id,
+    ).toBe("only");
   });
 
   test("唯一结果是派生节点时不可回退导出内部执行腿", () => {
@@ -34,15 +36,15 @@ describe("export capability", () => {
         },
       ],
     };
-    const plan = planExecution(spec);
+    const plan = planExecution(spec, { delivery: "identity" });
     expect(plan.output.id).toBe("derived");
     expect(exportableOutput(plan)).toBeUndefined();
   });
 
   test("多个独立终点不是合法分析", () => {
-    expect(() => planExecution({ views: [query("first"), query("second")] })).toThrow(
-      /一次分析只能回答一个问题/,
-    );
+    expect(() =>
+      planExecution({ views: [query("first"), query("second")] }, { delivery: "identity" }),
+    ).toThrow(/一次分析只能回答一个问题/);
   });
 });
 

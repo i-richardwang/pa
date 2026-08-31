@@ -1,5 +1,3 @@
-"use client";
-
 import { ChevronDownIcon, LogOutIcon, SettingsIcon } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@/components/ui/menu";

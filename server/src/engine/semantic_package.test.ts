@@ -6,7 +6,7 @@ import { configuredSemanticPackageDir, loadSemanticPackage } from "./semantic_pa
 
 test("默认公开包通过版本、分类和模型目录校验", async () => {
   const semanticPackage = await loadSemanticPackage(configuredSemanticPackageDir({}));
-  expect(semanticPackage).toMatchObject({ schema_version: 2, id: "pa_demo" });
+  expect(semanticPackage).toMatchObject({ schema_version: 1, id: "pa_demo" });
   expect(semanticPackage.time_sources.primary.id).toBe("workforce");
   expect(semanticPackage.formal_metrics.length).toBeGreaterThan(0);
   expect(semanticPackage.taxonomy.metric_domains.length).toBeGreaterThan(0);

@@ -1,8 +1,6 @@
-import { useEffect, useState } from "react";
-import { isDarkTheme, watchTheme } from "./chart_render.js";
+import { useSyncExternalStore } from "react";
+import { subscribeTheme, themeSnapshot } from "./theme_store.js";
 
 export function useDarkTheme(): boolean {
-  const [dark, setDark] = useState(isDarkTheme);
-  useEffect(() => watchTheme(() => setDark(isDarkTheme())), []);
-  return dark;
+  return useSyncExternalStore(subscribeTheme, themeSnapshot, () => false);
 }

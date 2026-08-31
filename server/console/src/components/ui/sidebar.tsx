@@ -1,5 +1,3 @@
-"use client";
-
 /** Adapted from shadcn/ui under the MIT License; see docs/third_party_licenses.md. */
 
 import * as React from "react";

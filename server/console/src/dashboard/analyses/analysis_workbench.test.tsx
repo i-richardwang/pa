@@ -80,7 +80,6 @@ const tableReplay: ReplayPayload = {
   record_projection_bindings: { views: [] },
   presentation: {
     type: "table",
-    table_layout: { state: "applied", leafColumns: 1 },
     table: resultTable,
   },
   payload: {

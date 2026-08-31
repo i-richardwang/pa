@@ -91,7 +91,6 @@ describe("result delivery", () => {
     const records: RecordProjectionPayload = {
       metric_id: "measure:active_employee_count",
       metric_title: "在职人数",
-      record_set_id: "employee_snapshot",
       record_set_title: "在职员工",
       record_set_description: "构成在职人数的员工记录。",
       columns: ["员工编号", "姓名"],

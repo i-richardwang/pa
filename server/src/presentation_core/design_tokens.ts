@@ -82,3 +82,41 @@ export const UI_TOKENS: Record<string, TokenPair> = {
   avatar: { light: "#e9f1fe", dark: "#24344d" },
   "tooltip-bg": { light: "#191919", dark: "#2e2e2e" },
 };
+
+export const TABLE_SHADING_TOKENS = {
+  surface: UI_TOKENS.bg,
+  palettes: {
+    traffic_lights: {
+      label: "红黄绿",
+      stops: [
+        { light: "#e0857a", dark: "#e8998f" },
+        { light: "#f5e6a3", dark: "#5c4a12" },
+        { light: "#3fa08f", dark: "#4fb8a5" },
+      ],
+    },
+    red_blue: {
+      label: "红蓝",
+      stops: [
+        { light: "#f25494", dark: "#f25494" },
+        { light: "#f7e5ff", dark: "#34004d" },
+        { light: "#91a1ff", dark: "#91a1ff" },
+      ],
+    },
+    viridis: {
+      label: "翠绿",
+      stops: [
+        { light: "#fff6a5", dark: "#5b1f6a" },
+        { light: "#4da198", dark: "#4da198" },
+        { light: "#5b1f6a", dark: "#fff6a5" },
+      ],
+    },
+    magma: {
+      label: "熔岩",
+      stops: [
+        { light: "#fcfdbf", dark: "#1b1b79" },
+        { light: "#d65b8f", dark: "#d65b8f" },
+        { light: "#1b1b79", dark: "#fcfdbf" },
+      ],
+    },
+  },
+} as const;

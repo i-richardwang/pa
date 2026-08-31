@@ -1,7 +1,7 @@
 views:
   - name: workforce_exposure_metrics
-    title: 在职人月指标执行面
-    description: 入职率与离职率分母的权限受控执行面。
+    title: 在职人月
+    description: 各月在职员工形成的人月，用于计算期间平均人数。
     meta:
       query_surface: metric_source
       time_source: workforce

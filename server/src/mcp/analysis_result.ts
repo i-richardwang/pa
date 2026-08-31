@@ -9,8 +9,7 @@ export function analysisResult(
   options: { includeDefinition?: boolean } = {},
 ) {
   const presentation = presentationService.compile(executed);
-  // 降级说明据本次编译解析出的物理呈现（executed.presentation）判定，与所渲图表同源。
-  const fallbacks = presentationService.runtimeFallbacks(executed, executed.presentation);
+  const fallbacks = presentationService.runtimeFallbacks(executed);
   const meta = {
     ...(executed.fullRows ? { [FULL_ROWS_META_KEY]: executed.fullRows } : {}),
     ...(executed.exportResource ? { [EXPORT_RESOURCE_META_KEY]: executed.exportResource } : {}),

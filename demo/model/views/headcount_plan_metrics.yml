@@ -1,12 +1,12 @@
 views:
   - name: headcount_plan_metrics
-    title: 编制计划指标执行面
-    description: 月度编制计划指标的权限受控执行面。
+    title: 部门编制计划
+    description: 部门月度计划编制人数及其组织归属。
     meta:
       query_surface: metric_source
       time_source: headcount_plan
       time_anchor_measure: planned_headcount
-      observation_scope: 统计范围：公开虚构数据中的示例员工。
+      observation_scope: 统计范围：公开虚构数据中的部门月度编制计划。
     access_policy:
       - groups: [pa_full, pa_service]
         member_level:

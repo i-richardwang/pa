@@ -216,7 +216,7 @@ app.use("/mcp", async (c, next) => {
     c.set("principal", principal);
     return next();
   }
-  // 指回受保护资源元数据，兼容不解析 WWW-Authenticate 细节的连接器。
+  // 未认证响应同时给出受保护资源元数据入口。
   return c.json(
     { jsonrpc: "2.0", error: { code: -32001, message: "未授权：需要有效凭证" }, id: null },
     401,

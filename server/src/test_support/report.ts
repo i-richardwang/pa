@@ -25,12 +25,16 @@ import {
 import { memberShortName } from "../semantic_core/member_name.js";
 
 function semanticMember(query: QueryViewSpec, reference: string): string {
-  if (reference === "year" || reference === "month") return reference;
-  const member = [...(query.measures ?? []), ...(query.dimensions ?? [])].find(
+  if (/^(?:measure|dimension):[a-z][a-z0-9_]*$/.test(reference)) return reference;
+  const measure = (query.measures ?? []).find(
     (candidate) => memberShortName(candidate) === memberShortName(reference),
   );
-  if (!member) throw new Error(`测试报告的查询视图 ${query.id} 不包含字段 ${reference}`);
-  return member;
+  if (measure) return `measure:${memberShortName(measure)}`;
+  const dimension = (query.dimensions ?? []).find(
+    (candidate) => memberShortName(candidate) === memberShortName(reference),
+  );
+  if (dimension) return `dimension:${memberShortName(dimension)}`;
+  throw new Error(`测试报告的查询视图 ${query.id} 不包含字段 ${reference}`);
 }
 
 function semanticOperand(
@@ -110,8 +114,12 @@ export function semanticAnalysisOf(
         return {
           id: view.id,
           ...(view.view_title ? { view_title: view.view_title } : {}),
-          ...(view.measures ? { measures: view.measures } : {}),
-          ...(view.dimensions ? { dimensions: view.dimensions } : {}),
+          ...(view.measures
+            ? { measures: view.measures.map((member) => semanticMember(view, member)) }
+            : {}),
+          ...(view.dimensions
+            ? { dimensions: view.dimensions.map((member) => semanticMember(view, member)) }
+            : {}),
           ...(view.filters
             ? {
                 filters: view.filters.map((filter) => {
@@ -119,7 +127,7 @@ export function semanticAnalysisOf(
                     throw new Error(`测试报告的公开筛选不支持物理算子 ${filter.operator}`);
                   }
                   return {
-                    member: filter.member,
+                    member: semanticMember(view, filter.member),
                     relation: filter.operator === "equals" ? "one_of" : "none_of",
                     values: filter.values,
                   };

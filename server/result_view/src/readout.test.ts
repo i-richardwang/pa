@@ -60,8 +60,8 @@ test("结构占比随卡附一行，只在这一格有占比时出现", () => {
   expect(readoutModel(chart, 1).rows).toHaveLength(1);
 });
 
-test("同期叠加按声明的对照关系读差值：量作差仍是量，率作差是百分点", () => {
-  const overlay = (format: "number" | "percent", values: number[][]) =>
+test("同期叠加只展示服务端交付的变化值：量为相对变化率，率为百分点", () => {
+  const overlay = (format: "number" | "percent", values: number[][], comparisonValues: number[]) =>
     cartesian([
       { name: "2026 年", color: "#3b6fdb", format, values: values[0], axis: 0 },
       {
@@ -70,44 +70,62 @@ test("同期叠加按声明的对照关系读差值：量作差仍是量，率�
         format,
         values: values[1],
         axis: 0,
-        baseline: 0,
+        comparison: {
+          values: comparisonValues,
+          format: format === "percent" ? "percentage_point" : "percent",
+          ...(format === "percent" ? { decimals: 1 } : {}),
+        },
         ...(format === "percent" ? { decimals: 1 } : {}),
       },
     ]);
   const counts = readoutModel(
-    overlay("number", [
-      [1200, 45],
-      [1000, 60],
-    ]),
+    overlay(
+      "number",
+      [
+        [1200, 45],
+        [1000, 60],
+      ],
+      [0.2, -0.25],
+    ),
     0,
   );
-  // 主期没有对照，不带差值；对照期读的是「它自己 − 主期」
+  // 主期没有对照；对照期附带“主期较该期”的服务端变化值。
   expect(counts.rows[0].delta).toBeUndefined();
-  expect(counts.rows[1].delta).toBe("-200");
+  expect(counts.rows[1].delta).toBe("+20.0%");
 
   const rates = readoutModel(
-    overlay("percent", [
-      [0.12, 0.2],
-      [0.095, 0.2],
-    ]),
+    overlay(
+      "percent",
+      [
+        [0.12, 0.2],
+        [0.095, 0.2],
+      ],
+      [0.025, 0],
+    ),
     0,
   );
-  expect(rates.rows[1].delta).toBe("-2.5 pp");
-  // 涨也只陈述方向：显式带 +，不换颜色，模型层没有指标方向声明
-  const up = readoutModel(
-    overlay("number", [
-      [1000, 45],
-      [1200, 60],
-    ]),
+  expect(rates.rows[1].delta).toBe("+2.5 pp");
+  const down = readoutModel(
+    overlay(
+      "number",
+      [
+        [1000, 45],
+        [1200, 60],
+      ],
+      [-1 / 6, -0.25],
+    ),
     0,
   );
-  expect(up.rows[1].delta).toBe("+200");
+  expect(down.rows[1].delta).toBe("-16.7%");
 });
 
 test("对照期缺一头就不给差值：只有一个数时减不出变化", () => {
   const chart = cartesian([
     count("2026 年", [null, 45]),
-    count("2025 年", [1000, 60], { color: "#e0857a", baseline: 0 }),
+    count("2025 年", [1000, 60], {
+      color: "#e0857a",
+      comparison: { values: [null, -0.25], format: "percent" },
+    }),
   ]);
   expect(readoutModel(chart, 0).rows[1].delta).toBeUndefined();
 });
@@ -119,8 +137,12 @@ test("饼图一卡列齐全部切片，各带占比，抬头是度量名；指�
     option: {},
     model: {
       categories: ["在职人数"],
-      legend: [count("研发", [60]), count("市场", [40], { color: "#e0857a" })],
+      legend: [
+        count("研发", [60], { share: 0.6 }),
+        count("市场", [40], { color: "#e0857a", share: 0.4 }),
+      ],
       axes: {},
+      total: { value: 100, format: "number" },
       pointer: "item",
     },
   };

@@ -62,6 +62,14 @@ flowchart LR
 
 控制台地址为 `http://127.0.0.1:8788/dashboard`，MCP Streamable HTTP 入口为 `http://127.0.0.1:8788/mcp`。
 
+### Codex Plugin
+
+仓库内的 [`plugins/pa`](./plugins/pa) 是完整插件制品，入口为
+[`plugins/pa/.codex-plugin/plugin.json`](./plugins/pa/.codex-plugin/plugin.json)，本地 marketplace
+为 [`.agents/plugins/marketplace.json`](./.agents/plugins/marketplace.json)。插件默认连接公开 Demo 的
+`http://127.0.0.1:8788/mcp`。内部部署由私有适配仓库生成自己的 MCP 连接配置；公共仓库不向消费目录
+复制文件，也不改写消费仓库的说明、Agent 指令或编辑器配置。
+
 ### 本机并行运行多套语义包
 
 Compose 不固定容器名；项目名负责隔离容器、网络和服务发现。每个实例还必须使用不同的
@@ -94,7 +102,7 @@ your_semantic_package/
     └── views/             # 指标执行面与受控记录面
 ```
 
-`semantic_package.yml` 是纯声明文件，不能执行代码。当前 `schema_version: 2` 由包登记授权维度稳定 id 与标题、
+`semantic_package.yml` 是纯声明文件，不能执行代码。`schema_version: 1` 由包登记授权维度稳定 id 与标题、
 时间源、比较策略、业务分类和正式指标图；每个公开 View 另以 `meta.observation_scope` 声明自己的
 观察对象与纳入范围。加载器会拒绝未知结构、重复身份、无效时间源关系、未登记指标域、缺失模型目录
 和逃逸包目录的路径。

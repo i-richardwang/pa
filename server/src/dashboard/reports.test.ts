@@ -267,7 +267,7 @@ describe("dashboard report routes", () => {
         const planned = await semanticPlanningStub.plan(principal, candidate, view);
         return {
           ...planned,
-          plan: planExecution(STRUCTURE_ARGS),
+          plan: planExecution(STRUCTURE_ARGS, { delivery: "identity" }),
           presentation: compiledPresentation,
           render_decl: compiledPresentation,
           routes: [{ status: "direct" as const, result_view_id: "structure" }],

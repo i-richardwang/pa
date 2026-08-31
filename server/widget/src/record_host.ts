@@ -18,6 +18,7 @@ import {
   type HostShellState,
   requestFullscreen as requestShellFullscreen,
 } from "./host_shell.js";
+import { createRequestCoordinator } from "./request_coordinator.js";
 
 export type RecordHostState = HostShellState & {
   viewId: string | null;
@@ -39,6 +40,7 @@ const store = createHostStore<RecordHostState>({
 export const useRecordHostState = store.use;
 
 const app = createHostApp("-records");
+const requests = createRequestCoordinator();
 
 function applyResult(result: ToolResult): boolean {
   const delivered = deliverRecordProjection(result);
@@ -54,6 +56,8 @@ function applyResult(result: ToolResult): boolean {
 export async function loadRecordPage(offset: number): Promise<void> {
   const { viewId, payload, loading } = store.get();
   if (!viewId || !payload || loading) return;
+  const token = requests.begin();
+  if (token === null) return;
   store.set({ loading: true, status: "正在加载名单分页…" });
   try {
     const result = (await app.callServerTool({
@@ -66,8 +70,9 @@ export async function loadRecordPage(offset: number): Promise<void> {
         limit: payload.page_size,
       },
     })) as ToolResult;
-    applyResult(result);
+    if (requests.isCurrent(token)) applyResult(result);
   } catch (error) {
+    if (!requests.isCurrent(token)) return;
     store.set({
       loading: false,
       status: `名单分页加载失败：${error instanceof Error ? error.message : String(error)}`,
@@ -79,10 +84,12 @@ export const requestRecordFullscreen = (): Promise<void> => requestShellFullscre
 
 export async function connectRecordHost(): Promise<void> {
   app.onteardown = async () => {
+    requests.close();
     store.clear();
     return {};
   };
   app.addEventListener("toolinput", (params) => {
+    requests.invalidate();
     store.set({
       viewId: viewIdFrom(params.arguments) ?? store.get().viewId,
       status: RECORDS_WAITING_STATUS,

@@ -25,24 +25,6 @@ function asArray(value: unknown): MutableOption[] {
   return [];
 }
 
-/** 宿主经 applyDocumentTheme 落 data-theme；无宿主环境时随系统明暗。 */
-export function isDarkTheme(): boolean {
-  const theme = document.documentElement.dataset.theme;
-  if (theme) return theme === "dark";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
-export function watchTheme(onChange: () => void): () => void {
-  const observer = new MutationObserver(onChange);
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-  const media = window.matchMedia("(prefers-color-scheme: dark)");
-  media.addEventListener("change", onChange);
-  return () => {
-    observer.disconnect();
-    media.removeEventListener("change", onChange);
-  };
-}
-
 export type Viewport = { width: number; height: number };
 
 /** grid 与 DOM 场地框读同一道算式，两处必须同源。 */
@@ -168,14 +150,14 @@ function injectAxisFormatters(option: MutableOption, model: ChartModel): void {
   inject(asArray(option.yAxis), model.axes.y, model.axis_decimals?.y);
 }
 
-/** 饼图切片总量：呈现算术（与切片占比同级），环心总计与占比读同一份。 */
-export function legendTotal(model: ChartModel): number {
-  return model.legend.reduce((sum, item) => sum + (item.values[0] ?? 0), 0);
+export function legendTotal(model: ChartModel): number | null {
+  return model.total?.value ?? null;
 }
 
 function injectPieCenterTotal(option: MutableOption, model: ChartModel, dark: boolean): void {
   const lead = model.legend[0];
-  if (!lead) return;
+  const total = legendTotal(model);
+  if (!lead || total === null) return;
   const valueColor = dark ? CHART_CHROME.valueText.dark : CHART_CHROME.valueText.light;
   const labelColor = dark ? CHART_CHROME.axisText.dark : CHART_CHROME.axisText.light;
   option.graphic = [
@@ -186,7 +168,7 @@ function injectPieCenterTotal(option: MutableOption, model: ChartModel, dark: bo
       silent: true,
       z: 10,
       style: {
-        text: `{v|${formatSeriesValue(legendTotal(model), lead.format, lead.decimals)}}\n{l|总计}`,
+        text: `{v|${formatSeriesValue(total, model.total?.format ?? lead.format, model.total?.decimals)}}\n{l|总计}`,
         rich: {
           v: {
             fontSize: 22,

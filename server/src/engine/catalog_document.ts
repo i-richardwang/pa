@@ -7,6 +7,7 @@ import { recordProjectionTargetsOf } from "./record_metadata.js";
 import { memberDisplayTitle } from "./member_presentation.js";
 import { dimensionKind, memberSemanticId, type DimensionKind } from "./model_contract.js";
 import { memberShortName } from "../semantic_core/member_name.js";
+import { parseIncompatibleDimensions } from "./incompatible_dimensions.js";
 import {
   parseKnownTimeSourceId,
   timeSourceDefinition,
@@ -206,21 +207,14 @@ function memberDocument(
     ...(kind === "measure"
       ? { time_contract: parseMetricTimeContract(member.meta?.time_contract, member.title) }
       : {}),
-    ...(Array.isArray(member.meta?.incompatible_dimensions)
-      ? {
-          incompatible_dimensions: member.meta.incompatible_dimensions.flatMap((value) => {
-            if (typeof value === "string") return [value];
-            if (
-              value &&
-              typeof value === "object" &&
-              "member" in value &&
-              typeof value.member === "string"
-            )
-              return [value.member];
-            return [];
-          }),
-        }
-      : {}),
+    ...(member.meta?.incompatible_dimensions === undefined
+      ? {}
+      : {
+          incompatible_dimensions: parseIncompatibleDimensions(
+            member.meta.incompatible_dimensions,
+            `指标 ${member.title}`,
+          ).map(({ member: incompatible }) => incompatible),
+        }),
     ...(reportCalculations?.length
       ? { report_calculations: [...new Set(reportCalculations)] as ReportCalculationKind[] }
       : {}),
@@ -371,8 +365,9 @@ function resolveIncompatibleInView(
   const ids = new Set<string>();
   for (const reference of references) {
     const matches = tokens?.get(reference);
-    // 互斥维度引用在本视图零命中即跳过：该维度不在此域中。
-    if (!matches || matches.size === 0) continue;
+    if (!matches || matches.size === 0) {
+      throw new Error(`视图 ${view} 声明了未知的互斥维度「${reference}」`);
+    }
     if (matches.size > 1) {
       throw new Error(
         `视图 ${view} 声明的互斥维度「${reference}」在该视图内命中多个维度，存在歧义，无法唯一解析`,

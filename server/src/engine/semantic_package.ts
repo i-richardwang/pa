@@ -114,7 +114,7 @@ const dimensionGroup = z
   .strict();
 const manifestSchema = z
   .object({
-    schema_version: z.literal(2),
+    schema_version: z.literal(1),
     id: memberName,
     model_path: z.string().trim().min(1),
     access_scope: ACCESS_SCOPE_DEFINITION_SCHEMA,
@@ -143,7 +143,7 @@ const manifestSchema = z
   .strict();
 
 export type SemanticPackage = {
-  schema_version: 2;
+  schema_version: 1;
   id: string;
   root: string;
   model_root: string;
@@ -176,7 +176,7 @@ export async function loadSemanticPackage(root: string): Promise<SemanticPackage
   const raw = parse(await readFile(manifestPath, "utf8"));
   const parsed = manifestSchema.safeParse(raw);
   if (!parsed.success) {
-    throw new Error(`语义包 ${manifestPath} 不符合 schema_version 2 合同`, {
+    throw new Error(`语义包 ${manifestPath} 不符合 schema_version 1 合同`, {
       cause: parsed.error,
     });
   }
@@ -218,7 +218,7 @@ export async function loadSemanticPackage(root: string): Promise<SemanticPackage
     );
   }
   return {
-    schema_version: 2,
+    schema_version: 1,
     id: parsed.data.id,
     root: packageRoot,
     model_root: modelRoot,

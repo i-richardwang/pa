@@ -1,5 +1,3 @@
-"use client";
-
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 import { useId } from "react";
 import type * as React from "react";

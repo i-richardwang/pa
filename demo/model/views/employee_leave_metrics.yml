@@ -1,7 +1,7 @@
 views:
   - name: employee_leave_metrics
-    title: 员工离职指标执行面
-    description: 员工离职事件指标的权限受控执行面。
+    title: 员工离职
+    description: 所选期间发生的员工离职事件及人数。
     meta:
       query_surface: metric_source
       time_source: workforce

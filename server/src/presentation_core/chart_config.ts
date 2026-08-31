@@ -20,7 +20,6 @@ import {
   type PieSpec,
   type ResultShape,
   type SeriesDef,
-  type TableLayoutStatus,
   type TableModel,
   type TotalBand,
   type TrendSpec,
@@ -28,8 +27,8 @@ import {
 import type { ChartDecl, SeriesDisplay } from "./chart_decl.js";
 import { formatSeriesValue, toNumber } from "./view_format.js";
 import { CHART_CHROME, CHART_SERIES, FONT_FAMILY } from "./design_tokens.js";
-import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
 import type { PresentationSpec } from "./presentation_spec.js";
+import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
 
 const MOTION = {
   animation: true,
@@ -66,8 +65,14 @@ export type ChartLegendItem = {
   values: (number | null)[];
   /** 落在哪把尺子上：0 主轴、1 副轴；面板按它回显归属，不读声明缺省。 */
   axis: 0 | 1;
-  /** 所对照单元的序号（同期叠加里各对照期都指向主期）；读数卡据此附差值。 */
-  baseline?: number;
+  /** 服务端已计算的逐分类对照变化值。 */
+  comparison?: {
+    values: (number | null)[];
+    format: ColumnFormat;
+    decimals?: number;
+  };
+  /** 构成图切片占比；仅逐项指针图使用。 */
+  share?: number | null;
 };
 
 /** 与 `option` 并列交付、供渲染端读的那份数据；渲染端不从 option 反解任何数。 */
@@ -80,6 +85,8 @@ export type ChartModel = {
   axis_decimals?: AxisDecimals;
   /** 结构占比注释：按类目序对位；读数卡随附一行占比说明 */
   share?: { title: string; values: (number | null)[] };
+  /** 构成图总计；仅逐项指针图使用。 */
+  total?: { value: number; format: ColumnFormat; decimals?: number };
   /** 每个单元都有值的最后一个时间桶，凑不齐则缺席；只随时间趋势下发。 */
   latest?: { index: number; label: string };
   /** 读数索引由谁报：整列指针（类目轴）或逐项进出（饼图无类目轴） */
@@ -90,8 +97,8 @@ export type ChartModel = {
 
 export type ViewChartForm = "line" | "bar" | "pie";
 
-export type ViewChart = {
-  form: ViewChartForm;
+type ViewChartShape<Form extends ViewChartForm> = {
+  form: Form;
   /** 建议渲染高度（px）：条形随分类数伸缩，布局由服务端一次算定 */
   height: number;
 
@@ -106,18 +113,23 @@ export type ViewChart = {
   model: ChartModel;
 };
 
-/** 服务端确定性编译产物；表格恒在册，图表只是同一结果的可选首选视图。 */
-export type PresentationBlock = {
-  type: ChartDecl["type"];
+export type ViewChart<Form extends ViewChartForm = ViewChartForm> = Form extends ViewChartForm
+  ? ViewChartShape<Form>
+  : never;
+
+type PresentationBase = {
   table: TableModel;
-  /** 声明式表格布局的实际编译状态；无法忠实成矩阵时才 unavailable。 */
-  table_layout: TableLayoutStatus;
   /** 结构式标题（`structureTitle`）：度量 · 按分类 · 趋势粒度；派生不出任何一段时缺席。 */
   structure_title?: string;
-  chart?: ViewChart;
-
-  totals?: TotalBand;
 };
+
+/** 服务端确定性编译产物；形态决定唯一合法载荷。 */
+export type PresentationBlock =
+  | (PresentationBase & { type: "table" })
+  | (PresentationBase & { type: "kpi"; totals: TotalBand })
+  | (PresentationBase & { type: "line"; chart: ViewChart<"line"> })
+  | (PresentationBase & { type: "bar"; chart: ViewChart<"bar"> })
+  | (PresentationBase & { type: "pie"; chart: ViewChart<"pie"> });
 
 export type PresentationFallbackKind = "empty_result" | "unsupported_shape";
 
@@ -129,22 +141,25 @@ export type PresentationFallback = {
 
 export function presentationFallbacks(
   viewId: string,
-  compiled: PresentationBlock,
-  presentation: PresentationSpec,
-  rowCount: number,
+  view: ViewBlock,
+  presentation: ChartDecl,
 ): PresentationFallback[] {
+  const titleOf = makeTitleOf(view);
+  const resultShape = analyzeResultShape(view);
+  const compiledTable = compileTableWithStatus(view, titleOf, presentation, resultShape);
+  const compiled = compilePresentationBlock(view, presentation);
   const tableNotes: PresentationFallback[] =
-    presentation.type === "table" && compiled.table_layout.state === "unavailable"
+    presentation.type === "table" && compiledTable.layout.state === "unavailable"
       ? [
           {
             result_view_id: viewId,
             kind: "unsupported_shape",
-            note: `声明的表格布局未生效：${compiled.table_layout.message}`,
+            note: `声明的表格布局未生效：${compiledTable.layout.message}`,
           },
         ]
       : [];
   if (compiled.type === presentation.type) return tableNotes;
-  if (rowCount === 0) {
+  if (view.rows.length === 0) {
     return [
       ...tableNotes,
       {
@@ -282,7 +297,9 @@ export function focusPatch(
 ): { series?: Record<string, unknown>[]; color?: string[] } {
   const items = chart.model.legend;
   if (chart.model.pointer === "item") {
-    return { color: items.map((item, i) => focusedColor(item.color, i, focused)) };
+    return {
+      color: items.map((item, i) => focusedColor(item.color, i, focused)),
+    };
   }
   const series = (Array.isArray(chart.option.series) ? chart.option.series : []) as Record<
     string,
@@ -399,16 +416,14 @@ function pointerOption(hasBar: boolean) {
     trigger: "axis",
     axisPointer: hasBar
       ? { type: "shadow", shadowStyle: { color: POINTER_BAND } }
-      : { type: "line", lineStyle: { color: POINTER_LINE, type: "dashed", width: 1 } },
+      : {
+          type: "line",
+          lineStyle: { color: POINTER_LINE, type: "dashed", width: 1 },
+        },
   };
 }
 
 /** 系列 key → 序号：对照关系在编排期按 key 立，图例与 series 数组按序号对位。 */
-function seriesIndexOf(series: { key: string }[], key: string): number | null {
-  const index = series.findIndex((item) => item.key === key);
-  return index < 0 ? null : index;
-}
-
 /** 渲染栈唯一的场景词汇：场地留白、画不画框、chrome 取舍（`VIEW_SCENES`）都按它查表。 */
 export type ViewScene = "card" | "tile" | "page";
 
@@ -425,7 +440,11 @@ export const PLOT_PADDING: Record<
  * 画不画那圈圆角发丝框按宿主场景定、不看形态。
  * 框落在 DOM（`PlotSlab`）而不是 echarts 的 grid：canvas 画不出圆角。
  */
-export const PLOT_FRAME: Record<ViewScene, boolean> = { card: true, tile: false, page: true };
+export const PLOT_FRAME: Record<ViewScene, boolean> = {
+  card: true,
+  tile: false,
+  page: true,
+};
 
 export const PLOT_RADIUS = 10;
 
@@ -470,6 +489,7 @@ type ResolvedSeries = SeriesDef & {
   mark: Mark;
   color: string;
   values: (number | null)[];
+  comparisonValues?: (number | null)[];
 };
 
 /** 两把尺子都在用时主轴画柱、副轴画线；只有一把尺子时照形态缺省。 */
@@ -487,11 +507,17 @@ function resolveSeries(
 ): ResolvedSeries[] {
   return series.map((s, i) => {
     const intent = (s.column && display?.[s.column]) || {};
+    const comparisonKey = s.comparison?.key;
     return {
       ...s,
       mark: intent.type ?? defaultMark(s),
       color: intent.color ?? seriesColorAt(i),
       values: rows.map((row) => cellNumber(row[s.key])),
+      ...(comparisonKey
+        ? {
+            comparisonValues: rows.map((row) => cellNumber(row[comparisonKey])),
+          }
+        : {}),
     };
   });
 }
@@ -517,7 +543,7 @@ function axisDecimals(key: "x" | "y", values: (number | null)[]) {
   return values.some((v) => v !== null) ? { axis_decimals: { [key]: values } } : {};
 }
 
-function legendOf(series: ResolvedSeries[], all: SeriesDef[]): ChartLegendItem[] {
+function legendOf(series: ResolvedSeries[]): ChartLegendItem[] {
   return series.map((s) => ({
     name: s.name,
     color: s.color,
@@ -525,8 +551,14 @@ function legendOf(series: ResolvedSeries[], all: SeriesDef[]): ChartLegendItem[]
     ...(s.decimals === undefined ? {} : { decimals: s.decimals }),
     values: s.values,
     axis: s.axis,
-    ...(s.baselineKey && seriesIndexOf(all, s.baselineKey) !== null
-      ? { baseline: seriesIndexOf(all, s.baselineKey) as number }
+    ...(s.comparison && s.comparisonValues
+      ? {
+          comparison: {
+            values: s.comparisonValues,
+            format: s.comparison.format,
+            ...(s.comparison.decimals === undefined ? {} : { decimals: s.comparison.decimals }),
+          },
+        }
       : {}),
   }));
 }
@@ -628,7 +660,10 @@ function seriesOption(s: ResolvedSeries, index: number, ctx: SeriesContext) {
     z: seriesZ(index),
     ...(ctx.orientation === "vertical" ? { yAxisIndex: s.axis } : {}),
     ...(s.mark === "bar"
-      ? { ...barSeriesPreferences(s.color), ...(ctx.stacked ? { stack: "total" } : {}) }
+      ? {
+          ...barSeriesPreferences(s.color),
+          ...(ctx.stacked ? { stack: "total" } : {}),
+        }
       : {
           ...lineSeriesPreferences(s.color, ctx.multi),
           ...latestMarkPoint(s.values, ctx.latest, s.color),
@@ -662,7 +697,10 @@ const valueAxisOption = (side: "left" | "right", first: boolean) => ({
   splitLine: first ? gridSplit : noSplit,
 });
 
-const OPTION_BASE = { textStyle: { fontFamily: FONT_FAMILY }, ...MOTION } as const;
+const OPTION_BASE = {
+  textStyle: { fontFamily: FONT_FAMILY },
+  ...MOTION,
+} as const;
 
 /**
  * `containLabel` 恒关，框也不由 grid 画（见 `PLOT_FRAME`）：四缘必须在渲染前算得出，
@@ -713,7 +751,7 @@ function cartesianOption(input: CartesianInput): ViewChart {
     },
     model: {
       categories: input.categories,
-      legend: legendOf(series, input.all),
+      legend: legendOf(series),
       axes: { y: axes.formats },
       ...axisDecimals("y", axes.decimals),
       ...(input.share ? { share: input.share } : {}),
@@ -730,7 +768,10 @@ function lastIndexWhere(length: number, test: (index: number) => boolean): numbe
 }
 
 /** 图表的视觉覆盖：只有折线与柱状声明这两个通道，饼图两者都没有。 */
-type ChartStyle = { display?: Record<string, SeriesDisplay>; valueLabels?: "main" | "all" };
+type ChartStyle = {
+  display?: Record<string, SeriesDisplay>;
+  valueLabels?: "main" | "all";
+};
 
 /** 时间趋势：时间恒占 x 轴。 */
 function trendOption(spec: TrendSpec, style: ChartStyle): ViewChart {
@@ -770,7 +811,12 @@ function barOption(spec: BarSpec, style: ChartStyle): ViewChart {
       rows: spec.rows,
       sourceRows: spec.sourceRows,
       ...(shareKey
-        ? { share: { title: "占比", values: spec.rows.map((row) => cellNumber(row[shareKey])) } }
+        ? {
+            share: {
+              title: "占比",
+              values: spec.rows.map((row) => cellNumber(row[shareKey])),
+            },
+          }
         : {}),
       valueLabels: style.valueLabels,
     });
@@ -779,11 +825,16 @@ function barOption(spec: BarSpec, style: ChartStyle): ViewChart {
   const shareKey = spec.stacked ? "share" : (spec.series[0]?.shareKey ?? "share");
   const model: ChartModel = {
     categories,
-    legend: legendOf(series, spec.series),
+    legend: legendOf(series),
     axes: { x: [spec.format] },
     ...axisDecimals("x", [declared.length ? Math.max(...declared) : null]),
     ...(spec.hasShare
-      ? { share: { title: "占比", values: spec.rows.map((r) => cellNumber(r[shareKey])) } }
+      ? {
+          share: {
+            title: "占比",
+            values: spec.rows.map((r) => cellNumber(r[shareKey])),
+          },
+        }
       : {}),
     pointer: "axis",
     records: recordPoints(spec.rows, spec.sourceRows, spec.series),
@@ -853,6 +904,7 @@ function pieOption(spec: PieSpec): ViewChart {
     ...(spec.decimals === undefined ? {} : { decimals: spec.decimals }),
     values: [r.value],
     axis: 0 as const,
+    share: r.share,
   }));
   return {
     form: "pie",
@@ -879,6 +931,11 @@ function pieOption(spec: PieSpec): ViewChart {
       categories: [spec.seriesName],
       legend,
       axes: {},
+      total: {
+        value: spec.total,
+        format: spec.format,
+        ...(spec.decimals === undefined ? {} : { decimals: spec.decimals }),
+      },
       pointer: "item",
       records: {
         points: spec.rows.map((_, rowIndex) => {
@@ -925,7 +982,6 @@ export function compilePresentationBlock(
   const title = structureTitle(view, titleOf);
   const base = {
     table: compiledTable.table,
-    table_layout: compiledTable.layout,
     ...(title ? { structure_title: title } : {}),
   };
   if (decl.type === "table") return { type: "table", ...base };
@@ -936,5 +992,16 @@ export function compilePresentationBlock(
     return totals ? { type: "kpi", ...base, totals } : { type: "table", ...base };
   }
   const chart = buildViewChart(view, decl, resultShape);
-  return chart ? { type: decl.type, ...base, chart } : { type: "table", ...base };
+  if (!chart) return { type: "table", ...base };
+  switch (decl.type) {
+    case "line":
+      if (chart.form !== "line") throw new Error("折线声明生成了错误图表形态");
+      return { type: "line", ...base, chart };
+    case "bar":
+      if (chart.form !== "bar") throw new Error("柱形声明生成了错误图表形态");
+      return { type: "bar", ...base, chart };
+    case "pie":
+      if (chart.form !== "pie") throw new Error("饼图声明生成了错误图表形态");
+      return { type: "pie", ...base, chart };
+  }
 }

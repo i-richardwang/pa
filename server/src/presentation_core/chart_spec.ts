@@ -15,7 +15,7 @@ type Display = Record<string, SeriesDisplay>;
 
 /**
  * 编译器产出的图表声明：通道按图型定形，哪个通道属于哪个图型出自这份形状本身，
- * 绑定层不再复述适用性。成员名还是编译期的绑定结果，尚未对着交付视图核对。
+ * 绑定层只核对成员。成员名还是编译期的绑定结果，尚未对着交付视图核对。
  */
 export type UnboundChart =
   | { type: "table"; columns?: string[]; shading?: TableShadingPreferences }

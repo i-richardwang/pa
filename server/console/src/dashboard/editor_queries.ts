@@ -214,12 +214,7 @@ export async function runDraft(input: DraftRunInput): Promise<ReplayPayload> {
   const resultView = base.render_bundle.view;
   const presentation = compilePresentationBlock(resultView, materialized.render_decl);
   // 降级说明与呈现同源重算：只改呈现时不回服务端，说明也必须跟着新声明一起出。
-  const notes = presentationFallbacks(
-    resultView.id,
-    presentation,
-    materialized.render_decl,
-    resultView.rows.length,
-  );
+  const notes = presentationFallbacks(resultView.id, resultView, materialized.render_decl);
   return {
     ...base,
     at: new Date().toISOString(),

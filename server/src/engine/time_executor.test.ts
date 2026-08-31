@@ -34,7 +34,7 @@ const plan: PlannedQuery = {
   },
 };
 
-const response = (data: Record<string, unknown>[]): LoadResponse => ({
+const response = (data: LoadResponse["data"]): LoadResponse => ({
   data,
   annotation: {
     measures: { "test_people_metrics.new_hire_count": { title: "入职人数" } },

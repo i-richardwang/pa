@@ -1,4 +1,4 @@
-/** 语义分析与物理执行工件的唯一双向边界。 */
+/** 把语义分析编译为物理执行工件的唯一边界。 */
 import { memberShortName } from "../semantic_core/member_name.js";
 import {
   isDerivedViewSpec,

@@ -7,6 +7,8 @@ import type { PresentationSpec } from "../presentation_core/presentation_spec.js
 import { authorizeTestAnalysisPlan } from "../test_support/dashboard.js";
 import { createQueryExecutionService } from "./query_execution_service.js";
 
+const identityExecution = (input: AnalysisSpec) => planExecution(input, { delivery: "identity" });
+
 const principal: Principal = {
   email: "viewer@example.com",
   roles: ["user"],
@@ -140,7 +142,7 @@ test("Agent 指标域拒绝手写技术维度与计算辅助指标，且不会�
     const spec: AnalysisSpec = {
       views: [{ id: "result", ...query, time: { cutoff: "2026-07" } }],
     };
-    await expect(service.execute(planned(planExecution(spec)))).rejects.toThrow(
+    await expect(service.execute(planned(identityExecution(spec)))).rejects.toThrow(
       "所选字段不在当前可用的数据目录中",
     );
   }
@@ -387,7 +389,7 @@ test("分组 Top-N 按正式指标在最新逻辑时间桶排名，并保留选�
   });
   const result = await service.execute(
     planned(
-      planExecution({
+      identityExecution({
         views: [
           {
             id: "result",
@@ -551,7 +553,7 @@ test("Top-N 先按选择粒度排名，再展开选中分组的完整展示粒�
   });
   const result = await service.execute(
     planned(
-      planExecution({
+      identityExecution({
         views: [
           {
             id: "result",
@@ -675,7 +677,7 @@ test("年度连续区间把端点、YTD 与流量指标自动拆腿后按组织�
   });
   const result = await service.execute(
     planned(
-      planExecution({
+      identityExecution({
         views: [
           {
             id: "result",
@@ -803,7 +805,7 @@ test("截断的直查结果交付导出能力与资源", async () => {
   });
   const result = await service.execute(
     planned(
-      planExecution({
+      identityExecution({
         views: [
           {
             id: "result",
@@ -945,7 +947,7 @@ test("不能整窗合并的指标退到期间终点求值，并写实其真实�
   });
   const result = await service.execute(
     planned(
-      planExecution({
+      identityExecution({
         views: [
           {
             id: "result",
@@ -996,7 +998,7 @@ test("带对照时每个指标逐期间给出合计", async () => {
   });
   const result = await service.execute(
     planned(
-      planExecution({
+      identityExecution({
         views: [
           {
             id: "result",

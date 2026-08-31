@@ -81,7 +81,7 @@ export const dashboardKeys = {
 };
 
 /**
- * 清单里撤下一行的乐观补丁。移除动作在点击时就已发出，界面只是不等回执先撤下；
+ * 清单移除使用乐观更新：动作在点击时发出，界面先撤下对应行；
  * 失败由调用它的 mutation 用 onMutate 存下的快照整份回滚。
  */
 export function withoutRow<T extends { rows: Array<{ id: string }> }>(

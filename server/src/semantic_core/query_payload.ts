@@ -466,10 +466,6 @@ export function isColumnFormat(value: unknown): value is ColumnFormat {
   return COLUMN_FORMAT_SCHEMA.safeParse(value).success;
 }
 
-export function isQueryPayload(value: unknown): value is QueryPayload {
-  return QUERY_PAYLOAD_SCHEMA.safeParse(value).success;
-}
-
 export type ExportResourceLink = {
   type: "resource_link";
   uri: string;
@@ -488,13 +484,6 @@ export const FULL_ROWS_BLOCK_SCHEMA = z
   })
   .strict();
 
-export function isFullRowsBlock(value: unknown, payload?: QueryPayload): value is FullRowsBlock {
-  const parsed = FULL_ROWS_BLOCK_SCHEMA.safeParse(value);
-  if (!parsed.success) return false;
-  if (!payload) return true;
-  return parsed.data.rows.every((row) => row.length === payload.view.columns.length);
-}
-
 export const EXPORT_RESOURCE_LINK_SCHEMA = z
   .object({
     type: z.literal("resource_link"),
@@ -503,10 +492,6 @@ export const EXPORT_RESOURCE_LINK_SCHEMA = z
     mimeType: z.string().startsWith("text/csv"),
   })
   .strict();
-
-export function isExportResourceLink(value: unknown): value is ExportResourceLink {
-  return EXPORT_RESOURCE_LINK_SCHEMA.safeParse(value).success;
-}
 
 export function freshnessLabel(payload: QueryPayload): string {
   const sources = payload.time_context;

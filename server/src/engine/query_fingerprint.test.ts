@@ -1,18 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import {
-  derivedFormulaSummaries,
-  QUERY_FINGERPRINT_PATTERN,
-  queryFingerprint,
-} from "./query_fingerprint.js";
+import { derivedFormulaSummaries, queryFingerprint } from "./query_fingerprint.js";
+
+const QUERY_FINGERPRINT_PATTERN = /^q-[0-9a-f]{10}$/;
 
 const queryView = (id = "source", cutoff = "2026-07") => ({
   id,
   view_title: "结果",
-  measures: ["active_employee_count"],
-  dimensions: ["organization_name"],
+  measures: ["measure:active_employee_count"],
+  dimensions: ["dimension:organization_name"],
   filters: [
-    { member: "organization_name", relation: "one_of" as const, values: ["Aurora Labs"] },
-    { member: "category_level", relation: "one_of" as const, values: ["Band C"] },
+    {
+      member: "dimension:organization_name",
+      relation: "one_of" as const,
+      values: ["Aurora Labs"],
+    },
+    { member: "dimension:category_level", relation: "one_of" as const, values: ["Band C"] },
   ],
   time: {
     window: { kind: "current_month", month: cutoff },
@@ -57,21 +59,21 @@ describe("queryFingerprint", () => {
   test("数据选择、列序与派生算式参与指纹", () => {
     const fingerprint = queryFingerprint(spec([queryView()]));
     const changed = queryView();
-    changed.measures = ["ytd_primary_event_rate"];
+    changed.measures = ["measure:ytd_primary_event_rate"];
     expect(queryFingerprint(spec([changed]))).not.toBe(fingerprint);
 
     const delta = {
       id: "delta",
       view_title: "差值",
       from: ["current", "previous"],
-      join: { on: ["organization_name"], how: "left" as const },
+      join: { on: ["dimension:organization_name"], how: "left" as const },
       columns: [
-        { member: "organization_name", source: "current", as: "组织" },
+        { member: "dimension:organization_name", source: "current", as: "组织" },
         {
           expr: {
             op: "-" as const,
-            left: { member: "active_employee_count", source: "current" },
-            right: { member: "active_employee_count", source: "previous" },
+            left: { member: "measure:active_employee_count", source: "current" },
+            right: { member: "measure:active_employee_count", source: "previous" },
           },
           as: "delta",
         },
@@ -130,13 +132,13 @@ describe("queryFingerprint", () => {
             id: "delta",
             view_title: "变化",
             from: ["current", "previous"],
-            join: { on: ["organization_name"], how: "left" },
+            join: { on: ["dimension:organization_name"], how: "left" },
             columns: [
               {
                 expr: {
                   op: "-",
-                  left: { member: "active_employee_count", source: "current" },
-                  right: { member: "active_employee_count", source: "previous" },
+                  left: { member: "measure:active_employee_count", source: "current" },
+                  right: { member: "measure:active_employee_count", source: "previous" },
                 },
                 as: "人数变化",
               },
@@ -144,7 +146,9 @@ describe("queryFingerprint", () => {
           },
         ]),
       ),
-    ).toEqual(["人数变化 = active_employee_count(当期) − active_employee_count(上年同期)"]);
+    ).toEqual([
+      "人数变化 = measure:active_employee_count(当期) − measure:active_employee_count(上年同期)",
+    ]);
     expect(derivedFormulaSummaries({ invalid: true })).toEqual([]);
   });
 });

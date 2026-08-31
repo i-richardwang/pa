@@ -439,10 +439,8 @@ async function executeView(
         return decimals === undefined ? [] : [[columns[index], decimals]];
       }),
     );
-  const toCells = (records: Record<string, unknown>[]) =>
-    records.map((record) =>
-      memberKeys.map((key) => (record[key] ?? null) as string | number | null),
-    );
+  const toCells = (records: Record<string, string | number | null>[]) =>
+    records.map((record) => memberKeys.map((key) => record[key] ?? null));
 
   const { rowCount, hasMore, truncated } = selection
     ? { rowCount: resolved.data.length, hasMore: false, truncated: undefined }

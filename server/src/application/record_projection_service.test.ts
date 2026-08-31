@@ -377,7 +377,6 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
   });
 
   expect(result.rows).toHaveLength(2);
-  expect(result.record_set_id).toBe("employee");
   expect(result.record_set_title).toBe("员工记录");
   expect(result.rows[0].slice(0, 2)).toEqual(["e_07", "钱七"]);
   expect(result.columns).toEqual(["工号", "姓名", "记录日期", "组织"]);

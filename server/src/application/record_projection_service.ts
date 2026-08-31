@@ -465,7 +465,6 @@ export function createRecordProjectionService(deps: {
       const payload: RecordProjectionPayload = {
         metric_id: input.metric_id,
         metric_title: metric.title,
-        record_set_id: target.recordSet,
         record_set_title: target.records.title,
         record_set_description: target.records.description,
         columns,

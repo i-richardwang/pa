@@ -8,6 +8,7 @@ import {
   focusPatch,
   RANK_ROW,
   SERIES_COLORS,
+  presentationFallbacks,
   type ChartModel,
   type ViewChart,
 } from "./chart_config.js";
@@ -24,6 +25,16 @@ const QUERY_NOTES = [
 
 const view = (...args: Parameters<typeof viewBlock>): ViewBlock =>
   viewBlock(args[0], args[1], { queryNotes: QUERY_NOTES, ...args[2] });
+
+function chartOf(block: ReturnType<typeof compilePresentationBlock>): ViewChart {
+  if (!("chart" in block)) throw new Error("测试数据未编译成图表");
+  return block.chart;
+}
+
+function totalsOf(block: ReturnType<typeof compilePresentationBlock>) {
+  if (block.type !== "kpi") throw new Error("测试数据未编译成指标卡");
+  return block.totals;
+}
 
 /** 真系列：折线的垫层追加在它们之后，形态断言只看前几条 */
 function realSeries<T>(chart: ViewChart): T[] {
@@ -754,7 +765,7 @@ describe("无图形态与回答级块", () => {
     expect(isPresentationBlock(block)).toBe(true);
   });
 
-  test("显式 table 布局把生效与不可用状态写入呈现块", () => {
+  test("显式 table 布局只交付已编译表格，不泄漏编译状态", () => {
     const applied = compilePresentationBlock(
       view(
         ["organization_name", "degree", "active_employee_count"],
@@ -772,7 +783,6 @@ describe("无图形态与回答级块", () => {
     );
     expect(applied).toMatchObject({
       type: "table",
-      table_layout: { state: "applied", leafColumns: 2 },
       table: {
         columns: [
           { headerPath: [{ label: "organization_name" }] },
@@ -782,23 +792,24 @@ describe("无图形态与回答级块", () => {
       },
     });
 
-    const unavailable = compilePresentationBlock(
-      view(
-        ["organization_name", "degree", "active_employee_count"],
-        [
-          ["A", "本科", 10],
-          ["A", "本科", 20],
-        ],
-      ),
-      {
-        type: "table",
-        tableColumns: [{ kind: "field", column: "degree" }, { kind: "metrics" }],
-      },
+    const duplicate = view(
+      ["organization_name", "degree", "active_employee_count"],
+      [
+        ["A", "本科", 10],
+        ["A", "本科", 20],
+      ],
     );
-    expect(unavailable.table_layout).toMatchObject({
-      state: "unavailable",
-      reason: "duplicate_coordinate",
-    });
+    const declaration = {
+      type: "table" as const,
+      tableColumns: [{ kind: "field" as const, column: "degree" }, { kind: "metrics" as const }],
+    };
+    expect(presentationFallbacks("result", duplicate, declaration)).toEqual([
+      {
+        result_view_id: "result",
+        kind: "unsupported_shape",
+        note: expect.stringContaining("表格布局未生效"),
+      },
+    ]);
   });
 
   test("完整呈现块的声明类型必须与编译图表一致", () => {
@@ -809,7 +820,6 @@ describe("无图形态与回答级块", () => {
       isPresentationBlock({
         type: "line",
         table,
-        table_layout: { state: "applied", leafColumns: 1 },
         chart: { form: "bar", height: 300, option: {} },
       }),
     ).toBe(false);
@@ -817,7 +827,6 @@ describe("无图形态与回答级块", () => {
       isPresentationBlock({
         type: "pie",
         table,
-        table_layout: { state: "applied", leafColumns: 1 },
         chart: {
           form: "pie",
           height: 300,
@@ -833,7 +842,7 @@ describe("无图形态与回答级块", () => {
     ).toBe(false);
   });
 
-  test("table_layout 只接受完整的 applied/unavailable 状态", () => {
+  test("呈现块拒绝未登记字段", () => {
     const table = compilePresentationBlock(view(["active_employee_count"], [[10]]), {
       type: "table",
     }).table;
@@ -841,28 +850,15 @@ describe("无图形态与回答级块", () => {
       isPresentationBlock({
         type: "table",
         table,
-        table_layout: { state: "applied", leafColumns: 1 },
       }),
     ).toBe(true);
     expect(
       isPresentationBlock({
         type: "table",
         table,
-        table_layout: { state: "unknown", leafColumns: 1 },
+        compile_state: "applied",
       }),
     ).toBe(false);
-    expect(
-      isPresentationBlock({
-        type: "table",
-        table,
-        table_layout: {
-          state: "unavailable",
-          leafColumns: 2,
-          reason: "duplicate_coordinate",
-          message: "坐标重复",
-        },
-      }),
-    ).toBe(true);
   });
 });
 
@@ -1091,9 +1087,10 @@ describe("服务端物理呈现声明", () => {
     expect(chart.option.tooltip).toEqual({ show: false });
     expect(chart.option.legend).toBeUndefined();
     expect(pa(chart).legend).toEqual([
-      { name: "A", color: "#3b6fdb", format: "number", values: [60], axis: 0 },
-      { name: "B", color: "#e0857a", format: "number", values: [40], axis: 0 },
+      { name: "A", color: "#3b6fdb", format: "number", values: [60], axis: 0, share: 0.6 },
+      { name: "B", color: "#e0857a", format: "number", values: [40], axis: 0, share: 0.4 },
     ]);
+    expect(pa(chart).total).toEqual({ value: 100, format: "number" });
     expect(pa(chart).categories).toEqual(["在职人数"]);
     expect(pa(chart).pointer).toBe("item");
     expect(chart.option.grid).toBeUndefined();
@@ -1206,7 +1203,8 @@ describe("对照叠加折线的交付形态", () => {
       y: ["ytd_primary_event_rate"],
     });
     expect(block.type).toBe("line");
-    const option = block.chart?.option as {
+    const chart = chartOf(block);
+    const option = chart.option as {
       series: { name: string; data: (number | null | { value: number | null })[] }[];
       xAxis: { data: string[] };
     };
@@ -1226,12 +1224,13 @@ describe("对照叠加折线的交付形态", () => {
     expect(lastValue(option.series[0])).toBeCloseTo(0.16, 10);
     expect(lastValue(option.series[1])).toBeCloseTo(0.08, 10);
     // 身份链：对照系列末点回指结果中的 2025-08 行（前 8 行是 2025）。
-    const points = pa(block.chart!).records?.points;
+    const points = pa(chart).records?.points;
     expect(points?.[0]?.[7]?.row).toBe(15);
     expect(points?.[1]?.[7]?.row).toBe(7);
-    const legend = pa(block.chart!).legend;
-    expect(legend?.[0]).not.toHaveProperty("baseline");
-    expect(legend?.[1]?.baseline).toBe(0);
+    const legend = pa(chart).legend;
+    expect(legend?.[0]).not.toHaveProperty("comparison");
+    expect(legend?.[1]?.comparison?.format).toBe("percentage_point");
+    expect(legend?.[1]?.comparison?.values.at(-1)).toBeCloseTo(0.08, 10);
   });
 
   test("同一结果的月度交叉表在对照列旁给出差值列", () => {
@@ -1279,23 +1278,25 @@ describe("整窗读数进呈现块", () => {
   test("整窗读数只随指标卡下发：图与表之上不摆第二个口径的读数", () => {
     const kpi = compilePresentationBlock(seriesView(), { type: "kpi" });
     expect(kpi.type).toBe("kpi");
-    expect(kpi.totals?.metrics[0]).toMatchObject({
+    const totals = totalsOf(kpi);
+    expect(totals.metrics[0]).toMatchObject({
       value: 22,
       period: { label: "2026年1—2月", from: "2026-01", to: "2026-02" },
     });
     const line = compilePresentationBlock(seriesView(), { type: "line", y: ["turnover_count"] });
     expect(line.type).toBe("line");
-    expect(line.totals).toBeUndefined();
+    expect(line).not.toHaveProperty("totals");
     const table = compilePresentationBlock(seriesView(), { type: "table" });
-    expect(table.totals).toBeUndefined();
+    expect(table).not.toHaveProperty("totals");
     expect(isPresentationBlock(line)).toBe(true);
     expect(isPresentationBlock(kpi)).toBe(true);
-    expect(isPresentationBlock({ ...line, totals: kpi.totals })).toBe(false);
-    expect(isPresentationBlock({ ...table, totals: kpi.totals })).toBe(false);
+    expect(isPresentationBlock({ ...line, totals })).toBe(false);
+    expect(isPresentationBlock({ ...table, totals })).toBe(false);
   });
 
   test("宿主边界拒收残缺整窗读数，也拒收没有数可读的指标卡", () => {
     const block = compilePresentationBlock(seriesView(), { type: "kpi" });
+    const totals = totalsOf(block);
     expect(isPresentationBlock({ ...block, totals: undefined })).toBe(false);
     expect(
       isPresentationBlock({
@@ -1309,7 +1310,7 @@ describe("整窗读数进呈现块", () => {
         totals: {
           metrics: [
             {
-              ...block.totals!.metrics[0],
+              ...totals.metrics[0],
               comparisons: [{ label: "较2025年", value: 0.1, format: "ratio" }],
             },
           ],
@@ -1444,8 +1445,12 @@ test("每种形态一律照同一道取色式置灰：折线、双轴、分类�
     ],
     [
       "对照叠加",
-      compilePresentationBlock(comparisonView, { type: "line", y: ["ytd_primary_event_rate"] })
-        .chart ?? null,
+      chartOf(
+        compilePresentationBlock(comparisonView, {
+          type: "line",
+          y: ["ytd_primary_event_rate"],
+        }),
+      ),
     ],
     [
       "饼图",

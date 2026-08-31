@@ -616,10 +616,12 @@ describe("compileChart", () => {
       x: "previous_category_type",
       y: ["active_employee_count"],
     });
-    expect((chart as { rows: { label: string; value: number | null }[] }).rows).toEqual([
-      { label: "类别甲", value: 60 },
-      { label: "—", value: 32 },
-      { label: "类别乙", value: 8 },
+    expect(
+      (chart as { rows: { label: string; value: number | null; share: number }[] }).rows,
+    ).toEqual([
+      { label: "类别甲", value: 60, share: 0.6 },
+      { label: "—", value: 32, share: 0.32 },
+      { label: "类别乙", value: 8, share: 0.08 },
     ]);
 
     const both = payload(

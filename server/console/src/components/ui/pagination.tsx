@@ -1,6 +1,4 @@
 /** Adapted from shadcn/ui under the MIT License; see docs/third_party_licenses.md. */
-"use client";
-
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";

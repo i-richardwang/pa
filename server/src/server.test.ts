@@ -374,7 +374,6 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     return {
       metric_id: options.metricId ?? "measure:active_employee_count",
       metric_title: "在职人数",
-      record_set_id: "employee_snapshot",
       record_set_title: "在职员工",
       record_set_description: "所选业务时点构成在职人数的员工快照记录。",
       columns: ["员工编号", "姓名"],
@@ -567,7 +566,6 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     expect(appliedPivot.structuredContent).not.toHaveProperty("presentation_notes");
     expect(appliedPivot._meta?.["ai.pa/presentation"]).toMatchObject({
       type: "table",
-      table_layout: { state: "applied" },
     });
 
     const unavailablePivot = await client.callTool({
@@ -590,7 +588,6 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     });
     expect(unavailablePivot._meta?.["ai.pa/presentation"]).toMatchObject({
       type: "table",
-      table_layout: { state: "unavailable", reason: "duplicate_coordinate" },
     });
 
     const rendered = await client.callTool({

@@ -14,6 +14,21 @@ const specWithFilters = (filters: unknown[]) => ({
 });
 
 describe("semantic analysis filters", () => {
+  test("语义成员必须携带种类前缀", () => {
+    expect(() =>
+      parseAnalysisDefinition({
+        views: [
+          {
+            id: "result",
+            measures: ["active_employee_count"],
+            dimensions: ["organization_name"],
+            time: { window: { kind: "current_month" } },
+          },
+        ],
+      }),
+    ).toThrow("分析定义无效");
+  });
+
   test("多值按集合在输入边界去空、去重并稳定排序", () => {
     const parsed = parseAnalysisDefinition(
       specWithFilters([

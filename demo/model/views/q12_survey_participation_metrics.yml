@@ -1,7 +1,7 @@
 views:
   - name: q12_survey_participation_metrics
     title: Q12调研投放指标
-    description: Q12调研投放、答卷人数和回复率的权限受控查询入口。
+    description: 各期 Q12 调研的受邀人数、答卷人数和回复率。
     meta:
       query_surface: metric_source
       time_source: survey

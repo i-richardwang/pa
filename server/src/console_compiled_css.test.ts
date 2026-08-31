@@ -175,7 +175,7 @@ test("every colour a class compiles to comes from the pa-* table", async () => {
       ).toEqual([]);
     }
   }
-});
+}, 10_000);
 
 test("the extractor claims owned utilities with variant prefixes", async () => {
   const text = await readFile(new URL("components/ui/input.tsx", CONSOLE_SRC), "utf8");

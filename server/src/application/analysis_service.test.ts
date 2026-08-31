@@ -28,7 +28,7 @@ const barIntent: SemanticViewIntent = {
 };
 
 const compiled = {
-  plan: planExecution(STRUCTURE_ARGS),
+  plan: planExecution(STRUCTURE_ARGS, { delivery: "identity" }),
   presentation: {
     type: "bar" as const,
     x: "category_level",
@@ -48,15 +48,15 @@ const pivotDefinition: AnalysisDefinition = {
   views: [
     {
       id: "structure",
-      measures: ["test_people_metrics.active_employee_count"],
-      dimensions: ["test_people_metrics.organization_name", "test_people_metrics.department_name"],
+      measures: ["measure:active_employee_count"],
+      dimensions: ["dimension:organization_name", "dimension:department_name"],
       time: { window: { kind: "current_month", month: "2026-07" } },
     },
   ],
 };
 const pivotIntent: SemanticViewIntent = {
   type: "table",
-  columns: ["test_people_metrics.department_name"],
+  columns: ["dimension:department_name"],
 };
 const pivotCompiled = {
   ...compiled,
@@ -222,16 +222,14 @@ describe("analysis service 身份与呈现边界", () => {
     expect(compilePresentationBlock(fallback.fullRowViewBlock, fallback.decl).type).toBe("table");
   });
 
-  test("表格布局不可用时保留 View 声明并显式报告状态", async () => {
+  test("表格布局不可用时保留 View 声明", async () => {
     const { repository, service } = pivotServiceWith([
       ["公司", "研发", 10],
       ["公司", "研发", 8],
     ]);
     const executed = await service.run(principal, pivotDefinition, pivotIntent);
     expect(executed.intent).toEqual(pivotIntent);
-    expect(compilePresentationBlock(executed.fullRowViewBlock, executed.decl)).toMatchObject({
-      table_layout: { state: "unavailable", reason: "duplicate_coordinate" },
-    });
+    expect(compilePresentationBlock(executed.fullRowViewBlock, executed.decl).type).toBe("table");
     expect(
       (await repository.resolveOwnedView(executed.view_id, principal.email)).view.intent,
     ).toEqual(pivotIntent);

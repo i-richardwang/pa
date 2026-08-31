@@ -8,7 +8,7 @@ import {
   requestFullscreen,
 } from "./host_shell.js";
 
-test("状态仓：补丁合并、订阅者按次通知、清空后不再通知", () => {
+test("状态仓：状态合并、订阅者按次通知、清空后不再通知", () => {
   const store = createHostStore({ ...HOST_SHELL_INITIAL, payload: null as string | null });
   store.set({ payload: "p" });
   expect(store.get()).toEqual({ displayMode: "inline", canFullscreen: false, payload: "p" });

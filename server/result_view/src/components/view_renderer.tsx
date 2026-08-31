@@ -146,7 +146,7 @@ function ViewBody({
 
   return (
     <div className={`flex flex-col ${fill ? "min-h-0 flex-1" : ""}`}>
-      {presentation.chart ? (
+      {"chart" in presentation ? (
         <div className={fill ? "flex min-h-0 flex-1 flex-col" : ""}>
           <ViewChartCanvas
             chart={presentation.chart}

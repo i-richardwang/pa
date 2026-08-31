@@ -148,6 +148,14 @@ test("Cube meta 与 load 的内部结构在 HTTP 边界 fail-closed", async () =
     );
     await expect(testGateway().load({}, TEST_CONTEXT)).rejects.toBeInstanceOf(CubeGatewayError);
 
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        data: [{ "sales.revenue": { nested: true } }],
+        annotation: { measures: {}, dimensions: {} },
+      }),
+    );
+    await expect(testGateway().load({}, TEST_CONTEXT)).rejects.toBeInstanceOf(CubeGatewayError);
+
     fetchMock.mockResolvedValueOnce(jsonResponse({ results: [null] }));
     await expect(testGateway().loadMulti({}, TEST_CONTEXT)).rejects.toBeInstanceOf(
       CubeGatewayError,

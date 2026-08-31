@@ -36,8 +36,8 @@ class DemoDataTest(unittest.TestCase):
             self.assertEqual(first, second)
             self.assertEqual(len(list((root / "versions").iterdir())), 1)
             self.assertEqual(first["semantic_package"], "pa_demo")
-            self.assertEqual(first["generator_version"], "demo_v3")
-            self.assertRegex(first["version"], r"^demo_v3_2026_07_[0-9a-f]{12}$")
+            self.assertEqual(first["generator_version"], "demo_v1")
+            self.assertRegex(first["version"], r"^demo_v1_2026_07_[0-9a-f]{12}$")
             self.assertRegex(first["content_fingerprint"], r"^[0-9a-f]{64}$")
             self.assertIs(first["synthetic"], True)
             self.assertEqual(first["as_of_month"], "2026-07")
@@ -337,7 +337,7 @@ class DemoDataTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "current").mkdir()
-            version = root / "versions" / "demo_v3_2026_07"
+            version = root / "versions" / "demo_v1_2026_07"
             version.mkdir(parents=True)
             with self.assertRaisesRegex(RuntimeError, "必须是可原子替换的软链接"):
                 publish_current(root, version)

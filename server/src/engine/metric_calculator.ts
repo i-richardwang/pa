@@ -3,6 +3,7 @@ import type { TopNSelectionSpec } from "../semantic_core/analysis_spec.js";
 import type {
   CubeFilter,
   CubeFilterCondition,
+  CubeCell,
   CubeView,
   LoadResponse,
 } from "../ports/cube_gateway.js";
@@ -42,19 +43,14 @@ export type ResolvedMetricLoad = ResolvedLoad & {
   masked?: MaskedMeasureSummary[];
 };
 
-const cell = (value: unknown): string | number | boolean | null => {
-  if (value == null) return null;
-  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-    ? value
-    : String(value);
-};
+const cell = (value: CubeCell): CubeCell => value ?? null;
 
 function canonicalRow(
   plan: MetricQueryPlan,
   leg: MetricQueryLeg,
-  source: Record<string, unknown>,
-): Record<string, unknown> {
-  const row: Record<string, unknown> = {};
+  source: Record<string, CubeCell>,
+): Record<string, CubeCell> {
+  const row: Record<string, CubeCell> = {};
   for (const [physical, canonical] of Object.entries(leg.dimensions)) {
     row[canonical] = source[physical] ?? null;
   }
@@ -70,7 +66,7 @@ function canonicalRow(
 
 function metricValue(
   metricId: string,
-  row: Record<string, unknown>,
+  row: Record<string, CubeCell>,
   nodes: Readonly<Record<string, ExecutableMetricNode>>,
   memo: Map<string, number | null>,
 ): number | null {
@@ -147,16 +143,16 @@ function annotation(plan: MetricQueryPlan, views: CubeView[]): LoadResponse["ann
   return { measures, dimensions };
 }
 
-const selectionCell = (value: unknown): string | null => (value == null ? null : String(value));
-const selectionKey = (dimensions: string[], row: Record<string, unknown>) =>
+const selectionCell = (value: CubeCell): string | null => (value == null ? null : String(value));
+const selectionKey = (dimensions: string[], row: Record<string, CubeCell>) =>
   JSON.stringify(dimensions.map((dimension) => selectionCell(row[dimension])));
 
 function applySelection(
   plan: MetricQueryPlan,
-  rows: Record<string, unknown>[],
+  rows: Record<string, CubeCell>[],
   selection: TopNSelectionSpec,
 ): {
-  rows: Record<string, unknown>[];
+  rows: Record<string, CubeCell>[];
   outcome: MetricSelectionOutcome;
   filter: CubeFilter;
 } {
@@ -212,7 +208,7 @@ function applySelection(
       rank.get(selectionKey(selection.dimensions, left))! -
       rank.get(selectionKey(selection.dimensions, right))!,
   );
-  const tupleFilter = (row: Record<string, unknown>): CubeFilter => {
+  const tupleFilter = (row: Record<string, CubeCell>): CubeFilter => {
     const conditions: CubeFilterCondition[] = selection.dimensions.map((member) => {
       const value = selectionCell(row[member]);
       return value === null
@@ -255,7 +251,7 @@ export function alignMetricLoads(
 ): ResolvedMetricLoad {
   if (loads.length !== plan.legs.length) throw new Error("正式指标查询腿执行结果不完整");
   const keys = metricKeyMembers(plan);
-  const aligned = new Map<string, Record<string, unknown>>();
+  const aligned = new Map<string, Record<string, CubeCell>>();
   loads.forEach((load, index) => {
     const leg = plan.legs[index];
     const seen = new Set<string>();
@@ -279,7 +275,7 @@ export function alignMetricLoads(
   const maskedGroups = new Map<string, number>();
   const data = [...aligned.values()].map((internal) => {
     const memo = new Map<string, number | null>();
-    const output: Record<string, unknown> = Object.fromEntries(
+    const output: Record<string, CubeCell> = Object.fromEntries(
       keys.map((key) => [key, internal[key] ?? null]),
     );
     for (const member of plan.measures) {

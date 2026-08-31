@@ -112,9 +112,12 @@ async function deliverTimeContract(measures: string[], time: TimeInput): Promise
     const result = await service.execute(
       authorizeTestAnalysisPlan({
         principal,
-        plan: planExecution({
-          views: [{ id: "result", measures, dimensions: [`${VIEW}.organization_name`], time }],
-        }),
+        plan: planExecution(
+          {
+            views: [{ id: "result", measures, dimensions: [`${VIEW}.organization_name`], time }],
+          },
+          { delivery: "identity" },
+        ),
         presentation: TABLE_PRESENTATION,
         views: [view],
         timeContext: await cube.timeContext(),
