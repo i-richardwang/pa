@@ -542,7 +542,7 @@ export function primaryMeasureIndices(view: ViewBlock, measureIdx: number[]): nu
 
 /**
  * 结构式标题 = 度量 · 按分类维度 · 趋势粒度，如「收入 · 按区域 · 月度趋势」。
- * 列角色取自 detectRoles，与图型判定同源。占比派生列与取值唯一的分类列不进标题；
+ * 列角色取自 detectRoles，与图型判定同源。占比列与取值唯一的分类列不进标题；
  * 度量超过三个以「等」收束。时间列 ≥2 个时点才算趋势，带 month 列即月度、否则年度。
  */
 export function structureTitle(view: ViewBlock, titleOf: (c: string) => string): string | null {
@@ -1129,10 +1129,11 @@ export function resolveTableLayout(
   declared?: TableAxis[],
 ): TableLayout {
   const temporal = roles.timePoints.length >= 2;
-  const monthly = timeColumnIndex(view, "year") >= 0 && timeColumnIndex(view, "month") >= 0;
+  const hasTime = timeColumnIndex(view, "year") >= 0;
+  const monthly = hasTime && timeColumnIndex(view, "month") >= 0;
   const dimensions = dimensionColumns(view);
   const columns =
-    declared ??
+    declared?.filter((axis) => axis.kind !== "time" || hasTime) ??
     (!tableValueIndices(roles).length
       ? []
       : temporal && monthly && !dimensions.length

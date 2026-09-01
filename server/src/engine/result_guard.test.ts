@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { CubeGateway, CubeQuery, CubeView, LoadResponse } from "../ports/cube_gateway.js";
 import type { CubeSecurityContext } from "../ports/cube_gateway.js";
 import { executeMetricQuery } from "./metric_executor.js";
-import { planMetricQuery } from "./metric_planner.js";
+import { planMetricQuery } from "../test_support/planning.js";
 
 const periodic = "periodic_quality_metrics";
 const organization = `${periodic}.organization_name`;

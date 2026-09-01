@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CubeGateway } from "./ports/cube_gateway.js";
-import { MAX_PLAN_NODES, parseAnalysisSpec } from "./semantic_core/analysis_spec.js";
+import { parseAnalysisSpec } from "./semantic_core/analysis_spec.js";
 import {
   parseAnalysisDefinition,
   type SemanticViewIntent,
@@ -159,12 +159,47 @@ describe("AnalysisSpec", () => {
     );
   });
 
-  test("分析计算图受统一执行节点预算约束", () => {
+  test("grouping-set 的语义绑定只能引用查询自身的维度与指标", () => {
+    const base = {
+      ...query("shares"),
+      grouping_sets: {
+        base: [
+          {
+            id: "dimension:organization_name",
+            member: "test_people_metrics.unknown_dimension",
+          },
+        ],
+      },
+    };
+    expect(() => parseAnalysisSpec({ views: [base] })).toThrow(
+      /基础分组集的物理绑定必须属于查询 dimensions/,
+    );
     expect(() =>
       parseAnalysisSpec({
-        views: Array.from({ length: MAX_PLAN_NODES + 1 }, (_, index) => query(`view_${index}`)),
+        views: [
+          {
+            ...base,
+            grouping_sets: {
+              base: [
+                {
+                  id: "dimension:organization_name",
+                  member: "test_people_metrics.organization_name",
+                },
+              ],
+              calculations: [
+                {
+                  kind: "grouping_share",
+                  id: "calculation:organization_share",
+                  title: "组织占比",
+                  measure: "test_people_metrics.unknown_measure",
+                  category_dimension: "dimension:organization_name",
+                },
+              ],
+            },
+          },
+        ],
       }),
-    ).toThrow(`Array must contain at most ${MAX_PLAN_NODES} element`);
+    ).toThrow(/grouping-set 计算的基础指标必须属于查询 measures/);
   });
 });
 

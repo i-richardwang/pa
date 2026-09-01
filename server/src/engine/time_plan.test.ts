@@ -6,8 +6,7 @@ import {
   type TimeInput,
   timeBuckets,
 } from "../semantic_core/time_contract.js";
-import { planMetricQuery } from "./metric_planner.js";
-import { planTimeQuery } from "./time_plan.js";
+import { planMetricQuery, planTimeQuery } from "../test_support/planning.js";
 
 /** 截止月份坐标恒为单月桶，与结果粒度无关。 */
 const atCutoff = (month: string) => ({

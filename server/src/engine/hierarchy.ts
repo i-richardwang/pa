@@ -16,14 +16,18 @@ export interface CompletedQuery {
 }
 
 /** 补全判定（纯函数）：chains 为各层级链的成员名列表（从粗到细） */
-export function completeWithChains(query: CubeQuery, chains: string[][]): CompletedQuery {
+export function completeWithChains(
+  query: CubeQuery,
+  chains: string[][],
+  options: { filtersReferenceHierarchy?: boolean } = {},
+): CompletedQuery {
   const dims = query.dimensions ?? [];
   const conditions = (query.filters ?? []).filter(isCondition).map((filter) => ({
     member: filter.member,
     includes: filter.operator === "equals",
     values: filter.values,
   }));
-  const { dimensions, added } = completeHierarchyDimensions(dims, conditions, chains);
+  const { dimensions, added } = completeHierarchyDimensions(dims, conditions, chains, options);
   if (!added.length) return { query, added };
   return { query: { ...query, dimensions }, added };
 }
@@ -31,4 +35,15 @@ export function completeWithChains(query: CubeQuery, chains: string[][]): Comple
 export function completeHierarchy(query: CubeQuery, views: CubeView[]): CompletedQuery {
   const chains = views.flatMap((v) => v.hierarchies ?? []).map((h) => h.levels);
   return completeWithChains(query, chains);
+}
+
+/**
+ * grouping set 的筛选只约束层级，不声明结果分组。这样空分组保持总体，粗分组也不会因
+ * 沿用基础查询筛选而被补回已经移除的分类维度。
+ */
+export function completeGroupingSetHierarchy(query: CubeQuery, views: CubeView[]): CompletedQuery {
+  const chains = views
+    .flatMap((view) => view.hierarchies ?? [])
+    .map((hierarchy) => hierarchy.levels);
+  return completeWithChains(query, chains, { filtersReferenceHierarchy: false });
 }

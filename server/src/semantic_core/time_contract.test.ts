@@ -259,18 +259,18 @@ describe("时间该不该占轴", () => {
 
   test("带业务分组的结果时间不占轴，没有分组时连续期间给走势", () => {
     const time = compileTimeIntent(range);
-    expect(resolveTimeOutputGrain(time, "2026-07", { grouped: true })).toBe("total");
+    expect(resolveTimeOutputGrain(time, "2026-07", { defaultOutput: "total" })).toBe("total");
     expect(resolveTimeOutputGrain(time, "2026-07")).toBe("month");
     // 相对窗口的单位默认同样只对无分组成立。
     const trailing = compileTimeIntent({ window: { kind: "trailing", count: 3, unit: "year" } });
-    expect(resolveTimeOutputGrain(trailing, "2026-07", { grouped: true })).toBe("total");
+    expect(resolveTimeOutputGrain(trailing, "2026-07", { defaultOutput: "total" })).toBe("total");
     expect(resolveTimeOutputGrain(trailing, "2026-07")).toBe("year");
   });
 
   test("要在分组之上再看时间，显式声明即可", () => {
     expect(
       resolveTimeOutputGrain(compileTimeIntent({ ...range, display: "month" }), "2026-07", {
-        grouped: true,
+        defaultOutput: "total",
       }),
     ).toBe("month");
   });
@@ -280,7 +280,9 @@ describe("时间该不该占轴", () => {
       ...range,
       comparison: { kind: "custom", window: { kind: "range", from: "2021-01", to: "2023-07" } },
     });
-    expect(resolveTimeOutputGrain(compared, "2026-07", { grouped: true })).not.toBe("total");
+    expect(resolveTimeOutputGrain(compared, "2026-07", { defaultOutput: "total" })).not.toBe(
+      "total",
+    );
   });
 
   test("年初归零的指标跨日历年不成整段单桶，自动档降为按年", () => {

@@ -481,17 +481,19 @@ export type ResolvedTimePlanning = {
   evalForms: ReadonlyMap<string, TimeEvalForm>;
 };
 
+export type TimeOutputDefault = "series" | "total";
+
 /** 业务时间的唯一解析入口。 */
 export function resolveTimePlanning(
   query: CubeQuery,
   time: TimeInput | undefined,
   context: TimeContext,
   views: CubeView[],
-  preferredView?: string,
+  options: { defaultOutput: TimeOutputDefault; preferredView?: string },
 ): ResolvedTimePlanning {
   if (!time) throw new Error("查询必须提供业务时间；使用截止月份或连续期间");
   assertNoRawTimeMembers(query);
-  const view = queryTimeView(query, preferredView);
+  const view = queryTimeView(query, options.preferredView);
   const contracts = measureContracts(query, views);
   const bounds = timeBounds(query, context, views);
   // 窗口先于对照展开：相对窗口先落为绝对 range，年同移的相对对照再作用其上。
@@ -509,7 +511,7 @@ export function resolveTimePlanning(
       contracts,
       coordinates,
       resolveTimeOutputGrain(time, bounds.defaultThrough, {
-        grouped: (query.dimensions ?? []).length > 0,
+        defaultOutput: options.defaultOutput,
       }),
       explicitGrain,
     ),
@@ -575,9 +577,12 @@ export function planTimeQuery(
   time: TimeInput | undefined,
   context: TimeContext,
   views: CubeView[],
-  preferredView?: string,
+  options: { defaultOutput: TimeOutputDefault; preferredView?: string },
 ): PlannedQuery {
-  const planning = resolveTimePlanning(query, time, context, views, preferredView);
+  const planning = resolveTimePlanning(query, time, context, views, {
+    defaultOutput: options.defaultOutput,
+    ...(options.preferredView ? { preferredView: options.preferredView } : {}),
+  });
   return {
     ...planResolvedTimeQuery(query, planning),
     businessTime: planning.businessTime,

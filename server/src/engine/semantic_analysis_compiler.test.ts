@@ -175,7 +175,7 @@ describe("semantic analysis compiler", () => {
     expect(() => parseDefinitionFrom(invalid)).toThrow(/分析定义无效/);
   });
 
-  test("报告构成占比编译为两个 Cube 聚合查询与一个 many_to_one 标量变换", () => {
+  test("报告构成占比编译为查询视图内部的共享时间 grouping set", () => {
     const calculationId = "calculation:active_employee_age_band_share";
     const compiled = compileAnalysisView(catalog, {
       analysis: {
@@ -194,29 +194,37 @@ describe("semantic analysis compiler", () => {
                 category_dimension: AGE_BAND,
               },
             ],
-            time: JULY_2026,
+            time: { window: { kind: "trailing", count: 2, unit: "year" } },
           },
         ],
       },
       view: { type: "table" },
     });
-    expect(compiled.plan.nodes).toHaveLength(3);
+    expect(compiled.plan.nodes).toHaveLength(1);
     const queries = compiled.plan.nodes.filter(
       (node): node is QueryViewSpec => !isDerivedViewSpec(node),
     );
-    const derived = compiled.plan.nodes.find(isDerivedViewSpec);
-    expect(queries).toHaveLength(2);
+    expect(queries).toHaveLength(1);
     expect(queries[0]?.dimensions).toContain("test_people_metrics.age_band");
-    expect(queries[1]?.dimensions).not.toContain("test_people_metrics.age_band");
-    expect(derived?.join?.cardinality).toBe("many_to_one");
-    expect(derived?.join?.on).toEqual([{ left: "organization_name", right: "organization_name" }]);
-    expect(derived?.structure_shares).toEqual([
-      { measure: "年龄段结构", numerator: "active_employee_count" },
-    ]);
-    expect(compiled.plan.output.columns.年龄段结构).toBe(calculationId);
-    expect(compiled.routes).toEqual([
-      expect.objectContaining({ status: "composed", result_view_id: "result" }),
-    ]);
+    expect(queries[0]?.grouping_sets).toEqual({
+      base: [
+        { id: ORG, member: "test_people_metrics.organization_name" },
+        { id: AGE_BAND, member: "test_people_metrics.age_band" },
+      ],
+      calculations: [
+        {
+          kind: "grouping_share",
+          id: calculationId,
+          title: "年龄段结构",
+          measure: "test_people_metrics.active_employee_count",
+          category_dimension: AGE_BAND,
+        },
+      ],
+    });
+    expect(compiled.plan.output.columns.calculation_active_employee_age_band_share).toBe(
+      calculationId,
+    );
+    expect(compiled.routes).toEqual([{ status: "direct", result_view_id: "result" }]);
   });
 
   test("维度最大项数编译为层级补全后的私有选择规格，不生成物理行 limit", () => {

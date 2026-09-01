@@ -20,7 +20,7 @@ import { SERIES_COLORS } from "@charts";
 import { type ChartSpecContext, normalizeTableColumns, type TableAxis } from "@chart-spec";
 import { chartChannels, splitCandidates } from "@channels";
 import { memberShortName } from "@member";
-import { isSemanticDerivedView, type SemanticViewIntent } from "@semantic-analysis";
+import type { SemanticViewIntent } from "@semantic-analysis";
 import type { SeriesPreferences, TableShadingPreferences } from "@view-preferences";
 import {
   analyzeResultShape,
@@ -192,11 +192,6 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   const dimensions = context?.dimensions ?? [];
   const canSummarize = measures.length > 0 && dimensions.length > 0;
   const summaryEnabled = semanticSummaryEnabled(draft);
-  // 构成占比自带各类合计，模型层不许再叠总体。
-  const summaryBlocked =
-    semanticView && !isSemanticDerivedView(semanticView) && semanticView.calculations?.length
-      ? "已有构成占比，各类合计就是总体"
-      : undefined;
   // 表格布局与服务端同一条规则：轴的归属出自 resolveTableLayout，面板只排版、只写回列轴声明。
   const tableSpec: ChartSpecContext = { measures, dimensions };
   const resultShape = analyzeResultShape(resultView);
@@ -390,7 +385,6 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
 
   const summarySwitch = canSummarize ? (
     <SwitchField
-      blocked={summaryBlocked}
       checked={summaryEnabled}
       indent
       label="显示总体"

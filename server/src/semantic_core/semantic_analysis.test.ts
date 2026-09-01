@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { PRESENTATION_TYPE_SCHEMA } from "./presentation_type.js";
-import { parseAnalysisDefinition, SEMANTIC_VIEW_INTENT_INPUT } from "./semantic_analysis.js";
+import {
+  MAX_SEMANTIC_VIEWS,
+  parseAnalysisDefinition,
+  SEMANTIC_VIEW_INTENT_INPUT,
+} from "./semantic_analysis.js";
 
 const specWithFilters = (filters: unknown[]) => ({
   views: [
@@ -11,6 +15,18 @@ const specWithFilters = (filters: unknown[]) => ({
       time: { window: { kind: "current_month" } },
     },
   ],
+});
+
+test("视图预算只约束用户声明的语义查询图", () => {
+  expect(() =>
+    parseAnalysisDefinition({
+      views: Array.from({ length: MAX_SEMANTIC_VIEWS + 1 }, (_, index) => ({
+        id: `result_${index}`,
+        measures: ["measure:active_employee_count"],
+        time: { window: { kind: "current_month" } },
+      })),
+    }),
+  ).toThrow("分析定义无效");
 });
 
 describe("semantic analysis filters", () => {
@@ -210,10 +226,10 @@ describe("semantic analysis report calculations", () => {
     ).toThrow("分类维度必须同时出现在 dimensions");
   });
 
-  test("构成占比与总体行、Top-N 互斥，避免分母与可见分类集合背离", () => {
-    expect(() => parseAnalysisDefinition(calculated({ summary: { mode: "grand_total" } }))).toThrow(
-      "不能同时声明总体行",
-    );
+  test("构成占比可与不同分组集的总体共存，仍拒绝改变分母人群的 Top-N", () => {
+    expect(() =>
+      parseAnalysisDefinition(calculated({ summary: { mode: "grand_total" } })),
+    ).not.toThrow();
     expect(() =>
       parseAnalysisDefinition(
         calculated({

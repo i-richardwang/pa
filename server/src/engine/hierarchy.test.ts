@@ -103,3 +103,28 @@ describe("completeWithChains：补全上级", () => {
     expect(r.query.dimensions).toEqual([ROOT, DEPARTMENT, channel]);
   });
 });
+
+describe("completeWithChains：grouping set 模式", () => {
+  test("筛选只约束层级，不把空分组提升为业务分组", () => {
+    const r = completeWithChains(
+      q({ filters: [{ member: O2, operator: "equals", values: ["Marketplace"] }] }),
+      CHAINS,
+      { filtersReferenceHierarchy: false },
+    );
+    expect(r.added).toEqual([]);
+    expect(r.query.dimensions).toBeUndefined();
+  });
+
+  test("仍按显式分组补全未被单值筛选约束的上级", () => {
+    const r = completeWithChains(
+      q({
+        dimensions: [O3],
+        filters: [{ member: O2, operator: "equals", values: ["Experience"] }],
+      }),
+      CHAINS,
+      { filtersReferenceHierarchy: false },
+    );
+    expect(r.added).toEqual([{ member: O1, children: [O2] }]);
+    expect(r.query.dimensions).toEqual([O1, O3]);
+  });
+});

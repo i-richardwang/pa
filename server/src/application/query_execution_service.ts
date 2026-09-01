@@ -18,7 +18,7 @@ import {
   type ExecutedViewResult,
   type QueryRunResult,
 } from "./query_pipeline.js";
-import type { QueryViewSpec } from "../semantic_core/analysis_spec.js";
+import { calculationColumnName, type QueryViewSpec } from "../semantic_core/analysis_spec.js";
 import {
   COLUMN_DECIMALS_SCHEMA,
   COLUMN_FORMATS,
@@ -26,7 +26,9 @@ import {
   type ColumnFormat,
 } from "../semantic_core/query_payload.js";
 import { executeMetricQuery, prepareMetricQueryExecution } from "../engine/metric_executor.js";
-import { metricOutputMembers, planMetricQuery } from "../engine/metric_planner.js";
+import { metricOutputMembers, metricTimeMembers } from "../engine/metric_planner.js";
+import { applyGroupingSets } from "../engine/grouping_set_executor.js";
+import { planGroupingSets } from "../engine/grouping_set_planner.js";
 import { resultBuckets, resultCoordinates } from "../engine/time_plan.js";
 import type {
   DerivedSourceSemantics,
@@ -89,6 +91,7 @@ function buildSourceSemantics(
   authViews: CubeView[],
   timeView: string,
   time: DerivedSourceSemantics["time"],
+  calculations: NonNullable<QueryViewSpec["grouping_sets"]>["calculations"] = [],
 ): DerivedSourceSemantics {
   if (new Set(columns).size !== columns.length) {
     throw new Error("查询结果列名在省略 view 前缀后发生碰撞；请联系维护者调整模型成员名");
@@ -102,8 +105,24 @@ function buildSourceSemantics(
     authViews.flatMap((view) => view.dimensions).map((member) => [member.name, member]),
   );
   const resolved = new Map<string, SourceColumnSemantics>();
+  const calculationByColumn = new Map(
+    (calculations ?? []).map((item) => [calculationColumnName(item.id), item]),
+  );
   memberKeys.forEach((memberName, index) => {
     const column = columns[index];
+    const calculation = calculationByColumn.get(memberName);
+    if (calculation) {
+      const measure = measures.get(calculation.measure);
+      if (!measure) throw new Error(`计算「${calculation.title}」的基础指标不在查询结果中`);
+      resolved.set(column, {
+        member: memberName,
+        alias: calculation.id,
+        kind: "measure",
+        valueType: "number",
+        timeEvaluation: resolveMetricTime(measure, measures).evaluation,
+      });
+      return;
+    }
     const measure = measures.get(memberName);
     const dimension = dimensions.get(memberName);
     if (measure) {
@@ -162,7 +181,7 @@ async function executeView(
   const { principal, cubeContext } = ctx;
   const inputQuery: CubeQuery = {
     measures: spec.measures,
-    dimensions: spec.dimensions,
+    dimensions: spec.grouping_sets?.base.map((dimension) => dimension.member) ?? spec.dimensions,
     filters: spec.filters,
     order: toOrderTuples(spec.order),
   };
@@ -196,28 +215,42 @@ async function executeView(
     views: authViews,
     securityContext: cubeContext,
     timeView: spec.time_view,
+    defaultTimeOutput:
+      (spec.grouping_sets?.base.length ?? spec.dimensions?.length ?? 0) > 0 ? "total" : "series",
     selection: spec.selection,
   });
   const queryPlan = prepared.plan;
-  // 总体腿的时间粒度钉住主查询已解析的粒度，与明细同解。
-  const summaryTime = { ...spec.time, grain: queryPlan.business_time.outputGrain };
-  const parallelSummaryPlan =
-    includeSummary && !spec.selection
-      ? planMetricQuery(
-          { ...shaped, dimensions: undefined, order: undefined },
-          summaryTime,
-          context,
-          authViews,
-          spec.time_view,
-        )
-      : undefined;
-  const [displayResolved, parallelSummaryResolved, metricTotals] = await Promise.all([
+  const selectionState = prepared.selection;
+  const selection = selectionState?.outcome;
+  const effectiveQuery: CubeQuery = selection
+    ? {
+        ...shaped,
+        filters: [...(shaped.filters ?? []), selectionState.filter],
+      }
+    : shaped;
+  const groupingPlan = planGroupingSets({
+    viewId: spec.id,
+    baseQuery: effectiveQuery,
+    baseGroupingSet:
+      spec.grouping_sets?.base.map((dimension) => dimension.id) ??
+      (spec.dimensions ?? []).map((dimension) => memberSemanticId("dimension", dimension)),
+    basePlan: queryPlan,
+    timePlanning: prepared.timePlanning,
+    baselineFilters: shaped.filters,
+    grouping: spec.grouping_sets,
+    includeSummary,
+    views: authViews,
+    timeView: spec.time_view,
+  });
+  const [displayResolved, groupingLoads, metricTotals] = await Promise.all([
     prepared.precomputed
       ? Promise.resolve(prepared.precomputed)
       : executeMetricQuery(deps.cube, queryPlan, cubeContext, authViews),
-    parallelSummaryPlan
-      ? executeMetricQuery(deps.cube, parallelSummaryPlan, cubeContext, authViews)
-      : Promise.resolve(undefined),
+    Promise.all(
+      groupingPlan.legs.map((leg) =>
+        executeMetricQuery(deps.cube, leg.plan, cubeContext, authViews),
+      ),
+    ),
     includeTotals
       ? computeMetricTotals({
           cube: deps.cube,
@@ -237,44 +270,39 @@ async function executeView(
         selectionFilter: prepared.selection.filter,
       }
     : displayResolved;
-  const selection = resolved.selection;
-  if (selection && !resolved.selectionFilter) {
-    throw new Error("Top-N 结果缺少选中分组过滤，无法安全计算总体");
-  }
+  const groupingResolved = applyGroupingSets(
+    groupingPlan,
+    resolved,
+    new Map(
+      groupingPlan.legs.map((leg, index) => {
+        const load = groupingLoads[index];
+        if (!load) throw new Error(`分组腿 ${leg.id} 未返回执行结果`);
+        return [leg.id, load];
+      }),
+    ),
+  );
   const businessTime = queryPlan.business_time;
-  const summaryResolved =
-    includeSummary && selection
-      ? await executeMetricQuery(
-          deps.cube,
-          planMetricQuery(
-            {
-              ...shaped,
-              dimensions: undefined,
-              order: undefined,
-              filters: [...(shaped.filters ?? []), resolved.selectionFilter!],
-            },
-            summaryTime,
-            context,
-            authViews,
-            spec.time_view,
-          ),
-          cubeContext,
-          authViews,
-        )
-      : parallelSummaryResolved;
-  if (selection && resolved.data.length > AGGREGATE_CARD_ROWS) {
+  const finalResolved = groupingResolved.load;
+  const summaryResolved = groupingResolved.summary;
+  if (selection && finalResolved.data.length > AGGREGATE_CARD_ROWS) {
     throw new Error(
-      `Top-N 分组的完整结果共 ${resolved.data.length} 行，超过交付上限 ${AGGREGATE_CARD_ROWS}；` +
+      `Top-N 分组的完整结果共 ${finalResolved.data.length} 行，超过交付上限 ${AGGREGATE_CARD_ROWS}；` +
         "请减少 Top-N 数量或分组维度",
     );
   }
+  if (groupingPlan.calculations.length && finalResolved.data.length > AGGREGATE_CARD_ROWS) {
+    throw new Error(
+      `构成占比结果共 ${finalResolved.data.length} 行，超过交付上限 ${AGGREGATE_CARD_ROWS}；` +
+        "请增加筛选条件或减少分组维度",
+    );
+  }
   const annotations = [
-    ...Object.entries(resolved.annotation.measures).map(([name, value]) => ({
+    ...Object.entries(finalResolved.annotation.measures).map(([name, value]) => ({
       name,
       value,
       kind: "measure" as const,
     })),
-    ...Object.entries(resolved.annotation.dimensions).map(([name, value]) => ({
+    ...Object.entries(finalResolved.annotation.dimensions).map(([name, value]) => ({
       name,
       value,
       kind: "dimension" as const,
@@ -322,7 +350,7 @@ async function executeView(
     });
   }
 
-  for (const mask of resolved.masked ?? []) {
+  for (const mask of finalResolved.masked ?? []) {
     const member = visibleMembers.find((candidate) => candidate.name === mask.member);
     const title = memberDisplayTitle(
       authViews,
@@ -395,9 +423,9 @@ async function executeView(
     });
   }
 
-  const memberKeys = resolved.data.length
-    ? Object.keys(resolved.data[0])
-    : metricOutputMembers(queryPlan);
+  const calculationColumns = groupingPlan.calculations.map((calculation) => calculation.column);
+  const baseMemberKeys = metricOutputMembers(queryPlan);
+  const memberKeys = [...baseMemberKeys, ...calculationColumns];
   const columnsOf = (keys: string[]) => {
     const singleView = new Set(keys.map(memberViewName)).size === 1;
     return singleView ? keys.map(memberShortName) : keys;
@@ -442,29 +470,48 @@ async function executeView(
   const toCells = (records: Record<string, string | number | null>[]) =>
     records.map((record) => memberKeys.map((key) => record[key] ?? null));
 
-  const { rowCount, hasMore, truncated } = selection
-    ? { rowCount: resolved.data.length, hasMore: false, truncated: undefined }
-    : resolveLimitOutcome(resolved.data.length, cap);
-  const records = selection
-    ? resolved.data
-    : applyValueOrder(resolved.data.slice(0, rowCount), shaped, authViews);
-  const columns = columnsOf(memberKeys);
+  const completeResult = Boolean(selection) || groupingPlan.calculations.length > 0;
+  const { rowCount, hasMore, truncated } = completeResult
+    ? { rowCount: finalResolved.data.length, hasMore: false, truncated: undefined }
+    : resolveLimitOutcome(finalResolved.data.length, cap);
+  const records = completeResult
+    ? finalResolved.data
+    : applyValueOrder(finalResolved.data.slice(0, rowCount), shaped, authViews);
+  const columns = [...columnsOf(baseMemberKeys), ...calculationColumns];
   const sourceSemantics = buildSourceSemantics(
     memberKeys,
     columns,
     authViews,
     queryPlan.time_view,
     businessTime,
+    spec.grouping_sets?.calculations,
   );
-  const columnFormats = columnFormatsOf(memberKeys, columns);
+  const columnFormats = {
+    ...columnFormatsOf(baseMemberKeys, columns.slice(0, baseMemberKeys.length)),
+    ...Object.fromEntries(calculationColumns.map((column) => [column, "percent" as const])),
+  };
   const columnDecimals = columnDecimalsOf(memberKeys, columns);
   const columnRoles = Object.fromEntries(
     [...sourceSemantics.columns].map(([column, semantics]) => [column, semantics.kind]),
   );
-  const structureShares = structureSharesOf(memberKeys, columns, visibleMembers);
+  const modelStructureShares = structureSharesOf(baseMemberKeys, columns, visibleMembers);
+  const columnOfMember = new Map(memberKeys.map((key, index) => [key, columns[index]]));
+  const resolvedDeliveryColumns = Object.fromEntries(
+    metricTimeMembers(queryPlan).map((member) => {
+      const column = columnOfMember.get(member);
+      if (!column) throw new Error(`已解析时间签名的成员 ${member} 不在执行结果列中`);
+      return [column, memberShortName(member)];
+    }),
+  );
+  const calculatedStructureShares = groupingResolved.structure_shares.map((share) => {
+    const measure = columnOfMember.get(share.measure);
+    const numerator = columnOfMember.get(share.numerator);
+    if (!measure || !numerator) throw new Error("构成占比的结果列关系无法投影");
+    return { measure, numerator };
+  });
+  const structureShares = [...modelStructureShares, ...calculatedStructureShares];
   const rows = toCells(records);
   const summaryRows = summaryResolved ? toCells(summaryResolved.data) : undefined;
-  const columnOfMember = new Map(memberKeys.map((key, index) => [key, columns[index]]));
   const totals = metricTotals.map(({ member, periods }) => {
     const column = columnOfMember.get(member);
     if (!column) throw new Error(`整窗合计的指标 ${member} 不在结果列中`);
@@ -520,7 +567,8 @@ async function executeView(
     block,
     sampleForModel: true,
     sourceSemantics,
-    ...(truncated ? { exportPlan: queryPlan } : {}),
+    resolvedDeliveryColumns,
+    ...(truncated && !groupingPlan.calculations.length ? { exportPlan: queryPlan } : {}),
   };
 }
 

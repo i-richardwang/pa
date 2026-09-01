@@ -66,5 +66,7 @@ export function planExecution(input: AnalysisSpec, opts: PlanOptions): Execution
 
 export function exportableOutput(plan: ExecutionPlan): QueryViewSpec | undefined {
   const node = plan.nodes.find((candidate) => candidate.id === plan.output.id);
-  return node && !isDerivedViewSpec(node) ? node : undefined;
+  return node && !isDerivedViewSpec(node) && !node.grouping_sets?.calculations?.length
+    ? node
+    : undefined;
 }

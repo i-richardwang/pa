@@ -283,7 +283,7 @@ function normalizeViewIntent(
 ): SemanticViewIntent {
   const { measures, dimensions } = semanticViewContext(view, catalog);
   if (chart.type === "table") {
-    // 时间轴留给结果裁决：输出粒度由引擎按指标时间契约与数据边界决定，这里预测不出来。
+    // time 是条件列轴优先序；结果是否实际带时间成员由已解析时间签名裁决。
     const columns = chart.columns?.filter((axis) => {
       if (axis === "time") return true;
       if (axis === "metrics") return measures.length > 0;

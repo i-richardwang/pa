@@ -14,9 +14,13 @@ export function completeHierarchyDimensions(
   dimensions: readonly string[],
   filters: readonly HierarchyCondition[],
   chains: readonly (readonly string[])[],
+  options: { filtersReferenceHierarchy?: boolean } = {},
 ): CompletedHierarchyDimensions {
   const grouped = [...dimensions];
-  const referenced = new Set([...grouped, ...filters.map((filter) => filter.member)]);
+  const referenced = new Set([
+    ...grouped,
+    ...(options.filtersReferenceHierarchy === false ? [] : filters.map((filter) => filter.member)),
+  ]);
   if (!referenced.size) return { dimensions: grouped, added: [] };
 
   const constrained = (member: string) =>

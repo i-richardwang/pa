@@ -212,7 +212,7 @@ describe("compileTableWithStatus", () => {
     ]);
   });
 
-  test("声明的时间轴在结果里不存在：显式不可用并退回长表", () => {
+  test("声明的条件时间轴在结果里不存在：忽略该轴并保持布局生效", () => {
     const flat = payload(
       ["organization_name", "active_employee_count"],
       [
@@ -223,9 +223,9 @@ describe("compileTableWithStatus", () => {
     );
     const compiled = compileTableWithStatus(flat, titleOf, {
       type: "table",
-      tableColumns: [{ kind: "metrics" }, { kind: "time", level: "bucket" }],
+      tableColumns: [{ kind: "time", level: "bucket" }],
     });
-    expect(compiled.layout).toMatchObject({ state: "unavailable", reason: "missing_axis" });
+    expect(compiled.layout).toMatchObject({ state: "applied" });
     expect(headerPathsOf(compiled.table)).toEqual([
       ["organization_name"],
       ["active_employee_count"],

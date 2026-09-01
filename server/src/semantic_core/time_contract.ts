@@ -429,13 +429,14 @@ function duplicateOutputBucket(
 export function resolveTimeOutputGrain(
   time: TimeInput,
   defaultCutoff?: string,
-  opts: { grouped?: boolean } = {},
+  opts: { defaultOutput?: "series" | "total" } = {},
 ): TimeOutputGrain {
   const windowed = expandTimeWindow(time, defaultCutoff);
   const coordinates = outputCoordinates(expandTimeCompare(windowed, defaultCutoff), defaultCutoff);
-  const requested = windowed.grain ?? (opts.grouped ? undefined : lastDefaultGrain(time));
+  const seriesDefault = opts.defaultOutput !== "total";
+  const requested = windowed.grain ?? (seriesDefault ? lastDefaultGrain(time) : undefined);
   if (coordinates.length === 1) {
-    return requested ?? (windowed.range && !opts.grouped ? "month" : "total");
+    return requested ?? (windowed.range && seriesDefault ? "month" : "total");
   }
   if (requested === "total") {
     throw new Error("存在对照时间时不能合并为无时间标识的总计，请改为按年或按月呈现");
@@ -543,12 +544,14 @@ export function resolvedTimeDisplay(
   time: TimeIntent,
   latest: string,
   capabilities: TimeCapabilities = {},
-  grouped = false,
+  hasBusinessGrouping = false,
 ): TimeOutputGrain {
   if (time.display === undefined && requiresMonthlyDisplay(time, capabilities, latest)) {
     return "month";
   }
-  const grain = resolveTimeOutputGrain(compileTimeIntent(time), latest, { grouped });
+  const grain = resolveTimeOutputGrain(compileTimeIntent(time), latest, {
+    defaultOutput: hasBusinessGrouping ? "total" : "series",
+  });
   if (time.display === undefined && grain === "total" && capabilities.year_scoped) {
     const { from, to } = primaryTimeRange(time, latest);
     // 年初归零指标跨日历年没有单一合计：服务端隐式降为按年（compatibleYearScopedGrain）。
@@ -572,13 +575,6 @@ export function timeDisplayIssues(
     issues.year = "所选指标按月定义；跨月范围会自动按月返回。";
   }
   return issues;
-}
-
-export function timeOutputColumns(time: TimeInput): string[] {
-  const grain = resolveTimeOutputGrain(time);
-  if (grain === "year") return ["year"];
-  if (grain === "month") return ["year", "month"];
-  return [];
 }
 
 /** 业务时间桶：月份原子构成的闭区间，终点恒为 to。 */

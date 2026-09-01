@@ -111,7 +111,9 @@ async function executeRecordProjection(input: {
   const execute = async (query: CubeQuery, limit: number) => {
     const shaped = completeHierarchy(query, authViews).query;
     const plan = withPlannedLimit(
-      planTimeQuery(shaped, selectedTime(target, timeCoordinate), context, authViews),
+      planTimeQuery(shaped, selectedTime(target, timeCoordinate), context, authViews, {
+        defaultOutput: "total",
+      }),
       limit,
     );
     return executePlanned(cube, plan, cubeContext);
@@ -317,12 +319,9 @@ export function createRecordProjectionService(deps: {
       },
       input.authViews,
     ).query;
-    const resolution = planTimeQuery(
-      scopeQuery,
-      input.sourceTime,
-      input.context,
-      input.authViews,
-    ).businessTime;
+    const resolution = planTimeQuery(scopeQuery, input.sourceTime, input.context, input.authViews, {
+      defaultOutput: "total",
+    }).businessTime;
     const buckets = resultBuckets(resolution);
     if (resolution.outputGrain !== "total" || buckets.length !== 1) {
       throw new RecordProjectionRequestError(

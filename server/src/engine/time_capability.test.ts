@@ -22,7 +22,7 @@ import {
   TEST_SEMANTIC_TAXONOMY,
   TEST_TIME_SOURCE_REGISTRY,
 } from "../test_support/semantic_taxonomy.js";
-import { planMetricQuery } from "./metric_planner.js";
+import { planMetricQuery } from "../test_support/planning.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
   buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY, {

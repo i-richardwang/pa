@@ -93,7 +93,7 @@ export async function computeMetricTotals(input: {
         leg.time,
         context,
         views,
-        timeView,
+        { defaultOutput: "total", ...(timeView ? { timeView } : {}) },
       );
       const load = await executeMetricQuery(cube, plan, securityContext, views);
       return { leg, row: load.data[0] };

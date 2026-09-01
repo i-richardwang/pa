@@ -12,7 +12,7 @@ import type {
 import { planQueryIntent } from "../semantic_core/query_intent.js";
 import { applyFormalMetricModel } from "./metric_model.js";
 import { executeMetricQuery } from "./metric_executor.js";
-import { planMetricQuery } from "./metric_planner.js";
+import { planMetricQuery } from "../test_support/planning.js";
 import { loadCanonicalSemanticModel } from "./canonical_semantic_model.js";
 import { toCompilerCatalog } from "./catalog_document.js";
 import { loadSemanticPackage } from "./semantic_package.js";

@@ -41,6 +41,33 @@ describe("export capability", () => {
     expect(exportableOutput(plan)).toBeUndefined();
   });
 
+  test("grouping-set 报告计算不可退化为缺少计算列的底层导出", () => {
+    const view = {
+      ...query("shares"),
+      dimensions: ["test_people_metrics.organization_name"],
+      grouping_sets: {
+        base: [
+          {
+            id: "dimension:organization_name",
+            member: "test_people_metrics.organization_name",
+          },
+        ],
+        calculations: [
+          {
+            kind: "grouping_share" as const,
+            id: "calculation:organization_share",
+            title: "组织占比",
+            measure: "test_people_metrics.active_employee_count",
+            category_dimension: "dimension:organization_name",
+          },
+        ],
+      },
+    };
+    expect(
+      exportableOutput(planExecution({ views: [view] }, { delivery: "identity" })),
+    ).toBeUndefined();
+  });
+
   test("多个独立终点不是合法分析", () => {
     expect(() =>
       planExecution({ views: [query("first"), query("second")] }, { delivery: "identity" }),

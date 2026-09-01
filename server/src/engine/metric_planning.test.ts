@@ -8,7 +8,8 @@ import type {
 } from "../ports/cube_gateway.js";
 import type { CubeSecurityContext } from "../ports/cube_gateway.js";
 import { executeMetricQuery } from "./metric_executor.js";
-import { parseMetricQueryPlan, planMetricQuery, type MetricQueryPlan } from "./metric_planner.js";
+import { planMetricQuery } from "../test_support/planning.js";
+import { parseMetricQueryPlan, type MetricQueryPlan } from "./metric_planner.js";
 
 const attrition = "employee_leave_metrics";
 const structure = "employee_snapshot_metrics";

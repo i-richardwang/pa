@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 import { analysisGraphSink, validateDerivedGraphView } from "./analysis_graph.js";
-import { GRAND_TOTAL_DESCRIPTION, MAX_PLAN_NODES } from "./analysis_spec.js";
+import { GRAND_TOTAL_DESCRIPTION } from "./analysis_spec.js";
 import { COLUMN_FORMATS, type ColumnFormat } from "./query_payload.js";
 import { TIME_INTENT_INPUT } from "./time_contract.js";
 
@@ -159,13 +159,6 @@ export const SEMANTIC_QUERY_VIEW_INPUT = z
           message: "构成占比的分类维度必须同时出现在 dimensions 中",
         });
       }
-    }
-    if (calculations.length && view.summary) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["summary"],
-        message: "构成占比已经包含分区合计，不能同时声明总体行",
-      });
     }
     if (calculations.length && view.group_sort?.max_items) {
       context.addIssue({
@@ -414,13 +407,16 @@ export const SEMANTIC_VIEW_INTENT_INPUT = z
 /** 呈现意图按图型判别：哪些通道属于哪个图型出自这一份形状，下游不再复述适用性。 */
 export type SemanticViewIntent = z.infer<typeof SEMANTIC_VIEW_INTENT_INPUT>;
 
+/** 用户声明的语义查询视图预算；物理查询腿由 Planner 去重后自行管理。 */
+export const MAX_SEMANTIC_VIEWS = 3;
+
 export const ANALYSIS_DEFINITION_INPUT = z
   .object({
     title: z.string().min(1).max(100).optional(),
     views: z
       .array(z.union([SEMANTIC_QUERY_VIEW_INPUT, SEMANTIC_DERIVED_VIEW_INPUT]))
       .min(1)
-      .max(MAX_PLAN_NODES),
+      .max(MAX_SEMANTIC_VIEWS),
   })
   .strict();
 

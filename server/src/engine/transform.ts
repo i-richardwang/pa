@@ -1,10 +1,9 @@
 /**
- * 派生视图是 MCP 壳内唯一的度量算术豁免点：只对同一次调用已查得的完整聚合行做
+ * 派生视图只对同一次调用已查得的完整聚合行做
  * join、逐行标量算式、排序与限行，不创造时间/人群语义，不做跨行聚合或 pivot。
  *
  * 语义钉死如下：
- * - one_to_one 的两侧 join 键必须各自唯一；many_to_one 只允许右侧唯一并把分母安全广播到左侧。
- *   left 保留左侧，inner 只保留两侧命中行，
+ * - 两侧 join 键必须各自唯一。left 保留左侧，inner 只保留两侧命中行，
  *   full 保留两侧全集并从已有侧回填缺失侧的关联键。未命中的度量保持 null，不填 0。
  * - 组合键中的 null 是可对齐的业务空值：只有两侧整组键（含其余非空键）一致时才合并。
  *   任一算式操作数为 null、除零或结果非有限数时返回 null。
@@ -434,24 +433,6 @@ function rowContexts(
   const second = assertSource(secondSource, sources, spec.view_title);
   const join = spec.join;
   if (!join) throw new Error(`派生视图「${spec.view_title}」缺少 join 声明`);
-  if ((join.cardinality ?? "one_to_one") === "many_to_one") {
-    const rightByKey = uniqueRowsByKey(
-      secondSource,
-      second,
-      join.on.map((binding) => binding.right),
-      spec.view_title,
-    );
-    const leftIndices = join.on.map((binding) =>
-      columnIndex(firstSource, binding.left, sources, spec.view_title),
-    );
-    return first.rows.map((left) => {
-      const right = rightByKey.get(joinKey(left, leftIndices)) ?? null;
-      return new Map([
-        [firstSource, left],
-        [secondSource, right],
-      ]);
-    });
-  }
   const firstByKey = uniqueRowsByKey(
     firstSource,
     first,
@@ -781,7 +762,6 @@ export function transformDerivedView(
     ...(Object.keys(formats).length ? { column_formats: formats } : {}),
     ...(Object.keys(decimals).length ? { column_decimals: decimals } : {}),
     column_roles: columnRoles,
-    ...(spec.structure_shares?.length ? { structure_shares: spec.structure_shares } : {}),
     rows,
     row_count: rows.length,
     has_more: hasMore,

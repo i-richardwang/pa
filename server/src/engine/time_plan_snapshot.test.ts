@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { CubeView, TimeContext } from "../ports/cube_gateway.js";
-import { planMetricQuery } from "./metric_planner.js";
+import { planMetricQuery } from "../test_support/planning.js";
 import type { TimeInput } from "../semantic_core/time_contract.js";
 
 /**

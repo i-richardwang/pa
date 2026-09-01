@@ -467,60 +467,6 @@ describe("transformDerivedView", () => {
     ).toThrow(/join 键.*重复.*唯一分组/);
   });
 
-  test("many_to_one 将 Cube 已聚合的分区合计广播到分类行，不在 transform 跨行求和", () => {
-    const numerator = view(
-      "职级人数",
-      [
-        ["Band C", 20],
-        ["Band D", 30],
-        ["Band B", 50],
-      ],
-      {
-        columns: ["job_level_band", "active_employee_count"],
-        column_roles: { job_level_band: "dimension", active_employee_count: "measure" },
-      },
-    );
-    const denominator = view("在职总人数", [[100]], {
-      columns: ["active_employee_count"],
-      column_roles: { active_employee_count: "measure" },
-    });
-    const result = transformDerivedView(
-      {
-        id: "structure",
-        view_title: "职级结构",
-        from: ["numerator", "denominator"],
-        join: { on: [], how: "left", cardinality: "many_to_one" },
-        columns: [
-          { source: "numerator", col: "job_level_band" },
-          { source: "numerator", col: "active_employee_count" },
-          {
-            expr: {
-              op: "/",
-              left: { source: "numerator", col: "active_employee_count" },
-              right: { source: "denominator", col: "active_employee_count" },
-            },
-            as: "职级结构",
-            format: "percent",
-          },
-        ],
-        structure_shares: [{ measure: "职级结构", numerator: "active_employee_count" }],
-      },
-      new Map([
-        ["numerator", numerator],
-        ["denominator", denominator],
-      ]),
-      new Set(),
-    );
-    expect(result.rows).toEqual([
-      ["Band C", 20, 0.2],
-      ["Band D", 30, 0.3],
-      ["Band B", 50, 0.5],
-    ]);
-    expect(result.structure_shares).toEqual([
-      { measure: "职级结构", numerator: "active_employee_count" },
-    ]);
-  });
-
   test("输入 has_more 即拒绝；sampled 标记本身不影响完整行变换", () => {
     const complete = view("完整", [["A", 2]], { sampled: "模型只见样本" });
     const other = view("对照", [["A", 1]]);

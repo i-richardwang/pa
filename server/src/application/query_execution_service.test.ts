@@ -262,6 +262,116 @@ test("交付边界把执行成员一次性投影为语义列与语义口径引�
   expect(publicIdentifiers).not.toContain("test_people_metrics.category_level");
 });
 
+test("分组构成占比与基础查询共享一次解析的 total 时间签名", async () => {
+  const METRIC = "measure:active_employee_count";
+  const DIMENSION = "dimension:organization_name";
+  const CALCULATION = "calculation:organization_share";
+  const annotation = {
+    measures: {
+      "test_people_metrics.active_employee_count": {
+        title: "在职人数",
+        description: "月末在职人数。",
+      },
+    },
+    dimensions: {
+      "test_people_metrics.organization_name": {
+        title: "组织",
+        description: "公司一级组织。",
+      },
+    },
+  };
+  let ungroupedLoads = 0;
+  let releaseBase!: () => void;
+  const baseGate = new Promise<void>((resolve) => {
+    releaseBase = resolve;
+  });
+  const cube = {
+    meta: async () => [publicView],
+    timeContext: async () => timeContext,
+    load: async (query: CubeQuery) => {
+      if (!query.dimensions?.length) ungroupedLoads += 1;
+      if (query.dimensions?.length) await baseGate;
+      return {
+        data: query.dimensions?.length
+          ? [
+              {
+                "test_people_metrics.organization_name": "甲",
+                "test_people_metrics.active_employee_count": 10,
+              },
+              {
+                "test_people_metrics.organization_name": "乙",
+                "test_people_metrics.active_employee_count": 20,
+              },
+            ]
+          : [{ "test_people_metrics.active_employee_count": 30 }],
+        annotation,
+      };
+    },
+    loadMulti: async () => {
+      throw new Error("total 时间签名不应产生多窗口查询");
+    },
+  } as unknown as CubeGateway;
+  const service = createQueryExecutionService({
+    cube,
+    exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
+  });
+  const spec: AnalysisSpec = {
+    views: [
+      {
+        id: "result",
+        measures: ["test_people_metrics.active_employee_count"],
+        dimensions: ["test_people_metrics.organization_name"],
+        grouping_sets: {
+          base: [
+            {
+              id: DIMENSION,
+              member: "test_people_metrics.organization_name",
+            },
+          ],
+          calculations: [
+            {
+              kind: "grouping_share",
+              id: CALCULATION,
+              title: "组织占比",
+              measure: "test_people_metrics.active_employee_count",
+              category_dimension: DIMENSION,
+            },
+          ],
+        },
+        summary: { mode: "grand_total" },
+        time: { last: { years: 2 } },
+      },
+    ],
+  };
+  const plan = planExecution(spec, {
+    delivery: {
+      columns: {
+        organization_name: DIMENSION,
+        active_employee_count: METRIC,
+        calculation_organization_share: CALCULATION,
+      },
+    },
+  });
+  const pending = service.execute(planned(plan));
+  for (let turn = 0; turn < 10 && ungroupedLoads < 2; turn += 1) await Promise.resolve();
+  // 基础结果仍被门控时，占比分母/总体腿与整窗合计已经同时发起。
+  expect(ungroupedLoads).toBe(2);
+  releaseBase();
+  const result = await pending;
+  expect(result.payload.view.time?.grain).toBe("total");
+  expect(result.payload.view.columns).toEqual([DIMENSION, METRIC, CALCULATION]);
+  expect(result.payload.view.rows).toEqual([
+    ["甲", 10, 1 / 3],
+    ["乙", 20, 2 / 3],
+  ]);
+  expect(result.payload.view.structure_shares).toEqual([
+    { measure: CALCULATION, numerator: METRIC },
+  ]);
+  expect(result.payload.view.summary?.rows).toEqual([[null, 30, 1]]);
+  // 一个无分组查询供整窗读数，另一个由占比分母与总体共同复用。
+  expect(ungroupedLoads).toBe(2);
+});
+
 test("分组 Top-N 按正式指标在最新逻辑时间桶排名，并保留选中分组的全部时间桶", async () => {
   const loads: Array<{ kind: "single" | "multi"; query: unknown }> = [];
   const annotation = {
@@ -675,22 +785,34 @@ test("年度连续区间把端点、YTD 与流量指标自动拆腿后按组织�
     cube,
     exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
+  const annualSpec: AnalysisSpec = {
+    views: [
+      {
+        id: "result",
+        measures: [
+          "test_people_metrics.ytd_event_rate",
+          "test_people_metrics.active_employee_count",
+          "test_people_metrics.ytd_secondary_event_rate",
+          "test_people_metrics.turnover_count",
+        ],
+        dimensions: ["test_people_metrics.organization_name"],
+        time: { cutoff: "2026-07", last: { years: 3 }, grain: "year" },
+      },
+    ],
+  };
   const result = await service.execute(
     planned(
-      identityExecution({
-        views: [
-          {
-            id: "result",
-            measures: [
-              "test_people_metrics.ytd_event_rate",
-              "test_people_metrics.active_employee_count",
-              "test_people_metrics.ytd_secondary_event_rate",
-              "test_people_metrics.turnover_count",
-            ],
-            dimensions: ["test_people_metrics.organization_name"],
-            time: { cutoff: "2026-07", last: { years: 3 }, grain: "year" },
+      planExecution(annualSpec, {
+        delivery: {
+          // 时间公共列由执行后的 business_time 签名提供。
+          columns: {
+            organization_name: "organization_name",
+            ytd_event_rate: "ytd_event_rate",
+            active_employee_count: "active_employee_count",
+            ytd_secondary_event_rate: "ytd_secondary_event_rate",
+            turnover_count: "turnover_count",
           },
-        ],
+        },
       }),
     ),
   );

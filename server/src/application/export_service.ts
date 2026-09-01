@@ -133,7 +133,7 @@ export function createExportService(deps: {
       const executionPlan = planned.plan;
       const view = exportableOutput(executionPlan);
       if (!view) {
-        throw new Error("该分析结果不支持导出底层明细（组合或派生结果无底层明细可导）");
+        throw new Error("该分析结果包含报告计算或派生列，不能按底层直查结果导出");
       }
       const {
         cubeContext,
@@ -161,6 +161,10 @@ export function createExportService(deps: {
         views: authViews,
         securityContext: cubeContext,
         timeView: view.time_view,
+        defaultTimeOutput:
+          (view.grouping_sets?.base.length ?? view.dimensions?.length ?? 0) > 0
+            ? "total"
+            : "series",
         selection: view.selection,
       });
       const { link } = await createDelivery(plan, principal.email);

@@ -22,6 +22,7 @@ import {
   type PlannedQuery,
   type PlannedQueryLeg,
   type ResolvedTimePlanning,
+  type TimeOutputDefault,
   type TimeEvalForm,
 } from "./time_plan.js";
 
@@ -249,9 +250,53 @@ export function planMetricQuery(
   time: TimeInput | undefined,
   context: TimeContext,
   views: CubeView[],
-  timeView?: string,
-  selection?: TopNSelectionSpec,
+  options: {
+    defaultOutput: TimeOutputDefault;
+    timeView?: string;
+    selection?: TopNSelectionSpec;
+  },
 ): MetricQueryPlan {
+  const planning = resolveMetricQueryPlanning(query, time, context, views, {
+    defaultOutput: options.defaultOutput,
+    ...(options.timeView ? { timeView: options.timeView } : {}),
+  });
+  return planMetricQueryWithPlanning(query, planning, views, options.timeView, options.selection);
+}
+
+/**
+ * 解析一个语义查询视图的业务时间。调用方必须传入用户声明的基础分组查询；同一视图展开的
+ * 排名、总体与其他 grouping set 复用返回值，不得再次解释默认粒度。
+ */
+export function resolveMetricQueryPlanning(
+  query: CubeQuery,
+  time: TimeInput | undefined,
+  context: TimeContext,
+  views: CubeView[],
+  options: { defaultOutput: TimeOutputDefault; timeView?: string },
+): ResolvedTimePlanning {
+  const { requested, leaves } = metricQueryParts(query, views);
+  const synthetic: CubeQuery = {
+    ...query,
+    measures: [...new Set([...leaves.map((leaf) => leaf.member), ...requested])],
+    order: undefined,
+    limit: undefined,
+    offset: undefined,
+  };
+  return resolveTimePlanning(synthetic, time, context, views, {
+    defaultOutput: options.defaultOutput,
+    ...(options.timeView ? { preferredView: options.timeView } : {}),
+  });
+}
+
+type MetricQueryParts = {
+  requested: string[];
+  outputMetricIds: Map<string, string>;
+  nodes: Map<string, ExecutableMetricNode>;
+  resultGuards: PlannedResultGuard[];
+  leaves: ReturnType<typeof physicalLeaves>;
+};
+
+function metricQueryParts(query: CubeQuery, views: CubeView[]): MetricQueryParts {
   const requested = query.measures ?? [];
   const index = metricIndex(views);
   const outputMetricIds = new Map<string, string>();
@@ -270,15 +315,21 @@ export function planMetricQuery(
   }
   const leaves = physicalLeaves(nodes);
   if (!leaves.length && requested.length) throw new Error("正式指标图没有可执行叶子指标");
+  return { requested, outputMetricIds, nodes, resultGuards, leaves };
+}
 
-  const synthetic: CubeQuery = {
-    ...query,
-    measures: [...new Set([...leaves.map((leaf) => leaf.member), ...requested])],
-    order: undefined,
-    limit: undefined,
-    offset: undefined,
-  };
-  const planning = resolveTimePlanning(synthetic, time, context, views, timeView);
+/** 在已经解析的视图时间签名下规划一个 grouping set。 */
+export function planMetricQueryWithPlanning(
+  query: CubeQuery,
+  planning: ResolvedTimePlanning,
+  views: CubeView[],
+  timeView?: string,
+  selection?: TopNSelectionSpec,
+): MetricQueryPlan {
+  const { requested, outputMetricIds, nodes, resultGuards, leaves } = metricQueryParts(
+    query,
+    views,
+  );
   const outputTimeView = timeView ?? requested[0]?.split(".")[0] ?? planning.view;
   const groups = new Map<string, { source: CubeView; form: TimeEvalForm; leaves: typeof leaves }>();
   for (const leaf of leaves) {

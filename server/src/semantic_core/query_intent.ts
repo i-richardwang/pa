@@ -331,6 +331,12 @@ export function planQueryIntent(
       ...(intent.view_title ? { view_title: intent.view_title } : {}),
       time_view: anchorView,
       time: compileTimeIntent(intent.time),
+      grouping_sets: {
+        base: membersOf(catalog, intent.dimensions ?? [], "dimension").map((dimension) => ({
+          id: dimension.id,
+          member: bindDimension(dimension),
+        })),
+      },
       ...(intent.measures
         ? { measures: intent.measures.map((member) => bind(member, "measure")) }
         : {}),

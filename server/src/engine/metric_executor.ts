@@ -18,15 +18,22 @@ import {
   type MetricSelectionOutcome,
   type ResolvedMetricLoad,
 } from "./metric_calculator.js";
-import { metricLegPlan, planMetricQuery, type MetricQueryPlan } from "./metric_planner.js";
+import {
+  metricLegPlan,
+  planMetricQueryWithPlanning,
+  resolveMetricQueryPlanning,
+  type MetricQueryPlan,
+} from "./metric_planner.js";
+import type { ResolvedTimePlanning, TimeOutputDefault } from "./time_plan.js";
 import { isBoundedResultComplete } from "./result_limit.js";
 import { executeBoundedPlanned, executeCompletePlanned } from "./time_executor.js";
 
 export type PreparedMetricQueryExecution = {
   plan: MetricQueryPlan;
+  timePlanning: ResolvedTimePlanning;
   /** 选择粒度与展示粒度相同时，排名结果本身就是最终结果。 */
   precomputed?: ResolvedMetricLoad;
-  /** 展示粒度更细时，把独立排名结果附回展示结果。 */
+  /** 排名结果及其选择过滤；展示是否复用排名载荷不改变选择合同。 */
   selection?: {
     outcome: MetricSelectionOutcome;
     filter: CubeFilter;
@@ -56,11 +63,29 @@ export async function prepareMetricQueryExecution(input: {
   views: CubeView[];
   securityContext: CubeSecurityContext;
   timeView?: string;
+  defaultTimeOutput: TimeOutputDefault;
   selection?: TopNSelectionSpec;
 }): Promise<PreparedMetricQueryExecution> {
-  const { cube, query, time, context, views, securityContext, timeView, selection } = input;
+  const {
+    cube,
+    query,
+    time,
+    context,
+    views,
+    securityContext,
+    timeView,
+    defaultTimeOutput,
+    selection,
+  } = input;
+  const timePlanning = resolveMetricQueryPlanning(query, time, context, views, {
+    defaultOutput: defaultTimeOutput,
+    ...(timeView ? { timeView } : {}),
+  });
   if (!selection) {
-    return { plan: planMetricQuery(query, time, context, views, timeView) };
+    return {
+      plan: planMetricQueryWithPlanning(query, timePlanning, views, timeView),
+      timePlanning,
+    };
   }
   const rankingQuery = completeHierarchy(
     {
@@ -70,25 +95,39 @@ export async function prepareMetricQueryExecution(input: {
     },
     views,
   ).query;
-  const rankingPlan = planMetricQuery(rankingQuery, time, context, views, timeView, selection);
+  const rankingPlan = planMetricQueryWithPlanning(
+    rankingQuery,
+    timePlanning,
+    views,
+    timeView,
+    selection,
+  );
   const ranking = await executeMetricQuery(cube, rankingPlan, securityContext, views);
   if (!ranking.selection || !ranking.selectionFilter) {
     throw new Error("Top-N 结果缺少选中分组过滤，无法安全继续");
   }
   if (JSON.stringify(rankingQuery.dimensions ?? []) === JSON.stringify(query.dimensions ?? [])) {
-    return { plan: rankingPlan, precomputed: ranking };
+    return {
+      plan: rankingPlan,
+      timePlanning,
+      precomputed: ranking,
+      selection: {
+        outcome: ranking.selection,
+        filter: ranking.selectionFilter,
+      },
+    };
   }
   return {
-    plan: planMetricQuery(
+    plan: planMetricQueryWithPlanning(
       {
         ...query,
         filters: [...(query.filters ?? []), ranking.selectionFilter],
       },
-      time,
-      context,
+      timePlanning,
       views,
       timeView,
     ),
+    timePlanning,
     selection: {
       outcome: ranking.selection,
       filter: ranking.selectionFilter,

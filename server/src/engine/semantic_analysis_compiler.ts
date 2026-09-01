@@ -3,11 +3,13 @@ import { memberShortName } from "../semantic_core/member_name.js";
 import {
   isDerivedViewSpec,
   parseAnalysisSpec,
+  calculationColumnName,
   type ColumnOperand,
   type DerivedColumnInput,
   type DerivedViewSpec,
   type ExprNode,
   type LiteralOperand,
+  type GroupingShareCalculationSpec,
   type QueryViewSpec,
 } from "../semantic_core/analysis_spec.js";
 import type { CompilerCatalog, CompilerCatalogMember } from "../semantic_core/compiler_catalog.js";
@@ -33,7 +35,6 @@ import {
   type SemanticDerivedView,
   type SemanticExprNode,
   type SemanticLiteralOperand,
-  type SemanticPercentOfTotalCalculation,
   type SemanticQueryView,
 } from "../semantic_core/semantic_analysis.js";
 import {
@@ -51,7 +52,6 @@ import type {
   RecordProjectionViewBinding,
 } from "../contracts/record_projection_contract.js";
 import { planMetricRecordProjection } from "../semantic_core/record_projection_planner.js";
-import { compileTimeIntent, timeOutputColumns } from "../semantic_core/time_contract.js";
 import { projectPresentation } from "../presentation_core/presentation_projection.js";
 import type { ChartDecl } from "../presentation_core/chart_decl.js";
 
@@ -86,6 +86,12 @@ function bindingInPool(member: CompilerCatalogMember, pool: string[]): string {
   const binding = member.available_in.find((available) => pool.includes(available.member));
   if (!binding) throw new Error(`字段「${member.title}」未绑定到当前执行查询`);
   return memberShortName(binding.member);
+}
+
+function physicalBindingInPool(member: CompilerCatalogMember, pool: string[]): string {
+  const binding = member.available_in.find((available) => pool.includes(available.member));
+  if (!binding) throw new Error(`字段「${member.title}」未绑定到当前执行查询`);
+  return binding.member;
 }
 
 function recordProjectionBindingForIntent(
@@ -172,7 +178,9 @@ function directDelivery(
   for (const dimension of plan.group_dimensions) {
     columns[memberShortName(dimension.member)] = dimension.id;
   }
-  for (const column of timeOutputColumns(compileTimeIntent(intent.time))) columns[column] = column;
+  for (const calculation of intent.calculations ?? []) {
+    columns[calculationColumnName(calculation.id)] = calculation.id;
+  }
   return { columns };
 }
 
@@ -345,18 +353,6 @@ function compileBoundChart(
     ...seriesChannels,
     ...(chart.stack !== undefined ? { stack: chart.stack } : {}),
   };
-}
-
-function compileSemanticChart(
-  catalog: CompilerCatalog,
-  intent: SemanticQueryView,
-  physical: QueryViewSpec,
-  chart: SemanticViewIntent,
-  style: ViewPreferences,
-): UnboundChart {
-  return compileBoundChart(catalog, intent, chart, style, (reference, kind) =>
-    bindSemantic(catalog, intent, physical, reference, kind),
-  );
 }
 
 function physicalReference(
@@ -541,203 +537,37 @@ function validateSemanticTableLayout(view: SemanticAnalysisView, chart: Semantic
   }
 }
 
-type DirectQueryIntentPlan = Extract<QueryIntentPlan, { status: "direct" }>;
-
-function internalViewId(base: string, suffix: string): string {
-  const tail = `_${suffix}`;
-  return `${base.slice(0, 64 - tail.length)}${tail}`;
-}
-
-function requireDirectPlan(
+function groupingShareCalculations(
   catalog: CompilerCatalog,
   intent: SemanticQueryView,
-): DirectQueryIntentPlan {
-  const plan = planQueryIntent(catalog, intent);
-  if (plan.status === "incompatible") {
-    throw new SemanticQueryIncompatibleError(plan.reason, [
-      { status: "incompatible", result_view_id: intent.id, reason: plan.reason },
-    ]);
-  }
-  return plan;
-}
-
-function percentOfTotalCalculation(
-  catalog: CompilerCatalog,
-  intent: SemanticQueryView,
-): SemanticPercentOfTotalCalculation | undefined {
-  const calculation = intent.calculations?.[0];
-  if (!calculation) return undefined;
-  const measure = catalogMember(catalog, calculation.measure, "measure");
-  if (!measure) {
-    throw new AnalysisDefinitionError(`catalog 中不存在基础指标 ${calculation.measure}`);
-  }
-  if (!measure.report_calculations?.includes("percent_of_total")) {
-    throw new AnalysisDefinitionError(`指标「${measure.title}」不支持报告级构成占比`);
-  }
-  const category = catalogMember(catalog, calculation.category_dimension, "dimension");
-  if (!category) {
-    throw new AnalysisDefinitionError(`catalog 中不存在构成维度 ${calculation.category_dimension}`);
-  }
-  if (category.dimension_kind === "overlapping") {
-    throw new AnalysisDefinitionError(
-      `维度「${category.title}」不是互斥分类，不能计算合计为 100% 的构成占比`,
-    );
-  }
-  return calculation;
-}
-
-function compilePercentOfTotalAnalysis(
-  catalog: CompilerCatalog,
-  definition: AnalysisDefinition,
-  intent: SemanticQueryView,
-  calculation: SemanticPercentOfTotalCalculation,
-  viewIntent: SemanticViewIntent,
-  preferences: ViewPreferences,
-): CompiledAnalysisView {
-  const numeratorPlan = requireDirectPlan(catalog, intent);
-  const numeratorId = internalViewId(intent.id, "numerator");
-  const denominatorId = internalViewId(intent.id, "denominator");
-  const numeratorTitle = `${calculation.title}分组值`;
-  const denominatorTitle = `${calculation.title}分区合计`;
-  const denominatorIntent: SemanticQueryView = {
-    id: denominatorId,
-    view_title: denominatorTitle,
-    measures: [calculation.measure],
-    dimensions: (intent.dimensions ?? []).filter(
-      (dimension) => dimension !== calculation.category_dimension,
-    ),
-    ...(intent.filters?.length ? { filters: intent.filters } : {}),
-    time: intent.time,
-  };
-  const denominatorPlan = requireDirectPlan(catalog, denominatorIntent);
-  const numeratorQuery: QueryViewSpec = {
-    ...numeratorPlan.query,
-    id: numeratorId,
-    view_title: numeratorTitle,
-  };
-  const denominatorQuery: QueryViewSpec = {
-    ...denominatorPlan.query,
-    id: denominatorId,
-    view_title: denominatorTitle,
-  };
-
-  const numeratorDimensions = new Map(
-    numeratorPlan.group_dimensions.map((dimension) => [dimension.id, dimension]),
-  );
-  const denominatorDimensions = new Map(
-    denominatorPlan.group_dimensions.map((dimension) => [dimension.id, dimension]),
-  );
-  const categoryPhysical = numeratorDimensions.get(calculation.category_dimension);
-  if (!categoryPhysical) throw new Error("构成维度没有进入分子查询的实际分组");
-  const partitionDimensions = [...denominatorDimensions.values()];
-  const missingPartition = partitionDimensions.find(
-    (dimension) => !numeratorDimensions.has(dimension.id),
-  );
-  if (missingPartition) {
-    throw new Error(`分母分组「${missingPartition.title}」不在分子查询中，无法计算构成占比`);
-  }
-  const timeColumns = timeOutputColumns(compileTimeIntent(intent.time));
-  const joinKeys = [
-    ...partitionDimensions.map((dimension) => ({
-      left: memberShortName(numeratorDimensions.get(dimension.id)!.member),
-      right: memberShortName(dimension.member),
-    })),
-    ...timeColumns.map((column) => ({ left: column, right: column })),
-  ];
-
-  const dimensionColumns = numeratorPlan.group_dimensions.map((dimension) => ({
-    semantic: dimension.id,
-    internal: memberShortName(dimension.member),
-  }));
-  const measureColumns = (intent.measures ?? []).map((id) => {
-    const member = catalogMember(catalog, id, "measure");
-    if (!member) throw new Error(`catalog 中不存在指标 ${id}`);
-    return { semantic: id, internal: bindingInPool(member, numeratorQuery.measures ?? []) };
+  plan: Extract<QueryIntentPlan, { status: "direct" }>,
+): GroupingShareCalculationSpec[] {
+  return (intent.calculations ?? []).map((calculation) => {
+    const measure = catalogMember(catalog, calculation.measure, "measure");
+    if (!measure)
+      throw new AnalysisDefinitionError(`catalog 中不存在基础指标 ${calculation.measure}`);
+    if (!measure.report_calculations?.includes("percent_of_total")) {
+      throw new AnalysisDefinitionError(`指标「${measure.title}」不支持报告级构成占比`);
+    }
+    const category = catalogMember(catalog, calculation.category_dimension, "dimension");
+    if (!category) {
+      throw new AnalysisDefinitionError(
+        `catalog 中不存在构成维度 ${calculation.category_dimension}`,
+      );
+    }
+    if (category.dimension_kind === "overlapping") {
+      throw new AnalysisDefinitionError(
+        `维度「${category.title}」不是互斥分类，不能计算合计为 100% 的构成占比`,
+      );
+    }
+    return {
+      kind: "grouping_share",
+      id: calculation.id,
+      title: calculation.title,
+      measure: physicalBindingInPool(measure, plan.query.measures ?? []),
+      category_dimension: calculation.category_dimension,
+    };
   });
-  const numeratorMeasure = measureColumns.find((column) => column.semantic === calculation.measure);
-  if (!numeratorMeasure) throw new Error("构成占比的基础指标没有进入分子查询");
-  const denominatorMeasure = catalogMember(catalog, calculation.measure, "measure");
-  if (!denominatorMeasure) throw new Error(`catalog 中不存在指标 ${calculation.measure}`);
-  const denominatorInternal = bindingInPool(denominatorMeasure, denominatorQuery.measures ?? []);
-  const calculationInternal = calculation.title;
-  const derived: DerivedViewSpec = {
-    id: intent.id,
-    view_title: intent.view_title ?? definition.title ?? calculation.title,
-    from: [numeratorId, denominatorId],
-    join: { on: joinKeys, how: "left", cardinality: "many_to_one" },
-    columns: [
-      ...dimensionColumns.map((column) => ({
-        source: numeratorId,
-        col: column.internal,
-        as: column.internal,
-      })),
-      ...measureColumns.map((column) => ({
-        source: numeratorId,
-        col: column.internal,
-        as: column.internal,
-      })),
-      ...timeColumns.map((column) => ({ source: numeratorId, col: column, as: column })),
-      {
-        expr: {
-          op: "/",
-          left: { source: numeratorId, col: numeratorMeasure.internal },
-          right: { source: denominatorId, col: denominatorInternal },
-        },
-        as: calculationInternal,
-        format: "percent",
-      },
-    ],
-    structure_shares: [{ measure: calculationInternal, numerator: numeratorMeasure.internal }],
-  };
-  const analysis = parseAnalysisSpec({
-    ...(definition.title ? { title: definition.title } : {}),
-    views: [numeratorQuery, denominatorQuery, derived],
-  });
-  const calculated = new Map<string, CalculatedMeasure>([
-    [calculation.id, { title: calculation.title, numerator_id: calculation.measure }],
-  ]);
-  const bind: ChartMemberBinder = (reference, kind) => {
-    if (kind === "measure" && reference === calculation.id) return calculationInternal;
-    return memberShortName(bindSemantic(catalog, intent, numeratorQuery, reference, kind));
-  };
-  validateSemanticTableLayout(intent, viewIntent);
-  const presentation = bindPresentation(
-    compileBoundChart(catalog, intent, viewIntent, preferences, bind, calculated),
-    analysis,
-  );
-  const joinKeyDelivery = [
-    ...partitionDimensions.map((dimension) => ({ id: dimension.id, title: dimension.title })),
-    ...timeColumns.map((column) => ({
-      id: column,
-      title: column === "year" ? "年份" : "月份",
-    })),
-  ];
-  const delivery: OutputDelivery = {
-    columns: {
-      ...Object.fromEntries(dimensionColumns.map((column) => [column.internal, column.semantic])),
-      ...Object.fromEntries(measureColumns.map((column) => [column.internal, column.semantic])),
-      ...Object.fromEntries(timeColumns.map((column) => [column, column])),
-      [calculationInternal]: calculation.id,
-    },
-    provenance: {
-      sources: [{ title: numeratorTitle }, { title: denominatorTitle }],
-      join_keys: joinKeyDelivery,
-    },
-  };
-  const route: SemanticRoute = {
-    status: "composed",
-    result_view_id: intent.id,
-    sources: delivery.provenance!.sources,
-    join_keys: delivery.provenance!.join_keys,
-  };
-  const plan = planExecution(analysis, { delivery });
-  return {
-    plan,
-    presentation,
-    render_decl: projectPresentation(presentation, plan.output, plan.output.id),
-    routes: [route],
-    record_projection_bindings: { views: [] },
-  };
 }
 
 /** 在当前身份可见 catalog 上编译可执行工件。 */
@@ -749,22 +579,6 @@ export function compileAnalysisView(
   const definition = parseAnalysisDefinition(input.analysis);
   const intent = parseSemanticViewIntent(input.view);
   const preferences = validateViewPreferences(intent, rawPreferences);
-  const calculationIntent = definition.views.find(
-    (view): view is SemanticQueryView =>
-      !isSemanticDerivedView(view) && Boolean(view.calculations?.length),
-  );
-  if (calculationIntent) {
-    const calculation = percentOfTotalCalculation(catalog, calculationIntent);
-    if (!calculation) throw new Error("构成占比声明缺少计算定义");
-    return compilePercentOfTotalAnalysis(
-      catalog,
-      definition,
-      calculationIntent,
-      calculation,
-      intent,
-      preferences,
-    );
-  }
   const intents = definition.views.filter(
     (view): view is SemanticQueryView => !isSemanticDerivedView(view),
   );
@@ -789,9 +603,17 @@ export function compileAnalysisView(
       physicalViews.push(compileDerivedView(catalog, intentById, queryById, view));
       continue;
     }
-    const plan = planByIntent.get(view.id)!;
+    const plan = planByIntent.get(view.id);
+    if (!plan) throw new Error(`查询视图 ${view.id} 缺少已解析执行计划`);
+    const calculations = groupingShareCalculations(catalog, view, plan);
+    const groupingSets = plan.query.grouping_sets;
+    if (!groupingSets) throw new Error(`查询视图 ${view.id} 缺少基础分组集`);
     physicalViews.push({
       ...plan.query,
+      grouping_sets: {
+        ...groupingSets,
+        ...(calculations.length ? { calculations } : {}),
+      },
       ...(view.summary ? { summary: view.summary } : {}),
     });
   }
@@ -803,11 +625,30 @@ export function compileAnalysisView(
   const outputPhysical = analysis.views.find((view) => view.id === outputId);
   if (!outputIntent || !outputPhysical) throw new Error(`结果视图 ${outputId} 不存在`);
   validateSemanticTableLayout(outputIntent, intent);
+  const calculated = new Map<string, CalculatedMeasure>(
+    !isSemanticDerivedView(outputIntent)
+      ? (outputIntent.calculations ?? []).map((calculation) => [
+          calculation.id,
+          { title: calculation.title, numerator_id: calculation.measure },
+        ])
+      : [],
+  );
   const presentation = bindPresentation(
     isSemanticDerivedView(outputIntent) && isDerivedViewSpec(outputPhysical)
       ? compileDerivedChart(intent, preferences)
       : !isSemanticDerivedView(outputIntent) && !isDerivedViewSpec(outputPhysical)
-        ? compileSemanticChart(catalog, outputIntent, outputPhysical, intent, preferences)
+        ? compileBoundChart(
+            catalog,
+            outputIntent,
+            intent,
+            preferences,
+            (reference, kind) => {
+              const calculation = calculated.get(reference);
+              if (kind === "measure" && calculation) return calculationColumnName(reference);
+              return bindSemantic(catalog, outputIntent, outputPhysical, reference, kind);
+            },
+            calculated,
+          )
         : (() => {
             throw new Error(`结果视图 ${outputId} 的语义类型与执行类型不一致`);
           })(),

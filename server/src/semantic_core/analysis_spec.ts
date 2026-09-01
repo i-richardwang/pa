@@ -3,9 +3,6 @@ import { analysisGraphSink, validateDerivedGraphView } from "./analysis_graph.js
 import { TIME_INPUT } from "./time_contract.js";
 import { COLUMN_FORMATS, type ColumnFormat } from "./query_payload.js";
 
-/** 引擎预算：一次分析的执行节点（查询腿 + 变换）总数上限。用户不感知此数。 */
-export const MAX_PLAN_NODES = 3;
-
 const VIEW_ID = z
   .string()
   .regex(/^[a-z][a-z0-9_]*$/)
@@ -73,6 +70,74 @@ export const SUMMARY_INPUT = z
 
 export type SummarySpec = z.infer<typeof SUMMARY_INPUT>;
 
+const GROUPING_DIMENSION_INPUT = z
+  .object({
+    id: z
+      .string()
+      .regex(/^dimension:[a-z][a-z0-9_]*$/)
+      .max(120),
+    member: z.string().min(1),
+  })
+  .strict();
+
+const GROUPING_SHARE_CALCULATION_INPUT = z
+  .object({
+    kind: z.literal("grouping_share"),
+    id: z
+      .string()
+      .regex(/^calculation:[a-z][a-z0-9_]*$/)
+      .max(120),
+    title: z.string().trim().min(1).max(30),
+    measure: z.string().min(1),
+    category_dimension: z
+      .string()
+      .regex(/^dimension:[a-z][a-z0-9_]*$/)
+      .max(120),
+  })
+  .strict();
+
+export const GROUPING_SETS_INPUT = z
+  .object({
+    base: z.array(GROUPING_DIMENSION_INPUT),
+    calculations: z.array(GROUPING_SHARE_CALCULATION_INPUT).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const ids = value.base.map((dimension) => dimension.id);
+    if (new Set(ids).size !== ids.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["base"],
+        message: "基础分组集不能包含重复语义维度",
+      });
+    }
+    const members = value.base.map((dimension) => dimension.member);
+    if (new Set(members).size !== members.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["base"],
+        message: "基础分组集不能包含重复物理维度",
+      });
+    }
+    for (const [index, calculation] of (value.calculations ?? []).entries()) {
+      if (!ids.includes(calculation.category_dimension)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["calculations", index, "category_dimension"],
+          message: "构成占比的分类维度必须属于基础分组集",
+        });
+      }
+    }
+  });
+
+export type GroupingSetsSpec = z.infer<typeof GROUPING_SETS_INPUT>;
+export type GroupingShareCalculationSpec = NonNullable<GroupingSetsSpec["calculations"]>[number];
+
+/** 报告计算的内部结果列只由稳定计算 id 派生；业务标题不参与寻址。 */
+export function calculationColumnName(id: string): string {
+  return id.replace(":", "_");
+}
+
 export const QUERY_VIEW_INPUT = z
   .object({
     id: VIEW_ID,
@@ -80,6 +145,7 @@ export const QUERY_VIEW_INPUT = z
     /** 跨指标域查询使用的时间与一致维度锚点；仅存在于服务端物理执行规格。 */
     time_view: VIEW_ID.optional(),
     ...QUERY_FIELDS,
+    grouping_sets: GROUPING_SETS_INPUT.optional(),
     selection: TOP_N_SELECTION_INPUT.optional(),
     summary: SUMMARY_INPUT.optional(),
   })
@@ -97,6 +163,28 @@ export const QUERY_VIEW_INPUT = z
         path: ["summary"],
         message: "总体行只适用于同时包含指标与业务分组维度的查询",
       });
+    }
+    if (view.grouping_sets) {
+      const dimensions = new Set(view.dimensions ?? []);
+      for (const [index, dimension] of view.grouping_sets.base.entries()) {
+        if (!dimensions.has(dimension.member)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["grouping_sets", "base", index, "member"],
+            message: "基础分组集的物理绑定必须属于查询 dimensions",
+          });
+        }
+      }
+      const measures = new Set(view.measures ?? []);
+      for (const [index, calculation] of (view.grouping_sets.calculations ?? []).entries()) {
+        if (!measures.has(calculation.measure)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["grouping_sets", "calculations", index, "measure"],
+            message: "grouping-set 计算的基础指标必须属于查询 measures",
+          });
+        }
+      }
     }
     if (view.selection) {
       if (view.order?.length) {
@@ -155,10 +243,8 @@ export type DerivedViewSpec = {
   join?: {
     on: JoinKeyInput[];
     how: "left" | "inner" | "full";
-    cardinality?: "one_to_one" | "many_to_one";
   };
   columns: DerivedColumnInput[];
-  structure_shares?: { measure: string; numerator: string }[];
   order?: { by: string; direction: "asc" | "desc" }[];
   limit?: number;
   summary?: SummarySpec;
@@ -200,7 +286,6 @@ export const DERIVED_VIEW_INPUT: z.ZodType<DerivedViewSpec> = z
             .strict(),
         ),
         how: z.enum(["left", "inner", "full"]),
-        cardinality: z.enum(["one_to_one", "many_to_one"]).optional(),
       })
       .strict()
       .optional(),
@@ -218,9 +303,6 @@ export const DERIVED_VIEW_INPUT: z.ZodType<DerivedViewSpec> = z
         ]),
       )
       .min(1),
-    structure_shares: z
-      .array(z.object({ measure: z.string().min(1), numerator: z.string().min(1) }).strict())
-      .optional(),
     order: z
       .array(z.object({ by: z.string().min(1), direction: z.enum(["asc", "desc"]) }).strict())
       .optional(),
@@ -230,19 +312,11 @@ export const DERIVED_VIEW_INPUT: z.ZodType<DerivedViewSpec> = z
   .strict()
   .superRefine((view, context) => {
     if (!view.join) return;
-    const cardinality = view.join.cardinality ?? "one_to_one";
-    if (cardinality === "one_to_one" && view.join.on.length === 0) {
+    if (view.join.on.length === 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["join", "on"],
         message: "one_to_one join 至少需要一个关联列",
-      });
-    }
-    if (cardinality === "many_to_one" && view.join.how !== "left") {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["join", "how"],
-        message: "many_to_one 只支持 left join",
       });
     }
   });
@@ -253,7 +327,7 @@ export type AnalysisViewSpec = QueryViewSpec | DerivedViewSpec;
 export const ANALYSIS_SPEC_INPUT = z
   .object({
     title: z.string().min(1).max(100).optional(),
-    views: z.array(ANALYSIS_VIEW_INPUT).min(1).max(MAX_PLAN_NODES),
+    views: z.array(ANALYSIS_VIEW_INPUT).min(1),
   })
   .strict();
 
@@ -292,15 +366,6 @@ function validateDerivedView(view: DerivedViewSpec, views: AnalysisViewSpec[]): 
       columnSources(column).map((operand) => ({ source: operand.source, label: operand.col })),
     outputName: derivedColumnName,
   });
-  const outputs = new Set(view.columns.map(derivedColumnName));
-  for (const relation of view.structure_shares ?? []) {
-    if (!outputs.has(relation.measure) || !outputs.has(relation.numerator)) {
-      throw new Error("结构占比关系只能引用派生视图的输出列");
-    }
-    if (relation.measure === relation.numerator) {
-      throw new Error("结构占比列与分子列不能相同");
-    }
-  }
 }
 
 export function parseAnalysisSpec(value: unknown): AnalysisSpec {

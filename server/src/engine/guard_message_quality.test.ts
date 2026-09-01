@@ -9,7 +9,7 @@ import type { CubeView, TimeContext } from "../ports/cube_gateway.js";
 import { assertMeasureFilterCompatibility } from "./query_contract.js";
 import { parseAnalysisSpec } from "../semantic_core/analysis_spec.js";
 import { observationScopes } from "./catalog_document.js";
-import { planTimeQuery } from "./time_plan.js";
+import { planTimeQuery } from "../test_support/planning.js";
 
 const views: CubeView[] = [
   {

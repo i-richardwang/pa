@@ -31,6 +31,8 @@ export type ExecutedViewResult = {
   block: EngineViewBlock;
   sampleForModel: boolean;
   sourceSemantics?: DerivedSourceSemantics;
+  /** 由已解析结果签名产生的运行时公共列身份。 */
+  resolvedDeliveryColumns?: Record<string, string>;
   exportPlan?: MetricQueryPlan;
 };
 
@@ -256,9 +258,17 @@ export async function runQueryPipeline(
   };
   // 内部执行腿全部算过但不进交付面，也不序列化给模型。
   const outputId = plan.output.id;
-  const deliveredResult = resultById.get(outputId)!;
-  const deliveredFull = projectOutputBlock(deliveredResult.block, plan.output, outputId);
-  const decl = projectPresentation(presentation, plan.output, outputId);
+  const deliveredResult = resultById.get(outputId);
+  if (!deliveredResult) throw new Error(`交付视图 ${outputId} 未产生执行结果`);
+  const resolvedOutput = {
+    ...plan.output,
+    columns: {
+      ...plan.output.columns,
+      ...(deliveredResult.resolvedDeliveryColumns ?? {}),
+    },
+  };
+  const deliveredFull = projectOutputBlock(deliveredResult.block, resolvedOutput, outputId);
+  const decl = projectPresentation(presentation, resolvedOutput, outputId);
   const deliveredSampled: ViewBlock =
     deliveredResult.sampleForModel && deliveredFull.rows.length > AGGREGATE_MODEL_ROWS
       ? {
