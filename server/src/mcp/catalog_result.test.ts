@@ -38,6 +38,16 @@ const views: CubeView[] = [
         },
       },
       {
+        name: "people_metrics.monthly_metric",
+        title: "月度指标",
+        description: "仅按单月计算的指标。",
+        type: "number",
+        meta: {
+          metric_domain_id: "metric_domain:workforce_structure",
+          time_contract: { aggregation: "average", window: "selected", grain: "month" },
+        },
+      },
+      {
         name: "people_metrics.active_employee_rate",
         title: "在职人数占比",
         description: "在职人数占统计范围总人数的比例。",
@@ -65,7 +75,7 @@ const views: CubeView[] = [
   },
 ];
 
-test("Agent Catalog 从真实授权目录显式移除仅供 Web 导航的字段", async () => {
+test("Agent Catalog 从真实授权目录投影查询所需能力", async () => {
   const principal: Principal = { email: "agent@x", roles: ["user"], accessScope: { kind: "all" } };
   const service = createCatalogService({
     canonical: canonicalModelFixture(views, TEST_SEMANTIC_TAXONOMY),
@@ -95,4 +105,7 @@ test("Agent Catalog 从真实授权目录显式移除仅供 Web 导航的字段"
     numerator: "在职人数",
     denominator: "统计范围总人数",
   });
+  expect(agentPayload.measures.find(({ title }) => title === "月度指标")?.time_constraints).toEqual(
+    { grain: "month" },
+  );
 });

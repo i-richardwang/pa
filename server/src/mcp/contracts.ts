@@ -14,16 +14,16 @@ import { EXPORT_TICKET_TTL_MINUTES } from "../contracts/export_contract.js";
 import { ACCESS_SCOPE_DEFINITION_SCHEMA } from "../contracts/access_scope.js";
 
 export const SERVER_INSTRUCTIONS =
-  "PA 是权限裁剪的封闭查询面。成员只引用 catalog 的语义 id；先用 catalog(terms) 读取 term_resolutions，名录值不确定时用 values_of。" +
-  "术语解释仅供查前理解，不改写查询；歧义先确认。查询只声明指标、维度与 time，不使用标题、物理字段、SQL，也不补充用户未要求的范围或比较。" +
-  "构成记录仅用于单结果格、单时间桶且 records_available 的分析，逐条记录只在受控 App 展示。";
+  "PA 是权限裁剪的封闭查询面。成员只引用 catalog 的语义 id，并遵守其 time_constraints 与 incompatible_dimensions；先用 catalog(terms) 读取 term_resolutions，值不确定时用 values_of。" +
+  "术语只供理解，不改写查询；歧义先确认。查询只声明指标、维度与 time，不用标题、物理字段或 SQL，也不补充未要求的范围或比较。" +
+  "构成记录仅用于单结果格、单时间桶且 records_available 的分析，个体行只在受控 App 展示。";
 
 export const TOOL_DESCRIPTIONS = {
   catalog:
     "发现当前调用者可用的 PA 指标、维度与业务术语解释。不传 terms 返回全部成员，传 terms 按业务概念筛选；成员 id 可直接用于分析。",
   values_of: "搜索一个分类维度在当前调用者权限范围内的真实值，可按子串收窄。",
   run_analysis:
-    "用 catalog 返回的语义成员 id 与呈现意图执行一次分析；不接受视觉设置、物理字段、SQL 或个体字段。服务端自动规划兼容指标域，返回 analysis_id、view_id 与结构化结果。",
+    "用 catalog 的语义 id 与呈现意图执行分析；不接受视觉设置、物理字段、SQL 或个体字段。自动规划兼容指标域；成功返回分析结果，失败返回含 code/details 的错误 JSON。",
   rerun_analysis:
     "从已有 analysis_id 派生新的不可变 View 并按当前数据重跑；AnalysisDefinition 保持不变。",
   show_analysis: "为本人已有 view_id 打开交互结果卡；只负责展示，不重新定义或执行分析。",

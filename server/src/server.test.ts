@@ -37,6 +37,22 @@ function findJsonObject(
   return undefined;
 }
 
+function mcpToolError(result: unknown): Record<string, unknown> {
+  if (typeof result !== "object" || result === null || !("content" in result)) {
+    throw new Error("MCP 工具错误缺少 content");
+  }
+  const toolResult = result as {
+    isError?: boolean;
+    content: Array<{ type: string; text?: string }>;
+  };
+  expect(toolResult.isError).toBe(true);
+  const content = toolResult.content[0];
+  if (content?.type !== "text" || content.text === undefined) {
+    throw new Error("MCP 工具错误必须以 JSON 文本交付");
+  }
+  return JSON.parse(content.text) as Record<string, unknown>;
+}
+
 const query = (id: string, at = "2026-07") => ({
   id,
   view_title: `查询结果 ${id}`,
@@ -487,6 +503,10 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
       expect(description.length).toBeLessThanOrEqual(100);
     }
     expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(260);
+    expect(SERVER_INSTRUCTIONS).toContain("time_constraints");
+    expect(SERVER_INSTRUCTIONS).toContain("incompatible_dimensions");
+    expect(TOOL_DESCRIPTIONS.run_analysis).toContain("code/details");
+    expect(TOOL_DESCRIPTIONS.run_analysis).toContain("错误 JSON");
     expect(UI_RESOURCE_URI).toBe("ui://pa/result.html");
     expect(RECORDS_UI_RESOURCE_URI).toBe("ui://pa/records.html");
     expect(UI_RESOURCE_META).toEqual({
@@ -710,13 +730,13 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
         view: { type: "table" },
       },
     });
-    expect(invalidAnalysis.isError).toBe(true);
-    expect(invalidAnalysis.content).toEqual([
-      {
-        type: "text",
-        text: expect.stringContaining("一次分析只能回答一个问题"),
+    expect(invalidAnalysis).not.toHaveProperty("structuredContent");
+    expect(mcpToolError(invalidAnalysis)).toEqual({
+      error: {
+        code: "invalid_request",
+        message: expect.stringContaining("一次分析只能回答一个问题"),
       },
-    ]);
+    });
 
     application.export.readResource = async () => {
       throw new ExportIncompleteError(100_000);

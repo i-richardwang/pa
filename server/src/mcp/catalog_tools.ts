@@ -4,7 +4,7 @@ import type { McpRegistrationContext } from "./context.js";
 import type { CatalogService } from "../application/catalog_service.js";
 import type { UsageService } from "../application/usage_service.js";
 import { projectAgentCatalog } from "./catalog_result.js";
-import { safeMcpHandler } from "./errors.js";
+import { safeMcpToolHandler } from "./errors.js";
 import {
   CATALOG_OUTPUT,
   OAUTH_SECURITY_SCHEMES,
@@ -32,7 +32,7 @@ export function registerCatalogTools(
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    safeMcpHandler(
+    safeMcpToolHandler(
       "catalog",
       usage.wrap(
         {
@@ -70,7 +70,7 @@ export function registerCatalogTools(
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    safeMcpHandler(
+    safeMcpToolHandler(
       "values_of",
       usage.wrap(
         {

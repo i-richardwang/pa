@@ -5,7 +5,7 @@ import { RECORD_PROJECTION_META_KEY } from "../contracts/record_projection_contr
 import type { McpRegistrationContext } from "./context.js";
 import type { RecordProjectionService } from "../application/record_projection_service.js";
 import type { UsageService } from "../application/usage_service.js";
-import { safeMcpHandler } from "./errors.js";
+import { safeMcpToolHandler } from "./errors.js";
 import {
   OAUTH_SECURITY_SCHEMES,
   READ_ONLY_ANNOTATIONS,
@@ -69,7 +69,7 @@ export function registerRecordTools(
         "openai/toolInvocation/invoked": "构成记录已就绪",
       },
     },
-    safeMcpHandler(
+    safeMcpToolHandler(
       "show_records",
       usage.wrap(
         { tool: "show_records", caller },
@@ -105,7 +105,7 @@ export function registerRecordTools(
         ui: { visibility: ["app"] },
       },
     },
-    safeMcpHandler(
+    safeMcpToolHandler(
       "load_records_page",
       async (input: {
         view_id: string;

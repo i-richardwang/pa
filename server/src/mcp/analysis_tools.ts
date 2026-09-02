@@ -11,7 +11,7 @@ import type { McpRegistrationContext } from "./context.js";
 import type { AnalysisService } from "../application/analysis_service.js";
 import type { PresentationService } from "../application/presentation_service.js";
 import type { UsageService } from "../application/usage_service.js";
-import { safeMcpHandler } from "./errors.js";
+import { safeMcpToolHandler } from "./errors.js";
 import {
   OAUTH_SECURITY_SCHEMES,
   READ_ONLY_ANNOTATIONS,
@@ -50,7 +50,7 @@ export function registerAnalysisTools(
         "openai/toolInvocation/invoked": "分析结果已就绪",
       },
     },
-    safeMcpHandler(
+    safeMcpToolHandler(
       "run_analysis",
       async (input: { analysis: AnalysisDefinition; view: SemanticViewIntent }) =>
         analysisResult(presentation, await analysis.run(principal, input.analysis, input.view)),
@@ -70,7 +70,7 @@ export function registerAnalysisTools(
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    safeMcpHandler(
+    safeMcpToolHandler(
       "rerun_analysis",
       async (input: { analysis_id: string; view: SemanticViewIntent }) =>
         analysisResult(
@@ -102,7 +102,7 @@ export function registerAnalysisTools(
         "openai/toolInvocation/invoked": "分析结果卡已就绪",
       },
     },
-    safeMcpHandler(
+    safeMcpToolHandler(
       "show_analysis",
       usage.wrap({ tool: "show_analysis", caller }, async (input: { view_id: string }) => {
         await analysis.ensureOwned(principal, input.view_id);
@@ -131,7 +131,7 @@ export function registerAnalysisTools(
         ui: { visibility: ["model"] },
       },
     },
-    safeMcpHandler("load_analysis_result", async (input: { view_id: string }) =>
+    safeMcpToolHandler("load_analysis_result", async (input: { view_id: string }) =>
       analysisResult(presentation, await analysis.replay(principal, input.view_id), {
         includeDefinition: true,
       }),
@@ -154,7 +154,7 @@ export function registerAnalysisTools(
         ui: { visibility: ["app"] },
       },
     },
-    safeMcpHandler("load_analysis_card", async (input: { view_id: string }) =>
+    safeMcpToolHandler("load_analysis_card", async (input: { view_id: string }) =>
       analysisResult(presentation, await analysis.replay(principal, input.view_id)),
     ),
   );

@@ -5,7 +5,7 @@ import type { McpRegistrationContext } from "./context.js";
 import type { ReportService } from "../application/report_service.js";
 import type { UsageService } from "../application/usage_service.js";
 import { PRESENTATION_TYPE_SCHEMA } from "../semantic_core/presentation_type.js";
-import { safeMcpHandler } from "./errors.js";
+import { safeMcpToolHandler } from "./errors.js";
 import {
   OAUTH_SECURITY_SCHEMES,
   READ_ONLY_ANNOTATIONS,
@@ -41,7 +41,7 @@ export function registerReportTools(
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    safeMcpHandler("save_report", async (input) => {
+    safeMcpToolHandler("save_report", async (input) => {
       const report = await reports.save({
         principal,
         viewId: input.view_id,
@@ -79,7 +79,7 @@ export function registerReportTools(
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    safeMcpHandler(
+    safeMcpToolHandler(
       "update_report",
       async (input: { id: string; action: ReportUpdateAction; if_revision?: number }) => {
         const report = await reports.update(principal, input.id, input.action, input.if_revision);
@@ -121,7 +121,7 @@ export function registerReportTools(
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    safeMcpHandler(
+    safeMcpToolHandler(
       "find_report",
       usage.wrap({ tool: "find_report", caller }, async (input: { query?: string }) => {
         const found = (await reports.listOwned(principal, input.query)).map((report) => ({

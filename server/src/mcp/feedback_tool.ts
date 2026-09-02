@@ -4,7 +4,7 @@ import { FEEDBACK_LIMITS } from "../contracts/feedback_contract.js";
 import type { McpRegistrationContext } from "./context.js";
 import type { FeedbackService } from "../application/feedback_service.js";
 import type { UsageService } from "../application/usage_service.js";
-import { safeMcpHandler } from "./errors.js";
+import { safeMcpToolHandler } from "./errors.js";
 import { OAUTH_SECURITY_SCHEMES, TOOL_DESCRIPTIONS, WRITE_ANNOTATIONS } from "./contracts.js";
 
 export function registerFeedbackTool(
@@ -41,7 +41,7 @@ export function registerFeedbackTool(
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    safeMcpHandler(
+    safeMcpToolHandler(
       "feedback",
       usage.wrap({ tool: "feedback", caller }, async (input: FeedbackInput) => {
         const payload = await feedback.submit(principal, input);

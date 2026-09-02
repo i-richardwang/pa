@@ -53,6 +53,11 @@ Cube `/load` 使用同一用户 security context 执行行权限，因此成员�
 维度分组与公式跳转信息；MCP 再以字段白名单投影 Agent Catalog，只交付选材、查询合同和避坑所需
 语义。两者共享 canonical model 和权限裁剪；新增字段仅在对应白名单显式更新后进入该消费面。
 
+Application 抛出的领域错误由所有传输层共用一份公开分类。MCP 工具把失败交付为原生
+`isError: true` 结果，文本内容是稳定的 `{ error: { code, message, details? } }` JSON，供所有客户端
+和 Agent 读取并修正请求；成功结果的 `structuredContent` 始终匹配工具 `outputSchema`。MCP 资源读取
+没有工具错误结果通道，只抛出同一分类生成的安全消息。未知异常的诊断仅写服务端日志，不进入公共结果。
+
 ## 查询执行
 
 一次查询按以下顺序执行：

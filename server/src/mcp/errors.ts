@@ -1,7 +1,49 @@
-import { publicApplicationError } from "../application/errors.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { publicApplicationError, type PublicApplicationError } from "../application/errors.js";
 
-/** MCP 最外层调用边界：具体工具先完成领域错误映射，未知异常最后统一脱敏。 */
-export function safeMcpHandler<Args extends unknown[], Result>(
+type McpToolErrorContent = {
+  error: Pick<PublicApplicationError, "code" | "message" | "details">;
+};
+
+type McpToolErrorResult = Omit<CallToolResult, "structuredContent"> & {
+  content: [{ type: "text"; text: string }];
+  structuredContent?: never;
+  isError: true;
+};
+
+function publicMcpError(label: string, error: unknown): PublicApplicationError {
+  const safe = publicApplicationError(error);
+  if (safe.internal) console.error(`[pa] MCP ${label} 失败:`, error);
+  return safe;
+}
+
+/** 错误 JSON 位于 MCP `isError` 的 content；structuredContent 只承载成功 outputSchema。 */
+export function safeMcpToolHandler<Args extends unknown[], Result extends CallToolResult>(
+  label: string,
+  handler: (...args: Args) => Result | Promise<Result>,
+): (...args: Args) => Promise<Result | McpToolErrorResult> {
+  return async (...args) => {
+    try {
+      return await handler(...args);
+    } catch (error) {
+      const safe = publicMcpError(label, error);
+      const payload: McpToolErrorContent = {
+        error: {
+          code: safe.code,
+          message: safe.message,
+          ...(safe.details ? { details: safe.details } : {}),
+        },
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+        isError: true,
+      };
+    }
+  };
+}
+
+/** 资源读取没有工具错误结果通道，只抛出经过相同应用错误分类的安全消息。 */
+export function safeMcpResourceHandler<Args extends unknown[], Result>(
   label: string,
   handler: (...args: Args) => Result | Promise<Result>,
 ): (...args: Args) => Promise<Result> {
@@ -9,8 +51,7 @@ export function safeMcpHandler<Args extends unknown[], Result>(
     try {
       return await handler(...args);
     } catch (error) {
-      const safe = publicApplicationError(error);
-      if (safe.internal) console.error(`[pa] MCP ${label} 失败:`, error);
+      const safe = publicMcpError(label, error);
       throw new Error(safe.message, { cause: error });
     }
   };

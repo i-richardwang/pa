@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { RESOURCE_MIME_TYPE, registerAppResource } from "@modelcontextprotocol/ext-apps/server";
 import type { McpRegistrationContext } from "./context.js";
-import { safeMcpHandler } from "./errors.js";
+import { safeMcpResourceHandler } from "./errors.js";
 import {
   OPENAI_WIDGET_CSP,
   RECORDS_UI_RESOURCE_URI,
@@ -35,7 +35,7 @@ export function registerWidgetResource({ server }: McpRegistrationContext): void
       description: "以指标卡、图表或表格展示查询结果、数据截至月和口径说明。",
       _meta: { ui: UI_RESOURCE_META },
     },
-    safeMcpHandler("query_result_view", async () => ({
+    safeMcpResourceHandler("query_result_view", async () => ({
       contents: [
         {
           uri: UI_RESOURCE_URI,
@@ -63,7 +63,7 @@ export function registerWidgetResource({ server }: McpRegistrationContext): void
       description: "以受控表格展示构成指标结果的明细记录及其上下文字段。",
       _meta: { ui: UI_RESOURCE_META },
     },
-    safeMcpHandler("record_projection_view", async () => ({
+    safeMcpResourceHandler("record_projection_view", async () => ({
       contents: [
         {
           uri: RECORDS_UI_RESOURCE_URI,

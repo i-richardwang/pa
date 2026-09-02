@@ -112,6 +112,10 @@ meta:
 一致性由跨层用例逐组合双向断言把守。求值形态本身（interval / endpoint / year_to_date）仍是引擎私有，
 不出现在任何消费面。
 
+Agent 在取得语义 id 的同一次 Catalog 调用中读取 `time_constraints`。若请求与指标能力冲突，MCP
+`run_analysis` 返回 `isError: true`，并在错误 JSON 的 `error.details.issue` 保留同一
+`TimeSelectionIssue`；Agent 按 issue 修正选择或向用户确认。
+
 合计位的 `endpoint` 降级建立在已有序列签名上；若外部请求直接把年初归零指标的跨年窗口声明为
 `grain: total`，就没有可忠实表达的序列或整窗值，统一返回结构化时间问题，而不是把终点值冒充跨年总计。
 
