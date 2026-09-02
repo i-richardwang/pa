@@ -169,8 +169,7 @@ test("题名副行只显示观察窗口", () => {
   const timed = setDraftTime(
     draftFixture(),
     {
-      window: { kind: "range", from: "2026-01", to: "2026-06" },
-      display: "month",
+      window: { kind: "range", from: "2026-01", to: "2026-06", grain: "month" },
       comparison: { kind: "previous_year" },
     },
     catalog,

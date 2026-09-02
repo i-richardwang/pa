@@ -7,12 +7,11 @@ export const TIME_GRAINS = ["total", "year", "month"] as const;
 export type TimeOutputGrain = (typeof TIME_GRAINS)[number];
 
 /**
- * 用户与 Agent 能选的显示方式只有序列粒度；整段合计由结果自带的合计位承担（见 view.totals）。
- * 「对照 × 合计」「年初归零 × 跨日历年合计」这类组合在这条轴上不可表达。
- * 内部 grain 保留 total 档：单月窗口解析为整段单桶，合计腿按它求值，不对外开放。
+ * 期间窗口的序列粒度，是窗口自身的一部分。整段合计由结果自带的合计位承担（见 view.totals），
+ * 不是一档粒度。内部 grain 的 total 档只给单月窗口、合计腿与记录投影，不对外开放。
  */
-export const TIME_DISPLAY_CHOICES = ["year", "month"] as const;
-export type TimeDisplayChoice = (typeof TIME_DISPLAY_CHOICES)[number];
+export const SERIES_GRAINS = ["year", "month"] as const;
+export type SeriesGrain = (typeof SERIES_GRAINS)[number];
 
 export const TIME_RANGE_INPUT = z
   .object({
@@ -57,7 +56,7 @@ export const TIME_INPUT = z
     range: TIME_RANGE_INPUT.optional().describe("连续业务月份范围"),
     last: TIME_LAST_INPUT.optional().describe(
       "相对窗口：以锚点（cutoff，省略即 actual_through）为终点回看近 N 月或近 N 个日历年，" +
-        "随数据推进自动滚动；省略结果粒度时 months 按月、years 按年呈现",
+        "随数据推进自动滚动",
     ),
     grain: z.enum(TIME_GRAINS).optional().describe("结果按总计、年或月呈现"),
     compare: z
@@ -101,12 +100,15 @@ export const TIME_INPUT = z
 export type TimeInput = z.infer<typeof TIME_INPUT>;
 export type TimeCompareInput = z.infer<typeof TIME_COMPARE_INPUT>;
 
+const SERIES_GRAIN_FIELD = z
+  .enum(SERIES_GRAINS)
+  .describe("期间按年还是按月成序列；整段合计恒由结果的合计位给出，不在这里表达");
+
 /**
- * Agent 与产品界面共用的业务时间意图；三个字段各自的取值与冻结性见 docs/time_contract.md §1。
- * 冻结由窗口种类本身承载，不靠额外的截止字段。
- * display 是可省略的结果显示方式，comparison 是按需启用的分析能力。
- * 指标跨桶求和、平均、取期末或重算仍由模型 time_contract 决定。物理 Planner 只消费
- * compileTimeIntent 的内部坐标产物。
+ * Agent 与产品界面共用的业务时间意图；取值与冻结性见 docs/time_contract.md §1。
+ * 单月窗口是一个时点、只有一个结果；期间窗口必带序列粒度，服务端不推导。
+ * 冻结由窗口种类本身承载，不靠额外的截止字段。指标跨桶求和、平均、取期末或重算仍由
+ * 模型 time_contract 决定。物理 Planner 只消费 compileTimeIntent 的内部坐标产物。
  */
 export const TIME_WINDOW_INPUT = z.discriminatedUnion("kind", [
   z
@@ -119,12 +121,13 @@ export const TIME_WINDOW_INPUT = z.discriminatedUnion("kind", [
         .describe("固定观察月份；省略时使用所选数据源共同具备的最新月份"),
     })
     .strict(),
-  z.object({ kind: z.literal("year_to_date") }).strict(),
+  z.object({ kind: z.literal("year_to_date"), grain: SERIES_GRAIN_FIELD }).strict(),
   z
     .object({
       kind: z.literal("trailing"),
       count: z.number().int().min(1).max(60),
       unit: z.enum(["month", "year"]),
+      grain: SERIES_GRAIN_FIELD,
     })
     .strict(),
   z
@@ -132,6 +135,7 @@ export const TIME_WINDOW_INPUT = z.discriminatedUnion("kind", [
       kind: z.literal("range"),
       from: z.string().regex(YEAR_MONTH),
       to: z.string().regex(YEAR_MONTH),
+      grain: SERIES_GRAIN_FIELD,
     })
     .strict(),
 ]);
@@ -178,16 +182,9 @@ export const TIME_COMPARISON_INPUT = z.discriminatedUnion("kind", [
 export const TIME_INTENT_INPUT = z
   .object({
     window: TIME_WINDOW_INPUT.describe(
-      "观察时间：最新或固定月份、年初至今、回看近 N 月/年，或明确的起止月份；" +
-        "相对窗口随数据推进滚动，需要冻结时用明确的起止月份表达",
+      "观察时间：单个月份得到一个结果；年初至今、回看近 N 月/年或明确的起止月份是期间，" +
+        "按所带的 grain 成序列。相对窗口随数据推进滚动，需要冻结时用明确的起止月份表达",
     ),
-    display: z
-      .enum(TIME_DISPLAY_CHOICES)
-      .optional()
-      .describe(
-        "可选序列粒度：month 或 year；省略时按窗口和指标自动选择。" +
-          "整段时间的合计恒由结果的合计位给出，不必也不能在这里要求",
-      ),
     comparison: TIME_COMPARISON_INPUT.optional().describe(
       "可选时间对比；上一等长期间、去年同期，或明确的单一自定义对照窗口",
     ),
@@ -232,27 +229,23 @@ export type TimeIntent = z.infer<typeof TIME_INTENT_INPUT>;
 /** 公开业务时间 → Planner 私有坐标；这是跨层翻译的唯一入口。 */
 export function compileTimeIntent(time: TimeIntent): TimeInput {
   const business = parseTimeIntent(time);
-  const grain = business.display;
   let primary: TimeInput;
   if (business.window.kind === "current_month") {
-    primary = {
-      ...(business.window.month ? { cutoff: business.window.month } : {}),
-      ...(grain ? { grain } : {}),
-    };
+    primary = business.window.month ? { cutoff: business.window.month } : {};
   } else if (business.window.kind === "year_to_date") {
-    primary = { last: { years: 1 }, ...(grain ? { grain } : {}) };
+    primary = { last: { years: 1 }, grain: business.window.grain };
   } else if (business.window.kind === "trailing") {
     primary = {
       last:
         business.window.unit === "month"
           ? { months: business.window.count }
           : { years: business.window.count },
-      ...(grain ? { grain } : {}),
+      grain: business.window.grain,
     };
   } else {
     primary = {
       range: { from: business.window.from, to: business.window.to },
-      ...(grain ? { grain } : {}),
+      grain: business.window.grain,
     };
   }
 
@@ -341,19 +334,8 @@ export function expandTimeCompare(time: TimeInput, defaultCutoff?: string): Time
 }
 
 /**
- * 相对窗口省略结果粒度时的默认：months 按月；years 只有跨过多个日历年才按年，
- * 单个年桶按月。只对无业务分组的结果成立。
- */
-function lastDefaultGrain(time: TimeInput): TimeOutputGrain | undefined {
-  if (!time.last) return undefined;
-  if ("months" in time.last) return "month";
-  return time.last.years > 1 ? "year" : "month";
-}
-
-/**
  * 把相对窗口 {last} 展开为绝对 range：锚点＝主 cutoff，省略时用 defaultCutoff（服务端
  * actual_through）。months 回看 N 个自然月至锚点，years 回看至 (锚点年-(N-1)) 年 1 月。
- * 默认结果粒度仍由原始 last 单位在 resolveTimeOutputGrain 中决定；展开本身只落定坐标。
  * 无锚点可用时（浏览器预览无 actual_through）保留相对形态。展开顺序恒为窗口先于对照，
  * 相对对照因此直接作用在展开后的 range 上。
  */
@@ -419,35 +401,22 @@ function duplicateOutputBucket(
 }
 
 /**
- * 意图层与物理时间编译层共用的结果粒度规则。对照窗口在最终时间键上必须互斥，
- * 否则相同行无法判断属于哪一个业务坐标。省略主截止月且带对照时恒按月输出：
- * 浏览器规划器拿不到 actual_through，必须与服务端同解。
- *
- * 省略粒度时的默认逐形态列在 docs/time_contract.md §1 的表里，本函数是那张表的唯一实现。
- * 内部 grain 可显式要求 total（合计腿、记录投影都这么用），带对照时拒绝：合计没有时间键。
+ * 意图层与物理时间编译层共用的结果粒度规则。省略 grain 即整段单桶：公开意图只有单月窗口
+ * 会这样，合计腿与记录投影也这么用。对照窗口在最终时间键上必须互斥，否则相同行无法判断
+ * 属于哪一个业务坐标；单月带对照时按年或按月给键，省略主截止月时恒按月：浏览器规划器
+ * 拿不到 actual_through，必须与服务端同解。
  */
-export function resolveTimeOutputGrain(
-  time: TimeInput,
-  defaultCutoff?: string,
-  opts: { defaultOutput?: "series" | "total" } = {},
-): TimeOutputGrain {
+export function resolveTimeOutputGrain(time: TimeInput, defaultCutoff?: string): TimeOutputGrain {
   const windowed = expandTimeWindow(time, defaultCutoff);
   const coordinates = outputCoordinates(expandTimeCompare(windowed, defaultCutoff), defaultCutoff);
-  const seriesDefault = opts.defaultOutput !== "total";
-  const requested = windowed.grain ?? (seriesDefault ? lastDefaultGrain(time) : undefined);
-  if (coordinates.length === 1) {
-    return requested ?? (windowed.range && seriesDefault ? "month" : "total");
-  }
+  const requested = windowed.grain;
+  if (coordinates.length === 1) return requested ?? "total";
   if (requested === "total") {
     throw new Error("存在对照时间时不能合并为无时间标识的总计，请改为按年或按月呈现");
   }
   const grain =
     requested ??
-    (windowed.range || !windowed.cutoff
-      ? "month"
-      : duplicateOutputBucket(coordinates, "year")
-        ? "month"
-        : "year");
+    (!windowed.cutoff ? "month" : duplicateOutputBucket(coordinates, "year") ? "month" : "year");
   const duplicate = duplicateOutputBucket(coordinates, grain);
   if (duplicate) {
     const label = grain === "year" ? `${duplicate} 年` : duplicate;
@@ -524,55 +493,19 @@ export function primaryTimeRange(time: TimeIntent, latest: string): { from: stri
   return { from: cutoff, to: cutoff };
 }
 
-/** 按月定义的指标遇到跨月窗口：省略显示方式时服务端隐式按月返回（compatibleTimeGrain 同规则）。 */
-export function requiresMonthlyDisplay(
+/**
+ * 各序列粒度在当前窗口下不可用的理由；空表示全部可用。唯一规则：按月定义 × 跨月 →
+ * 镜像 compatibleTimeGrain。年初归零由合计位的终点降级承担（totalPeriodOf），不在本表内。
+ */
+export function seriesGrainIssues(
   time: TimeIntent,
   capabilities: TimeCapabilities,
   latest: string,
-): boolean {
-  if (capabilities.multi_month_display !== "month") return false;
-  const range = primaryTimeRange(time, latest);
-  return range.from !== range.to;
-}
-
-/**
- * 该意图最终会得到的结果粒度：省略显示方式时按窗口与指标能力推导，与服务端一致——
- * 服务端对「按月定义 × 跨月 × 未显式指定」隐式降为按月（compatibleTimeGrain 的非显式分支），
- * 其余情形由 resolveTimeOutputGrain 决定。
- */
-export function resolvedTimeDisplay(
-  time: TimeIntent,
-  latest: string,
-  capabilities: TimeCapabilities = {},
-  hasBusinessGrouping = false,
-): TimeOutputGrain {
-  if (time.display === undefined && requiresMonthlyDisplay(time, capabilities, latest)) {
-    return "month";
-  }
-  const grain = resolveTimeOutputGrain(compileTimeIntent(time), latest, {
-    defaultOutput: hasBusinessGrouping ? "total" : "series",
-  });
-  if (time.display === undefined && grain === "total" && capabilities.year_scoped) {
-    const { from, to } = primaryTimeRange(time, latest);
-    // 年初归零指标跨日历年没有单一合计：服务端隐式降为按年（compatibleYearScopedGrain）。
-    if (from.slice(0, 4) !== to.slice(0, 4)) return "year";
-  }
-  return grain;
-}
-
-/**
- * 各显示档在当前窗口下不可用的理由；空表示全部可用。唯一规则：按月定义 × 跨月 →
- * 镜像 compatibleTimeGrain 的显式分支。年初归零由合计位的终点降级承担（totalPeriodOf），
- * 不在本表内。
- */
-export function timeDisplayIssues(
-  time: TimeIntent,
-  capabilities: TimeCapabilities,
-  latest: string,
-): Partial<Record<TimeDisplayChoice, string>> {
-  const issues: Partial<Record<TimeDisplayChoice, string>> = {};
-  if (requiresMonthlyDisplay(time, capabilities, latest)) {
-    issues.year = "所选指标按月定义；跨月范围会自动按月返回。";
+): Partial<Record<SeriesGrain, string>> {
+  const issues: Partial<Record<SeriesGrain, string>> = {};
+  if (capabilities.multi_month_display === "month") {
+    const range = primaryTimeRange(time, latest);
+    if (range.from !== range.to) issues.year = "所选指标按月定义；跨月期间只能按月呈现。";
   }
   return issues;
 }

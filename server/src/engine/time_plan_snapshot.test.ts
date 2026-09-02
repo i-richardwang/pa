@@ -112,8 +112,8 @@ const TIME_INPUTS: Record<string, TimeInput> = {
   range_total: { range: { from: "2026-01", to: "2026-06" }, grain: "total" },
   range_total_cross_year: { range: { from: "2025-01", to: "2026-06" }, grain: "total" },
   range_total_single_month: { range: { from: "2026-06", to: "2026-06" }, grain: "total" },
-  last_months: { cutoff: "2026-07", last: { months: 12 } },
-  last_years: { cutoff: "2026-07", last: { years: 3 } },
+  last_months: { cutoff: "2026-07", last: { months: 12 }, grain: "month" },
+  last_years: { cutoff: "2026-07", last: { years: 3 }, grain: "year" },
   compare_cutoff: { cutoff: "2026-06", compare: [{ cutoff: "2025-06" }] },
   compare_cutoff_years_ago: { cutoff: "2026-06", compare: [{ years_ago: 1 }] },
   compare_range_month: {
@@ -127,12 +127,13 @@ const TIME_INPUTS: Record<string, TimeInput> = {
     grain: "year",
   },
   // 省略锚点：窗口与相对对照的锚点取服务端 actual_through，是报告滚动语义的默认形态。
-  last_months_default_anchor: { last: { months: 12 } },
-  last_years_default_anchor: { last: { years: 3 } },
+  last_months_default_anchor: { last: { months: 12 }, grain: "month" },
+  last_years_default_anchor: { last: { years: 3 }, grain: "year" },
   compare_years_ago_default_anchor: { compare: [{ years_ago: 1 }] },
   last_months_compare_years_ago_default_anchor: {
     last: { months: 12 },
     compare: [{ years_ago: 1 }],
+    grain: "month",
   },
 };
 

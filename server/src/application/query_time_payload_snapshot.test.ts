@@ -104,7 +104,7 @@ const TIME_INPUTS: Record<string, TimeInput> = {
   range_total: { range: { from: "2026-01", to: "2026-06" }, grain: "total" },
   range_total_cross_year: { range: { from: "2025-01", to: "2026-06" }, grain: "total" },
   compare_cutoff: { cutoff: "2026-06", compare: [{ cutoff: "2025-06" }] },
-  last_years: { cutoff: "2026-07", last: { years: 3 } },
+  last_years: { cutoff: "2026-07", last: { years: 3 }, grain: "year" },
 };
 
 async function deliverTimeContract(measures: string[], time: TimeInput): Promise<string> {

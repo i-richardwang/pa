@@ -29,10 +29,13 @@ export async function createFormalMetricEvalRuntime() {
   const context = await cube.timeContext();
 
   async function execute(measures: string[], timeView?: string) {
-    const plan = planMetricQuery({ measures }, { cutoff: context.dataAsOf }, context, views, {
-      defaultOutput: "total",
-      ...(timeView ? { timeView } : {}),
-    });
+    const plan = planMetricQuery(
+      { measures },
+      { cutoff: context.dataAsOf },
+      context,
+      views,
+      timeView ? { timeView } : {},
+    );
     for (const leaf of metricPlanLeafQueries(plan)) {
       const prefixes = new Set(
         [...(leaf.query.measures ?? []), ...(leaf.query.dimensions ?? [])].map(

@@ -200,14 +200,6 @@ describe("TimePlan 业务时间坐标", () => {
       granularity: "month",
       dateRange: ["2026-04-01", "2026-06-30"],
     });
-    expect(
-      planTimeQuery(
-        { measures: [measure] },
-        { range: { from: "2026-04", to: "2026-06" } },
-        context,
-        views,
-      ).businessTime.outputGrain,
-    ).toBe("month");
     expect(() =>
       planTimeQuery(
         { measures: [measure] },
@@ -392,7 +384,7 @@ describe("TimePlan 业务时间坐标", () => {
   });
 
   test("相对窗口 last:{months} 与等价绝对 range 逐字节一致，随锚点滚动", () => {
-    const relative = TIME_INPUT.parse({ cutoff: "2026-07", last: { months: 12 } });
+    const relative = TIME_INPUT.parse({ cutoff: "2026-07", last: { months: 12 }, grain: "month" });
     const absolute = TIME_INPUT.parse({
       range: { from: "2025-08", to: "2026-07" },
       grain: "month",
@@ -429,7 +421,7 @@ describe("TimePlan 业务时间坐标", () => {
   });
 
   test("相对窗口 last:{years} 历年口径与等价绝对 range 逐字节一致", () => {
-    const relative = TIME_INPUT.parse({ cutoff: "2026-07", last: { years: 3 } });
+    const relative = TIME_INPUT.parse({ cutoff: "2026-07", last: { years: 3 }, grain: "year" });
     const absolute = TIME_INPUT.parse({
       range: { from: "2024-01", to: "2026-07" },
       grain: "year",
@@ -472,7 +464,7 @@ describe("TimePlan 业务时间坐标", () => {
   });
 
   test("省略锚点的 last 落到 actual_through 并随数据滚动", () => {
-    const relative = TIME_INPUT.parse({ last: { months: 6 } });
+    const relative = TIME_INPUT.parse({ last: { months: 6 }, grain: "month" });
     const plan = planTimeQuery(
       { measures: ["test_people_metrics.active_employee_count"] },
       relative,

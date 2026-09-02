@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   TIME_INTENT_INPUT,
   compileTimeIntent,
-  resolvedTimeDisplay,
   resolveTimeOutputGrain,
   type TimeCapabilities,
   type TimeIntent,
@@ -16,13 +15,14 @@ import {
   defaultCustomComparisonWindow,
   previousPeriodLabel,
   previousYearLabel,
+  seriesGrainOf,
   setTimeComparison,
   summarizeResolvedTime,
   timeChangeIssue,
   TimeBar,
-  toggleDisplayChoice,
   WindowPopup,
   withCurrent,
+  withSeriesGrain,
 } from "./time_editor";
 
 const MONTHLY: TimeCapabilities = { multi_month_display: "month" };
@@ -46,21 +46,34 @@ const segmentLabels = (html: string) =>
     (match) => match[1] ?? "",
   );
 
-test("时间栏三件齐备：观察时间、显示方式、对比，单月窗口解析为一个结果", () => {
+test("单月窗口是一个时点：只有观察时间与对比，没有粒度分段，解析为一个结果", () => {
   const out = renderBar({ window: { kind: "current_month" } });
   expect(out).toContain('aria-label="观察时间"');
-  expect(out).toContain('aria-label="显示方式"');
   expect(out).toContain('aria-label="添加对比"');
+  expect(out).not.toContain('aria-label="序列粒度"');
+  expect(segmentLabels(out)).toEqual([]);
   expect(out).toContain("最新月份");
   expect(summarizeResolvedTime({ window: { kind: "current_month" } }, "2026-07")).toBe(
     "主期 2026年7月 · 一个结果 · 随数据更新",
   );
 });
 
-test("解析摘要忠实回显主期、对比期与是否随数据滚动", () => {
+test("期间窗口带粒度分段，亮的恒是窗口自带的粒度", () => {
+  const months = renderBar({ window: DEFAULT_TIME_WINDOW.trailing_months });
+  expect(segmentLabels(months)).toEqual(["按月", "按年"]);
+  expect(segmentAttrs(months, "按月")).toContain('aria-pressed="true"');
+  const years = renderBar({ window: DEFAULT_TIME_WINDOW.trailing_years });
+  expect(segmentAttrs(years, "按年")).toContain('aria-pressed="true"');
+  const monthlyYears = renderBar({
+    window: { kind: "trailing", count: 3, unit: "year", grain: "month" },
+  });
+  expect(segmentAttrs(monthlyYears, "按月")).toContain('aria-pressed="true"');
+  expect(segmentAttrs(monthlyYears, "按年")).toContain('aria-pressed="false"');
+});
+
+test("解析摘要忠实回显主期、粒度、对比期与是否随数据滚动", () => {
   const rolling: TimeIntent = {
-    window: { kind: "trailing", count: 6, unit: "month" },
-    display: "month",
+    window: { kind: "trailing", count: 6, unit: "month", grain: "month" },
     comparison: { kind: "previous_period" },
   };
   expect(summarizeResolvedTime(rolling, "2026-07")).toBe(
@@ -68,31 +81,34 @@ test("解析摘要忠实回显主期、对比期与是否随数据滚动", () =>
   );
   // 冻结只由绝对表达式承载：同一段时间写成起止月即与数据推进脱钩。
   const frozen: TimeIntent = {
-    window: { kind: "range", from: "2026-01", to: "2026-06" },
-    display: "month",
+    window: { kind: "range", from: "2024-01", to: "2026-06", grain: "year" },
   };
   expect(summarizeResolvedTime(frozen, "2026-07")).toBe(
-    "主期 2026年1月—2026年6月 · 每月一个结果 · 固定时间",
+    "主期 2024年1月—2026年6月 · 每年一个结果 · 固定时间",
   );
 });
 
-test("按月定义的指标在跨月自动模式下由服务端约束解析为按月", () => {
-  const time: TimeIntent = {
-    window: { kind: "range", from: "2026-01", to: "2026-07" },
-  };
-  expect(resolvedTimeDisplay(time, "2026-07", MONTHLY)).toBe("month");
-  expect(segmentAttrs(renderBar(time, "2026-07", MONTHLY), "按月")).toContain(
-    'aria-pressed="true"',
-  );
+test("粒度只能改不能撤：期间窗口换粒度，单月窗口不受影响", () => {
+  const years: TimeIntent = { window: DEFAULT_TIME_WINDOW.trailing_years };
+  expect(withSeriesGrain(years, "month").window).toEqual({
+    kind: "trailing",
+    count: 3,
+    unit: "year",
+    grain: "month",
+  });
+  const single: TimeIntent = { window: { kind: "current_month" } };
+  expect(withSeriesGrain(single, "month")).toEqual(single);
+  expect(seriesGrainOf(single.window)).toBeUndefined();
+  expect(seriesGrainOf({ kind: "year_to_date", grain: "month" })).toBe("month");
 });
 
 test("切换主窗口时显式说明被调整的对比选择", () => {
   const yearToDate = adjustTimeWindow(
     {
-      window: { kind: "trailing", count: 6, unit: "month" },
+      window: { kind: "trailing", count: 6, unit: "month", grain: "month" },
       comparison: { kind: "previous_period" },
     },
-    { kind: "year_to_date" },
+    { kind: "year_to_date", grain: "month" },
   );
   expect(yearToDate.time.comparison).toEqual({ kind: "previous_year" });
   expect(yearToDate.adjustment).toContain("已将对比改为“去年同期”");
@@ -105,33 +121,34 @@ test("切换主窗口时显式说明被调整的对比选择", () => {
         window: { kind: "current_month", month: "2025-07" },
       },
     },
-    { kind: "range", from: "2026-01", to: "2026-07" },
+    { kind: "range", from: "2026-01", to: "2026-07", grain: "month" },
   );
   expect(custom.time.comparison).toBeUndefined();
   expect(custom.adjustment).toContain("已移除自定义对照");
 });
 
-test("对比只换对比：显示方式是序列粒度，不受对照期影响", () => {
+test("对比只换对比，窗口与粒度不动", () => {
   const next = setTimeComparison(
-    { window: { kind: "current_month" }, display: "month" },
+    { window: { kind: "year_to_date", grain: "year" } },
     { kind: "previous_period" },
   );
   expect(next).toEqual({
-    window: { kind: "current_month" },
-    display: "month",
+    window: { kind: "year_to_date", grain: "year" },
     comparison: { kind: "previous_period" },
   });
-  expect(setTimeComparison(next)).toEqual({ window: { kind: "current_month" }, display: "month" });
+  expect(setTimeComparison(next)).toEqual({ window: { kind: "year_to_date", grain: "year" } });
 });
 
 test("对比文案随主窗口说人话", () => {
   expect(previousPeriodLabel({ kind: "current_month" })).toBe("上月");
   expect(previousYearLabel({ kind: "current_month" })).toBe("去年同月");
-  expect(previousPeriodLabel({ kind: "trailing", count: 6, unit: "month" })).toBe("上一等长期间");
-  expect(previousYearLabel({ kind: "year_to_date" })).toBe("去年同期");
+  expect(previousPeriodLabel({ kind: "trailing", count: 6, unit: "month", grain: "month" })).toBe(
+    "上一等长期间",
+  );
+  expect(previousYearLabel({ kind: "year_to_date", grain: "month" })).toBe("去年同期");
 
   const out = renderBar({
-    window: { kind: "year_to_date" },
+    window: { kind: "year_to_date", grain: "month" },
     comparison: { kind: "previous_year" },
   });
   expect(out).toContain("与去年同期比较");
@@ -139,7 +156,7 @@ test("对比文案随主窗口说人话", () => {
 
 test("自定义对照默认为主窗口整体回移一年", () => {
   const time: TimeIntent = {
-    window: { kind: "range", from: "2026-01", to: "2026-07" },
+    window: { kind: "range", from: "2026-01", to: "2026-07", grain: "month" },
   };
   expect(defaultCustomComparisonWindow(time, "2026-07")).toEqual({
     kind: "range",
@@ -148,37 +165,17 @@ test("自定义对照默认为主窗口整体回移一年", () => {
   });
 });
 
-test("时间栏三控件内联在场：粒度只有按月/按年两档，不开浮层即一击可达", () => {
-  const out = renderBar({ window: { kind: "current_month" } });
-  expect(out).toContain('aria-label="观察时间"');
-  expect(out).toContain('aria-label="添加对比"');
-  expect(segmentLabels(out)).toEqual(["按月", "按年"]);
-  expect(out).not.toContain("自动");
-  expect(out).toContain("最新月份");
-});
-
-test("分段亮的是实际生效的粒度：省略 display 时按窗口推导，整段单桶时两档都不亮", () => {
-  const single = renderBar({ window: { kind: "current_month" } });
-  expect(segmentAttrs(single, "按月")).toContain('aria-pressed="false"');
-  expect(segmentAttrs(single, "按年")).toContain('aria-pressed="false"');
-  const months = renderBar({ window: { kind: "trailing", count: 12, unit: "month" } });
-  expect(segmentAttrs(months, "按月")).toContain('aria-pressed="true"');
-  const years = renderBar({ window: { kind: "trailing", count: 3, unit: "year" } });
-  expect(segmentAttrs(years, "按年")).toContain('aria-pressed="true"');
-  const explicit = renderBar({
-    window: { kind: "trailing", count: 3, unit: "year" },
-    display: "month",
-  });
-  expect(segmentAttrs(explicit, "按月")).toContain('aria-pressed="true"');
-});
-
-test("期间浮层把两种回看口径分节，并在每行印出实际起止月", () => {
+test("期间浮层把两种回看口径分节，每行印出实际起止月，选几年就按年、几个月就按月", () => {
+  const picked: TimeIntent["window"][] = [];
   const out = renderToStaticMarkup(
     <WindowPopup
       latest="2026-07"
-      onChange={() => true}
+      onChange={(time) => {
+        picked.push(time.window);
+        return true;
+      }}
       onPick={() => {}}
-      time={{ window: { kind: "trailing", count: 2, unit: "year" } }}
+      time={{ window: { kind: "trailing", count: 2, unit: "year", grain: "year" } }}
     />,
   );
   const labels = [...out.matchAll(/data-slot="popup-title"[^>]*>([^<]*)</g)].map((m) => m[1]);
@@ -200,12 +197,13 @@ test("期间浮层把两种回看口径分节，并在每行印出实际起止�
     "最近 3 年",
     "最近 5 年",
   ]);
+  expect(picked).toEqual([]);
 });
 
 test("对照期在某一粒度下与主期撞桶：那一档点击前就灰，理由与落值闸同句", () => {
   const out = renderBar(
     {
-      window: { kind: "trailing", count: 6, unit: "month" },
+      window: { kind: "trailing", count: 6, unit: "month", grain: "month" },
       comparison: { kind: "previous_period" },
     },
     "2026-08",
@@ -216,8 +214,7 @@ test("对照期在某一粒度下与主期撞桶：那一档点击前就灰，�
   expect(
     timeChangeIssue(
       {
-        window: { kind: "trailing", count: 6, unit: "month" },
-        display: "year",
+        window: { kind: "trailing", count: 6, unit: "month", grain: "year" },
         comparison: { kind: "previous_period" },
       },
       "2026-08",
@@ -230,7 +227,6 @@ test("对比浮层：会撞桶的对照档点击前就灰，可用的照常", ()
     renderToStaticMarkup(
       <ComparisonPopup
         capabilities={{}}
-        grouped={false}
         latest="2026-08"
         onChange={() => true}
         onPick={() => {}}
@@ -242,45 +238,40 @@ test("对比浮层：会撞桶的对照档点击前就灰，可用的照常", ()
     if (!match) throw new Error(`找不到行「${label}」`);
     return match[1] ?? "";
   };
-  const years = html({ window: { kind: "trailing", count: 5, unit: "year" } });
+  const years = html({ window: { kind: "trailing", count: 5, unit: "year", grain: "year" } });
   expect(rowAttrs(years, "去年同期")).toContain('aria-disabled="true"');
   expect(rowAttrs(years, "上一等长期间")).not.toContain("aria-disabled");
-  const ytd = html({ window: { kind: "year_to_date" } });
+  const ytd = html({ window: { kind: "year_to_date", grain: "month" } });
   expect(rowAttrs(ytd, "去年同期")).not.toContain("aria-disabled");
 });
 
-test("单月对上月：两期同落一年，按年灰、按月可用；换去年同月则两档都可用", () => {
-  const sameYear = renderBar({
-    window: { kind: "current_month" },
-    comparison: { kind: "previous_period" },
-  });
-  expect(segmentAttrs(sameYear, "按年")).toContain('aria-disabled="true"');
-  expect(segmentAttrs(sameYear, "按月")).toContain('aria-disabled="false"');
-  const lastYear = renderBar({
-    window: { kind: "current_month" },
-    comparison: { kind: "previous_year" },
-  });
-  for (const label of ["按月", "按年"]) {
-    expect(segmentAttrs(lastYear, label)).toContain('aria-disabled="false"');
+test("单月对上月与去年同月都不需要粒度：时间键由对照坐标决定，落值闸放行", () => {
+  for (const kind of ["previous_period", "previous_year"] as const) {
+    const time: TimeIntent = { window: { kind: "current_month" }, comparison: { kind } };
+    expect(segmentLabels(renderBar(time))).toEqual([]);
+    expect(timeChangeIssue(time, "2026-07")).toBeUndefined();
   }
 });
 
 test("按月定义的指标跨月时分段只留按月", () => {
   const out = renderBar(
-    { window: { kind: "range", from: "2026-01", to: "2026-07" } },
+    { window: { kind: "range", from: "2026-01", to: "2026-07", grain: "month" } },
     "2026-07",
     MONTHLY,
   );
   expect(segmentAttrs(out, "按年")).toContain('aria-disabled="true"');
   expect(segmentAttrs(out, "按月")).toContain('aria-disabled="false"');
   expect(
-    segmentAttrs(renderBar({ window: { kind: "range", from: "2026-01", to: "2026-07" } }), "按年"),
+    segmentAttrs(
+      renderBar({ window: { kind: "range", from: "2026-01", to: "2026-07", grain: "month" } }),
+      "按年",
+    ),
   ).toContain('aria-disabled="false"');
 });
 
 test("年初归零的指标跨日历年时两档全部可用", () => {
   const crossYear = renderBar(
-    { window: { kind: "range", from: "2024-01", to: "2026-07" } },
+    { window: { kind: "range", from: "2024-01", to: "2026-07", grain: "year" } },
     "2026-07",
     YEAR_SCOPED,
   );
@@ -290,14 +281,13 @@ test("年初归零的指标跨日历年时两档全部可用", () => {
   }
 });
 
-test("能力卡不成立的显示方式在写入草稿前被拦下，与服务端拒绝同因", () => {
+test("能力卡不成立的粒度在写入草稿前被拦下，与服务端拒绝同因", () => {
   const crossMonthYear: TimeIntent = {
-    window: { kind: "range", from: "2026-01", to: "2026-08" },
-    display: "year",
+    window: { kind: "range", from: "2026-01", to: "2026-08", grain: "year" },
   };
   expect(timeChangeIssue(crossMonthYear, "2026-08", MONTHLY)).toContain("按月定义");
   expect(
-    timeChangeIssue({ ...crossMonthYear, display: "month" }, "2026-08", MONTHLY),
+    timeChangeIssue(withSeriesGrain(crossMonthYear, "month"), "2026-08", MONTHLY),
   ).toBeUndefined();
   expect(timeChangeIssue(crossMonthYear, "2026-08")).toBeUndefined();
 });
@@ -308,22 +298,10 @@ test("数据截至月不可用时拒绝编辑，不以浏览器本地月份猜�
   expect(out).not.toContain('aria-label="观察时间"');
 });
 
-test("显示方式取档：点别的档显式写入，再点已指定的档剥掉 display 键，推导出的档再点不动", () => {
-  const single: TimeIntent = { window: { kind: "current_month" } };
-  expect(toggleDisplayChoice(single, "month", undefined)).toEqual({ ...single, display: "month" });
-  expect(toggleDisplayChoice({ ...single, display: "month" }, "year", "month")).toEqual({
-    ...single,
-    display: "year",
-  });
-  expect(toggleDisplayChoice({ ...single, display: "year" }, "year", "year")).toEqual(single);
-  expect(toggleDisplayChoice(single, "month", "month")).toBeUndefined();
-});
-
 test("会产生重叠结果桶的对比在写入草稿前被拦截", () => {
   const issue = timeChangeIssue(
     {
-      window: { kind: "trailing", count: 5, unit: "year" },
-      display: "year",
+      window: { kind: "trailing", count: 5, unit: "year", grain: "year" },
       comparison: { kind: "previous_year" },
     },
     "2026-07",
@@ -351,7 +329,7 @@ test("三种默认窗口产生的业务坐标都能组成权威 AnalysisSpec", (
 
 // 编辑器只该产出契约合法、结果桶互不重叠的时间坐标。三种默认窗口覆盖 GUI 的全部出口，
 // 逐个跑契约校验与唯一编译点的结果粒度解析，锁死「不生产会撞桶/非法坐标」这条不变量。
-test("三种默认窗口都通过契约校验并解析出预期结果粒度", () => {
+test("三种默认窗口都通过契约校验，粒度就是窗口自带的那一档", () => {
   const current = { window: DEFAULT_TIME_WINDOW.current_month };
   const monthly = { window: DEFAULT_TIME_WINDOW.trailing_months };
   const yearly = { window: DEFAULT_TIME_WINDOW.trailing_years };
@@ -374,17 +352,18 @@ test("默认窗口一律省略锚点走相对窗口，随数据滚动而非冻�
     kind: "trailing",
     count: 12,
     unit: "month",
+    grain: "month",
   });
   expect(DEFAULT_TIME_WINDOW.trailing_years).toEqual({
     kind: "trailing",
     count: 3,
     unit: "year",
+    grain: "year",
   });
   expect(DEFAULT_TIME_WINDOW.current_month).toEqual({ kind: "current_month" });
   // 同期口径与主窗口整体错开一年，随 actual_through 滚动。
   const aligned = {
-    window: { kind: "year_to_date" as const },
-    display: "year" as const,
+    window: { kind: "year_to_date" as const, grain: "year" as const },
     comparison: { kind: "previous_year" as const },
   };
   expect(() => TIME_INTENT_INPUT.parse(aligned)).not.toThrow();

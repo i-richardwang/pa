@@ -37,12 +37,12 @@ const sameJson = (left: unknown, right: unknown): boolean =>
 
 /**
  * 各种窗口的默认取值：空白分析、换窗口种类、看板时间覆盖都从这里取。
- * 相对窗口不带端点，随数据滚动。
+ * 相对窗口不带端点，随数据滚动；序列粒度是窗口的一部分，回看几年就按年、几个月就按月。
  */
 export const DEFAULT_TIME_WINDOW = {
   current_month: { kind: "current_month" },
-  trailing_months: { kind: "trailing", count: 12, unit: "month" },
-  trailing_years: { kind: "trailing", count: 3, unit: "year" },
+  trailing_months: { kind: "trailing", count: 12, unit: "month", grain: "month" },
+  trailing_years: { kind: "trailing", count: 3, unit: "year", grain: "year" },
 } as const satisfies Record<string, TimeIntent["window"]>;
 
 /**

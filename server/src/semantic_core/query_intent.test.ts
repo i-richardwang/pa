@@ -268,7 +268,7 @@ describe("semantic query intent", () => {
         measures: ["measure:counted_units"],
         dimensions: ["dimension:warehouse"],
         time: {
-          window: { kind: "range" as const, from: "2026-01", to: "2026-07" },
+          window: { kind: "range" as const, from: "2026-01", to: "2026-07", grain: "month" },
           comparison: { kind },
         },
       });

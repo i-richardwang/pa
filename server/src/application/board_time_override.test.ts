@@ -8,8 +8,7 @@ const singleView: AnalysisDefinition = {
       id: "result",
       measures: ["active_employee_count"],
       time: {
-        window: { kind: "trailing", count: 6, unit: "month" },
-        display: "month",
+        window: { kind: "trailing", count: 6, unit: "month", grain: "month" },
         comparison: { kind: "previous_year" },
       },
     },
@@ -19,8 +18,12 @@ const singleView: AnalysisDefinition = {
 describe("applyBoardTimeOverride", () => {
   test("单 query view：整体替换 time 并丢弃自身 compare", () => {
     const override = {
-      window: { kind: "trailing" as const, count: 12, unit: "month" as const },
-      display: "month" as const,
+      window: {
+        kind: "trailing" as const,
+        count: 12,
+        unit: "month" as const,
+        grain: "month" as const,
+      },
     };
     const result = applyBoardTimeOverride(singleView, override);
     expect(result.status).toBe("applied");
@@ -43,15 +46,18 @@ describe("applyBoardTimeOverride", () => {
           id: "b",
           measures: ["active_employee_count"],
           time: {
-            window: { kind: "trailing", count: 3, unit: "month" },
-            display: "month",
+            window: { kind: "trailing", count: 3, unit: "month", grain: "month" },
           },
         },
       ],
     };
     const override = {
-      window: { kind: "trailing" as const, count: 3, unit: "year" as const },
-      display: "year" as const,
+      window: {
+        kind: "trailing" as const,
+        count: 3,
+        unit: "year" as const,
+        grain: "year" as const,
+      },
     };
     const result = applyBoardTimeOverride(multi, override);
     expect(result.status).toBe("unsupported");
@@ -70,8 +76,7 @@ describe("applyBoardTimeOverride", () => {
       ],
     };
     const result = applyBoardTimeOverride(derived, {
-      window: { kind: "trailing", count: 12, unit: "month" },
-      display: "month",
+      window: { kind: "trailing", count: 12, unit: "month", grain: "month" },
     });
     expect(result.status).toBe("unsupported");
     expect(result.definition).toBe(derived);

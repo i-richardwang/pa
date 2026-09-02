@@ -138,7 +138,7 @@ try {
           {
             id: "movement",
             measures: [hireRate, turnoverRate],
-            time: { window: { kind: "year_to_date" }, display: "month" },
+            time: { window: { kind: "year_to_date", grain: "month" } },
           },
         ],
       },

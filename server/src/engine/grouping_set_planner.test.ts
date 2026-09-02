@@ -43,9 +43,7 @@ const context = {
 
 function plannedBase(dimensions: string[], filters?: CubeQuery["filters"]) {
   const query = completeHierarchy({ measures: [MEASURE], dimensions, filters }, views).query;
-  const timePlanning = resolveMetricQueryPlanning(query, { last: { years: 2 } }, context, views, {
-    defaultOutput: "total",
-  });
+  const timePlanning = resolveMetricQueryPlanning(query, { last: { years: 2 } }, context, views);
   return {
     query,
     timePlanning,

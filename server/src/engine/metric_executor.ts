@@ -24,7 +24,7 @@ import {
   resolveMetricQueryPlanning,
   type MetricQueryPlan,
 } from "./metric_planner.js";
-import type { ResolvedTimePlanning, TimeOutputDefault } from "./time_plan.js";
+import type { ResolvedTimePlanning } from "./time_plan.js";
 import { isBoundedResultComplete } from "./result_limit.js";
 import { executeBoundedPlanned, executeCompletePlanned } from "./time_executor.js";
 
@@ -63,24 +63,10 @@ export async function prepareMetricQueryExecution(input: {
   views: CubeView[];
   securityContext: CubeSecurityContext;
   timeView?: string;
-  defaultTimeOutput: TimeOutputDefault;
   selection?: TopNSelectionSpec;
 }): Promise<PreparedMetricQueryExecution> {
-  const {
-    cube,
-    query,
-    time,
-    context,
-    views,
-    securityContext,
-    timeView,
-    defaultTimeOutput,
-    selection,
-  } = input;
-  const timePlanning = resolveMetricQueryPlanning(query, time, context, views, {
-    defaultOutput: defaultTimeOutput,
-    ...(timeView ? { timeView } : {}),
-  });
+  const { cube, query, time, context, views, securityContext, timeView, selection } = input;
+  const timePlanning = resolveMetricQueryPlanning(query, time, context, views, timeView);
   if (!selection) {
     return {
       plan: planMetricQueryWithPlanning(query, timePlanning, views, timeView),

@@ -22,7 +22,6 @@ import {
   type PlannedQuery,
   type PlannedQueryLeg,
   type ResolvedTimePlanning,
-  type TimeOutputDefault,
   type TimeEvalForm,
 } from "./time_plan.js";
 
@@ -250,29 +249,22 @@ export function planMetricQuery(
   time: TimeInput | undefined,
   context: TimeContext,
   views: CubeView[],
-  options: {
-    defaultOutput: TimeOutputDefault;
-    timeView?: string;
-    selection?: TopNSelectionSpec;
-  },
+  options: { timeView?: string; selection?: TopNSelectionSpec } = {},
 ): MetricQueryPlan {
-  const planning = resolveMetricQueryPlanning(query, time, context, views, {
-    defaultOutput: options.defaultOutput,
-    ...(options.timeView ? { timeView: options.timeView } : {}),
-  });
+  const planning = resolveMetricQueryPlanning(query, time, context, views, options.timeView);
   return planMetricQueryWithPlanning(query, planning, views, options.timeView, options.selection);
 }
 
 /**
- * 解析一个语义查询视图的业务时间。调用方必须传入用户声明的基础分组查询；同一视图展开的
- * 排名、总体与其他 grouping set 复用返回值，不得再次解释默认粒度。
+ * 解析一个语义查询视图的业务时间。同一视图展开的排名、总体与其他 grouping set 复用返回值，
+ * 不得各自再解析一次。
  */
 export function resolveMetricQueryPlanning(
   query: CubeQuery,
   time: TimeInput | undefined,
   context: TimeContext,
   views: CubeView[],
-  options: { defaultOutput: TimeOutputDefault; timeView?: string },
+  timeView?: string,
 ): ResolvedTimePlanning {
   const { requested, leaves } = metricQueryParts(query, views);
   const synthetic: CubeQuery = {
@@ -282,10 +274,7 @@ export function resolveMetricQueryPlanning(
     limit: undefined,
     offset: undefined,
   };
-  return resolveTimePlanning(synthetic, time, context, views, {
-    defaultOutput: options.defaultOutput,
-    ...(options.timeView ? { preferredView: options.timeView } : {}),
-  });
+  return resolveTimePlanning(synthetic, time, context, views, timeView);
 }
 
 type MetricQueryParts = {

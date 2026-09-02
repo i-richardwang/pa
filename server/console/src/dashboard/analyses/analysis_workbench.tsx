@@ -163,7 +163,6 @@ export function AnalysisWorkbench({
       <TimeBar
         dataAsOf={catalog.data_as_of}
         capabilities={timeCapabilitiesOf(queryView, catalog)}
-        grouped={(queryView.dimensions ?? []).length > 0}
         onChange={(time) => setDraft(setDraftTime(draft, time, catalog))}
         time={queryView.time}
       />

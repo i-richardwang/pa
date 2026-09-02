@@ -369,8 +369,12 @@ const periodQuery = await callTool({
           id: "result",
           measures: [HIRE_COUNT],
           time: {
-            window: { kind: "range", from: `${asOfYear - 2}-01`, to: `${asOfYear - 1}-06` },
-            display: "month",
+            window: {
+              kind: "range",
+              from: `${asOfYear - 2}-01`,
+              to: `${asOfYear - 1}-06`,
+              grain: "month",
+            },
           },
         },
       ],

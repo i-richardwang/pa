@@ -4,8 +4,7 @@
  */
 import { expect, test } from "bun:test";
 import {
-  resolvedTimeDisplay,
-  timeDisplayIssues,
+  seriesGrainIssues,
   totalPeriodOf,
   type TimeCapabilities,
   type TimeIntent,
@@ -95,26 +94,31 @@ function rejection(measureId: string, time: TimeIntent): string | undefined {
 
 const TIMES: { label: string; time: TimeIntent }[] = [
   { label: "单月", time: { window: { kind: "current_month", month: LATEST } } },
-  { label: "年内期间·自动", time: { window: { kind: "range", from: "2026-01", to: "2026-07" } } },
   {
     label: "年内期间·按月",
-    time: { window: { kind: "range", from: "2026-01", to: "2026-07" }, display: "month" },
+    time: { window: { kind: "range", from: "2026-01", to: "2026-07", grain: "month" } },
   },
   {
     label: "年内期间·按年",
-    time: { window: { kind: "range", from: "2026-01", to: "2026-07" }, display: "year" },
+    time: { window: { kind: "range", from: "2026-01", to: "2026-07", grain: "year" } },
   },
-  { label: "跨年期间·自动", time: { window: { kind: "range", from: "2024-01", to: "2026-07" } } },
   {
     label: "跨年期间·按月",
-    time: { window: { kind: "range", from: "2024-01", to: "2026-07" }, display: "month" },
+    time: { window: { kind: "range", from: "2024-01", to: "2026-07", grain: "month" } },
   },
   {
     label: "跨年期间·按年",
-    time: { window: { kind: "range", from: "2024-01", to: "2026-07" }, display: "year" },
+    time: { window: { kind: "range", from: "2024-01", to: "2026-07", grain: "year" } },
   },
-  { label: "近12月", time: { window: { kind: "trailing", count: 12, unit: "month" } } },
-  { label: "今年至今", time: { window: { kind: "year_to_date" } } },
+  {
+    label: "近12月",
+    time: { window: { kind: "trailing", count: 12, unit: "month", grain: "month" } },
+  },
+  {
+    label: "近3年·按月",
+    time: { window: { kind: "trailing", count: 3, unit: "year", grain: "month" } },
+  },
+  { label: "今年至今", time: { window: { kind: "year_to_date", grain: "year" } } },
   {
     label: "单月×上一周期",
     time: {
@@ -147,10 +151,11 @@ test("卡的预测与生产路径的接受/拒绝逐例等价（双向）", () =
     const card = cardOf(measureId);
     for (const { label, time } of TIMES) {
       const at = `${measureId} × ${label}`;
-      const resolved = resolvedTimeDisplay(time, LATEST, card);
-      // 解析为整段单桶（单月窗口）无从违规：能被禁用的只有序列粒度。
+      // 单月窗口没有粒度可选，无从违规。
       const predicted =
-        resolved === "total" ? undefined : timeDisplayIssues(time, card, LATEST)[resolved];
+        time.window.kind === "current_month"
+          ? undefined
+          : seriesGrainIssues(time, card, LATEST)[time.window.grain];
       const actual = rejection(measureId, time);
       if (predicted) predictedRejections.push(at);
       if (actual) actualRejections.push(`${at}：${actual}`);
@@ -167,11 +172,10 @@ test("卡的预测与生产路径的接受/拒绝逐例等价（双向）", () =
 const at = (label: string) => TIMES.find((entry) => entry.label === label)!.time;
 
 test("被拒的正是按月定义指标的越界组合", () => {
-  // 按月定义：跨月显式按年被拒，跨月自动仍放行（服务端隐式按月）。
   expect(rejection("measure:current_month_turnover_rate", at("年内期间·按年"))).toContain(
     "按月定义",
   );
-  expect(rejection("measure:current_month_turnover_rate", at("年内期间·自动"))).toBeUndefined();
+  expect(rejection("measure:current_month_turnover_rate", at("年内期间·按月"))).toBeUndefined();
   expect(rejection("measure:active_employee_count", at("年内期间·按年"))).toBeUndefined();
   expect(rejection("measure:turnover_count", at("跨年期间·按月"))).toBeUndefined();
 });
@@ -179,7 +183,7 @@ test("被拒的正是按月定义指标的越界组合", () => {
 test("年初归零由合计位的终点降级承担，不表现为显示档拒绝", () => {
   // 跨日历年按年/按月均合法；年初归零只影响合计位的覆盖期间。
   expect(rejection("measure:ytd_event_rate", at("跨年期间·按月"))).toBeUndefined();
-  expect(rejection("measure:ytd_event_rate", at("跨年期间·自动"))).toBeUndefined();
+  expect(rejection("measure:ytd_event_rate", at("跨年期间·按年"))).toBeUndefined();
   // 它仍是一位真实能力：整窗合计据此退到终点所在年的年初至今，而不是硬合并跨年。
   const crossYear = { from: "2024-01", to: "2026-07" };
   expect(totalPeriodOf(cardOf("measure:ytd_event_rate"), crossYear)).toEqual({

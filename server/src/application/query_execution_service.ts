@@ -215,8 +215,6 @@ async function executeView(
     views: authViews,
     securityContext: cubeContext,
     timeView: spec.time_view,
-    defaultTimeOutput:
-      (spec.grouping_sets?.base.length ?? spec.dimensions?.length ?? 0) > 0 ? "total" : "series",
     selection: spec.selection,
   });
   const queryPlan = prepared.plan;

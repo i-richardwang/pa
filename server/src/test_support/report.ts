@@ -17,7 +17,6 @@ import {
   type SemanticViewIntent,
 } from "../semantic_core/semantic_analysis.js";
 import {
-  resolveTimeOutputGrain,
   TIME_INTENT_INPUT,
   type TimeInput,
   type TimeIntent,
@@ -63,21 +62,20 @@ function semanticExpression(
 }
 
 /** 测试夹具只把简单物理时间坐标还原为当前语义输入；复杂时间用例直接构造 AnalysisDefinition。 */
-function testTimeIntent(time: TimeInput, hasBusinessGrouping: boolean): TimeIntent {
+function testTimeIntent(time: TimeInput): TimeIntent {
   if (time.last || time.compare) {
     throw new Error("复杂时间测试必须直接使用 TimeIntent 构造语义规格");
   }
-  // 显示方式只有序列粒度；整段单桶时省略 display。
-  const grain =
-    time.grain ??
-    resolveTimeOutputGrain(time, undefined, {
-      defaultOutput: hasBusinessGrouping ? "total" : "series",
+  if (time.range) {
+    if (time.grain !== "year" && time.grain !== "month") {
+      throw new Error("期间夹具必须带序列粒度 year 或 month");
+    }
+    return TIME_INTENT_INPUT.parse({
+      window: { kind: "range", from: time.range.from, to: time.range.to, grain: time.grain },
     });
+  }
   return TIME_INTENT_INPUT.parse({
-    window: time.range
-      ? { kind: "range", from: time.range.from, to: time.range.to }
-      : { kind: "current_month", ...(time.cutoff ? { month: time.cutoff } : {}) },
-    ...(grain === "total" ? {} : { display: grain }),
+    window: { kind: "current_month", ...(time.cutoff ? { month: time.cutoff } : {}) },
   });
 }
 
@@ -138,7 +136,7 @@ export function semanticAnalysisOf(
                 }),
               }
             : {}),
-          time: testTimeIntent(view.time, (view.dimensions ?? []).length > 0),
+          time: testTimeIntent(view.time),
           ...(groupSort ? { group_sort: groupSort } : {}),
         };
       }

@@ -161,10 +161,6 @@ export function createExportService(deps: {
         views: authViews,
         securityContext: cubeContext,
         timeView: view.time_view,
-        defaultTimeOutput:
-          (view.grouping_sets?.base.length ?? view.dimensions?.length ?? 0) > 0
-            ? "total"
-            : "series",
         selection: view.selection,
       });
       const { link } = await createDelivery(plan, principal.email);

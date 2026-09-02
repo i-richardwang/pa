@@ -21,7 +21,7 @@ test("各 *Hash() 拼出的串都能被 parseRoute 读回同一路由", () => {
 });
 
 test("看板 ?t= 带回板级时间覆盖；坏掉的参数当没有", () => {
-  const time = { window: { kind: "trailing", count: 12, unit: "month" } } as const;
+  const time = { window: { kind: "trailing", count: 12, unit: "month", grain: "month" } } as const;
   const parsed = parseRoute(boardHash("b1", time));
   expect(parsed.page).toBe("board");
   expect(parsed.page === "board" && parsed.time).toEqual(time);

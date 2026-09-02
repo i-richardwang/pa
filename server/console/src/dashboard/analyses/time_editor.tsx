@@ -16,11 +16,11 @@ import {
   expandTimeWindow,
   parseTimeIntent,
   primaryTimeRange,
-  resolvedTimeDisplay,
-  timeDisplayIssues,
+  resolveTimeOutputGrain,
+  seriesGrainIssues,
+  type SeriesGrain,
   type TimeCapabilities,
   type TimeIntent,
-  type TimeDisplayChoice,
 } from "@time";
 import { CalendarIcon, GitCompareArrowsIcon } from "lucide-react";
 import { useState } from "react";
@@ -136,7 +136,7 @@ export function adjustTimeWindow(
   };
 }
 
-/** 对比只换对比：显示方式是序列粒度，与对照期无关。 */
+/** 对比只换对比，窗口与粒度不动。 */
 export function setTimeComparison(
   time: TimeIntent,
   comparison?: TimeIntent["comparison"],
@@ -154,7 +154,7 @@ function presetWindow(
   if (choice === "current_month") {
     return { kind: "current_month", ...(fixedEndpoint ? { month: fixedEndpoint } : {}) };
   }
-  if (choice === "year_to_date") return { kind: "year_to_date" };
+  if (choice === "year_to_date") return { kind: "year_to_date", grain: "month" };
   if (choice === "trailing_months") return DEFAULT_TIME_WINDOW.trailing_months;
   if (choice === "trailing_years") return DEFAULT_TIME_WINDOW.trailing_years;
   const to = fixedEndpoint ?? latest;
@@ -162,7 +162,18 @@ function presetWindow(
     kind: "range",
     from: monthAt(monthIndex(to) - (DEFAULT_TIME_WINDOW.trailing_months.count - 1)),
     to,
+    grain: "month",
   };
+}
+
+/** 期间窗口的序列粒度；单月窗口是一个时点，没有粒度。 */
+export function seriesGrainOf(window: TimeIntent["window"]): SeriesGrain | undefined {
+  return window.kind === "current_month" ? undefined : window.grain;
+}
+
+export function withSeriesGrain(time: TimeIntent, grain: SeriesGrain): TimeIntent {
+  if (time.window.kind === "current_month") return time;
+  return { ...time, window: { ...time.window, grain } };
 }
 
 function coordinateRanges(time: TimeIntent, latest: string) {
@@ -181,39 +192,28 @@ function coordinateRanges(time: TimeIntent, latest: string) {
 
 const rangeLabel = ({ from, to }: { from: string; to: string }) => monthRangeLabel(from, to);
 
-export function summarizeResolvedTime(
-  time: TimeIntent,
-  latest: string,
-  capabilities: TimeCapabilities = {},
-  grouped = false,
-): string {
+export function summarizeResolvedTime(time: TimeIntent, latest: string): string {
   const parsed = parseTimeIntent(time);
   const { primary, comparisons } = coordinateRanges(parsed, latest);
-  const display = resolvedTimeDisplay(parsed, latest, capabilities, grouped);
+  const grain = seriesGrainOf(parsed.window);
   const displayText =
-    display === "total" ? "一个结果" : display === "month" ? "每月一个结果" : "每年一个结果";
+    grain === undefined ? "一个结果" : grain === "month" ? "每月一个结果" : "每年一个结果";
   const comparison = comparisons.length ? ` · 对比 ${comparisons.map(rangeLabel).join("、")}` : "";
   const rolling = !fixedWindow(parsed);
   return `主期 ${rangeLabel(primary)} · ${displayText}${comparison} · ${rolling ? "随数据更新" : "固定时间"}`;
 }
 
-/**
- * 落草稿前的唯一校验闸；显示方式按解析后的粒度判定。
- */
+/** 落草稿前的唯一校验闸。 */
 export function timeChangeIssue(
   time: TimeIntent,
   latest: string,
   capabilities: TimeCapabilities = {},
-  grouped = false,
 ): string | undefined {
   try {
-    summarizeResolvedTime(time, latest, capabilities, grouped);
     const parsed = parseTimeIntent(time);
-    const resolved = resolvedTimeDisplay(parsed, latest, capabilities, grouped);
-    // 解析为整段单桶（单月窗口）无从违规：能被禁用的只有序列粒度。
-    return resolved === "total"
-      ? undefined
-      : timeDisplayIssues(parsed, capabilities, latest)[resolved];
+    resolveTimeOutputGrain(compileTimeIntent(parsed), latest);
+    const grain = seriesGrainOf(parsed.window);
+    return grain === undefined ? undefined : seriesGrainIssues(parsed, capabilities, latest)[grain];
   } catch (error) {
     return error instanceof Error ? error.message : "时间组合无效";
   }
@@ -287,7 +287,7 @@ export function WindowPopup({
       </PopupSection>
       <PopupSection label="按月滚动">
         {monthCounts.map((count) => {
-          const candidate = { kind: "trailing", count, unit: "month" } as const;
+          const candidate = { kind: "trailing", count, unit: "month", grain: "month" } as const;
           return row(
             `m${count}`,
             `最近 ${count} 个月`,
@@ -303,10 +303,10 @@ export function WindowPopup({
           "今年至今",
           window.kind === "year_to_date",
           () => changeWindow(presetWindow("year_to_date", latest, endpoint)),
-          { kind: "year_to_date" },
+          { kind: "year_to_date", grain: "month" },
         )}
         {yearCounts.map((count) => {
-          const candidate = { kind: "trailing", count, unit: "year" } as const;
+          const candidate = { kind: "trailing", count, unit: "year", grain: "year" } as const;
           return row(
             `y${count}`,
             `最近 ${count} 年`,
@@ -357,87 +357,59 @@ export function WindowPopup({
   );
 }
 
-const DISPLAY_CHOICES: { value: TimeDisplayChoice; label: string }[] = [
+const GRAIN_CHOICES: { value: SeriesGrain; label: string }[] = [
   { value: "month", label: "按月" },
   { value: "year", label: "按年" },
 ];
 
 /**
- * 再点已显式指定的那档即剥掉 `display` 键，交回服务端推导；
- * 推导结果那档再点不动。
- */
-export function toggleDisplayChoice(
-  time: TimeIntent,
-  choice: TimeDisplayChoice,
-  active: TimeDisplayChoice | undefined,
-): TimeIntent | undefined {
-  const { display, ...base } = time;
-  if (display === choice) return base;
-  if (display === undefined && choice === active) return undefined;
-  return { ...base, display: choice };
-}
-
-/**
  * 每档对落值闸 `timeChangeIssue` 预跑一遍，点击前就灰；
  * toast 只留给这张表也算不出的情形。
  */
-function displayChoiceIssues(
+function grainChoiceIssues(
   time: TimeIntent,
   latest: string,
   capabilities: TimeCapabilities,
-  grouped: boolean,
-): Partial<Record<TimeDisplayChoice, string>> {
-  const issues = timeDisplayIssues(time, capabilities, latest);
-  for (const { value } of DISPLAY_CHOICES) {
+): Partial<Record<SeriesGrain, string>> {
+  const issues = seriesGrainIssues(time, capabilities, latest);
+  for (const { value } of GRAIN_CHOICES) {
     if (issues[value]) continue;
-    const issue = timeChangeIssue({ ...time, display: value }, latest, capabilities, grouped);
+    const issue = timeChangeIssue(withSeriesGrain(time, value), latest, capabilities);
     if (issue) issues[value] = issue;
   }
   return issues;
 }
 
-/** 两档里此刻亮着的那档：显式值优先，否则是推导结果；整段单桶时没有一档亮。 */
-function activeDisplayChoice(
-  time: TimeIntent,
-  latest: string,
-  capabilities: TimeCapabilities,
-  grouped: boolean,
-): TimeDisplayChoice | undefined {
-  const resolved = resolvedTimeDisplay(time, latest, capabilities, grouped);
-  return resolved === "total" ? undefined : resolved;
-}
-
 /**
- * 显示粒度分段：一击直达。禁用钮不派发指针事件，Tooltip 挂在外层 span 上。
+ * 序列粒度分段，只在期间窗口出现：一击直达，恒有一档亮。
+ * 禁用钮不派发指针事件，Tooltip 挂在外层 span 上。
  */
-function DisplaySegments({
+function GrainSegments({
   time,
   latest,
   capabilities,
-  grouped,
   onChange,
 }: {
   time: TimeIntent;
   latest: string;
   capabilities: TimeCapabilities;
-  grouped: boolean;
   onChange: ApplyTimeChange;
 }) {
-  const issues = displayChoiceIssues(time, latest, capabilities, grouped);
-  const active = activeDisplayChoice(time, latest, capabilities, grouped);
+  const active = seriesGrainOf(time.window);
+  if (!active) return null;
+  const issues = grainChoiceIssues(time, latest, capabilities);
   return (
     <ToggleGroup
-      aria-label="显示方式"
+      aria-label="序列粒度"
       columns={2}
       onValueChange={(value) => {
-        // 单选组里再点亮着的档会给出空值：那是「撤回显式值」，不是没有动作。
-        const choice = (value[0] as TimeDisplayChoice | undefined) ?? active;
-        const next = choice ? toggleDisplayChoice(time, choice, active) : undefined;
-        if (next) onChange(next);
+        // 单选组里再点亮着的档会给出空值：粒度不可撤回，视为没有动作。
+        const choice = value[0] as SeriesGrain | undefined;
+        if (choice && choice !== active) onChange(withSeriesGrain(time, choice));
       }}
-      value={active ? [active] : []}
+      value={[active]}
     >
-      {DISPLAY_CHOICES.map((choice) => {
+      {GRAIN_CHOICES.map((choice) => {
         const reason = issues[choice.value];
         const item = (
           <ToggleGroupItem className="w-full px-2" disabled={!!reason} value={choice.value}>
@@ -478,14 +450,12 @@ export function ComparisonPopup({
   time,
   latest,
   capabilities,
-  grouped,
   onChange,
   onPick,
 }: {
   time: TimeIntent;
   latest: string;
   capabilities: TimeCapabilities;
-  grouped: boolean;
   onChange: ApplyTimeChange;
   onPick: (kind: PickerKind) => void;
 }) {
@@ -502,7 +472,7 @@ export function ComparisonPopup({
     const selected = choice === value;
     const reason = selected
       ? undefined
-      : timeChangeIssue(setTimeComparison(time, candidate), latest, capabilities, grouped);
+      : timeChangeIssue(setTimeComparison(time, candidate), latest, capabilities);
     const item = (
       <PopoverListRow
         onClick={onSelect}
@@ -594,7 +564,8 @@ function TimeMonthPickers({
         label="自定义范围"
         onOpenChange={close}
         onValueChange={(range) => {
-          const normalized = adjustTimeWindow(time, { kind: "range", ...range });
+          const grain = seriesGrainOf(window) ?? "month";
+          const normalized = adjustTimeWindow(time, { kind: "range", ...range, grain });
           onChange(normalized.time, normalized.adjustment);
         }}
         open
@@ -653,14 +624,11 @@ export function TimeBar({
   onChange,
   dataAsOf,
   capabilities = {},
-  grouped = false,
 }: {
   time: TimeIntent;
   onChange: (time: TimeIntent) => void;
   dataAsOf: string;
   capabilities?: TimeCapabilities;
-  /** 结果已有业务分组：时间因此不占轴，自动档解析为整段单桶（与服务端同解）。 */
-  grouped?: boolean;
 }) {
   const [picker, setPicker] = useState<PickerKind>();
   const timeIntent = parseTimeIntent(time);
@@ -673,7 +641,7 @@ export function TimeBar({
   }
   const latest = dataAsOf;
   const applyChange: ApplyTimeChange = (next, message) => {
-    const issue = timeChangeIssue(next, latest, capabilities, grouped);
+    const issue = timeChangeIssue(next, latest, capabilities);
     if (issue) {
       toastManager.add({ type: "info", title: `未应用本次修改：${issue}` });
       return false;
@@ -695,8 +663,7 @@ export function TimeBar({
             </PopoverTrigger>
           </TooltipTrigger>
           <TooltipPopup>
-            {summarizeResolvedTime(timeIntent, latest, capabilities, grouped)} · 数据截至{" "}
-            {monthLabel(latest)}
+            {summarizeResolvedTime(timeIntent, latest)} · 数据截至 {monthLabel(latest)}
           </TooltipPopup>
         </Tooltip>
         <PopoverPopup width="list">
@@ -709,9 +676,8 @@ export function TimeBar({
         </PopoverPopup>
       </Popover>
 
-      <DisplaySegments
+      <GrainSegments
         capabilities={capabilities}
-        grouped={grouped}
         latest={latest}
         onChange={applyChange}
         time={timeIntent}
@@ -733,7 +699,6 @@ export function TimeBar({
         <PopoverPopup width="list">
           <ComparisonPopup
             capabilities={capabilities}
-            grouped={grouped}
             latest={latest}
             onChange={applyChange}
             onPick={setPicker}

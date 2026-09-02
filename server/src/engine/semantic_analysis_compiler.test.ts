@@ -67,8 +67,7 @@ const JULY_2026 = {
   window: { kind: "current_month" as const, month: "2026-07" },
 };
 const JAN_TO_JULY_2026 = {
-  window: { kind: "range" as const, from: "2026-01", to: "2026-07" },
-  display: "month" as const,
+  window: { kind: "range" as const, from: "2026-01", to: "2026-07", grain: "month" as const },
 };
 
 const catalog: CompilerCatalog = {
@@ -194,7 +193,7 @@ describe("semantic analysis compiler", () => {
                 category_dimension: AGE_BAND,
               },
             ],
-            time: { window: { kind: "trailing", count: 2, unit: "year" } },
+            time: { window: { kind: "trailing", count: 2, unit: "year", grain: "year" } },
           },
         ],
       },
@@ -237,7 +236,6 @@ describe("semantic analysis compiler", () => {
             dimensions: [DEPARTMENT],
             time: {
               window: { kind: "current_month", month: "2026-07" },
-              display: "year",
               comparison: { kind: "previous_year" },
             },
             group_sort: {

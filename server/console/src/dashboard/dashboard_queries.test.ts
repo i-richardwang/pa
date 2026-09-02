@@ -15,7 +15,14 @@ test("维度取值键位含维度与过滤词，避免跨维度、跨过滤词�
 });
 
 test("看板瓦片重放键位随板级时间覆盖分开，取数选项与键位同源", () => {
-  const override = { window: { kind: "trailing" as const, count: 12, unit: "month" as const } };
+  const override = {
+    window: {
+      kind: "trailing" as const,
+      count: 12,
+      unit: "month" as const,
+      grain: "month" as const,
+    },
+  };
   expect(dashboardKeys.boardReportReplay("board-1", "report-1", null)).toEqual([
     "board_report_replay",
     "board-1",

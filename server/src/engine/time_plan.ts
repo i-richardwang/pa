@@ -247,42 +247,24 @@ function measureContracts(query: CubeQuery, views: CubeView[]) {
 
 export type TimeEvalForm = "interval" | "endpoint";
 
-function compatibleTimeGrain(
+function assertCompatibleTimeGrain(
   contracts: ReturnType<typeof measureContracts>,
   coordinates: LogicalCoordinate[],
   grain: TimeOutputGrain,
-  explicit: boolean,
-): TimeOutputGrain {
+): void {
   const monthly = contracts.filter((contract) => contract.contract.grain === "month");
-  if (!monthly.length) return grain;
+  if (!monthly.length || grain === "month") return;
   const combinesMonths = coordinates.some(
     (coordinate) =>
       coordinate.kind === "range" &&
       monthIndex(parseMonth(coordinate.from)) !== monthIndex(parseMonth(coordinate.to)),
   );
-  if (combinesMonths && grain !== "month") {
-    if (!explicit) return "month";
+  if (combinesMonths) {
     throw new Error(
       `指标「${monthly.map((contract) => contract.title).join("、")}」按月定义；` +
         "连续期间请改为按月呈现，不能合并多个月份",
     );
   }
-  return grain;
-}
-
-function compatibleYearScopedGrain(
-  contracts: ReturnType<typeof measureContracts>,
-  coordinates: LogicalCoordinate[],
-  grain: TimeOutputGrain,
-  explicit: boolean,
-): TimeOutputGrain {
-  if (explicit || grain !== "total") return grain;
-  if (!contracts.some((contract) => contract.contract.window === "year_to_date")) return grain;
-  const crossesYears = coordinates.some(
-    (coordinate) =>
-      coordinate.kind === "range" && coordinate.from.slice(0, 4) !== coordinate.to.slice(0, 4),
-  );
-  return crossesYears ? "year" : grain;
 }
 
 function timeBounds(query: CubeQuery, context: TimeContext, views: CubeView[]) {
@@ -481,19 +463,17 @@ export type ResolvedTimePlanning = {
   evalForms: ReadonlyMap<string, TimeEvalForm>;
 };
 
-export type TimeOutputDefault = "series" | "total";
-
 /** 业务时间的唯一解析入口。 */
 export function resolveTimePlanning(
   query: CubeQuery,
   time: TimeInput | undefined,
   context: TimeContext,
   views: CubeView[],
-  options: { defaultOutput: TimeOutputDefault; preferredView?: string },
+  preferredView?: string,
 ): ResolvedTimePlanning {
   if (!time) throw new Error("查询必须提供业务时间；使用截止月份或连续期间");
   assertNoRawTimeMembers(query);
-  const view = queryTimeView(query, options.preferredView);
+  const view = queryTimeView(query, preferredView);
   const contracts = measureContracts(query, views);
   const bounds = timeBounds(query, context, views);
   // 窗口先于对照展开：相对窗口先落为绝对 range，年同移的相对对照再作用其上。
@@ -503,20 +483,8 @@ export function resolveTimePlanning(
   );
   const coordinates = coordinatesOf(resolved, bounds.defaultThrough);
   assertCoordinates(coordinates, bounds.availableThrough);
-  const explicitGrain = time.grain !== undefined;
-  const grain = compatibleYearScopedGrain(
-    contracts,
-    coordinates,
-    compatibleTimeGrain(
-      contracts,
-      coordinates,
-      resolveTimeOutputGrain(time, bounds.defaultThrough, {
-        defaultOutput: options.defaultOutput,
-      }),
-      explicitGrain,
-    ),
-    explicitGrain,
-  );
+  const grain = resolveTimeOutputGrain(time, bounds.defaultThrough);
+  assertCompatibleTimeGrain(contracts, coordinates, grain);
   const enumerated = enumerateCoordinates(coordinates, grain);
   const businessTime = {
     outputGrain: grain,
@@ -577,12 +545,9 @@ export function planTimeQuery(
   time: TimeInput | undefined,
   context: TimeContext,
   views: CubeView[],
-  options: { defaultOutput: TimeOutputDefault; preferredView?: string },
+  preferredView?: string,
 ): PlannedQuery {
-  const planning = resolveTimePlanning(query, time, context, views, {
-    defaultOutput: options.defaultOutput,
-    ...(options.preferredView ? { preferredView: options.preferredView } : {}),
-  });
+  const planning = resolveTimePlanning(query, time, context, views, preferredView);
   return {
     ...planResolvedTimeQuery(query, planning),
     businessTime: planning.businessTime,

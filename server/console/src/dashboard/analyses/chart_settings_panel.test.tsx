@@ -12,7 +12,9 @@ import { beginAnalysisEdit } from "./analysis_draft";
 import { ChartOptionsPanel } from "./chart_settings_panel";
 
 const MEASURE = "measure:active_employee_count";
-const MONTHLY_TIME = { window: { kind: "range" as const, from: "2026-01", to: "2026-06" } };
+const MONTHLY_TIME = {
+  window: { kind: "range" as const, from: "2026-01", to: "2026-06", grain: "month" as const },
+};
 
 const catalog: CatalogPayload = {
   access_scope: { id: "organization", title: "组织" },
