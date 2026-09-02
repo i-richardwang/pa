@@ -102,7 +102,7 @@ const CATALOG_MEMBER_OUTPUT = z
       .optional()
       .describe("指标的机器可读呈现关系；numerator_id 为分子指标的语义 id"),
     time_constraints: TIME_CAPABILITIES_INPUT.optional().describe(
-      "时间能力卡：会限制显示方式的指标时间性格；省略表示没有额外限制",
+      "时间能力卡：指标对序列粒度和日历期间的约束；省略表示没有额外限制",
     ),
   })
   .strict();

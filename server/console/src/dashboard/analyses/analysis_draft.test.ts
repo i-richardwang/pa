@@ -209,7 +209,7 @@ describe("analysis draft 三层状态", () => {
     expect(isAnalysisEditDirty(settleSaved(previewed))).toBe(false);
   });
 
-  test("声明的时间列轴不被意图层剔除：输出粒度由引擎按指标契约裁决", () => {
+  test("声明的条件时间列轴保留到结果布局解析", () => {
     const next = setSemanticViewIntent(
       begin(),
       { type: "table", columns: ["metrics", "time"] },

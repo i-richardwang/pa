@@ -1120,8 +1120,7 @@ const tableAxisKey = (axis: TableAxis): string =>
   axis.kind === "field" ? `field:${memberShortName(axis.column)}` : axis.kind;
 
 /**
- * 表格布局出自结果本身：声明只说哪些轴上列轴，其余（维度与时间）落行轴。
- * 输出时间粒度由引擎按指标时间契约与数据边界裁决，意图层预测不出来，因此这里不问声明问结果。
+ * 表格布局出自结果签名：声明只说哪些轴上列轴，其余维度与实际存在的时间轴落行轴。
  */
 export function resolveTableLayout(
   view: ViewBlock,

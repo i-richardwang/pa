@@ -39,7 +39,7 @@ PA 把时间拆成两层：用户按正交的时间轴选择要观察的业务�
 ```
 
 ```json
-{ "window": { "kind": "range", "from": "2025-08", "to": "2026-07" } }
+{ "window": { "kind": "range", "from": "2025-08", "to": "2026-07", "grain": "month" } }
 ```
 
 冻结「年初至某月」即写成起点为该年一月的 `range`；它与滚动的 `year_to_date` 在同一锚点上同解，
@@ -49,8 +49,8 @@ Analysis Planner 在执行规划时只解析一次公开时间协议，产出唯
 结果粒度和业务桶都在这一步定稿。业务桶使用月份闭区间，终点恒为 `to`；下游不得再次解释用户时间。
 持久化 Analysis、Web 书签与 MCP 请求共用同一份 TimeIntent schema，不接受其他时间形态。
 
-默认粒度读取用户声明的基础分组集，不读取某条物理查询腿的 `dimensions`。一个语义查询视图展开出的
-基础结果、构成占比分母、总体和 Top-N 排名腿共享同一份 `BusinessTimeResolution`；腿级 Planner 只能
+一个语义查询视图展开出的基础结果、构成占比分母、总体和 Top-N 排名腿共享同一份
+`BusinessTimeResolution`；腿级 Planner 只能
 消费这份既成签名。时间成员由签名的 `outputGrain` 唯一派生，不作为第二份字段写入契约。执行时再次
 断言各 grouping set 的时间签名精确相等，任何漂移都拒绝整件结果。交付边界同样从执行后签名派生
 时间成员及其公共列身份；投影层不按 `year` / `month` 名称或列角色自行放行。
@@ -101,7 +101,7 @@ meta:
 
 | 能力位 | 由合同推导 | 它决定什么 |
 |---|---|---|
-| `multi_month_display: "month"` | `grain: month` | 跨月期间要求按年即拒绝；合计位退到终点当月。 |
+| `grain: "month"` | `grain: month` | 跨月期间要求按年即拒绝；合计位退到终点当月。 |
 | `year_scoped: true` | `window: year_to_date` | 业务桶跨日历年时没有单一合计；合计位退到终点所在年的年初至终点。 |
 
 两位各自既约束序列粒度，也决定合计位怎么求值——不能整窗合并的指标不留空，而是退到期间终点

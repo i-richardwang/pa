@@ -262,7 +262,7 @@ test("交付边界把执行成员一次性投影为语义列与语义口径引�
   expect(publicIdentifiers).not.toContain("test_people_metrics.category_level");
 });
 
-test("分组构成占比与基础查询共享一次解析的 total 时间签名", async () => {
+test("分组构成占比、总体与基础查询共享一次解析的单月签名", async () => {
   const METRIC = "measure:active_employee_count";
   const DIMENSION = "dimension:organization_name";
   const CALCULATION = "calculation:organization_share";
@@ -308,7 +308,7 @@ test("分组构成占比与基础查询共享一次解析的 total 时间签名"
       };
     },
     loadMulti: async () => {
-      throw new Error("total 时间签名不应产生多窗口查询");
+      throw new Error("单月时间签名不应产生多窗口查询");
     },
   } as unknown as CubeGateway;
   const service = createQueryExecutionService({
@@ -339,7 +339,7 @@ test("分组构成占比与基础查询共享一次解析的 total 时间签名"
           ],
         },
         summary: { mode: "grand_total" },
-        time: { last: { years: 2 } },
+        time: {},
       },
     ],
   };

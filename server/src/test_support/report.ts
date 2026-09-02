@@ -63,10 +63,10 @@ function semanticExpression(
 
 /** 测试夹具只把简单物理时间坐标还原为当前语义输入；复杂时间用例直接构造 AnalysisDefinition。 */
 function testTimeIntent(time: TimeInput): TimeIntent {
-  if (time.last || time.compare) {
+  if ("last" in time || time.compare) {
     throw new Error("复杂时间测试必须直接使用 TimeIntent 构造语义规格");
   }
-  if (time.range) {
+  if ("range" in time) {
     if (time.grain !== "year" && time.grain !== "month") {
       throw new Error("期间夹具必须带序列粒度 year 或 month");
     }
@@ -74,8 +74,9 @@ function testTimeIntent(time: TimeInput): TimeIntent {
       window: { kind: "range", from: time.range.from, to: time.range.to, grain: time.grain },
     });
   }
+  const cutoff = "cutoff" in time ? time.cutoff : undefined;
   return TIME_INTENT_INPUT.parse({
-    window: { kind: "current_month", ...(time.cutoff ? { month: time.cutoff } : {}) },
+    window: { kind: "current_month", ...(cutoff ? { month: cutoff } : {}) },
   });
 }
 

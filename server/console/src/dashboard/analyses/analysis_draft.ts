@@ -441,8 +441,8 @@ export function timeCapabilitiesOf(
   const measures = view.measures ?? [];
   const members = catalog.measures.filter((member) => measures.includes(member.id));
   return {
-    ...(members.some((member) => member.time_constraints?.multi_month_display === "month")
-      ? { multi_month_display: "month" as const }
+    ...(members.some((member) => member.time_constraints?.grain === "month")
+      ? { grain: "month" as const }
       : {}),
     ...(members.some((member) => member.time_constraints?.year_scoped)
       ? { year_scoped: true as const }

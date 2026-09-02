@@ -25,7 +25,7 @@ import {
   withSeriesGrain,
 } from "./time_editor";
 
-const MONTHLY: TimeCapabilities = { multi_month_display: "month" };
+const MONTHLY: TimeCapabilities = { grain: "month" };
 const YEAR_SCOPED: TimeCapabilities = { year_scoped: true };
 
 const renderBar = (time: TimeIntent, dataAsOf = "2026-07", capabilities: TimeCapabilities = {}) =>

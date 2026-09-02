@@ -42,49 +42,52 @@ export const TIME_LAST_INPUT = z.union([
   z.object({ years: z.number().int().min(1).max(8) }).strict(),
 ]);
 
-/**
- * Planner 私有时间坐标。公开业务时间必须先经 compileTimeIntent 翻译；指标的
- * sum/average/last/recompute 与固定年初窗口仍由模型 time_contract 和唯一时间编译点决定。
- */
+const CUTOFF_FIELD = z
+  .string()
+  .regex(YEAR_MONTH)
+  .optional()
+  .describe("业务截止月份 YYYY-MM；省略时使用数据源 actual_through");
+const OUTPUT_GRAIN_FIELD = z.enum(TIME_GRAINS).describe("结果按总计、年或月呈现");
+const COMPARE_FIELD = z
+  .array(TIME_COMPARE_INPUT)
+  .min(1)
+  .max(8)
+  .optional()
+  .describe(
+    "对照坐标，按声明顺序返回。绝对形态（cutoff 或 range）须与主时间同类；" +
+      "相对形态 {years_ago:n} 表示主坐标整体回移 n 个日历年，随主时间与数据推进自动滚动",
+  );
+
+/** Planner 私有时间坐标：时点可省略粒度，期间与内部合计必须显式声明结果粒度。 */
 export const TIME_INPUT = z
-  .object({
-    cutoff: z
-      .string()
-      .regex(YEAR_MONTH)
-      .optional()
-      .describe("业务截止月份 YYYY-MM；省略时使用数据源 actual_through"),
-    range: TIME_RANGE_INPUT.optional().describe("连续业务月份范围"),
-    last: TIME_LAST_INPUT.optional().describe(
-      "相对窗口：以锚点（cutoff，省略即 actual_through）为终点回看近 N 月或近 N 个日历年，" +
-        "随数据推进自动滚动",
-    ),
-    grain: z.enum(TIME_GRAINS).optional().describe("结果按总计、年或月呈现"),
-    compare: z
-      .array(TIME_COMPARE_INPUT)
-      .min(1)
-      .max(8)
-      .optional()
-      .describe(
-        "对照坐标，按声明顺序返回。绝对形态（cutoff 或 range）须与主时间同类；" +
-          "相对形态 {years_ago:n} 表示主坐标整体回移 n 个日历年，随主时间与数据推进自动滚动",
-      ),
-  })
-  .strict()
+  .union([
+    z
+      .object({
+        cutoff: CUTOFF_FIELD,
+        grain: OUTPUT_GRAIN_FIELD.optional(),
+        compare: COMPARE_FIELD,
+      })
+      .strict(),
+    z
+      .object({
+        range: TIME_RANGE_INPUT.describe("连续业务月份范围"),
+        grain: OUTPUT_GRAIN_FIELD,
+        compare: COMPARE_FIELD,
+      })
+      .strict(),
+    z
+      .object({
+        cutoff: CUTOFF_FIELD,
+        last: TIME_LAST_INPUT.describe(
+          "相对窗口：以锚点（cutoff，省略即 actual_through）为终点回看近 N 月或近 N 个日历年",
+        ),
+        grain: OUTPUT_GRAIN_FIELD,
+        compare: COMPARE_FIELD,
+      })
+      .strict(),
+  ])
   .superRefine((time, context) => {
-    if (time.cutoff && time.range) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "时间只能选择截止月份或连续期间，不能同时选择两者",
-      });
-    }
-    if (time.range && time.last) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "连续期间与相对窗口都是窗口，只能选择其一",
-      });
-    }
-    // last 展开后即 range，故与 range 同属「范围」类，对照须为范围形态或相对形态。
-    const kind = time.range || time.last ? "range" : "cutoff";
+    const kind = "range" in time || "last" in time ? "range" : "cutoff";
     const mixed = time.compare?.find((coordinate) => {
       if ("years_ago" in coordinate || "previous_period" in coordinate) return false;
       return kind === "range" ? !("range" in coordinate) : !("cutoff" in coordinate);
@@ -99,6 +102,9 @@ export const TIME_INPUT = z
 
 export type TimeInput = z.infer<typeof TIME_INPUT>;
 export type TimeCompareInput = z.infer<typeof TIME_COMPARE_INPUT>;
+
+const timeRange = (time: TimeInput) => ("range" in time ? time.range : undefined);
+const timeCutoff = (time: TimeInput) => ("cutoff" in time ? time.cutoff : undefined);
 
 const SERIES_GRAIN_FIELD = z
   .enum(SERIES_GRAINS)
@@ -297,37 +303,39 @@ export function expandTimeCompare(time: TimeInput, defaultCutoff?: string): Time
     )
   )
     return time;
+  const range = timeRange(time);
+  const cutoff = timeCutoff(time);
   const compare = time.compare.map((coordinate): TimeCompareInput => {
     if ("previous_period" in coordinate) {
-      if (time.range) {
-        const length = monthIndex(time.range.to) - monthIndex(time.range.from) + 1;
+      if (range) {
+        const length = monthIndex(range.to) - monthIndex(range.from) + 1;
         return {
           range: {
-            from: monthAt(monthIndex(time.range.from) - length),
-            to: monthAt(monthIndex(time.range.from) - 1),
+            from: monthAt(monthIndex(range.from) - length),
+            to: monthAt(monthIndex(range.from) - 1),
           },
         };
       }
-      const base = time.cutoff ?? defaultCutoff;
+      const base = cutoff ?? defaultCutoff;
       return base ? { cutoff: monthAt(monthIndex(base) - 1) } : coordinate;
     }
     if (!("years_ago" in coordinate)) return coordinate;
     const back = coordinate.years_ago;
     if (coordinate.alignment === "full_period") {
-      const anchor = time.range?.to ?? time.cutoff ?? defaultCutoff;
+      const anchor = range?.to ?? cutoff ?? defaultCutoff;
       if (!anchor) return coordinate;
       const year = Number(anchor.slice(0, 4)) - back;
       return { range: { from: `${year}-01`, to: `${year}-12` } };
     }
-    if (time.range) {
+    if (range) {
       return {
         range: {
-          from: shiftYears(time.range.from, -back),
-          to: shiftYears(time.range.to, -back),
+          from: shiftYears(range.from, -back),
+          to: shiftYears(range.to, -back),
         },
       };
     }
-    const base = time.cutoff ?? defaultCutoff;
+    const base = cutoff ?? defaultCutoff;
     return base ? { cutoff: shiftYears(base, -back) } : coordinate;
   });
   return { ...time, compare };
@@ -340,7 +348,7 @@ export function expandTimeCompare(time: TimeInput, defaultCutoff?: string): Time
  * 相对对照因此直接作用在展开后的 range 上。
  */
 export function expandTimeWindow(time: TimeInput, defaultCutoff?: string): TimeInput {
-  if (!time.last) return time;
+  if (!("last" in time)) return time;
   const anchor = time.cutoff ?? defaultCutoff;
   if (!anchor) return time;
   const from =
@@ -352,9 +360,10 @@ export function expandTimeWindow(time: TimeInput, defaultCutoff?: string): TimeI
 }
 
 function outputCoordinates(time: TimeInput, defaultCutoff?: string): OutputCoordinate[] {
-  const base: OutputCoordinate = time.range
-    ? { kind: "range", ...time.range }
-    : { kind: "cutoff", cutoff: time.cutoff ?? defaultCutoff };
+  const range = timeRange(time);
+  const base: OutputCoordinate = range
+    ? { kind: "range", ...range }
+    : { kind: "cutoff", cutoff: timeCutoff(time) ?? defaultCutoff };
   return [
     base,
     ...(time.compare ?? []).map((coordinate): OutputCoordinate => {
@@ -416,7 +425,11 @@ export function resolveTimeOutputGrain(time: TimeInput, defaultCutoff?: string):
   }
   const grain =
     requested ??
-    (!windowed.cutoff ? "month" : duplicateOutputBucket(coordinates, "year") ? "month" : "year");
+    (!timeCutoff(windowed)
+      ? "month"
+      : duplicateOutputBucket(coordinates, "year")
+        ? "month"
+        : "year");
   const duplicate = duplicateOutputBucket(coordinates, grain);
   if (duplicate) {
     const label = grain === "year" ? `${duplicate} 年` : duplicate;
@@ -438,10 +451,7 @@ export function resolveTimeOutputGrain(time: TimeInput, defaultCutoff?: string):
  */
 export const TIME_CAPABILITIES_INPUT = z
   .object({
-    multi_month_display: z
-      .literal("month")
-      .optional()
-      .describe("指标只在单月桶上有定义；跨月窗口只能按月呈现"),
+    grain: z.literal("month").optional().describe("指标只在单月桶上有定义；跨月窗口只能按月呈现"),
     year_scoped: z
       .literal(true)
       .optional()
@@ -457,7 +467,7 @@ export type TimeCapabilities = z.infer<typeof TIME_CAPABILITIES_INPUT>;
  */
 export function metricTimeCapabilities(contract: MetricTimeContract | undefined): TimeCapabilities {
   return {
-    ...(contract?.grain === "month" ? { multi_month_display: "month" as const } : {}),
+    ...(contract?.grain === "month" ? { grain: "month" as const } : {}),
     ...(contract?.window === "year_to_date" ? { year_scoped: true as const } : {}),
   };
 }
@@ -469,13 +479,13 @@ export type TotalPeriod = { from: string; to: string; coverage: TotalCoverage };
 /**
  * 指标在一个时间坐标上的合计求值期间。能整窗合并即 window，期间就是坐标本身；
  * 不能合并的两族退为 endpoint——按月定义只覆盖终点当月，年初归零覆盖终点所在日历年的
- * 年初至终点。两条降级各镜像 compatibleTimeGrain 与 assertYearToDateBuckets。
+ * 年初至终点。两条降级各镜像 assertCompatibleTimeGrain 与 assertYearToDateBuckets。
  */
 export function totalPeriodOf(
   capabilities: TimeCapabilities,
   period: { from: string; to: string },
 ): TotalPeriod {
-  if (capabilities.multi_month_display === "month" && period.from !== period.to) {
+  if (capabilities.grain === "month" && period.from !== period.to) {
     return { from: period.to, to: period.to, coverage: "endpoint" };
   }
   if (capabilities.year_scoped && period.from.slice(0, 4) !== period.to.slice(0, 4)) {
@@ -488,14 +498,15 @@ export function totalPeriodOf(
 /** 主期间的绝对起止；相对窗口按 latest 展开，截止月份形态起止同月。 */
 export function primaryTimeRange(time: TimeIntent, latest: string): { from: string; to: string } {
   const expanded = expandTimeWindow(compileTimeIntent(time), latest);
-  if (expanded.range) return expanded.range;
-  const cutoff = expanded.cutoff ?? latest;
+  const range = timeRange(expanded);
+  if (range) return range;
+  const cutoff = timeCutoff(expanded) ?? latest;
   return { from: cutoff, to: cutoff };
 }
 
 /**
  * 各序列粒度在当前窗口下不可用的理由；空表示全部可用。唯一规则：按月定义 × 跨月 →
- * 镜像 compatibleTimeGrain。年初归零由合计位的终点降级承担（totalPeriodOf），不在本表内。
+ * 镜像 assertCompatibleTimeGrain。年初归零由合计位的终点降级承担（totalPeriodOf），不在本表内。
  */
 export function seriesGrainIssues(
   time: TimeIntent,
@@ -503,7 +514,7 @@ export function seriesGrainIssues(
   latest: string,
 ): Partial<Record<SeriesGrain, string>> {
   const issues: Partial<Record<SeriesGrain, string>> = {};
-  if (capabilities.multi_month_display === "month") {
+  if (capabilities.grain === "month") {
     const range = primaryTimeRange(time, latest);
     if (range.from !== range.to) issues.year = "所选指标按月定义；跨月期间只能按月呈现。";
   }

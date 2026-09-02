@@ -119,7 +119,7 @@ describe("拒绝文案", () => {
       () =>
         planTimeQuery(
           { measures: ["flow.hires"] },
-          { range: { from: "2026-06", to: "2026-05" } },
+          { range: { from: "2026-06", to: "2026-05" }, grain: "month" },
           context,
           views,
         ),

@@ -461,7 +461,7 @@ describe("CatalogDocument", () => {
     // 年初累计合同 ⇒ 年度归零位；再叠加按月定义 ⇒ 两位并存，各自独立成立。
     expect(withGrain()?.time_constraints).toEqual({ year_scoped: true });
     expect(withGrain("month")?.time_constraints).toEqual({
-      multi_month_display: "month",
+      grain: "month",
       year_scoped: true,
     });
     expect(withGrain()).not.toHaveProperty("time_contract");

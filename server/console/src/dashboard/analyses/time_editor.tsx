@@ -178,10 +178,8 @@ export function withSeriesGrain(time: TimeIntent, grain: SeriesGrain): TimeInten
 
 function coordinateRanges(time: TimeIntent, latest: string) {
   const expanded = expandTimeCompare(expandTimeWindow(compileTimeIntent(time), latest), latest);
-  const primary = expanded.range ?? {
-    from: expanded.cutoff ?? latest,
-    to: expanded.cutoff ?? latest,
-  };
+  const cutoff = "cutoff" in expanded ? (expanded.cutoff ?? latest) : latest;
+  const primary = "range" in expanded ? expanded.range : { from: cutoff, to: cutoff };
   const comparisons = (expanded.compare ?? []).flatMap((coordinate) => {
     if ("range" in coordinate) return [coordinate.range];
     if ("cutoff" in coordinate) return [{ from: coordinate.cutoff, to: coordinate.cutoff }];

@@ -508,6 +508,7 @@ describe("TimePlan 业务时间坐标", () => {
   test("跨年 range 对照按输出桶检查重叠，不以窗口终点代替唯一性", () => {
     const time: TimeInput = {
       range: { from: "2025-11", to: "2026-02" },
+      grain: "month",
       compare: [{ range: { from: "2024-11", to: "2025-02" } }],
     };
     const plan = planTimeQuery(
@@ -576,18 +577,29 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
     ).toBe(false);
   });
 
-  test("连续期间与相对窗口互斥，但锚点截止月可叠加相对窗口", () => {
+  test("期间形态互斥且必须显式声明粒度", () => {
     expect(
       TIME_INPUT.safeParse({
         range: { from: "2024-01", to: "2026-07" },
         last: { years: 3 },
       }).success,
     ).toBe(false);
-    expect(TIME_INPUT.safeParse({ cutoff: "2026-06", last: { years: 3 } }).success).toBe(true);
-    expect(TIME_INPUT.safeParse({ last: { months: 12 } }).success).toBe(true);
-    expect(TIME_INPUT.safeParse({ last: { months: 6 }, compare: [{ years_ago: 1 }] }).success).toBe(
-      true,
-    );
+    expect(TIME_INPUT.safeParse({ cutoff: "2026-06", last: { years: 3 } }).success).toBe(false);
+    expect(TIME_INPUT.safeParse({ last: { months: 12 } }).success).toBe(false);
+    expect(TIME_INPUT.safeParse({ range: { from: "2026-01", to: "2026-06" } }).success).toBe(false);
+    expect(
+      TIME_INPUT.safeParse({
+        range: { from: "2026-01", to: "2026-06" },
+        grain: "total",
+      }).success,
+    ).toBe(true);
+    expect(
+      TIME_INPUT.safeParse({
+        last: { months: 6 },
+        grain: "month",
+        compare: [{ years_ago: 1 }],
+      }).success,
+    ).toBe(true);
   });
 
   test("公开查询不能直接引用物理时间字段", () => {
@@ -757,7 +769,7 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
     expect(() =>
       planTimeQuery(
         { measures: ["test_people_metrics.new_hire_count"] },
-        { range: { from: "2026-06", to: "2026-05" } },
+        { range: { from: "2026-06", to: "2026-05" }, grain: "month" },
         context,
         views,
       ),
@@ -792,7 +804,7 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
     expect(() =>
       planTimeQuery(
         { measures: ["test_people_metrics.new_hire_count"] },
-        { range: { from: "2026-01", to: "2026-06" } },
+        { range: { from: "2026-01", to: "2026-06" }, grain: "total" },
         context,
         views,
       ),

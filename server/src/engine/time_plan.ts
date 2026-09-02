@@ -294,9 +294,13 @@ function timeBounds(query: CubeQuery, context: TimeContext, views: CubeView[]) {
 }
 
 function coordinatesOf(time: TimeInput, defaultThrough: string): LogicalCoordinate[] {
-  const base: LogicalCoordinate = time.range
-    ? { kind: "range", from: time.range.from, to: time.range.to }
-    : { kind: "cutoff", cutoff: time.cutoff ?? defaultThrough };
+  const base: LogicalCoordinate =
+    "range" in time
+      ? { kind: "range", from: time.range.from, to: time.range.to }
+      : {
+          kind: "cutoff",
+          cutoff: ("cutoff" in time ? time.cutoff : undefined) ?? defaultThrough,
+        };
   const compare = (time.compare ?? []).map((coordinate): LogicalCoordinate => {
     if ("range" in coordinate) {
       return { kind: "range", from: coordinate.range.from, to: coordinate.range.to };

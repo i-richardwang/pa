@@ -15,8 +15,7 @@ export const TABLE_AXIS_SCHEMA = z.discriminatedUnion("kind", [
 export type TableAxis = z.infer<typeof TABLE_AXIS_SCHEMA>;
 
 /**
- * 交叉表的列轴声明，从外到内。行轴不在声明里：它是结果的余数，由呈现层按实际结果裁决——
- * 输出时间粒度出自引擎（指标时间契约与数据边界都只有它知道），意图层预测不出来。
+ * 交叉表的列轴声明，从外到内。行轴是执行结果中未进入列轴的维度与时间轴。
  */
 export const TABLE_COLUMNS_DECL_SCHEMA = z.array(TABLE_AXIS_SCHEMA);
 

@@ -138,7 +138,7 @@ const MEASURES = [
 test("能力卡由模型时间合同推导：按月定义与年初归零各自成位", () => {
   expect(cardOf("measure:active_employee_count")).toEqual({});
   expect(cardOf("measure:turnover_count")).toEqual({});
-  expect(cardOf("measure:current_month_turnover_rate")).toEqual({ multi_month_display: "month" });
+  expect(cardOf("measure:current_month_turnover_rate")).toEqual({ grain: "month" });
   expect(cardOf("measure:ytd_event_rate")).toEqual({ year_scoped: true });
   // 合同本身绝不上线：卡只是它在消费面的投影。
   expect(JSON.stringify(semantic)).not.toContain("time_contract");

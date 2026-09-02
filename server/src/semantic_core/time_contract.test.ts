@@ -31,12 +31,14 @@ describe("business time intent", () => {
       grain: "month",
     });
     // 滚动窗口随数据推进改变解，绝对窗口不改变——这正是两种表达式的分工。
-    expect(
-      expandTimeWindow(
-        compileTimeIntent({ window: { kind: "year_to_date", grain: "month" } }),
-        "2026-09",
-      ).range,
-    ).toEqual({ from: "2026-01", to: "2026-09" });
+    const rolling = expandTimeWindow(
+      compileTimeIntent({ window: { kind: "year_to_date", grain: "month" } }),
+      "2026-09",
+    );
+    expect("range" in rolling ? rolling.range : undefined).toEqual({
+      from: "2026-01",
+      to: "2026-09",
+    });
   });
 
   test("单月窗口是一个时点，期间窗口的粒度就是窗口自带的那一档，服务端不推导", () => {
@@ -101,7 +103,10 @@ describe("business time intent", () => {
       ),
       "2026-07",
     );
-    expect(resolved.range).toEqual({ from: "2026-05", to: "2026-07" });
+    expect("range" in resolved ? resolved.range : undefined).toEqual({
+      from: "2026-05",
+      to: "2026-07",
+    });
     expect(resolved.compare).toEqual([{ range: { from: "2026-02", to: "2026-04" } }]);
   });
 
@@ -213,7 +218,7 @@ describe("整窗合计的求值期间", () => {
   });
 
   test("按月定义的指标跨月即退到终点当月，单月窗口仍是整窗", () => {
-    const monthly = { multi_month_display: "month" } as const;
+    const monthly = { grain: "month" } as const;
     expect(totalPeriodOf(monthly, window)).toEqual({
       from: "2026-07",
       to: "2026-07",
@@ -247,7 +252,7 @@ describe("整窗合计的求值期间", () => {
     });
     expect(
       metricTimeCapabilities({ aggregation: "recompute", window: "selected", grain: "month" }),
-    ).toEqual({ multi_month_display: "month" });
+    ).toEqual({ grain: "month" });
   });
 });
 
