@@ -5,6 +5,7 @@ import { BusinessTermNotFoundError } from "../ports/business_term_repository.js"
 import { CubeGatewayError } from "../ports/cube_gateway.js";
 import { ReportConflictError, ReportNotFoundError } from "../ports/report_repository.js";
 import { AnalysisDefinitionError, ViewIntentError } from "../semantic_core/semantic_analysis.js";
+import { TimeSelectionError } from "../semantic_core/time_contract.js";
 
 export type ApplicationErrorCode =
   | "invalid_request"
@@ -93,6 +94,8 @@ export function publicApplicationError(error: unknown): PublicApplicationError {
     classified = new ForbiddenError(error.message);
   } else if (error instanceof SemanticQueryIncompatibleError) {
     classified = new InvalidRequestError(error.message, { routes: error.routes });
+  } else if (error instanceof TimeSelectionError) {
+    classified = new InvalidRequestError(error.message, { issue: error.issue });
   } else if (error instanceof AnalysisDefinitionError || error instanceof ViewIntentError) {
     classified = new InvalidRequestError(error.message);
   } else if (

@@ -232,9 +232,7 @@ export const TIME_INTENT_INPUT = z
 
 export type TimeIntent = z.infer<typeof TIME_INTENT_INPUT>;
 
-/** 公开业务时间 → Planner 私有坐标；这是跨层翻译的唯一入口。 */
-export function compileTimeIntent(time: TimeIntent): TimeInput {
-  const business = parseTimeIntent(time);
+function compileParsedTimeIntent(business: TimeIntent): TimeInput {
   let primary: TimeInput;
   if (business.window.kind === "current_month") {
     primary = business.window.month ? { cutoff: business.window.month } : {};
@@ -268,13 +266,107 @@ export function compileTimeIntent(time: TimeIntent): TimeInput {
   return { ...primary, compare };
 }
 
+/** 公开业务时间 → Planner 私有坐标；这是跨层翻译的唯一入口。 */
+export function compileTimeIntent(time: TimeIntent): TimeInput {
+  return compileParsedTimeIntent(parseTimeIntent(time));
+}
+
 export function parseTimeIntent(value: unknown): TimeIntent {
   return TIME_INTENT_INPUT.parse(value);
 }
 
-type OutputCoordinate =
-  | { kind: "cutoff"; cutoff?: string }
+export type TimeSelectionCoordinate =
+  | { kind: "cutoff"; cutoff: string }
   | { kind: "range"; from: string; to: string };
+
+export type ResolvedTimeSelection = {
+  coordinates: TimeSelectionCoordinate[];
+  outputGrain: TimeOutputGrain;
+};
+
+export type TimeSelectionIssue =
+  | { code: "time_intent_invalid"; reason: string }
+  | { code: "time_anchor_unavailable" }
+  | { code: "time_range_invalid"; from: string; to: string }
+  | { code: "time_coordinates_duplicate"; coordinate: string }
+  | { code: "time_comparison_requires_series"; selected_grain: "total" }
+  | {
+      code: "time_output_bucket_overlap";
+      selected_grain: SeriesGrain;
+      bucket: string;
+      alternative_grain?: "month";
+    }
+  | {
+      code: "time_range_unavailable";
+      requested: string;
+      available_through: string;
+    }
+  | {
+      code: "metric_time_grain_incompatible";
+      metric_titles: string[];
+      required_grain: "month";
+      selected_grain: TimeOutputGrain;
+    }
+  | {
+      code: "metric_time_calendar_year_total_incompatible";
+      metric_titles: string[];
+      from: string;
+      to: string;
+      selected_grain: "total";
+    };
+
+export type TimeSelectionResult =
+  | { status: "resolved"; selection: ResolvedTimeSelection }
+  | { status: "invalid"; issue: TimeSelectionIssue };
+
+export function timeSelectionIssueMessage(issue: TimeSelectionIssue): string {
+  switch (issue.code) {
+    case "time_intent_invalid":
+      return issue.reason;
+    case "time_anchor_unavailable":
+      return "数据最新月份暂不可用，无法解析相对时间";
+    case "time_range_invalid":
+      return `时间范围「${issue.from} 至 ${issue.to}」的开始月份不能晚于结束月份；请调整为开始月份早于或等于结束月份`;
+    case "time_coordinates_duplicate":
+      return `主时间与对照时间重复：${issue.coordinate}`;
+    case "time_comparison_requires_series":
+      return "存在对照时间时不能合并为无时间标识的总计，请改为按年或按月呈现";
+    case "time_output_bucket_overlap": {
+      const label = issue.selected_grain === "year" ? `${issue.bucket} 年` : issue.bucket;
+      return (
+        `主时间与对照时间在${issue.selected_grain === "year" ? "按年" : "按月"}呈现时都会产生 ${label}，结果无法区分；` +
+        (issue.alternative_grain
+          ? "请改为按月呈现，或选择互不重叠的对照时间"
+          : "请选择互不重叠的主时间或对照时间")
+      );
+    }
+    case "time_range_unavailable":
+      return `当前数据可查询至 ${issue.available_through}，不能查询 ${issue.requested}；请把结束月份改为 ${issue.available_through} 或更早月份`;
+    case "metric_time_grain_incompatible": {
+      const subject = issue.metric_titles.length
+        ? `指标「${issue.metric_titles.join("、")}」`
+        : "所选指标";
+      return `${subject}按月定义；连续期间请改为按月呈现，不能合并多个月份`;
+    }
+    case "metric_time_calendar_year_total_incompatible": {
+      const subject = issue.metric_titles.length
+        ? `指标「${issue.metric_titles.join("、")}」`
+        : "所选指标";
+      return (
+        `${subject}按日历年重新起算，不能把跨年的「${issue.from} 至 ${issue.to}」合并为一个总计；` +
+        "请改为按年或按月呈现，或选择单一日历年"
+      );
+    }
+  }
+}
+
+export class TimeSelectionError extends Error {
+  override name = "TimeSelectionError";
+
+  constructor(readonly issue: TimeSelectionIssue) {
+    super(timeSelectionIssueMessage(issue));
+  }
+}
 
 const monthIndex = (value: string) => {
   const [year, month] = value.split("-").map(Number);
@@ -293,8 +385,8 @@ const shiftYears = (month: string, delta: number) => {
 
 /**
  * 把相对对照归一为绝对坐标：years_ago 将主坐标整体回移 n 年，previous_period 使用
- * 紧邻主坐标且长度相同的前一段时间。主截止月省略且无 actual_through 兜底时保留相对形态，
- * 由结果粒度层按保守规则处理；绝对对照原样保留。
+ * 紧邻主坐标且长度相同的前一段时间。无锚点时保留相对形态，解析入口负责拒绝未完成的坐标；
+ * 绝对对照原样保留。
  */
 export function expandTimeCompare(time: TimeInput, defaultCutoff?: string): TimeInput {
   if (
@@ -344,8 +436,8 @@ export function expandTimeCompare(time: TimeInput, defaultCutoff?: string): Time
 /**
  * 把相对窗口 {last} 展开为绝对 range：锚点＝主 cutoff，省略时用 defaultCutoff（服务端
  * actual_through）。months 回看 N 个自然月至锚点，years 回看至 (锚点年-(N-1)) 年 1 月。
- * 无锚点可用时（浏览器预览无 actual_through）保留相对形态。展开顺序恒为窗口先于对照，
- * 相对对照因此直接作用在展开后的 range 上。
+ * 无锚点时保留相对形态，解析入口负责拒绝。展开顺序恒为窗口先于对照，相对对照因此直接
+ * 作用在展开后的 range 上。
  */
 export function expandTimeWindow(time: TimeInput, defaultCutoff?: string): TimeInput {
   if (!("last" in time)) return time;
@@ -359,17 +451,17 @@ export function expandTimeWindow(time: TimeInput, defaultCutoff?: string): TimeI
   return { ...rest, range: { from, to: anchor } };
 }
 
-function outputCoordinates(time: TimeInput, defaultCutoff?: string): OutputCoordinate[] {
+function outputCoordinates(time: TimeInput, defaultCutoff: string): TimeSelectionCoordinate[] {
   const range = timeRange(time);
-  const base: OutputCoordinate = range
+  const base: TimeSelectionCoordinate = range
     ? { kind: "range", ...range }
     : { kind: "cutoff", cutoff: timeCutoff(time) ?? defaultCutoff };
   return [
     base,
-    ...(time.compare ?? []).map((coordinate): OutputCoordinate => {
+    ...(time.compare ?? []).map((coordinate): TimeSelectionCoordinate => {
       if ("range" in coordinate) return { kind: "range", ...coordinate.range };
       if ("years_ago" in coordinate || "previous_period" in coordinate) {
-        return { kind: "cutoff", cutoff: undefined };
+        throw new Error("相对对照未解析为绝对坐标");
       }
       return { kind: "cutoff", cutoff: coordinate.cutoff };
     }),
@@ -377,11 +469,10 @@ function outputCoordinates(time: TimeInput, defaultCutoff?: string): OutputCoord
 }
 
 function coordinateBuckets(
-  coordinate: OutputCoordinate,
+  coordinate: TimeSelectionCoordinate,
   grain: Exclude<TimeOutputGrain, "total">,
-): string[] | null {
+): string[] {
   if (coordinate.kind === "cutoff") {
-    if (!coordinate.cutoff) return null;
     return [grain === "year" ? coordinate.cutoff.slice(0, 4) : coordinate.cutoff];
   }
   const buckets = new Set<string>();
@@ -393,13 +484,12 @@ function coordinateBuckets(
 }
 
 function duplicateOutputBucket(
-  coordinates: OutputCoordinate[],
+  coordinates: TimeSelectionCoordinate[],
   grain: Exclude<TimeOutputGrain, "total">,
 ): string | undefined {
   const seen = new Set<string>();
   for (const coordinate of coordinates) {
     const buckets = coordinateBuckets(coordinate, grain);
-    if (!buckets) continue;
     const duplicate = buckets.find((bucket) => seen.has(bucket));
     if (duplicate) return duplicate;
     buckets.forEach((bucket) => {
@@ -409,19 +499,45 @@ function duplicateOutputBucket(
   return undefined;
 }
 
-/**
- * 意图层与物理时间编译层共用的结果粒度规则。省略 grain 即整段单桶：公开意图只有单月窗口
- * 会这样，合计腿与记录投影也这么用。对照窗口在最终时间键上必须互斥，否则相同行无法判断
- * 属于哪一个业务坐标；单月带对照时按年或按月给键，省略主截止月时恒按月：浏览器规划器
- * 拿不到 actual_through，必须与服务端同解。
- */
-export function resolveTimeOutputGrain(time: TimeInput, defaultCutoff?: string): TimeOutputGrain {
+const coordinateLabel = (coordinate: TimeSelectionCoordinate) =>
+  coordinate.kind === "cutoff" ? coordinate.cutoff : `${coordinate.from} 至 ${coordinate.to}`;
+
+/** 公开意图与 Planner 共用的时间坐标和结果粒度解析。 */
+export function resolveTimeSelection(time: TimeInput, defaultCutoff: string): TimeSelectionResult {
+  if (!YEAR_MONTH.test(defaultCutoff)) {
+    return { status: "invalid", issue: { code: "time_anchor_unavailable" } };
+  }
   const windowed = expandTimeWindow(time, defaultCutoff);
   const coordinates = outputCoordinates(expandTimeCompare(windowed, defaultCutoff), defaultCutoff);
+  const invalidRange = coordinates.find(
+    (coordinate) => coordinate.kind === "range" && coordinate.from > coordinate.to,
+  );
+  if (invalidRange?.kind === "range") {
+    return {
+      status: "invalid",
+      issue: { code: "time_range_invalid", from: invalidRange.from, to: invalidRange.to },
+    };
+  }
+  const labels = coordinates.map(coordinateLabel);
+  const duplicateCoordinate = labels.find((label, index) => labels.indexOf(label) !== index);
+  if (duplicateCoordinate) {
+    return {
+      status: "invalid",
+      issue: { code: "time_coordinates_duplicate", coordinate: duplicateCoordinate },
+    };
+  }
   const requested = windowed.grain;
-  if (coordinates.length === 1) return requested ?? "total";
+  if (coordinates.length === 1) {
+    return {
+      status: "resolved",
+      selection: { coordinates, outputGrain: requested ?? "total" },
+    };
+  }
   if (requested === "total") {
-    throw new Error("存在对照时间时不能合并为无时间标识的总计，请改为按年或按月呈现");
+    return {
+      status: "invalid",
+      issue: { code: "time_comparison_requires_series", selected_grain: "total" },
+    };
   }
   const grain =
     requested ??
@@ -432,17 +548,49 @@ export function resolveTimeOutputGrain(time: TimeInput, defaultCutoff?: string):
         : "year");
   const duplicate = duplicateOutputBucket(coordinates, grain);
   if (duplicate) {
-    const label = grain === "year" ? `${duplicate} 年` : duplicate;
     const canResolveByMonth =
       grain === "year" && duplicateOutputBucket(coordinates, "month") === undefined;
-    throw new Error(
-      `主时间与对照时间在${grain === "year" ? "按年" : "按月"}呈现时都会产生 ${label}，结果无法区分；` +
-        (canResolveByMonth
-          ? "请改为按月呈现，或选择互不重叠的对照时间"
-          : "请选择互不重叠的主时间或对照时间"),
-    );
+    return {
+      status: "invalid",
+      issue: {
+        code: "time_output_bucket_overlap",
+        selected_grain: grain,
+        bucket: duplicate,
+        ...(canResolveByMonth ? { alternative_grain: "month" as const } : {}),
+      },
+    };
   }
-  return grain;
+  return { status: "resolved", selection: { coordinates, outputGrain: grain } };
+}
+
+export function resolveTimeIntentSelection(time: unknown, latest: string): TimeSelectionResult {
+  const parsed = TIME_INTENT_INPUT.safeParse(time);
+  if (!parsed.success) {
+    return {
+      status: "invalid",
+      issue: {
+        code: "time_intent_invalid",
+        reason: parsed.error.issues[0]?.message ?? "时间组合无效",
+      },
+    };
+  }
+  return resolveTimeSelection(compileParsedTimeIntent(parsed.data), latest);
+}
+
+export function timeAvailabilityIssue(
+  selection: ResolvedTimeSelection,
+  availableThrough: string,
+): TimeSelectionIssue | undefined {
+  const unavailable = selection.coordinates.find((coordinate) => {
+    const to = coordinate.kind === "cutoff" ? coordinate.cutoff : coordinate.to;
+    return to > availableThrough;
+  });
+  if (!unavailable) return undefined;
+  return {
+    code: "time_range_unavailable",
+    requested: coordinateLabel(unavailable),
+    available_through: availableThrough,
+  };
 }
 
 /**
@@ -472,6 +620,56 @@ export function metricTimeCapabilities(contract: MetricTimeContract | undefined)
   };
 }
 
+export function mergeTimeCapabilities(capabilities: readonly TimeCapabilities[]): TimeCapabilities {
+  return {
+    ...(capabilities.some((item) => item.grain === "month") ? { grain: "month" as const } : {}),
+    ...(capabilities.some((item) => item.year_scoped) ? { year_scoped: true as const } : {}),
+  };
+}
+
+export type MetricTimeRequirement = {
+  capabilities: TimeCapabilities;
+  title?: string;
+};
+
+const requirementTitles = (requirements: readonly MetricTimeRequirement[]) => [
+  ...new Set(requirements.flatMap((requirement) => (requirement.title ? [requirement.title] : []))),
+];
+
+/** 指标能力只消费已解析时间，不重新解释用户意图。 */
+export function metricTimeSelectionIssue(
+  requirements: readonly MetricTimeRequirement[],
+  selection: ResolvedTimeSelection,
+): TimeSelectionIssue | undefined {
+  const monthly = requirements.filter((requirement) => requirement.capabilities.grain === "month");
+  const combinesMonths = selection.coordinates.some(
+    (coordinate) => coordinate.kind === "range" && coordinate.from !== coordinate.to,
+  );
+  if (monthly.length && selection.outputGrain !== "month" && combinesMonths) {
+    return {
+      code: "metric_time_grain_incompatible",
+      metric_titles: requirementTitles(monthly),
+      required_grain: "month",
+      selected_grain: selection.outputGrain,
+    };
+  }
+  const yearScoped = requirements.filter((requirement) => requirement.capabilities.year_scoped);
+  const crossYear = selection.coordinates.find(
+    (coordinate) =>
+      coordinate.kind === "range" && coordinate.from.slice(0, 4) !== coordinate.to.slice(0, 4),
+  );
+  if (yearScoped.length && selection.outputGrain === "total" && crossYear?.kind === "range") {
+    return {
+      code: "metric_time_calendar_year_total_incompatible",
+      metric_titles: requirementTitles(yearScoped),
+      from: crossYear.from,
+      to: crossYear.to,
+      selected_grain: "total",
+    };
+  }
+  return undefined;
+}
+
 export type TotalCoverage = "window" | "endpoint";
 /** 整窗合计的求值期间：真实覆盖的业务月份区间，以及它是整窗还是终点降级。 */
 export type TotalPeriod = { from: string; to: string; coverage: TotalCoverage };
@@ -479,7 +677,7 @@ export type TotalPeriod = { from: string; to: string; coverage: TotalCoverage };
 /**
  * 指标在一个时间坐标上的合计求值期间。能整窗合并即 window，期间就是坐标本身；
  * 不能合并的两族退为 endpoint——按月定义只覆盖终点当月，年初归零覆盖终点所在日历年的
- * 年初至终点。两条降级各镜像 assertCompatibleTimeGrain 与 assertYearToDateBuckets。
+ * 年初至终点。序列兼容性与合计覆盖期间共用同一能力卡。
  */
 export function totalPeriodOf(
   capabilities: TimeCapabilities,
@@ -489,7 +687,6 @@ export function totalPeriodOf(
     return { from: period.to, to: period.to, coverage: "endpoint" };
   }
   if (capabilities.year_scoped && period.from.slice(0, 4) !== period.to.slice(0, 4)) {
-    // 跨日历年才会走到这里，故终点所在年的年初必晚于期间起点。
     return { from: `${period.to.slice(0, 4)}-01`, to: period.to, coverage: "endpoint" };
   }
   return { from: period.from, to: period.to, coverage: "window" };
@@ -502,23 +699,6 @@ export function primaryTimeRange(time: TimeIntent, latest: string): { from: stri
   if (range) return range;
   const cutoff = timeCutoff(expanded) ?? latest;
   return { from: cutoff, to: cutoff };
-}
-
-/**
- * 各序列粒度在当前窗口下不可用的理由；空表示全部可用。唯一规则：按月定义 × 跨月 →
- * 镜像 assertCompatibleTimeGrain。年初归零由合计位的终点降级承担（totalPeriodOf），不在本表内。
- */
-export function seriesGrainIssues(
-  time: TimeIntent,
-  capabilities: TimeCapabilities,
-  latest: string,
-): Partial<Record<SeriesGrain, string>> {
-  const issues: Partial<Record<SeriesGrain, string>> = {};
-  if (capabilities.grain === "month") {
-    const range = primaryTimeRange(time, latest);
-    if (range.from !== range.to) issues.year = "所选指标按月定义；跨月期间只能按月呈现。";
-  }
-  return issues;
 }
 
 /** 业务时间桶：月份原子构成的闭区间，终点恒为 to。 */

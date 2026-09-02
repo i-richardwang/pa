@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ReplayPayload } from "@contracts/replay_contract";
+import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
 import type { AnalysisDefinition, SemanticViewIntent } from "@semantic-analysis";
 import type { ViewPreferences } from "@view-preferences";
 import { toastManager } from "@/components/ui/toast";
@@ -16,10 +17,10 @@ import { ApiError } from "../api";
 import { useCreateReport } from "../dashboard_queries";
 import {
   beginAnalysisEdit,
+  analysisReadiness,
   hasAnalysisChanges,
   hasViewChanges,
   isAnalysisEditDirty,
-  isAnalysisRunnable,
   isPreviewCurrent,
   settlePreview,
   settleSaved,
@@ -49,6 +50,7 @@ type AnalysisEditSessionInput = {
 
   savedReplay?: ReplayPayload | null;
   target: AnalysisEditorTarget;
+  catalog: CatalogPayload | null;
   /** 新建与另存产生新报告后的去向由宿主页裁决；保存只负责落库与落定基线。 */
   onCreated: (report: { id: string; name: string }) => void;
 };
@@ -58,6 +60,7 @@ export function useAnalysisEditSession({
   seed,
   savedReplay = null,
   target,
+  catalog,
   onCreated,
 }: AnalysisEditSessionInput) {
   const queryClient = useQueryClient();
@@ -86,6 +89,8 @@ export function useAnalysisEditSession({
   const previewReplay = useDraftPreview(sessionKey);
   const activeReplay = previewReplay ?? savedReplay;
   const showingSavedReplay = previewReplay === null && savedReplay !== null;
+  const canExecute = (current: AnalysisEditState) =>
+    catalog !== null && analysisReadiness(current, catalog).issues.length === 0;
 
   const initialRevision = target.kind === "update" ? target.ifRevision : null;
   useEffect(() => {
@@ -156,7 +161,7 @@ export function useAnalysisEditSession({
   }
 
   async function runPreview(): Promise<boolean> {
-    if (!draft || !isAnalysisRunnable(draft)) return false;
+    if (!draft || !canExecute(draft)) return false;
     if (hasAnalysisChanges(draft) || hasViewChanges(draft)) {
       if (!(await run(draft))) return false;
     }
@@ -174,6 +179,7 @@ export function useAnalysisEditSession({
 
   /** 可保存的 View 身份：未改动用自有 View，预览已是当前草稿用预览，否则现跑一次。 */
   async function materialize(current: AnalysisEditState): Promise<string | null> {
+    if (!canExecute(current)) return null;
     if (!hasAnalysisChanges(current) && !hasViewChanges(current) && seed?.ownedViewId) {
       return seed.ownedViewId;
     }
@@ -182,7 +188,7 @@ export function useAnalysisEditSession({
   }
 
   async function save(): Promise<boolean> {
-    if (!draft || !seed || !draft.name.trim()) return false;
+    if (!draft || !seed || !draft.name.trim() || !canExecute(draft)) return false;
     try {
       if (target.kind === "update") {
         if (!dirty) return false;
@@ -244,7 +250,7 @@ export function useAnalysisEditSession({
   }
 
   async function saveAs(): Promise<boolean> {
-    if (!draft || !seed || !draft.name.trim()) return false;
+    if (!draft || !seed || !draft.name.trim() || !canExecute(draft)) return false;
     try {
       const viewId = await materialize(draft);
       if (!viewId) return false;
@@ -286,10 +292,9 @@ export function useAnalysisEditSession({
       !!draft &&
       !!seed &&
       !!draft.name.trim() &&
-      isAnalysisRunnable(draft) &&
+      canExecute(draft) &&
       (target.kind === "create" || isAnalysisEditDirty(draft)),
-    canSaveAs:
-      target.kind === "update" && !!draft && !!draft.name.trim() && isAnalysisRunnable(draft),
+    canSaveAs: target.kind === "update" && !!draft && !!draft.name.trim() && canExecute(draft),
     leaveOpen,
     target,
     runPreview,

@@ -3,9 +3,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   TIME_INTENT_INPUT,
   compileTimeIntent,
-  resolveTimeOutputGrain,
+  resolveTimeSelection,
+  timeSelectionIssueMessage,
   type TimeCapabilities,
   type TimeIntent,
+  type TimeSelectionIssue,
 } from "@time";
 import { parseAnalysisSpec } from "../../../../src/semantic_core/analysis_spec";
 import { DEFAULT_TIME_WINDOW } from "./analysis_draft";
@@ -27,6 +29,13 @@ import {
 
 const MONTHLY: TimeCapabilities = { grain: "month" };
 const YEAR_SCOPED: TimeCapabilities = { year_scoped: true };
+const issueText = (issue: TimeSelectionIssue | undefined) =>
+  issue ? timeSelectionIssueMessage(issue) : undefined;
+const outputGrain = (time: TimeIntent) => {
+  const result = resolveTimeSelection(compileTimeIntent(time), "2026-07");
+  if (result.status === "invalid") throw new Error(timeSelectionIssueMessage(result.issue));
+  return result.selection.outputGrain;
+};
 
 const renderBar = (time: TimeIntent, dataAsOf = "2026-07", capabilities: TimeCapabilities = {}) =>
   renderToStaticMarkup(
@@ -200,6 +209,26 @@ test("期间浮层把两种回看口径分节，每行印出实际起止月，�
   expect(picked).toEqual([]);
 });
 
+test("按月定义的指标选择按年回看时显式落到按月，合法组合保持可达", () => {
+  const out = renderToStaticMarkup(
+    <WindowPopup
+      capabilities={MONTHLY}
+      latest="2026-07"
+      onChange={() => true}
+      onPick={() => {}}
+      time={{ window: { kind: "current_month" } }}
+    />,
+  );
+  const row = (label: string) => {
+    const at = out.indexOf(label);
+    if (at < 0) throw new Error(`缺少期间候选：${label}`);
+    return out.slice(out.lastIndexOf("<button", at), at);
+  };
+  expect(row("最近 3 年（按月）")).not.toContain('aria-disabled="true"');
+  expect(row("最近 24 个月")).not.toContain('aria-disabled="true"');
+  expect(out).not.toContain("不能合并多个月份");
+});
+
 test("对照期在某一粒度下与主期撞桶：那一档点击前就灰，理由与落值闸同句", () => {
   const out = renderBar(
     {
@@ -212,12 +241,14 @@ test("对照期在某一粒度下与主期撞桶：那一档点击前就灰，�
   expect(segmentAttrs(out, "按月")).toContain('aria-disabled="false"');
   // 灰掉的理由与落值闸同一句：分段不是另一套规则。
   expect(
-    timeChangeIssue(
-      {
-        window: { kind: "trailing", count: 6, unit: "month", grain: "year" },
-        comparison: { kind: "previous_period" },
-      },
-      "2026-08",
+    issueText(
+      timeChangeIssue(
+        {
+          window: { kind: "trailing", count: 6, unit: "month", grain: "year" },
+          comparison: { kind: "previous_period" },
+        },
+        "2026-08",
+      ),
     ),
   ).toContain("都会产生 2026 年");
 });
@@ -285,7 +316,11 @@ test("能力卡不成立的粒度在写入草稿前被拦下，与服务端拒�
   const crossMonthYear: TimeIntent = {
     window: { kind: "range", from: "2026-01", to: "2026-08", grain: "year" },
   };
-  expect(timeChangeIssue(crossMonthYear, "2026-08", MONTHLY)).toContain("按月定义");
+  expect(timeChangeIssue(crossMonthYear, "2026-08", MONTHLY)).toMatchObject({
+    code: "metric_time_grain_incompatible",
+    required_grain: "month",
+    selected_grain: "year",
+  });
   expect(
     timeChangeIssue(withSeriesGrain(crossMonthYear, "month"), "2026-08", MONTHLY),
   ).toBeUndefined();
@@ -306,9 +341,13 @@ test("会产生重叠结果桶的对比在写入草稿前被拦截", () => {
     },
     "2026-07",
   );
-  expect(issue).toContain("结果无法区分");
-  expect(issue).toContain("请选择互不重叠的主时间或对照时间");
-  expect(issue).not.toContain("改为按月");
+  expect(issue).toEqual({
+    code: "time_output_bucket_overlap",
+    selected_grain: "year",
+    bucket: "2022",
+  });
+  expect(issueText(issue)).toContain("请选择互不重叠的主时间或对照时间");
+  expect(issueText(issue)).not.toContain("改为按月");
 });
 
 test("三种默认窗口产生的业务坐标都能组成权威 AnalysisSpec", () => {
@@ -335,9 +374,9 @@ test("三种默认窗口都通过契约校验，粒度就是窗口自带的那�
   const yearly = { window: DEFAULT_TIME_WINDOW.trailing_years };
   for (const time of [current, monthly, yearly])
     expect(() => TIME_INTENT_INPUT.parse(time)).not.toThrow();
-  expect(resolveTimeOutputGrain(compileTimeIntent(current), "2026-07")).toBe("total");
-  expect(resolveTimeOutputGrain(compileTimeIntent(monthly), "2026-07")).toBe("month");
-  expect(resolveTimeOutputGrain(compileTimeIntent(yearly), "2026-07")).toBe("year");
+  expect(outputGrain(current)).toBe("total");
+  expect(outputGrain(monthly)).toBe("month");
+  expect(outputGrain(yearly)).toBe("year");
 });
 
 test("off-menu 的近 N 值注入档位列表，触发器不留空白且档位内不重复", () => {
@@ -367,5 +406,5 @@ test("默认窗口一律省略锚点走相对窗口，随数据滚动而非冻�
     comparison: { kind: "previous_year" as const },
   };
   expect(() => TIME_INTENT_INPUT.parse(aligned)).not.toThrow();
-  expect(resolveTimeOutputGrain(compileTimeIntent(aligned), "2026-07")).toBe("year");
+  expect(outputGrain(aligned)).toBe("year");
 });

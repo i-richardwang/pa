@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { CubeGatewayError } from "../ports/cube_gateway.js";
 import { AnalysisDefinitionError } from "../semantic_core/semantic_analysis.js";
+import { TimeSelectionError, timeSelectionIssueMessage } from "../semantic_core/time_contract.js";
 import { InvalidRequestError, publicApplicationError } from "./errors.js";
 
 describe("application error boundary", () => {
@@ -27,6 +28,45 @@ describe("application error boundary", () => {
       code: "invalid_request",
       message: "分析定义需要修改",
       status: 400,
+      internal: false,
+    });
+    const issue = {
+      code: "metric_time_grain_incompatible" as const,
+      metric_titles: ["月度入职率"],
+      required_grain: "month" as const,
+      selected_grain: "year" as const,
+    };
+    expect(publicApplicationError(new TimeSelectionError(issue))).toMatchObject({
+      code: "invalid_request",
+      message: timeSelectionIssueMessage(issue),
+      status: 400,
+      details: { issue },
+      internal: false,
+    });
+    const overlap = {
+      code: "time_output_bucket_overlap" as const,
+      selected_grain: "year" as const,
+      bucket: "2022",
+    };
+    expect(publicApplicationError(new TimeSelectionError(overlap))).toMatchObject({
+      code: "invalid_request",
+      message: timeSelectionIssueMessage(overlap),
+      status: 400,
+      details: { issue: overlap },
+      internal: false,
+    });
+    const calendarYearTotal = {
+      code: "metric_time_calendar_year_total_incompatible" as const,
+      metric_titles: ["YTD事件率"],
+      from: "2025-01",
+      to: "2026-07",
+      selected_grain: "total" as const,
+    };
+    expect(publicApplicationError(new TimeSelectionError(calendarYearTotal))).toMatchObject({
+      code: "invalid_request",
+      message: timeSelectionIssueMessage(calendarYearTotal),
+      status: 400,
+      details: { issue: calendarYearTotal },
       internal: false,
     });
   });

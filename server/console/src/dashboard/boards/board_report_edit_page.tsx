@@ -24,6 +24,7 @@ export function BoardReportEditPage({ boardId, reportId }: { boardId: string; re
     "分析副本";
   const error = errorText(boardQuery.error) ?? errorText(replayQuery.error);
   const edit = useAnalysisEditSession({
+    catalog,
     sessionKey: `board:${boardId}:report:${reportId}`,
     seed:
       board && replay

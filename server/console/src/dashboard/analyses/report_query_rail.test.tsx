@@ -30,6 +30,13 @@ const catalog: CatalogPayload = {
       description: "在职人数。",
       report_calculations: ["percent_of_total"],
     },
+    {
+      id: "measure:monthly_hire_rate",
+      kind: "measure",
+      title: "月度入职率",
+      description: "所选月份的入职率。",
+      time_constraints: { grain: "month" },
+    },
   ],
   dimensions: [
     {
@@ -63,6 +70,45 @@ function withMembers(draft: AnalysisEditState): AnalysisEditState {
           ...view,
           measures: ["measure:active_employee_count"],
           dimensions: ["dimension:organization_name"],
+        },
+      ],
+    },
+  };
+}
+
+function withAnnualMonthlyMetric(draft: AnalysisEditState): AnalysisEditState {
+  const view = draft.analysis.views[0];
+  if (!view || "from" in view) throw new Error("空白种子必须是语义查询视图");
+  return {
+    ...draft,
+    analysis: {
+      ...draft.analysis,
+      views: [
+        {
+          ...view,
+          measures: ["measure:monthly_hire_rate"],
+          time: { window: { kind: "trailing", count: 3, unit: "year", grain: "year" } },
+        },
+      ],
+    },
+  };
+}
+
+function withOverlappingTime(draft: AnalysisEditState): AnalysisEditState {
+  const withMeasure = withMembers(draft);
+  const view = withMeasure.analysis.views[0];
+  if (!view || "from" in view) throw new Error("测试草稿必须是语义查询视图");
+  return {
+    ...withMeasure,
+    analysis: {
+      ...withMeasure.analysis,
+      views: [
+        {
+          ...view,
+          time: {
+            window: { kind: "trailing", count: 5, unit: "year", grain: "year" },
+            comparison: { kind: "previous_year" },
+          },
         },
       ],
     },
@@ -164,6 +210,19 @@ test("补上成员后预览即可点，提示随之消失", () => {
   const out = render(withMembers(blankDraft()));
   expect(previewDisabled(out)).toBe(false);
   expect(out).not.toContain("至少选择一个指标或分组维度");
+});
+
+test("可预测的指标时间冲突在草稿出口阻断并显示真实原因", () => {
+  const out = render(withAnnualMonthlyMetric(blankDraft()));
+  expect(previewDisabled(out)).toBe(true);
+  expect(out).toContain("指标「月度入职率」按月定义；连续期间请改为按月呈现，不能合并多个月份");
+});
+
+test("历史规格的时间自身冲突不会中断渲染，运行出口显示原因", () => {
+  const out = render(withOverlappingTime(blankDraft()));
+  expect(previewDisabled(out)).toBe(true);
+  expect(out).toContain("主时间与对照时间在按年呈现时都会产生 2022 年");
+  expect(out).not.toContain("服务暂时无法完成请求");
 });
 
 test("时间不在查询栏：它是舞台 chrome，唯一实现在工作台页脚时间栏", () => {

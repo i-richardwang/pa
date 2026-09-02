@@ -1,4 +1,7 @@
-import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
+import type {
+  PublicCatalogDocument as CatalogPayload,
+  PublicCatalogMember as CatalogMemberPayload,
+} from "@contracts/catalog_contract";
 import type { ReplayPayload } from "@contracts/replay_contract";
 import {
   isSemanticDerivedView,
@@ -14,7 +17,16 @@ import { memberShortName } from "@member";
 import type { ViewBlock } from "@payload";
 import { proposeChartDecl } from "@shape";
 import { canonicalJson } from "@canonical-json";
-import type { TimeCapabilities, TimeIntent } from "@time";
+import {
+  mergeTimeCapabilities,
+  metricTimeSelectionIssue,
+  resolveTimeIntentSelection,
+  timeSelectionIssueMessage,
+  type TimeCapabilities,
+  type TimeIntent,
+  type TimeSelectionIssue,
+  type TimeSelectionResult,
+} from "@time";
 
 export type AnalysisEditState = {
   name: string;
@@ -45,9 +57,6 @@ export const DEFAULT_TIME_WINDOW = {
   trailing_years: { kind: "trailing", count: 3, unit: "year", grain: "year" },
 } as const satisfies Record<string, TimeIntent["window"]>;
 
-/**
- * 空查询不可执行；isAnalysisRunnable 把住预览与保存两个出口，编译合法性归服务端。
- */
 export function blankAnalysisDefinition(title: string): AnalysisDefinition {
   return {
     title,
@@ -69,17 +78,68 @@ export function blankAnalysisSeed(name: string): {
   };
 }
 
-/** 结果视图是否已具备可执行的成员。 */
-export function isAnalysisRunnable(draft: Pick<AnalysisEditState, "analysis">): boolean {
+export type AnalysisReadinessIssue =
+  | { code: "analysis_empty" | "analysis_unavailable" | "filter_incomplete"; message: string }
+  | (TimeSelectionIssue & { message: string });
+
+const presentTimeIssue = (issue: TimeSelectionIssue): TimeSelectionIssue & { message: string } => ({
+  ...issue,
+  message: timeSelectionIssueMessage(issue),
+});
+
+export function memberTimeSelectionIssue(
+  member: CatalogMemberPayload,
+  time: TimeSelectionResult,
+): TimeSelectionIssue | undefined {
+  if (member.kind !== "measure") return undefined;
+  if (time.status === "invalid") return time.issue;
+  if (!member.time_constraints) return undefined;
+  return metricTimeSelectionIssue(
+    [{ capabilities: member.time_constraints, title: member.title }],
+    time.selection,
+  );
+}
+
+/** 当前草稿的执行阻断及其唯一时间解析；服务端仍在权威规划后复验。 */
+export function analysisReadiness(
+  draft: Pick<AnalysisEditState, "analysis">,
+  catalog: CatalogPayload,
+): { issues: AnalysisReadinessIssue[]; time?: TimeSelectionResult } {
   const viewId = semanticAnalysisSink(draft.analysis.views);
   const view = draft.analysis.views.find((candidate) => candidate.id === viewId);
-  if (!view) return false;
-  if (isSemanticDerivedView(view)) return true;
+  if (!view) {
+    return {
+      issues: [{ code: "analysis_unavailable", message: "分析缺少可执行的结果视图" }],
+    };
+  }
+  if (isSemanticDerivedView(view)) return { issues: [] };
+  const issues: AnalysisReadinessIssue[] = [];
   const hasMembers = (view.measures?.length ?? 0) + (view.dimensions?.length ?? 0) > 0;
+  if (!hasMembers) {
+    issues.push({ code: "analysis_empty", message: "至少选择一个指标或分组维度" });
+  }
   const filtersComplete = (view.filters ?? []).every(
     (filter) => filter.values.length > 0 && filter.values.every((value) => value.trim().length > 0),
   );
-  return hasMembers && filtersComplete;
+  if (!filtersComplete) {
+    issues.push({ code: "filter_incomplete", message: "请先为筛选选择至少一个值" });
+  }
+  const time = resolveTimeIntentSelection(view.time, catalog.data_as_of);
+  if (time.status === "invalid") {
+    issues.push(presentTimeIssue(time.issue));
+  } else {
+    const selected = new Set(view.measures ?? []);
+    const members = catalog.measures.filter((member) => selected.has(member.id));
+    const issue = metricTimeSelectionIssue(
+      members.map((member) => ({
+        capabilities: member.time_constraints ?? {},
+        title: member.title,
+      })),
+      time.selection,
+    );
+    if (issue) issues.push(presentTimeIssue(issue));
+  }
+  return { issues, time };
 }
 
 /**
@@ -440,14 +500,7 @@ export function timeCapabilitiesOf(
 ): TimeCapabilities {
   const measures = view.measures ?? [];
   const members = catalog.measures.filter((member) => measures.includes(member.id));
-  return {
-    ...(members.some((member) => member.time_constraints?.grain === "month")
-      ? { grain: "month" as const }
-      : {}),
-    ...(members.some((member) => member.time_constraints?.year_scoped)
-      ? { year_scoped: true as const }
-      : {}),
-  };
+  return mergeTimeCapabilities(members.map((member) => member.time_constraints ?? {}));
 }
 
 /** 时间栏写入收敛点查询视图，并由 setSemanticQueryView 统一归一呈现状态。 */

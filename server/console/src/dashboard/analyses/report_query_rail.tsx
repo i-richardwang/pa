@@ -23,6 +23,7 @@ import type { ReplayPayload } from "@contracts/replay_contract";
 import { LoadingMark } from "pa-result-view";
 import type { SemanticPercentOfTotalCalculation, SemanticQueryView } from "@semantic-analysis";
 import { makeTitleOf } from "@shape";
+import { timeSelectionIssueMessage } from "@time";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/hint";
 import { PopupSection, PopupTitle } from "@/components/ui/surface";
@@ -47,7 +48,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
-  isAnalysisRunnable,
+  analysisReadiness,
+  memberTimeSelectionIssue,
   removeSemanticQueryMember,
   replaceSemanticQueryDimension,
   semanticSinkQueryView,
@@ -559,12 +561,13 @@ export function ReportQueryRail({
     [...catalog.measures, ...catalog.dimensions].map((item) => [item.id, item]),
   );
   const titleOf = (member: string) => catalogById.get(member)?.title ?? resultTitleOf(member);
-  // 空查询是合法中间态，出口由「运行预览」与保存的禁用把住。
-  const runnable = isAnalysisRunnable(draft);
-  const hasIncompleteFilter = filters.some((filter) => filter.values.length === 0);
-
-  // validate-on-commit：编辑照常落草稿，字段组合可执行性由运行预览时的服务端规划裁定；
-  // 选路只在服务端，草稿里的语义规格自始至终不含任何物理 view。
+  const readiness = analysisReadiness(draft, catalog);
+  const runIssue = readiness.issues[0];
+  const candidateTimeIssue = (member: CatalogMemberPayload) => {
+    if (!readiness.time) return undefined;
+    const issue = memberTimeSelectionIssue(member, readiness.time);
+    return issue ? timeSelectionIssueMessage(issue) : undefined;
+  };
   const updateIntent = (next: SemanticQueryView) => {
     onChange(setSemanticQueryView(draft, next.id, next, catalog));
   };
@@ -629,6 +632,7 @@ export function ReportQueryRail({
         <InspectorSection
           actions={
             <MemberPopover
+              candidateIssue={candidateTimeIssue}
               extras={{ label: "用已选指标再算", items: [calculationPick] }}
               members={catalog.measures}
               metricDomains={catalog.metric_domains}
@@ -735,18 +739,14 @@ export function ReportQueryRail({
       <div className="shrink-0 border-t border-pa-line bg-pa-bg px-3 py-3 md:px-2.5">
         <Button
           className="w-full"
-          disabled={!runnable}
+          disabled={Boolean(runIssue)}
           loading={previewing}
           onClick={onRunPreview}
           variant="filled"
         >
           运行预览
         </Button>
-        {!runnable && (
-          <Hint className="mt-2 text-center">
-            {hasIncompleteFilter ? "请先为筛选选择至少一个值" : "至少选择一个指标或分组维度"}
-          </Hint>
-        )}
+        {runIssue ? <Hint className="mt-2 text-center">{runIssue.message}</Hint> : null}
       </div>
     </div>
   );

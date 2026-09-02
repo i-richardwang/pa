@@ -11,19 +11,18 @@ import { toastManager } from "@/components/ui/toast";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  compileTimeIntent,
-  expandTimeCompare,
-  expandTimeWindow,
+  metricTimeSelectionIssue,
   parseTimeIntent,
   primaryTimeRange,
-  resolveTimeOutputGrain,
-  seriesGrainIssues,
+  resolveTimeIntentSelection,
+  timeSelectionIssueMessage,
   type SeriesGrain,
   type TimeCapabilities,
   type TimeIntent,
+  type TimeSelectionIssue,
 } from "@time";
 import { CalendarIcon, GitCompareArrowsIcon } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { monthLabel, monthRangeLabel } from "@format";
 import { DEFAULT_TIME_WINDOW } from "./analysis_draft";
 
@@ -176,23 +175,18 @@ export function withSeriesGrain(time: TimeIntent, grain: SeriesGrain): TimeInten
   return { ...time, window: { ...time.window, grain } };
 }
 
-function coordinateRanges(time: TimeIntent, latest: string) {
-  const expanded = expandTimeCompare(expandTimeWindow(compileTimeIntent(time), latest), latest);
-  const cutoff = "cutoff" in expanded ? (expanded.cutoff ?? latest) : latest;
-  const primary = "range" in expanded ? expanded.range : { from: cutoff, to: cutoff };
-  const comparisons = (expanded.compare ?? []).flatMap((coordinate) => {
-    if ("range" in coordinate) return [coordinate.range];
-    if ("cutoff" in coordinate) return [{ from: coordinate.cutoff, to: coordinate.cutoff }];
-    return [];
-  });
-  return { primary, comparisons };
-}
-
 const rangeLabel = ({ from, to }: { from: string; to: string }) => monthRangeLabel(from, to);
 
 export function summarizeResolvedTime(time: TimeIntent, latest: string): string {
   const parsed = parseTimeIntent(time);
-  const { primary, comparisons } = coordinateRanges(parsed, latest);
+  const result = resolveTimeIntentSelection(parsed, latest);
+  if (result.status === "invalid") return timeSelectionIssueMessage(result.issue);
+  const ranges = result.selection.coordinates.map((coordinate) =>
+    coordinate.kind === "cutoff"
+      ? { from: coordinate.cutoff, to: coordinate.cutoff }
+      : { from: coordinate.from, to: coordinate.to },
+  );
+  const [primary, ...comparisons] = ranges;
   const grain = seriesGrainOf(parsed.window);
   const displayText =
     grain === undefined ? "一个结果" : grain === "month" ? "每月一个结果" : "每年一个结果";
@@ -206,15 +200,10 @@ export function timeChangeIssue(
   time: TimeIntent,
   latest: string,
   capabilities: TimeCapabilities = {},
-): string | undefined {
-  try {
-    const parsed = parseTimeIntent(time);
-    resolveTimeOutputGrain(compileTimeIntent(parsed), latest);
-    const grain = seriesGrainOf(parsed.window);
-    return grain === undefined ? undefined : seriesGrainIssues(parsed, capabilities, latest)[grain];
-  } catch (error) {
-    return error instanceof Error ? error.message : "时间组合无效";
-  }
+): TimeSelectionIssue | undefined {
+  const result = resolveTimeIntentSelection(time, latest);
+  if (result.status === "invalid") return result.issue;
+  return metricTimeSelectionIssue([{ capabilities }], result.selection);
 }
 
 /**
@@ -224,11 +213,13 @@ export function timeChangeIssue(
 export function WindowPopup({
   time,
   latest,
+  capabilities = {},
   onChange,
   onPick,
 }: {
   time: TimeIntent;
   latest: string;
+  capabilities?: TimeCapabilities;
   onChange: ApplyTimeChange;
   onPick: (kind: PickerKind) => void;
 }) {
@@ -257,17 +248,31 @@ export function WindowPopup({
     selected: boolean,
     onSelect: () => void,
     candidate?: TimeIntent["window"],
-  ) => (
-    <PopoverListRow
-      key={key}
-      detail={candidate ? detail(candidate) : undefined}
-      onClick={onSelect}
-      selected={selected}
-      trailing={popoverListCheck(selected)}
-    >
-      {label}
-    </PopoverListRow>
-  );
+  ) => {
+    const issue = candidate
+      ? timeChangeIssue(adjustTimeWindow(time, candidate).time, latest, capabilities)
+      : undefined;
+    const reason = issue ? timeSelectionIssueMessage(issue) : undefined;
+    const item = (
+      <PopoverListRow
+        detail={candidate ? detail(candidate) : undefined}
+        onClick={onSelect}
+        selected={selected}
+        trailing={popoverListCheck(selected)}
+        unavailable={Boolean(reason)}
+      >
+        {label}
+        {reason ? <span className="sr-only">（{reason}）</span> : null}
+      </PopoverListRow>
+    );
+    if (!reason) return <Fragment key={key}>{item}</Fragment>;
+    return (
+      <Tooltip disableHoverablePopup key={key}>
+        <TooltipTrigger render={<div />}>{item}</TooltipTrigger>
+        <TooltipPopup>{reason}</TooltipPopup>
+      </Tooltip>
+    );
+  };
   const monthCounts = withCurrent(
     MONTH_CHOICES,
     window.kind === "trailing" && window.unit === "month" ? window.count : 0,
@@ -304,10 +309,11 @@ export function WindowPopup({
           { kind: "year_to_date", grain: "month" },
         )}
         {yearCounts.map((count) => {
-          const candidate = { kind: "trailing", count, unit: "year", grain: "year" } as const;
+          const grain = capabilities.grain === "month" ? "month" : "year";
+          const candidate = { kind: "trailing", count, unit: "year", grain } as const;
           return row(
             `y${count}`,
-            `最近 ${count} 年`,
+            `最近 ${count} 年${grain === "month" ? "（按月）" : ""}`,
             trailing("year", count),
             () => changeWindow(candidate),
             candidate,
@@ -369,11 +375,10 @@ function grainChoiceIssues(
   latest: string,
   capabilities: TimeCapabilities,
 ): Partial<Record<SeriesGrain, string>> {
-  const issues = seriesGrainIssues(time, capabilities, latest);
+  const issues: Partial<Record<SeriesGrain, string>> = {};
   for (const { value } of GRAIN_CHOICES) {
-    if (issues[value]) continue;
     const issue = timeChangeIssue(withSeriesGrain(time, value), latest, capabilities);
-    if (issue) issues[value] = issue;
+    if (issue) issues[value] = timeSelectionIssueMessage(issue);
   }
   return issues;
 }
@@ -468,9 +473,10 @@ export function ComparisonPopup({
     onSelect: () => void,
   ) => {
     const selected = choice === value;
-    const reason = selected
+    const issue = selected
       ? undefined
       : timeChangeIssue(setTimeComparison(time, candidate), latest, capabilities);
+    const reason = issue ? timeSelectionIssueMessage(issue) : undefined;
     const item = (
       <PopoverListRow
         onClick={onSelect}
@@ -641,7 +647,10 @@ export function TimeBar({
   const applyChange: ApplyTimeChange = (next, message) => {
     const issue = timeChangeIssue(next, latest, capabilities);
     if (issue) {
-      toastManager.add({ type: "info", title: `未应用本次修改：${issue}` });
+      toastManager.add({
+        type: "info",
+        title: `未应用本次修改：${timeSelectionIssueMessage(issue)}`,
+      });
       return false;
     }
     if (message) toastManager.add({ type: "info", title: message });
@@ -666,6 +675,7 @@ export function TimeBar({
         </Tooltip>
         <PopoverPopup width="list">
           <WindowPopup
+            capabilities={capabilities}
             latest={latest}
             onChange={applyChange}
             onPick={setPicker}

@@ -3,6 +3,7 @@ import type { CubeView, TimeContext } from "../ports/cube_gateway.js";
 import {
   TIME_GRAINS,
   TIME_INPUT,
+  TimeSelectionError,
   type TimeInput,
   timeBuckets,
 } from "../semantic_core/time_contract.js";
@@ -696,15 +697,27 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
     });
   });
 
-  test("PTD 跨年连续期间的合计无良定义，fail-closed 并给出改法", () => {
-    expect(() =>
+  test("PTD 跨年连续期间不能合为总计，返回结构化时间问题", () => {
+    try {
       planTimeQuery(
         { measures: ["test_people_metrics.ytd_primary_event_rate"] },
         { range: { from: "2025-01", to: "2026-06" }, grain: "total" },
         context,
         views,
-      ),
-    ).toThrow(/跨多个日历年时无法合并为一个合计.*按年或按月/);
+      );
+      throw new Error("预期时间规划拒绝跨年总计");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TimeSelectionError);
+      expect(error).toMatchObject({
+        issue: {
+          code: "metric_time_calendar_year_total_incompatible",
+          metric_titles: ["YTD主要事件率"],
+          from: "2025-01",
+          to: "2026-06",
+          selected_grain: "total",
+        },
+      });
+    }
   });
 
   test("连续期间总计中的 flow 与终点类指标自动编译为不同物理查询腿", () => {

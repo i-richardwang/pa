@@ -191,7 +191,7 @@ test("黄金对覆盖三种时间语义与全部业务时间形态，且守卫�
   expect(thrown.length).toBeGreaterThan(0);
   expect(thrown.length).toBeLessThan(Object.keys(golden).length);
   for (const marker of [
-    "跨多个日历年时无法合并为一个合计",
+    "按日历年重新起算",
     "按月定义",
     "compareDateRange",
     '"granularity":"year"',

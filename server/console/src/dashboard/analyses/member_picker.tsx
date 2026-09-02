@@ -69,21 +69,29 @@ export function DiamondOutline({ className }: { className?: string }) {
 
 export function pickableMembers(
   members: CatalogMemberPayload[],
-  selectedDimensions: string[],
-  blockedDimensions: string[] = [],
+  {
+    selectedDimensions,
+    blockedDimensions = [],
+    candidateIssue,
+  }: {
+    selectedDimensions: string[];
+    blockedDimensions?: string[];
+    candidateIssue?: (member: CatalogMemberPayload) => string | undefined;
+  },
 ): PickableMember[] {
   const selected = new Set(selectedDimensions);
   const blocked = new Set(blockedDimensions);
   return members.map((member) => {
-    const incompatible = Boolean(
-      (member.kind === "dimension" && blocked.has(member.id)) ||
-        member.incompatible_dimensions?.some((dimension) => selected.has(dimension)),
-    );
+    const reason =
+      ((member.kind === "dimension" && blocked.has(member.id)) ||
+      member.incompatible_dimensions?.some((dimension) => selected.has(dimension))
+        ? "与当前分组不兼容"
+        : undefined) ?? candidateIssue?.(member);
     return {
       ...member,
       canonical_name: member.id,
-      incompatible,
-      ...(incompatible ? { incompatible_reason: "与当前分组不兼容" } : {}),
+      incompatible: Boolean(reason),
+      ...(reason ? { incompatible_reason: reason } : {}),
     };
   });
 }
@@ -187,6 +195,7 @@ export function MemberPopover({
   emptyLabel = "没有可用字段",
   selectedDimensions,
   blockedDimensions = [],
+  candidateIssue,
   extras,
   metricDomains,
   onPick,
@@ -197,6 +206,7 @@ export function MemberPopover({
   emptyLabel?: string;
   selectedDimensions: string[];
   blockedDimensions?: string[];
+  candidateIssue?: (member: CatalogMemberPayload) => string | undefined;
   /** 非目录条目（如构成占比）与目录成员共用同一份行与不可选理由；无第二个添加入口。 */
   extras?: MemberGroup;
   /** 指标域清单（目录契约）：指标行按它分节；不给就不分节。 */
@@ -208,11 +218,11 @@ export function MemberPopover({
   const { contains } = useAutocompleteFilter({ sensitivity: "base" });
   const groups = useMemo(() => {
     const grouped = groupMembers(
-      pickableMembers(members, selectedDimensions, blockedDimensions),
+      pickableMembers(members, { selectedDimensions, blockedDimensions, candidateIssue }),
       metricDomainTitles(metricDomains ?? []),
     );
     return extras?.items.length ? [...grouped, extras] : grouped;
-  }, [members, selectedDimensions, blockedDimensions, extras, metricDomains]);
+  }, [members, selectedDimensions, blockedDimensions, candidateIssue, extras, metricDomains]);
   const chosen = new Set(selected ?? []);
 
   return (

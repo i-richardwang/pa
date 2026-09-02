@@ -22,16 +22,32 @@ const dimension: CatalogMemberPayload = {
 
 describe("report editor member picker", () => {
   test("候选本地灰化只据纯语义信号：互斥维度与被封锁维度，双向置灰", () => {
-    expect(pickableMembers([measure], ["dimension:department_name"], [])[0]).toMatchObject({
+    expect(
+      pickableMembers([measure], { selectedDimensions: ["dimension:department_name"] })[0],
+    ).toMatchObject({
       canonical_name: measure.id,
       incompatible: true,
     });
-    expect(pickableMembers([dimension], [], ["dimension:department_name"])[0]).toMatchObject({
-      canonical_name: dimension.id,
-      incompatible: true,
-    });
+    expect(
+      pickableMembers([dimension], {
+        selectedDimensions: [],
+        blockedDimensions: ["dimension:department_name"],
+      })[0],
+    ).toMatchObject({ canonical_name: dimension.id, incompatible: true });
     // 无冲突信号时可选——跨来源可行性交由提交时的服务端预览编译裁定
-    expect(pickableMembers([dimension], [], [])[0].incompatible).toBe(false);
+    expect(pickableMembers([dimension], { selectedDimensions: [] })[0].incompatible).toBe(false);
+  });
+
+  test("候选使用调用方给出的统一兼容性原因置灰", () => {
+    expect(
+      pickableMembers([measure], {
+        selectedDimensions: [],
+        candidateIssue: () => "当前时间按年呈现，该指标只支持按月呈现",
+      })[0],
+    ).toMatchObject({
+      incompatible: true,
+      incompatible_reason: "当前时间按年呈现，该指标只支持按月呈现",
+    });
   });
 
   // 分节靠服务端当前语义包投影的业务属性组驱动，身份使用公共语义 id：
@@ -61,8 +77,7 @@ describe("report editor member picker", () => {
           dimension("dimension:leave_type", "离职性质"),
           measure,
         ],
-        [],
-        [],
+        { selectedDimensions: [] },
       ),
     );
     expect(grouped.map((group) => group.label)).toEqual([
@@ -75,7 +90,11 @@ describe("report editor member picker", () => {
     expect(grouped[0].items.map((item) => item.id)).toEqual(["dimension:job_level_band"]);
     // 归不进任何组的维度才落末位兜底桶——模型归组是 fail-closed 的，真成员不该走到这里。
     expect(
-      groupMembers(pickableMembers([dimension("dimension:nowhere", "无归属")], [], [])),
+      groupMembers(
+        pickableMembers([dimension("dimension:nowhere", "无归属")], {
+          selectedDimensions: [],
+        }),
+      ),
     ).toEqual([{ label: "其他", items: expect.any(Array) }]);
   });
 
@@ -110,8 +129,7 @@ describe("report editor member picker", () => {
           m("measure:headcount", "在职人数"),
           dimension,
         ],
-        [],
-        [],
+        { selectedDimensions: [] },
       ),
       metricDomainTitles(domains),
     );

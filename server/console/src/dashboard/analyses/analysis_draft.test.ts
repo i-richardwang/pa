@@ -4,12 +4,13 @@ import type { ReplayPayload } from "@contracts/replay_contract";
 import type { AnalysisDefinition, SemanticQueryView } from "@semantic-analysis";
 import {
   beginAnalysisEdit,
+  analysisReadiness,
   blankAnalysisDefinition,
   defaultSemanticViewIntent,
   hasAnalysisChanges,
   hasViewChanges,
   isAnalysisEditDirty,
-  isAnalysisRunnable,
+  memberTimeSelectionIssue,
   isPreviewCurrent,
   removeSemanticQueryMember,
   renameAnalysisDraft,
@@ -339,18 +340,99 @@ describe("analysis draft 三层状态", () => {
       },
       false,
     );
-    expect(isAnalysisRunnable(blank)).toBe(false);
+    expect(analysisReadiness(blank, catalog).issues).toEqual([
+      { code: "analysis_empty", message: "至少选择一个指标或分组维度" },
+    ]);
     const query = semanticSinkQueryView(blank.analysis)!;
     expect(
-      isAnalysisRunnable(
+      analysisReadiness(
         setSemanticQueryView(
           blank,
           query.id,
           { ...query, measures: ["measure:active_employee_count"] },
           catalog,
         ),
-      ),
-    ).toBe(true);
+        catalog,
+      ).issues,
+    ).toEqual([]);
+  });
+
+  test("按月定义的指标在年度草稿与候选中返回同一结构化阻断", () => {
+    const monthly = {
+      id: "measure:monthly_hire_rate",
+      kind: "measure" as const,
+      title: "月度入职率",
+      description: "所选月份的入职率。",
+      time_constraints: { grain: "month" as const },
+    };
+    const annual = beginAnalysisEdit(
+      {
+        name: "年度分析",
+        analysis: {
+          title: "年度分析",
+          views: [
+            {
+              id: "result",
+              measures: [monthly.id],
+              time: { window: { kind: "trailing", count: 3, unit: "year", grain: "year" } },
+            },
+          ],
+        },
+        view: { type: "table" },
+      },
+      false,
+    );
+    const readiness = analysisReadiness(annual, {
+      ...catalog,
+      measures: [...catalog.measures, monthly],
+    });
+    if (!readiness.time) throw new Error("查询草稿必须产出时间解析");
+    const issue = memberTimeSelectionIssue(monthly, readiness.time);
+    if (!issue) throw new Error("按月定义指标必须拒绝年度呈现");
+    expect(issue).toEqual({
+      code: "metric_time_grain_incompatible",
+      metric_titles: ["月度入职率"],
+      required_grain: "month",
+      selected_grain: "year",
+    });
+    expect(readiness.issues).toEqual([
+      {
+        ...issue,
+        message: "指标「月度入职率」按月定义；连续期间请改为按月呈现，不能合并多个月份",
+      },
+    ]);
+  });
+
+  test("历史规格中的时间自身冲突稳定阻断，不依赖指标能力", () => {
+    const historical = beginAnalysisEdit(
+      {
+        name: "历史分析",
+        analysis: {
+          title: "历史分析",
+          views: [
+            {
+              id: "result",
+              measures: ["measure:active_employee_count"],
+              time: {
+                window: { kind: "trailing", count: 5, unit: "year", grain: "year" },
+                comparison: { kind: "previous_year" },
+              },
+            },
+          ],
+        },
+        view: { type: "table" },
+      },
+      true,
+    );
+    expect(analysisReadiness(historical, catalog).issues).toEqual([
+      {
+        code: "time_output_bucket_overlap",
+        selected_grain: "year",
+        bucket: "2022",
+        message:
+          "主时间与对照时间在按年呈现时都会产生 2022 年，结果无法区分；请选择互不重叠的主时间或对照时间",
+      },
+    ]);
   });
 
   test("派生分析没有唯一可编辑查询收敛点", () => {

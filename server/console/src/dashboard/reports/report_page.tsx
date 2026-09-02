@@ -30,6 +30,7 @@ export function ReportPage({ id }: { id: string }) {
       }
     : null;
   const edit = useAnalysisEditSession({
+    catalog,
     sessionKey: `report:${id}`,
     seed,
     savedReplay,

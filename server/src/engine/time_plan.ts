@@ -11,13 +11,17 @@ import type {
 import { filterMembers } from "./query_contract.js";
 import { physicalEvaluation, resolveMetricTime } from "./metric_time.js";
 import {
-  expandTimeCompare,
-  expandTimeWindow,
-  resolveTimeOutputGrain,
+  metricTimeSelectionIssue,
+  metricTimeCapabilities,
+  resolveTimeSelection,
+  timeAvailabilityIssue,
+  TimeSelectionError,
   type TimeBucket,
   timeBuckets,
+  type ResolvedTimeSelection,
   type TimeInput,
   type TimeOutputGrain,
+  type TimeSelectionCoordinate,
 } from "../semantic_core/time_contract.js";
 
 export type TimeWindow = { from: string; to: string };
@@ -160,9 +164,6 @@ export const PLANNED_QUERY_LEG_SCHEMA = z
   .strict() satisfies z.ZodType<PlannedQueryLeg>;
 
 type Month = { year: number; month: number };
-type LogicalCoordinate =
-  | { kind: "cutoff"; cutoff: string }
-  | { kind: "range"; from: string; to: string };
 const pad2 = (value: number) => String(value).padStart(2, "0");
 const yearMonthOf = (date: string) => date.slice(0, 7);
 const endOfMonth = (year: number, month: number) =>
@@ -247,24 +248,18 @@ function measureContracts(query: CubeQuery, views: CubeView[]) {
 
 export type TimeEvalForm = "interval" | "endpoint";
 
-function assertCompatibleTimeGrain(
+function assertMetricTimeSelection(
   contracts: ReturnType<typeof measureContracts>,
-  coordinates: LogicalCoordinate[],
-  grain: TimeOutputGrain,
+  selection: ResolvedTimeSelection,
 ): void {
-  const monthly = contracts.filter((contract) => contract.contract.grain === "month");
-  if (!monthly.length || grain === "month") return;
-  const combinesMonths = coordinates.some(
-    (coordinate) =>
-      coordinate.kind === "range" &&
-      monthIndex(parseMonth(coordinate.from)) !== monthIndex(parseMonth(coordinate.to)),
+  const issue = metricTimeSelectionIssue(
+    contracts.map((contract) => ({
+      title: contract.title,
+      capabilities: metricTimeCapabilities(contract.contract),
+    })),
+    selection,
   );
-  if (combinesMonths) {
-    throw new Error(
-      `指标「${monthly.map((contract) => contract.title).join("、")}」按月定义；` +
-        "连续期间请改为按月呈现，不能合并多个月份",
-    );
-  }
+  if (issue) throw new TimeSelectionError(issue);
 }
 
 function timeBounds(query: CubeQuery, context: TimeContext, views: CubeView[]) {
@@ -293,57 +288,8 @@ function timeBounds(query: CubeQuery, context: TimeContext, views: CubeView[]) {
   };
 }
 
-function coordinatesOf(time: TimeInput, defaultThrough: string): LogicalCoordinate[] {
-  const base: LogicalCoordinate =
-    "range" in time
-      ? { kind: "range", from: time.range.from, to: time.range.to }
-      : {
-          kind: "cutoff",
-          cutoff: ("cutoff" in time ? time.cutoff : undefined) ?? defaultThrough,
-        };
-  const compare = (time.compare ?? []).map((coordinate): LogicalCoordinate => {
-    if ("range" in coordinate) {
-      return { kind: "range", from: coordinate.range.from, to: coordinate.range.to };
-    }
-    if ("years_ago" in coordinate || "previous_period" in coordinate) {
-      throw new Error("相对对照未展开为绝对坐标，请联系服务维护者");
-    }
-    return { kind: "cutoff", cutoff: coordinate.cutoff };
-  });
-  return [base, ...compare];
-}
-
-function coordinateLabel(coordinate: LogicalCoordinate): string {
-  return coordinate.kind === "cutoff"
-    ? coordinate.cutoff
-    : `${coordinate.from} 至 ${coordinate.to}`;
-}
-
-function assertCoordinates(coordinates: LogicalCoordinate[], availableThrough: string): void {
-  const available = parseMonth(availableThrough);
-  for (const coordinate of coordinates) {
-    const from = parseMonth(coordinate.kind === "cutoff" ? coordinate.cutoff : coordinate.from);
-    const to = parseMonth(coordinate.kind === "cutoff" ? coordinate.cutoff : coordinate.to);
-    if (monthIndex(from) > monthIndex(to)) {
-      throw new Error(
-        `时间范围「${coordinateLabel(coordinate)}」的开始月份不能晚于结束月份；` +
-          "请调整为开始月份早于或等于结束月份",
-      );
-    }
-    if (monthIndex(to) > monthIndex(available)) {
-      throw new Error(
-        `当前数据可查询至 ${availableThrough}，不能查询 ${coordinateLabel(coordinate)}；` +
-          `请把结束月份改为 ${availableThrough} 或更早月份`,
-      );
-    }
-  }
-  const labels = coordinates.map(coordinateLabel);
-  const duplicate = labels.find((label, index) => labels.indexOf(label) !== index);
-  if (duplicate) throw new Error(`主时间与对照时间重复：${duplicate}`);
-}
-
 export type TimeEmission = { windows: TimeWindow[]; granularity?: "month" | "year" };
-type EnumeratedCoordinate = { coordinate: LogicalCoordinate; buckets: TimeBucket[] };
+type EnumeratedCoordinate = { coordinate: TimeSelectionCoordinate; buckets: TimeBucket[] };
 
 function monthWindow(month: string): TimeWindow {
   const at = parseMonth(month);
@@ -381,21 +327,8 @@ function emitEndpoint(time: BusinessTimeResolution): TimeEmission {
   };
 }
 
-function assertYearToDateBuckets(time: BusinessTimeResolution, enabled: boolean): void {
-  if (!enabled) return;
-  for (const coordinate of time.coordinates) {
-    const { buckets } = coordinate;
-    if (buckets.some((bucket) => bucket.from.slice(0, 4) !== bucket.to.slice(0, 4))) {
-      throw new Error(
-        `YTD 指标跨多个日历年时无法合并为一个合计（「${coordinate.from} 至 ${coordinate.to}」）；` +
-          "请改为按年或按月呈现，或改用一个截止月份表达单一终点",
-      );
-    }
-  }
-}
-
 function enumerateCoordinates(
-  coordinates: LogicalCoordinate[],
+  coordinates: TimeSelectionCoordinate[],
   grain: TimeOutputGrain,
 ): EnumeratedCoordinate[] {
   const kind = coordinates[0]?.kind;
@@ -480,24 +413,17 @@ export function resolveTimePlanning(
   const view = queryTimeView(query, preferredView);
   const contracts = measureContracts(query, views);
   const bounds = timeBounds(query, context, views);
-  // 窗口先于对照展开：相对窗口先落为绝对 range，年同移的相对对照再作用其上。
-  const resolved = expandTimeCompare(
-    expandTimeWindow(time, bounds.defaultThrough),
-    bounds.defaultThrough,
-  );
-  const coordinates = coordinatesOf(resolved, bounds.defaultThrough);
-  assertCoordinates(coordinates, bounds.availableThrough);
-  const grain = resolveTimeOutputGrain(time, bounds.defaultThrough);
-  assertCompatibleTimeGrain(contracts, coordinates, grain);
-  const enumerated = enumerateCoordinates(coordinates, grain);
+  const result = resolveTimeSelection(time, bounds.defaultThrough);
+  if (result.status === "invalid") throw new TimeSelectionError(result.issue);
+  const { selection } = result;
+  const unavailable = timeAvailabilityIssue(selection, bounds.availableThrough);
+  if (unavailable) throw new TimeSelectionError(unavailable);
+  assertMetricTimeSelection(contracts, selection);
+  const enumerated = enumerateCoordinates(selection.coordinates, selection.outputGrain);
   const businessTime = {
-    outputGrain: grain,
+    outputGrain: selection.outputGrain,
     coordinates: enumerated.map(resolvedCoordinate),
   } satisfies BusinessTimeResolution;
-  assertYearToDateBuckets(
-    businessTime,
-    contracts.some((contract) => contract.contract.window === "year_to_date"),
-  );
   return {
     businessTime,
     view,

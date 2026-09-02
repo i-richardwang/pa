@@ -4,7 +4,11 @@
  */
 import { expect, test } from "bun:test";
 import {
-  seriesGrainIssues,
+  metricTimeSelectionIssue,
+  resolveTimeSelection,
+  resolveTimeIntentSelection,
+  TimeSelectionError,
+  timeSelectionIssueMessage,
   totalPeriodOf,
   type TimeCapabilities,
   type TimeIntent,
@@ -74,8 +78,15 @@ const compiler = toCompilerCatalog(document);
 const cardOf = (id: string): TimeCapabilities =>
   semantic.measures.find((member) => member.id === id)?.time_constraints ?? {};
 
+function predictedIssue(time: TimeIntent, capabilities: TimeCapabilities) {
+  const result = resolveTimeIntentSelection(time, LATEST);
+  return result.status === "invalid"
+    ? result.issue
+    : metricTimeSelectionIssue([{ capabilities }], result.selection);
+}
+
 /** 生产路径：语义规格（带 TimeIntent）→ 编译 → 物理时间规划。抛错即该组合被拒。 */
-function rejection(measureId: string, time: TimeIntent): string | undefined {
+function planningFailure(measureId: string, time: TimeIntent): unknown {
   try {
     const plan = compileAnalysisView(compiler, {
       analysis: parseAnalysisDefinition({
@@ -88,8 +99,13 @@ function rejection(measureId: string, time: TimeIntent): string | undefined {
     planMetricQuery({ measures: node.measures ?? [] }, node.time, context, views);
     return undefined;
   } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+    return error;
   }
+}
+
+function rejection(measureId: string, time: TimeIntent): string | undefined {
+  const error = planningFailure(measureId, time);
+  return error === undefined ? undefined : error instanceof Error ? error.message : String(error);
 }
 
 const TIMES: { label: string; time: TimeIntent }[] = [
@@ -151,11 +167,8 @@ test("卡的预测与生产路径的接受/拒绝逐例等价（双向）", () =
     const card = cardOf(measureId);
     for (const { label, time } of TIMES) {
       const at = `${measureId} × ${label}`;
-      // 单月窗口没有粒度可选，无从违规。
-      const predicted =
-        time.window.kind === "current_month"
-          ? undefined
-          : seriesGrainIssues(time, card, LATEST)[time.window.grain];
+      const issue = predictedIssue(time, card);
+      const predicted = issue ? timeSelectionIssueMessage(issue) : undefined;
       const actual = rejection(measureId, time);
       if (predicted) predictedRejections.push(at);
       if (actual) actualRejections.push(`${at}：${actual}`);
@@ -172,12 +185,39 @@ test("卡的预测与生产路径的接受/拒绝逐例等价（双向）", () =
 const at = (label: string) => TIMES.find((entry) => entry.label === label)!.time;
 
 test("被拒的正是按月定义指标的越界组合", () => {
-  expect(rejection("measure:current_month_turnover_rate", at("年内期间·按年"))).toContain(
-    "按月定义",
-  );
+  const failure = planningFailure("measure:current_month_turnover_rate", at("年内期间·按年"));
+  expect(failure).toBeInstanceOf(TimeSelectionError);
+  expect(failure).toMatchObject({
+    issue: {
+      code: "metric_time_grain_incompatible",
+      required_grain: "month",
+      selected_grain: "year",
+    },
+  });
   expect(rejection("measure:current_month_turnover_rate", at("年内期间·按月"))).toBeUndefined();
   expect(rejection("measure:active_employee_count", at("年内期间·按年"))).toBeUndefined();
   expect(rejection("measure:turnover_count", at("跨年期间·按月"))).toBeUndefined();
+});
+
+test("时间自身冲突在预测与生产路径返回同一结构化 issue", () => {
+  const time: TimeIntent = {
+    window: { kind: "trailing", count: 5, unit: "year", grain: "year" },
+    comparison: { kind: "previous_year" },
+  };
+  expect(predictedIssue(time, {})).toEqual({
+    code: "time_output_bucket_overlap",
+    selected_grain: "year",
+    bucket: "2022",
+  });
+  const failure = planningFailure("measure:active_employee_count", time);
+  expect(failure).toBeInstanceOf(TimeSelectionError);
+  expect(failure).toMatchObject({
+    issue: {
+      code: "time_output_bucket_overlap",
+      selected_grain: "year",
+      bucket: "2022",
+    },
+  });
 });
 
 test("年初归零由合计位的终点降级承担，不表现为显示档拒绝", () => {
@@ -195,4 +235,31 @@ test("年初归零由合计位的终点降级承担，不表现为显示档拒�
     ...crossYear,
     coverage: "window",
   });
+});
+
+test("年初归零的跨年总计在能力投影与生产路径返回同一结构化 issue", () => {
+  const time = { range: { from: "2025-01", to: "2026-07" }, grain: "total" } as const;
+  const selection = resolveTimeSelection(time, LATEST);
+  if (selection.status === "invalid") throw new Error(timeSelectionIssueMessage(selection.issue));
+  const predicted = metricTimeSelectionIssue(
+    [{ capabilities: cardOf("measure:ytd_event_rate"), title: "YTD事件率" }],
+    selection.selection,
+  );
+  expect(predicted).toEqual({
+    code: "metric_time_calendar_year_total_incompatible",
+    metric_titles: ["YTD事件率"],
+    from: "2025-01",
+    to: "2026-07",
+    selected_grain: "total",
+  });
+  const actual = (() => {
+    try {
+      planMetricQuery({ measures: ["flow.ytd_event_rate"] }, time, context, views);
+      return undefined;
+    } catch (error) {
+      return error;
+    }
+  })();
+  expect(actual).toBeInstanceOf(TimeSelectionError);
+  expect(actual).toMatchObject({ issue: predicted });
 });

@@ -5,9 +5,19 @@ import {
   expandTimeCompare,
   expandTimeWindow,
   metricTimeCapabilities,
-  resolveTimeOutputGrain,
+  metricTimeSelectionIssue,
+  resolveTimeSelection,
+  timeAvailabilityIssue,
+  timeSelectionIssueMessage,
   totalPeriodOf,
+  type TimeInput,
 } from "./time_contract.js";
+
+function resolved(time: TimeInput, latest = "2026-07") {
+  const result = resolveTimeSelection(time, latest);
+  if (result.status === "invalid") throw new Error(timeSelectionIssueMessage(result.issue));
+  return result.selection;
+}
 
 describe("business time intent", () => {
   test("同一 YTD 窗口可选择年度或月度序列", () => {
@@ -42,22 +52,20 @@ describe("business time intent", () => {
   });
 
   test("单月窗口是一个时点，期间窗口的粒度就是窗口自带的那一档，服务端不推导", () => {
+    expect(resolved(compileTimeIntent({ window: { kind: "current_month" } })).outputGrain).toBe(
+      "total",
+    );
     expect(
-      resolveTimeOutputGrain(compileTimeIntent({ window: { kind: "current_month" } }), "2026-07"),
-    ).toBe("total");
-    expect(
-      resolveTimeOutputGrain(
+      resolved(
         compileTimeIntent({
           window: { kind: "range", from: "2024-01", to: "2026-07", grain: "year" },
         }),
-        "2026-07",
-      ),
+      ).outputGrain,
     ).toBe("year");
     expect(
-      resolveTimeOutputGrain(
+      resolved(
         compileTimeIntent({ window: { kind: "trailing", count: 3, unit: "year", grain: "month" } }),
-        "2026-07",
-      ),
+      ).outputGrain,
     ).toBe("month");
     for (const window of [
       { kind: "year_to_date" },
@@ -182,26 +190,95 @@ describe("business time intent", () => {
   });
 
   test("重叠冲突只在按月确实可解时建议改为按月", () => {
-    expect(() =>
-      resolveTimeOutputGrain({
-        cutoff: "2026-07",
-        grain: "year",
-        compare: [{ cutoff: "2026-06" }],
-      }),
-    ).toThrow("请改为按月呈现");
+    expect(
+      resolveTimeSelection(
+        {
+          cutoff: "2026-07",
+          grain: "year",
+          compare: [{ cutoff: "2026-06" }],
+        },
+        "2026-07",
+      ),
+    ).toEqual({
+      status: "invalid",
+      issue: {
+        code: "time_output_bucket_overlap",
+        selected_grain: "year",
+        bucket: "2026",
+        alternative_grain: "month",
+      },
+    });
 
-    const overlappingRanges = () =>
-      resolveTimeOutputGrain({
+    const overlappingRanges = resolveTimeSelection(
+      {
         range: { from: "2024-01", to: "2026-07" },
         grain: "year",
         compare: [{ range: { from: "2023-01", to: "2025-07" } }],
-      });
-    expect(overlappingRanges).toThrow("请选择互不重叠的主时间或对照时间");
-    try {
-      overlappingRanges();
-    } catch (error) {
-      expect(error instanceof Error ? error.message : String(error)).not.toContain("按月呈现");
+      },
+      "2026-07",
+    );
+    expect(overlappingRanges).toEqual({
+      status: "invalid",
+      issue: {
+        code: "time_output_bucket_overlap",
+        selected_grain: "year",
+        bucket: "2024",
+      },
+    });
+    if (overlappingRanges.status === "invalid") {
+      expect(timeSelectionIssueMessage(overlappingRanges.issue)).not.toContain("按月呈现");
     }
+  });
+
+  test("时间自身冲突全部返回结构化 issue", () => {
+    expect(
+      resolveTimeSelection(
+        {
+          cutoff: "2026-07",
+          grain: "total",
+          compare: [{ cutoff: "2025-07" }],
+        },
+        "2026-07",
+      ),
+    ).toMatchObject({
+      status: "invalid",
+      issue: { code: "time_comparison_requires_series" },
+    });
+    expect(
+      resolveTimeSelection(
+        {
+          cutoff: "2026-07",
+          compare: [{ cutoff: "2026-07" }],
+        },
+        "2026-07",
+      ),
+    ).toEqual({
+      status: "invalid",
+      issue: { code: "time_coordinates_duplicate", coordinate: "2026-07" },
+    });
+    expect(
+      resolveTimeSelection(
+        {
+          range: { from: "2026-07", to: "2026-01" },
+          grain: "month",
+        },
+        "2026-07",
+      ),
+    ).toEqual({
+      status: "invalid",
+      issue: { code: "time_range_invalid", from: "2026-07", to: "2026-01" },
+    });
+    expect(resolveTimeSelection({}, "未知")).toEqual({
+      status: "invalid",
+      issue: { code: "time_anchor_unavailable" },
+    });
+    const future = resolveTimeSelection({ cutoff: "2026-08" }, "2026-07");
+    if (future.status === "invalid") throw new Error(timeSelectionIssueMessage(future.issue));
+    expect(timeAvailabilityIssue(future.selection, "2026-07")).toEqual({
+      code: "time_range_unavailable",
+      requested: "2026-08",
+      available_through: "2026-07",
+    });
   });
 });
 
@@ -254,6 +331,27 @@ describe("整窗合计的求值期间", () => {
       metricTimeCapabilities({ aggregation: "recompute", window: "selected", grain: "month" }),
     ).toEqual({ grain: "month" });
   });
+
+  test("年初归零指标的跨年总计是结构化冲突，序列粒度不受影响", () => {
+    const selection = resolved({
+      range: { from: "2025-01", to: "2026-07" },
+      grain: "total",
+    });
+    const requirement = [{ capabilities: { year_scoped: true } as const, title: "YTD事件率" }];
+    expect(metricTimeSelectionIssue(requirement, selection)).toEqual({
+      code: "metric_time_calendar_year_total_incompatible",
+      metric_titles: ["YTD事件率"],
+      from: "2025-01",
+      to: "2026-07",
+      selected_grain: "total",
+    });
+    expect(
+      metricTimeSelectionIssue(requirement, {
+        ...selection,
+        outputGrain: "year",
+      }),
+    ).toBeUndefined();
+  });
 });
 
 describe("时间键", () => {
@@ -263,30 +361,28 @@ describe("时间键", () => {
 
   test("单月带对照时按坐标给键：同年撞桶按月，跨年按年；省略主截止月恒按月", () => {
     expect(
-      resolveTimeOutputGrain(
+      resolved(
         compileTimeIntent({
           window: { kind: "current_month", month: "2026-07" },
           comparison: { kind: "previous_period" },
         }),
-        "2026-07",
-      ),
+      ).outputGrain,
     ).toBe("month");
     expect(
-      resolveTimeOutputGrain(
+      resolved(
         compileTimeIntent({
           window: { kind: "current_month", month: "2026-07" },
           comparison: { kind: "previous_year" },
         }),
-        "2026-07",
-      ),
+      ).outputGrain,
     ).toBe("year");
     expect(
-      resolveTimeOutputGrain(
+      resolved(
         compileTimeIntent({
           window: { kind: "current_month" },
           comparison: { kind: "previous_year" },
         }),
-      ),
+      ).outputGrain,
     ).toBe("month");
   });
 
@@ -295,9 +391,10 @@ describe("时间键", () => {
       ...range,
       comparison: { kind: "custom", window: { kind: "range", from: "2021-01", to: "2023-07" } },
     });
-    expect(resolveTimeOutputGrain(compared, "2026-07")).toBe("year");
-    expect(() => resolveTimeOutputGrain({ ...compared, grain: "total" }, "2026-07")).toThrow(
-      "不能合并为无时间标识的总计",
-    );
+    expect(resolved(compared).outputGrain).toBe("year");
+    expect(resolveTimeSelection({ ...compared, grain: "total" }, "2026-07")).toMatchObject({
+      status: "invalid",
+      issue: { code: "time_comparison_requires_series" },
+    });
   });
 });

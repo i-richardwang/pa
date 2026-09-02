@@ -15,6 +15,7 @@ export function AnalysisPage({ id }: { id: string }) {
   const error = errorText(replayQuery.error);
   const title = data?.payload.title ?? data?.analysis.title ?? "分析回放";
   const edit = useAnalysisEditSession({
+    catalog,
     sessionKey: `analysis:${id}`,
     seed: data
       ? {
