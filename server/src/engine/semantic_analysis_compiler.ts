@@ -26,6 +26,8 @@ import {
   parseSemanticViewIntent,
   semanticResultView,
   semanticResultViewId,
+  semanticSourceViews,
+  SEMANTIC_DERIVED_VIEW_ID,
   AnalysisDefinitionError,
   ViewIntentError,
   type AnalysisDefinition,
@@ -102,6 +104,7 @@ function recordProjectionBindingForIntent(
   catalog: CompilerCatalog,
   intent: SemanticQueryView,
   plan: QueryIntentPlan,
+  viewId: string,
 ): RecordProjectionViewBinding | null {
   if (plan.status === "incompatible") return null;
   const metrics: RecordProjectionViewBinding["metrics"] = {};
@@ -118,7 +121,7 @@ function recordProjectionBindingForIntent(
       title: dimension.title,
     };
   }
-  return { result_view_id: intent.id, metrics, dimensions };
+  return { result_view_id: viewId, metrics, dimensions };
 }
 
 export class SemanticQueryIncompatibleError extends Error {
@@ -131,9 +134,9 @@ export class SemanticQueryIncompatibleError extends Error {
   }
 }
 
-function routesForPlans(intents: SemanticQueryView[], plans: QueryIntentPlan[]): SemanticRoute[] {
+function routesForPlans(roles: string[], plans: QueryIntentPlan[]): SemanticRoute[] {
   return plans.map((plan, index) => {
-    const viewId = intents[index].id;
+    const viewId = roles[index];
     if (plan.status === "direct") {
       return { status: "direct", result_view_id: viewId };
     }
@@ -152,7 +155,7 @@ function routeForDerived(
 ): SemanticRoute[] {
   const derived = definition.derived;
   if (!derived) return [];
-  const sources = definition.queries.map((query) => {
+  const sources = semanticSourceViews(definition).map(({ query }) => {
     if (!query.view_title?.trim()) {
       throw new Error(`派生结果「${derived.view_title}」的来源查询缺少业务标题`);
     }
@@ -163,7 +166,7 @@ function routeForDerived(
       status: "composed",
       result_view_id: semanticResultViewId(definition),
       sources,
-      join_keys: (derived.join?.on ?? []).map((member) => ({
+      join_keys: (derived.joined?.on ?? []).map((member) => ({
         id: member,
         title: catalogMember(catalog, member, "dimension")?.title ?? member,
       })),
@@ -213,7 +216,7 @@ function semanticDelivery(
   if (plan?.status !== "direct") {
     throw new Error(`语义结果视图 ${outputId} 没有可交付的执行计划`);
   }
-  return directDelivery(catalog, definition.queries[0], plan);
+  return directDelivery(catalog, definition.query, plan);
 }
 
 function memberForIntent(
@@ -425,7 +428,7 @@ function compileDerivedView(
   definition: AnalysisDefinition,
   view: SemanticDerivedView,
 ): DerivedViewSpec {
-  const from = definition.queries.map((query) => query.id);
+  const from = semanticSourceViews(definition).map(({ role }) => role);
   const columns: DerivedColumnInput[] = view.columns.map((column) =>
     "member" in column
       ? {
@@ -439,21 +442,13 @@ function compileDerivedView(
           ...(column.format ? { format: column.format } : {}),
         },
   );
-  const join = view.join
+  const join = view.joined
     ? {
-        how: view.join.how,
-        on: view.join.on.map((member) => {
-          const [leftSource, rightSource] = from;
-          const left = physicalReference(catalog, intents, queries, {
-            source: leftSource,
-            member,
-          });
-          const right = physicalReference(catalog, intents, queries, {
-            source: rightSource,
-            member,
-          });
-          return { left, right };
-        }),
+        how: view.joined.how,
+        on: view.joined.on.map((member) => ({
+          left: physicalReference(catalog, intents, queries, { source: "query", member }),
+          right: physicalReference(catalog, intents, queries, { source: "joined", member }),
+        })),
       }
     : undefined;
   if (view.summary) {
@@ -472,7 +467,7 @@ function compileDerivedView(
     }
   }
   return {
-    id: semanticResultViewId(definition),
+    id: SEMANTIC_DERIVED_VIEW_ID,
     view_title: view.view_title,
     from,
     ...(join ? { join } : {}),
@@ -583,35 +578,38 @@ export function compileAnalysisView(
   const definition = parseAnalysisDefinition(input.analysis);
   const intent = parseSemanticViewIntent(input.view);
   const preferences = validateViewPreferences(intent, rawPreferences);
-  const intents = definition.queries;
-  const resolved = intents.map((intent) => planQueryIntent(catalog, intent));
-  const routes = routesForPlans(intents, resolved);
+  const sources = semanticSourceViews(definition);
+  const resolved = sources.map(({ role, query }) => planQueryIntent(catalog, query, role));
+  const routes = routesForPlans(
+    sources.map(({ role }) => role),
+    resolved,
+  );
   const incompatible = resolved.find(
     (plan): plan is Extract<QueryIntentPlan, { status: "incompatible" }> =>
       plan.status === "incompatible",
   );
   if (incompatible) throw new SemanticQueryIncompatibleError(incompatible.issue, routes);
   const outputId = semanticResultViewId(definition);
-  const intentById = new Map(intents.map((intent) => [intent.id, intent]));
+  const intentById = new Map(sources.map(({ role, query }) => [role, query]));
   const directPlans = resolved.filter(
     (plan): plan is Extract<QueryIntentPlan, { status: "direct" }> => plan.status === "direct",
   );
   const queryById = new Map(directPlans.map((item) => [item.query.id, item.query]));
   // 查询计划的 query.id 恒等于其意图 id；上面的 fail-closed 已保证每个意图都有 direct 计划。
   const planByIntent = new Map(directPlans.map((item) => [item.query.id, item]));
-  const physicalViews: Array<QueryViewSpec | DerivedViewSpec> = definition.queries.map((view) => {
-    const plan = planByIntent.get(view.id);
-    if (!plan) throw new Error(`查询视图 ${view.id} 缺少已解析执行计划`);
-    const calculations = groupingShareCalculations(catalog, view, plan);
+  const physicalViews: Array<QueryViewSpec | DerivedViewSpec> = sources.map(({ role, query }) => {
+    const plan = planByIntent.get(role);
+    if (!plan) throw new Error(`查询视图 ${role} 缺少已解析执行计划`);
+    const calculations = groupingShareCalculations(catalog, query, plan);
     const groupingSets = plan.query.grouping_sets;
-    if (!groupingSets) throw new Error(`查询视图 ${view.id} 缺少基础分组集`);
+    if (!groupingSets) throw new Error(`查询视图 ${role} 缺少基础分组集`);
     return {
       ...plan.query,
       grouping_sets: {
         ...groupingSets,
         ...(calculations.length ? { calculations } : {}),
       },
-      ...(view.summary ? { summary: view.summary } : {}),
+      ...(query.summary ? { summary: query.summary } : {}),
     };
   });
   if (definition.derived) {
@@ -627,7 +625,7 @@ export function compileAnalysisView(
   if (!outputPhysical) throw new Error(`结果视图 ${outputId} 不存在`);
   const outputIntent = semanticResultView(definition);
   validateSemanticTableLayout(outputIntent, intent);
-  const outputQuery = definition.derived ? undefined : definition.queries[0];
+  const outputQuery = definition.derived ? undefined : definition.query;
   const calculated = new Map<string, CalculatedMeasure>(
     (outputQuery?.calculations ?? []).map((calculation) => [
       calculation.id,
@@ -658,7 +656,7 @@ export function compileAnalysisView(
   const outputPlan = planByIntent.get(outputId);
   const recordProjectionBinding =
     outputQuery && outputPlan
-      ? recordProjectionBindingForIntent(catalog, outputQuery, outputPlan)
+      ? recordProjectionBindingForIntent(catalog, outputQuery, outputPlan, outputId)
       : null;
   return {
     plan,

@@ -22,14 +22,11 @@ const report = {
   updated_at: "2026-08-13T00:00:00.000Z",
   view_preferences: {},
   definition: {
-    queries: [
-      {
-        id: "result",
-        measures: ["measure:active_employee_count"],
-        dimensions: [],
-        time: { window: { kind: "current_month" } },
-      },
-    ],
+    query: {
+      measures: ["measure:active_employee_count"],
+      dimensions: [],
+      time: { window: { kind: "current_month" } },
+    },
   },
   intent: { type: "table" },
 } satisfies ReportDocument;

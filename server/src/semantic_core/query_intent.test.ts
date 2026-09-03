@@ -161,12 +161,11 @@ const catalog: CompilerCatalog = {
 describe("semantic query intent", () => {
   test("单指标自动落到其唯一执行来源，不要求 analysis_topic", () => {
     const intent = {
-      id: "query_1",
       measures: [ACTIVE_EMPLOYEE],
       dimensions: [ORG],
       time: CURRENT_MONTH,
     };
-    expect(planQueryIntent(catalog, intent)).toMatchObject({
+    expect(planQueryIntent(catalog, intent, "query")).toMatchObject({
       view: "employee_snapshot_metrics",
       views: ["employee_snapshot_metrics"],
       query: {
@@ -178,13 +177,16 @@ describe("semantic query intent", () => {
   });
 
   test("跨指标域指标编译为一份逻辑查询，由正式指标 Planner 再拆事实腿", () => {
-    const result = planQueryIntent(catalog, {
-      id: "query_1",
-      measures: [ACTIVE_EMPLOYEE, YTD_EVENT_RATE, CURRENT_MONTH_FULFILLMENT_RATE],
-      dimensions: [ORG],
-      group_sort: { dimension: ORG, by: ACTIVE_EMPLOYEE, direction: "desc" },
-      time: JULY_2026,
-    });
+    const result = planQueryIntent(
+      catalog,
+      {
+        measures: [ACTIVE_EMPLOYEE, YTD_EVENT_RATE, CURRENT_MONTH_FULFILLMENT_RATE],
+        dimensions: [ORG],
+        group_sort: { dimension: ORG, by: ACTIVE_EMPLOYEE, direction: "desc" },
+        time: JULY_2026,
+      },
+      "query",
+    );
     expect(result).toMatchObject({
       view: "employee_snapshot_metrics",
       views: ["employee_snapshot_metrics", "employee_leave_metrics", "headcount_plan_metrics"],
@@ -201,12 +203,15 @@ describe("semantic query intent", () => {
   });
 
   test("跨域查询使用各指标域维度交集", () => {
-    const plan = planQueryIntent(catalog, {
-      id: "query_1",
-      measures: [YTD_EVENT_RATE, CURRENT_MONTH_FULFILLMENT_RATE],
-      dimensions: [AGE_BAND],
-      time: JULY_2026,
-    });
+    const plan = planQueryIntent(
+      catalog,
+      {
+        measures: [YTD_EVENT_RATE, CURRENT_MONTH_FULFILLMENT_RATE],
+        dimensions: [AGE_BAND],
+        time: JULY_2026,
+      },
+      "query",
+    );
     expect(plan).toEqual({
       status: "incompatible",
       issue: {
@@ -222,12 +227,15 @@ describe("semantic query intent", () => {
 
   test("筛选维度与分组维度遵守同一指标能力交集", () => {
     expect(
-      planQueryIntent(catalog, {
-        id: "query_1",
-        measures: [CURRENT_MONTH_FULFILLMENT_RATE],
-        filters: [{ member: AGE_BAND, relation: "one_of", values: ["示例年龄段"] }],
-        time: JULY_2026,
-      }),
+      planQueryIntent(
+        catalog,
+        {
+          measures: [CURRENT_MONTH_FULFILLMENT_RATE],
+          filters: [{ member: AGE_BAND, relation: "one_of", values: ["示例年龄段"] }],
+          time: JULY_2026,
+        },
+        "query",
+      ),
     ).toEqual({
       status: "incompatible",
       issue: {
@@ -242,12 +250,15 @@ describe("semantic query intent", () => {
   });
 
   test("单值员工属性可作用于支持它的流动指标", () => {
-    const result = planQueryIntent(catalog, {
-      id: "query_1",
-      measures: [YTD_EVENT_RATE],
-      dimensions: [AGE_BAND],
-      time: JULY_2026,
-    });
+    const result = planQueryIntent(
+      catalog,
+      {
+        measures: [YTD_EVENT_RATE],
+        dimensions: [AGE_BAND],
+        time: JULY_2026,
+      },
+      "query",
+    );
     expect(result).toMatchObject({
       query: {
         measures: ["employee_leave_metrics.ytd_event_rate"],
@@ -258,12 +269,15 @@ describe("semantic query intent", () => {
 
   test("受控明细绑定不参与普通指标唯一归属", () => {
     expect(
-      planQueryIntent(catalog, {
-        id: "query_1",
-        measures: [ACTIVE_EMPLOYEE, YTD_EVENT_RATE],
-        dimensions: [ORG],
-        time: JULY_2026,
-      }),
+      planQueryIntent(
+        catalog,
+        {
+          measures: [ACTIVE_EMPLOYEE, YTD_EVENT_RATE],
+          dimensions: [ORG],
+          time: JULY_2026,
+        },
+        "query",
+      ),
     ).toMatchObject({
       status: "direct",
       views: ["employee_snapshot_metrics", "employee_leave_metrics"],
@@ -272,23 +286,29 @@ describe("semantic query intent", () => {
 
   test("跨域锚点按指标顺序确定，不要求调用方选择物理 View", () => {
     expect(
-      planQueryIntent(catalog, {
-        id: "query_1",
-        measures: [YTD_EVENT_RATE, ACTIVE_EMPLOYEE],
-        dimensions: [ORG],
-        time: JULY_2026,
-      }),
+      planQueryIntent(
+        catalog,
+        {
+          measures: [YTD_EVENT_RATE, ACTIVE_EMPLOYEE],
+          dimensions: [ORG],
+          time: JULY_2026,
+        },
+        "query",
+      ),
     ).toMatchObject({ view: "employee_leave_metrics" });
   });
 
   test("个体维度不能进入普通聚合查询", () => {
     expect(
-      planQueryIntent(catalog, {
-        id: "query_1",
-        measures: [ACTIVE_EMPLOYEE],
-        dimensions: ["dimension:employee_id"],
-        time: JULY_2026,
-      }),
+      planQueryIntent(
+        catalog,
+        {
+          measures: [ACTIVE_EMPLOYEE],
+          dimensions: ["dimension:employee_id"],
+          time: JULY_2026,
+        },
+        "query",
+      ),
     ).toEqual({
       status: "incompatible",
       issue: {
@@ -336,15 +356,18 @@ describe("semantic query intent", () => {
       ],
     };
     for (const kind of ["previous_year", "previous_period"] as const) {
-      const blocked = planQueryIntent(withInventory, {
-        id: "query_1",
-        measures: ["measure:counted_units"],
-        dimensions: ["dimension:warehouse"],
-        time: {
-          window: { kind: "range" as const, from: "2026-01", to: "2026-07", grain: "month" },
-          comparison: { kind },
+      const blocked = planQueryIntent(
+        withInventory,
+        {
+          measures: ["measure:counted_units"],
+          dimensions: ["dimension:warehouse"],
+          time: {
+            window: { kind: "range" as const, from: "2026-01", to: "2026-07", grain: "month" },
+            comparison: { kind },
+          },
         },
-      });
+        "query",
+      );
       expect(blocked.status).toBe("incompatible");
       if (blocked.status === "incompatible") {
         expect(blocked.issue).toEqual({
@@ -355,18 +378,21 @@ describe("semantic query intent", () => {
       }
     }
     expect(
-      planQueryIntent(withInventory, {
-        id: "query_1",
-        measures: ["measure:counted_units"],
-        dimensions: ["dimension:warehouse"],
-        time: {
-          ...JULY_2026,
-          comparison: {
-            kind: "custom" as const,
-            window: { kind: "current_month" as const, month: "2025-09" },
+      planQueryIntent(
+        withInventory,
+        {
+          measures: ["measure:counted_units"],
+          dimensions: ["dimension:warehouse"],
+          time: {
+            ...JULY_2026,
+            comparison: {
+              kind: "custom" as const,
+              window: { kind: "current_month" as const, month: "2025-09" },
+            },
           },
         },
-      }),
+        "query",
+      ),
     ).toMatchObject({ status: "direct", view: "inventory_count_metrics" });
   });
 
@@ -395,12 +421,15 @@ describe("semantic query intent", () => {
       ],
     };
     expect(
-      planQueryIntent(continuous, {
-        id: "query_1",
-        measures: [ACTIVE_EMPLOYEE],
-        dimensions: [ORG],
-        time: { ...JULY_2026, comparison: { kind: "previous_year" as const } },
-      }),
+      planQueryIntent(
+        continuous,
+        {
+          measures: [ACTIVE_EMPLOYEE],
+          dimensions: [ORG],
+          time: { ...JULY_2026, comparison: { kind: "previous_year" as const } },
+        },
+        "query",
+      ),
     ).toMatchObject({ status: "direct", view: "employee_snapshot_metrics" });
   });
 });

@@ -65,58 +65,52 @@ const blankDraft = (): AnalysisEditState =>
   );
 
 function withMembers(draft: AnalysisEditState): AnalysisEditState {
-  const view = draft.analysis.queries[0];
+  const view = draft.analysis.query;
   if (!view || "from" in view) throw new Error("空白种子必须是语义查询视图");
   return {
     ...draft,
     analysis: {
       ...draft.analysis,
-      queries: [
-        {
-          ...view,
-          measures: ["measure:active_employee_count"],
-          dimensions: ["dimension:organization_name"],
-        },
-      ],
+      query: {
+        ...view,
+        measures: ["measure:active_employee_count"],
+        dimensions: ["dimension:organization_name"],
+      },
     },
   };
 }
 
 function withAnnualMonthlyMetric(draft: AnalysisEditState): AnalysisEditState {
-  const view = draft.analysis.queries[0];
+  const view = draft.analysis.query;
   if (!view || "from" in view) throw new Error("空白种子必须是语义查询视图");
   return {
     ...draft,
     analysis: {
       ...draft.analysis,
-      queries: [
-        {
-          ...view,
-          measures: ["measure:monthly_hire_rate"],
-          time: { window: { kind: "trailing", count: 3, unit: "year", grain: "year" } },
-        },
-      ],
+      query: {
+        ...view,
+        measures: ["measure:monthly_hire_rate"],
+        time: { window: { kind: "trailing", count: 3, unit: "year", grain: "year" } },
+      },
     },
   };
 }
 
 function withOverlappingTime(draft: AnalysisEditState): AnalysisEditState {
   const withMeasure = withMembers(draft);
-  const view = withMeasure.analysis.queries[0];
+  const view = withMeasure.analysis.query;
   if (!view || "from" in view) throw new Error("测试草稿必须是语义查询视图");
   return {
     ...withMeasure,
     analysis: {
       ...withMeasure.analysis,
-      queries: [
-        {
-          ...view,
-          time: {
-            window: { kind: "trailing", count: 5, unit: "year", grain: "year" },
-            comparison: { kind: "previous_year" },
-          },
+      query: {
+        ...view,
+        time: {
+          window: { kind: "trailing", count: 5, unit: "year", grain: "year" },
+          comparison: { kind: "previous_year" },
         },
-      ],
+      },
     },
   };
 }
@@ -125,41 +119,37 @@ function withSort(
   draft: AnalysisEditState,
   group_sort: Omit<NonNullable<SemanticQueryView["group_sort"]>, "dimension">,
 ): AnalysisEditState {
-  const view = draft.analysis.queries[0];
+  const view = draft.analysis.query;
   if (!view || "from" in view) throw new Error("空白种子必须是语义查询视图");
   return {
     ...draft,
     analysis: {
       ...draft.analysis,
-      queries: [
-        { ...view, group_sort: { ...group_sort, dimension: "dimension:organization_name" } },
-      ],
+      query: { ...view, group_sort: { ...group_sort, dimension: "dimension:organization_name" } },
     },
   };
 }
 
 function withCalculation(draft: AnalysisEditState): AnalysisEditState {
   const withMembersDraft = withMembers(draft);
-  const view = withMembersDraft.analysis.queries[0];
+  const view = withMembersDraft.analysis.query;
   if (!view || "from" in view) throw new Error("测试草稿必须是语义查询视图");
   return {
     ...withMembersDraft,
     analysis: {
       ...withMembersDraft.analysis,
-      queries: [
-        {
-          ...view,
-          calculations: [
-            {
-              id: "calculation:active_employee_organization_share",
-              title: "组织结构",
-              kind: "percent_of_total",
-              measure: "measure:active_employee_count",
-              category_dimension: "dimension:organization_name",
-            },
-          ],
-        },
-      ],
+      query: {
+        ...view,
+        calculations: [
+          {
+            id: "calculation:active_employee_organization_share",
+            title: "组织结构",
+            kind: "percent_of_total",
+            measure: "measure:active_employee_count",
+            category_dimension: "dimension:organization_name",
+          },
+        ],
+      },
     },
   };
 }
@@ -169,18 +159,16 @@ function withFilter(
   relation: "one_of" | "none_of",
   values = ["示例组织甲"],
 ): AnalysisEditState {
-  const view = draft.analysis.queries[0];
+  const view = draft.analysis.query;
   if (!view || "from" in view) throw new Error("空白种子必须是语义查询视图");
   return {
     ...draft,
     analysis: {
       ...draft.analysis,
-      queries: [
-        {
-          ...view,
-          filters: [{ member: "dimension:organization_name", relation, values }],
-        },
-      ],
+      query: {
+        ...view,
+        filters: [{ member: "dimension:organization_name", relation, values }],
+      },
     },
   };
 }
@@ -331,7 +319,7 @@ test("范围触发件印的是结论不是控件名：限项说端与量，只�
 
 test("分组默认展示全部，不在新增维度时暗写 Top 10", () => {
   const draft = withMembers(blankDraft());
-  const view = draft.analysis.queries[0];
+  const view = draft.analysis.query;
   if (!view || "from" in view) throw new Error("测试草稿必须是语义查询视图");
   expect(view.group_sort).toBeUndefined();
   const out = render(draft);

@@ -90,7 +90,7 @@ function planningFailure(measureId: string, time: TimeIntent): unknown {
   try {
     const plan = compileAnalysisView(compiler, {
       analysis: parseAnalysisDefinition({
-        queries: [{ id: "v1", measures: [measureId], time }],
+        query: { measures: [measureId], time },
       }),
       view: { type: "table" },
     });

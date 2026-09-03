@@ -198,19 +198,16 @@ describe("单语言物理绑定不上线", () => {
   it("编译产出的语义路由只讲业务血缘，键集合全等", () => {
     const compiled = compileAnalysisView(toCompilerCatalog(DOCUMENT), {
       analysis: parseAnalysisDefinition({
-        queries: [
-          {
-            id: "v1",
-            measures: [HEADCOUNT_ID],
-            time: {
-              window: { kind: "current_month", month: "2026-07" },
-            },
+        query: {
+          measures: [HEADCOUNT_ID],
+          time: {
+            window: { kind: "current_month", month: "2026-07" },
           },
-        ],
+        },
       }),
       view: { type: "table" },
     });
-    const route = compiled.routes.find((r) => r.result_view_id === "v1");
+    const route = compiled.routes.find((r) => r.result_view_id === "query");
     expect(route?.status).toBe("direct");
     // 全等而非排除：直查血缘只有状态与语义视图 id。
     expect(Object.keys(route!).sort()).toEqual(["result_view_id", "status"]);

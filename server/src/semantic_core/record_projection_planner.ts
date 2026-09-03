@@ -58,7 +58,8 @@ export function planMetricRecordProjection(
         member: dimensionBindings[index]!.member,
       })),
       query: {
-        id: intent.id,
+        // 明细投影只对直接交付的查询成立，其执行视图身份恒为顶层来源角色。
+        id: "query",
         ...(intent.view_title ? { view_title: intent.view_title } : {}),
         time_view: binding.view,
         measures: [binding.member],

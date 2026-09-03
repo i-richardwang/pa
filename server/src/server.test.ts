@@ -341,14 +341,11 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     };
   };
   const pivotDefinition = {
-    queries: [
-      {
-        id: "result",
-        measures: ["measure:active_employee_count"],
-        dimensions: ["dimension:organization_name", "dimension:department_name"],
-        time: { window: { kind: "current_month" as const, month: "2026-07" } },
-      },
-    ],
+    query: {
+      measures: ["measure:active_employee_count"],
+      dimensions: ["dimension:organization_name", "dimension:department_name"],
+      time: { window: { kind: "current_month" as const, month: "2026-07" } },
+    },
   };
   const pivotIntent = (columnAxis: string) => ({
     type: "table" as const,
@@ -529,15 +526,31 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     // 客户端只拿得到这份 JSON Schema：形状表达不出的约束，调用方在本地就无法自愈。
     const analysisSchema = findJsonObject(tools.run_analysis?.inputSchema, (candidate) => {
       const properties = candidate.properties;
-      return typeof properties === "object" && properties !== null && "queries" in properties;
+      return typeof properties === "object" && properties !== null && "derived" in properties;
     });
     const analysisProperties = analysisSchema?.properties as JsonObject;
-    const queriesSchema = analysisProperties.queries as JsonObject;
-    expect(queriesSchema.maxItems).toBe(2);
+    // 结果只有一个，所以只有一个查询字段；第二个查询只长在 derived.joined 上。
+    expect(Object.keys(analysisProperties).sort()).toEqual(["derived", "query", "title"]);
+    expect(analysisSchema?.required).toEqual(["query"]);
+    expect(analysisSchema?.additionalProperties).toBe(false);
     // 查询节点不是联合：客户端报错能落到具体字段，而不是「不匹配任何分支」。
-    expect(queriesSchema.items).not.toHaveProperty("anyOf");
-    expect(analysisProperties).toHaveProperty("derived");
-    expect(analysisSchema).not.toHaveProperty("properties.views");
+    expect(analysisProperties.query).not.toHaveProperty("anyOf");
+    const derivedProperties = (analysisProperties.derived as JsonObject).properties as JsonObject;
+    const joinedSchema = derivedProperties.joined as JsonObject;
+    // 第二个查询与它的关联合同同生共死：joined 三个键一起必填。
+    expect((joinedSchema.required as string[]).sort()).toEqual(["how", "on", "query"]);
+    // 来源角色是闭集：写错来源名在客户端本地就能判定。
+    const operandSchema = findJsonObject(tools.run_analysis?.inputSchema, (candidate) => {
+      const properties = candidate.properties;
+      return (
+        typeof properties === "object" &&
+        properties !== null &&
+        "member" in properties &&
+        "source" in properties
+      );
+    });
+    const operandProperties = operandSchema?.properties as JsonObject;
+    expect(operandProperties.source).toMatchObject({ enum: ["query", "joined"] });
     const tableColumnsSchema = findJsonObject(tools.run_analysis?.inputSchema, (candidate) => {
       const items = candidate.items;
       return (
@@ -748,20 +761,37 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     const invalidAnalysis = await client.callTool({
       name: "run_analysis",
       arguments: {
+        analysis: { queries: [pivotDefinition.query, pivotDefinition.query] },
+        view: { type: "table" },
+      },
+    });
+    // 并列查询在工具协议层就被拒：这层的文案也必须指路，服务端根本收不到这次调用。
+    expect(invalidAnalysis).not.toHaveProperty("structuredContent");
+    expect(invalidAnalysis).toMatchObject({ isError: true });
+    expect(JSON.stringify(invalidAnalysis)).toContain("query.measures");
+    expect(JSON.stringify(invalidAnalysis)).toContain("derived.joined");
+
+    // 形状之内、语义之外的错法仍由服务端拒绝，并保持 isError + JSON 错误信封。
+    const danglingSource = await client.callTool({
+      name: "run_analysis",
+      arguments: {
         analysis: {
-          queries: [
-            { ...pivotDefinition.queries[0], id: "first" },
-            { ...pivotDefinition.queries[0], id: "second" },
-          ],
+          query: { ...pivotDefinition.query, view_title: "来源" },
+          derived: {
+            view_title: "结果",
+            columns: [
+              { source: "joined", member: "measure:active_employee_count", as: "headcount" },
+            ],
+          },
         },
         view: { type: "table" },
       },
     });
-    expect(invalidAnalysis).not.toHaveProperty("structuredContent");
-    expect(mcpToolError(invalidAnalysis)).toEqual({
+    expect(danglingSource).not.toHaveProperty("structuredContent");
+    expect(mcpToolError(danglingSource)).toEqual({
       error: {
         code: "invalid_request",
-        message: expect.stringContaining("合并进一个查询"),
+        message: expect.stringContaining("没有声明 derived.joined"),
       },
     });
 

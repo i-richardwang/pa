@@ -154,23 +154,29 @@ test("非 HR 语义包走通注册、canonical model、比较策略、规划与�
     time_constraints: { comparison: "explicit_only" },
   });
 
-  const blocked = planQueryIntent(compiler, {
-    id: "inventory_comparison",
-    measures: ["measure:counted_units"],
-    dimensions: ["dimension:region"],
-    time: {
-      window: { kind: "current_month", month: "2026-07" },
-      comparison: { kind: "previous_year" },
+  const blocked = planQueryIntent(
+    compiler,
+    {
+      measures: ["measure:counted_units"],
+      dimensions: ["dimension:region"],
+      time: {
+        window: { kind: "current_month", month: "2026-07" },
+        comparison: { kind: "previous_year" },
+      },
     },
-  });
+    "query",
+  );
   expect(blocked).toMatchObject({ status: "incompatible" });
 
-  const intent = planQueryIntent(compiler, {
-    id: "sales_order_value",
-    measures: ["measure:average_order_value"],
-    dimensions: ["dimension:region"],
-    time: { window: { kind: "current_month", month: "2026-07" } },
-  });
+  const intent = planQueryIntent(
+    compiler,
+    {
+      measures: ["measure:average_order_value"],
+      dimensions: ["dimension:region"],
+      time: { window: { kind: "current_month", month: "2026-07" } },
+    },
+    "query",
+  );
   if (intent.status !== "direct") throw new Error(queryFeasibilityIssueMessage(intent.issue));
 
   const context: TimeContext = {

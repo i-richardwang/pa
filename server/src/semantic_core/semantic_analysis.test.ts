@@ -1,46 +1,73 @@
 import { describe, expect, test } from "bun:test";
 import { PRESENTATION_TYPE_SCHEMA } from "./presentation_type.js";
-import {
-  MAX_SEMANTIC_QUERIES,
-  parseAnalysisDefinition,
-  SEMANTIC_VIEW_INTENT_INPUT,
-} from "./semantic_analysis.js";
+import { parseAnalysisDefinition, SEMANTIC_VIEW_INTENT_INPUT } from "./semantic_analysis.js";
 
 const specWithFilters = (filters: unknown[]) => ({
-  queries: [
-    {
-      id: "result",
-      measures: ["measure:active_employee_count"],
-      filters,
-      time: { window: { kind: "current_month" } },
-    },
-  ],
+  query: {
+    measures: ["measure:active_employee_count"],
+    filters,
+    time: { window: { kind: "current_month" } },
+  },
 });
 
-test("查询预算只约束用户声明的来源查询", () => {
+test("并列查询没有落脚点：拒绝时指向合并与 derived.joined", () => {
+  const query = {
+    measures: ["measure:active_employee_count"],
+    time: { window: { kind: "current_month" } },
+  };
+  expect(() => parseAnalysisDefinition({ queries: [query, query] })).toThrow(
+    /query\.measures[\s\S]*derived\.joined/,
+  );
+});
+
+test("第二个查询只能长在 derived.joined 上，并与关联合同同生共死", () => {
+  const left = {
+    view_title: "在职",
+    measures: ["measure:active_employee_count"],
+    dimensions: ["dimension:organization_name"],
+    time: { window: { kind: "current_month" } },
+  };
+  const right = { ...left, view_title: "编制", measures: ["measure:average_entity_count"] };
   expect(() =>
     parseAnalysisDefinition({
-      queries: Array.from({ length: MAX_SEMANTIC_QUERIES + 1 }, (_, index) => ({
-        id: `source_${index}`,
-        measures: ["measure:active_employee_count"],
-        time: { window: { kind: "current_month" } },
-      })),
+      query: left,
+      derived: {
+        view_title: "达成率",
+        joined: { query: right, on: ["dimension:organization_name"], how: "left" },
+        columns: [
+          { source: "query", member: "dimension:organization_name", as: "org" },
+          {
+            expr: {
+              op: "/",
+              left: { source: "query", member: "measure:active_employee_count" },
+              right: { source: "joined", member: "measure:average_entity_count" },
+            },
+            as: "rate",
+          },
+        ],
+      },
     }),
-  ).toThrow("分析定义无效");
+  ).not.toThrow();
+  expect(() =>
+    parseAnalysisDefinition({
+      query: left,
+      derived: {
+        view_title: "达成率",
+        columns: [{ source: "joined", member: "measure:active_employee_count", as: "headcount" }],
+      },
+    }),
+  ).toThrow(/没有声明 derived\.joined/);
 });
 
 describe("semantic analysis filters", () => {
   test("语义成员必须携带种类前缀", () => {
     expect(() =>
       parseAnalysisDefinition({
-        queries: [
-          {
-            id: "result",
-            measures: ["active_employee_count"],
-            dimensions: ["organization_name"],
-            time: { window: { kind: "current_month" } },
-          },
-        ],
+        query: {
+          measures: ["active_employee_count"],
+          dimensions: ["organization_name"],
+          time: { window: { kind: "current_month" } },
+        },
       }),
     ).toThrow("分析定义无效");
   });
@@ -55,11 +82,7 @@ describe("semantic analysis filters", () => {
         },
       ]),
     );
-    const view = parsed.queries[0];
-    expect(view && !("from" in view) ? view.filters?.[0]?.values : undefined).toEqual([
-      "部门乙",
-      "部门甲",
-    ]);
+    expect(parsed.query.filters?.[0]?.values).toEqual(["部门乙", "部门甲"]);
   });
 
   test("筛选必须有非空值，且同一维度只能出现一次", () => {
@@ -111,21 +134,16 @@ describe("semantic analysis filters", () => {
 
 describe("semantic analysis group sort", () => {
   const grouped = (groupSort?: unknown) => ({
-    queries: [
-      {
-        id: "result",
-        measures: ["measure:active_employee_count"],
-        dimensions: ["dimension:organization_name"],
-        time: { window: { kind: "current_month" } },
-        ...(groupSort === undefined ? {} : { group_sort: groupSort }),
-      },
-    ],
+    query: {
+      measures: ["measure:active_employee_count"],
+      dimensions: ["dimension:organization_name"],
+      time: { window: { kind: "current_month" } },
+      ...(groupSort === undefined ? {} : { group_sort: groupSort }),
+    },
   });
 
   test("省略分组排序即展示全部，不自动产生 Top 10", () => {
-    const parsed = parseAnalysisDefinition(grouped());
-    const view = parsed.queries[0];
-    expect(view && !("from" in view) ? view.group_sort : undefined).toBeUndefined();
+    expect(parseAnalysisDefinition(grouped()).query.group_sort).toBeUndefined();
   });
 
   test("最大项数是维度上下文的可选配置，上限为 20", () => {
@@ -165,30 +183,26 @@ describe("semantic analysis group sort", () => {
     expect(() =>
       parseAnalysisDefinition({
         ...base,
-        queries: [
-          {
-            ...base.queries[0],
-            order: [{ member: "measure:active_employee_count", direction: "desc" }],
-          },
-        ],
+        query: {
+          ...base.query,
+          order: [{ member: "measure:active_employee_count", direction: "desc" }],
+        },
       }),
     ).toThrow("分析定义无效");
     expect(() =>
       parseAnalysisDefinition({
         ...base,
-        queries: [
-          {
-            ...base.queries[0],
-            selection: {
-              type: "top_n",
-              grain: ["dimension:organization_name"],
-              by: "measure:active_employee_count",
-              window: "anchor",
-              count: 10,
-              direction: "desc",
-            },
+        query: {
+          ...base.query,
+          selection: {
+            type: "top_n",
+            grain: ["dimension:organization_name"],
+            by: "measure:active_employee_count",
+            window: "anchor",
+            count: 10,
+            direction: "desc",
           },
-        ],
+        },
       }),
     ).toThrow("分析定义无效");
   });
@@ -196,24 +210,21 @@ describe("semantic analysis group sort", () => {
 
 describe("semantic analysis report calculations", () => {
   const calculated = (overrides: Record<string, unknown> = {}) => ({
-    queries: [
-      {
-        id: "result",
-        measures: ["measure:active_employee_count"],
-        dimensions: ["dimension:organization_name", "dimension:job_level_band"],
-        calculations: [
-          {
-            id: "calculation:active_employee_job_level_share",
-            title: "职级结构",
-            kind: "percent_of_total",
-            measure: "measure:active_employee_count",
-            category_dimension: "dimension:job_level_band",
-          },
-        ],
-        time: { window: { kind: "current_month" } },
-        ...overrides,
-      },
-    ],
+    query: {
+      measures: ["measure:active_employee_count"],
+      dimensions: ["dimension:organization_name", "dimension:job_level_band"],
+      calculations: [
+        {
+          id: "calculation:active_employee_job_level_share",
+          title: "职级结构",
+          kind: "percent_of_total",
+          measure: "measure:active_employee_count",
+          category_dimension: "dimension:job_level_band",
+        },
+      ],
+      time: { window: { kind: "current_month" } },
+      ...overrides,
+    },
   });
 
   test("构成占比必须引用同一查询中的正式指标和分类分组", () => {

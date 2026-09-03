@@ -14,7 +14,7 @@ import {
   removeSemanticQueryMember,
   renameAnalysisDraft,
   replaceSemanticQueryDimension,
-  semanticSinkQueryView,
+  semanticEditableQuery,
   setSemanticQueryView,
   setSemanticViewIntent,
   setViewPreferences,
@@ -67,14 +67,11 @@ const catalog: CatalogPayload = {
 
 const definition: AnalysisDefinition = {
   title: "组织人数",
-  queries: [
-    {
-      id: "result",
-      measures: ["measure:active_employee_count", "measure:new_hire_count"],
-      dimensions: ["dimension:organization_name"],
-      time: { window: { kind: "current_month", month: "2026-07" } },
-    },
-  ],
+  query: {
+    measures: ["measure:active_employee_count", "measure:new_hire_count"],
+    dimensions: ["dimension:organization_name"],
+    time: { window: { kind: "current_month", month: "2026-07" } },
+  },
 };
 
 const begin = (saved = true) =>
@@ -158,10 +155,9 @@ describe("analysis draft 三层状态", () => {
     expect(hasAnalysisChanges(viewOnly)).toBe(false);
     expect(hasViewChanges(viewOnly)).toBe(true);
 
-    const query = semanticSinkQueryView(draft.analysis)!;
+    const query = semanticEditableQuery(draft.analysis)!;
     const analysisChanged = setSemanticQueryView(
       draft,
-      query.id,
       { ...query, measures: ["measure:new_hire_count"] },
       catalog,
     );
@@ -286,9 +282,9 @@ describe("analysis draft 三层状态", () => {
 
   test("指标卡没有任何维度通道：查询带分组维度时退回表格", () => {
     const draft = begin();
-    const query = semanticSinkQueryView(draft.analysis)!;
+    const query = semanticEditableQuery(draft.analysis)!;
     expect(defaultSemanticViewIntent(draft, "kpi", catalog)).toEqual({ type: "table" });
-    const flat = setSemanticQueryView(draft, query.id, { ...query, dimensions: [] }, catalog);
+    const flat = setSemanticQueryView(draft, { ...query, dimensions: [] }, catalog);
     expect(defaultSemanticViewIntent(flat, "kpi", catalog)).toMatchObject({ type: "kpi" });
   });
 
@@ -317,7 +313,7 @@ describe("analysis draft 三层状态", () => {
 
   test("查询加到两个维度时折线没有第二个拆分通道，呈现退回表格", () => {
     const draft = begin();
-    const query = semanticSinkQueryView(draft.analysis)!;
+    const query = semanticEditableQuery(draft.analysis)!;
     const line = setSemanticViewIntent(
       draft,
       { type: "line", series: ["measure:active_employee_count"] },
@@ -326,7 +322,6 @@ describe("analysis draft 三层状态", () => {
     expect(line.view.type).toBe("line");
     const widened = setSemanticQueryView(
       line,
-      query.id,
       {
         ...query,
         dimensions: ["dimension:organization_name", "dimension:department_name"],
@@ -348,12 +343,11 @@ describe("analysis draft 三层状态", () => {
     expect(analysisReadiness(blank, catalog).issues).toEqual([
       { code: "analysis_empty", message: "至少选择一个指标或分组维度" },
     ]);
-    const query = semanticSinkQueryView(blank.analysis)!;
+    const query = semanticEditableQuery(blank.analysis)!;
     expect(
       analysisReadiness(
         setSemanticQueryView(
           blank,
-          query.id,
           { ...query, measures: ["measure:active_employee_count"] },
           catalog,
         ),
@@ -376,13 +370,10 @@ describe("analysis draft 三层状态", () => {
         name: "年度分析",
         analysis: {
           title: "年度分析",
-          queries: [
-            {
-              id: "result",
-              measures: [monthly.id],
-              time: { window: { kind: "trailing", count: 3, unit: "year", grain: "year" } },
-            },
-          ],
+          query: {
+            measures: [monthly.id],
+            time: { window: { kind: "trailing", count: 3, unit: "year", grain: "year" } },
+          },
         },
         view: { type: "table" },
       },
@@ -409,16 +400,13 @@ describe("analysis draft 三层状态", () => {
         name: "历史分析",
         analysis: {
           title: "历史分析",
-          queries: [
-            {
-              id: "result",
-              measures: ["measure:active_employee_count"],
-              time: {
-                window: { kind: "trailing", count: 5, unit: "year", grain: "year" },
-                comparison: { kind: "previous_year" },
-              },
+          query: {
+            measures: ["measure:active_employee_count"],
+            time: {
+              window: { kind: "trailing", count: 5, unit: "year", grain: "year" },
+              comparison: { kind: "previous_year" },
             },
-          ],
+          },
         },
         view: { type: "table" },
       },
@@ -437,25 +425,24 @@ describe("analysis draft 三层状态", () => {
 
   test("派生分析没有唯一可编辑查询收敛点", () => {
     const derived: AnalysisDefinition = {
-      queries: [{ ...definition.queries[0]!, view_title: "来源" }],
+      query: { ...definition.query, view_title: "来源" },
       derived: {
         view_title: "派生结果",
         columns: [
           {
-            source: "result",
+            source: "query",
             member: "measure:active_employee_count",
             as: "active_employee_count",
           },
         ],
       },
     };
-    expect(semanticSinkQueryView(derived)).toBeNull();
+    expect(semanticEditableQuery(derived)).toBeNull();
   });
 });
 
 describe("查询成员纯转换", () => {
   const query: SemanticQueryView = {
-    id: "result",
     measures: ["measure:active_employee_count"],
     dimensions: ["dimension:organization_name"],
     time: { window: { kind: "current_month" } },

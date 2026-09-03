@@ -47,7 +47,7 @@ const semanticPlanning = {
     plan: planExecution(
       {
         ...(semantic.title ? { title: semantic.title } : {}),
-        views: semantic.queries,
+        views: [{ ...semantic.query, id: "query" }],
       } as AnalysisSpec,
       { delivery: "identity" },
     ),

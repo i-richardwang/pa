@@ -39,10 +39,15 @@ const SEMANTIC_FILTER_VALUES = z
   .transform((values) =>
     [...new Set(values)].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0)),
   );
-const VIEW_ID = z
-  .string()
-  .regex(/^[a-z][a-z0-9_]*$/)
-  .max(64);
+/**
+ * 来源角色是固定词汇，不是调用方发明的名字：query 指顶层查询，joined 指 derived.joined.query。
+ * 派生列据此引用来源，引用错误在 schema 层就能判定。
+ */
+export const SEMANTIC_SOURCE_ROLE = z
+  .enum(["query", "joined"])
+  .describe("派生列的来源：query = 顶层 query，joined = derived.joined.query");
+
+export type SemanticSourceRole = z.infer<typeof SEMANTIC_SOURCE_ROLE>;
 
 const CALCULATION_ID = z
   .string()
@@ -91,7 +96,6 @@ export type SemanticSummary = z.infer<typeof SEMANTIC_SUMMARY_INPUT>;
 
 export const SEMANTIC_QUERY_VIEW_INPUT = z
   .object({
-    id: VIEW_ID,
     view_title: z.string().min(1).max(30).optional(),
     measures: z.array(SEMANTIC_MEASURE_ID).optional(),
     dimensions: z.array(SEMANTIC_DIMENSION_ID).optional(),
@@ -200,7 +204,7 @@ export const SEMANTIC_QUERY_VIEW_INPUT = z
 
 export type SemanticQueryView = z.infer<typeof SEMANTIC_QUERY_VIEW_INPUT>;
 
-export type SemanticColumnOperand = { member: string; source: string };
+export type SemanticColumnOperand = { member: string; source: SemanticSourceRole };
 export type SemanticCarriedColumn = SemanticColumnOperand & { as: string };
 export type SemanticLiteralOperand = { lit: number };
 export type SemanticExprNode = {
@@ -213,7 +217,11 @@ export type SemanticDerivedColumn =
   | { expr: SemanticExprNode; as: string; format?: ColumnFormat };
 export type SemanticDerivedView = {
   view_title: string;
-  join?: { on: string[]; how: "left" | "inner" | "full" };
+  joined?: {
+    query: SemanticQueryView;
+    on: string[];
+    how: "left" | "inner" | "full";
+  };
   columns: SemanticDerivedColumn[];
   order?: { by: string; direction: "asc" | "desc" }[];
   limit?: number;
@@ -221,7 +229,7 @@ export type SemanticDerivedView = {
 };
 
 const SEMANTIC_COLUMN_OPERAND = z
-  .object({ member: SEMANTIC_QUERY_MEMBER_ID, source: VIEW_ID })
+  .object({ member: SEMANTIC_QUERY_MEMBER_ID, source: SEMANTIC_SOURCE_ROLE })
   .strict();
 /** 派生输出列名是标识符：与呈现通道同一份词汇，通道引用才能在 schema 层判定。 */
 const DERIVED_OUTPUT_NAME = z
@@ -245,14 +253,15 @@ const SEMANTIC_EXPR_NODE: z.ZodType<SemanticExprNode> = z.lazy(() =>
 export const SEMANTIC_DERIVED_VIEW_INPUT: z.ZodType<SemanticDerivedView> = z
   .object({
     view_title: z.string().min(1).max(30),
-    join: z
+    joined: z
       .object({
+        query: SEMANTIC_QUERY_VIEW_INPUT.describe("参与逐行算术的第二个查询；它只为本次算术存在"),
         on: z.array(SEMANTIC_DIMENSION_ID).min(1).describe("两个来源查询共同使用的语义维度 id"),
-        how: z.enum(["left", "inner", "full"]).describe("以 queries[0] 为左表"),
+        how: z.enum(["left", "inner", "full"]).describe("以顶层 query 为左表"),
       })
       .strict()
       .optional()
-      .describe("声明两个 queries 时必填；只有一个 queries 时不能声明"),
+      .describe("需要跨两个查询逐行算术时声明；第二个查询与它的关联合同只能一起出现"),
     columns: z
       .array(
         z.union([
@@ -408,31 +417,29 @@ export const SEMANTIC_VIEW_INTENT_INPUT = z
 /** 呈现意图按图型判别：哪些通道属于哪个图型出自这一份形状，下游不再复述适用性。 */
 export type SemanticViewIntent = z.infer<typeof SEMANTIC_VIEW_INTENT_INPUT>;
 
-/** 逐行算术最多合并两个来源查询；物理查询腿由 Planner 去重后自行管理。 */
-export const MAX_SEMANTIC_QUERIES = 2;
-
 /**
  * 一次分析只交付一个结果，所以结果节点由形状固定：声明 derived 时它就是结果，
- * 否则唯一的 queries[0] 就是结果。「多个互不相干的结果」在这份形状里写不出来。
+ * 否则唯一的 query 就是结果。第二个查询只存在于 derived.joined 里，因此
+ * 「多个互不相干的结果」和「有第二个查询却没有算术」都写不出来。
  */
 export const ANALYSIS_DEFINITION_INPUT = z
   .object({
     title: z.string().min(1).max(100).optional(),
-    queries: z
-      .array(SEMANTIC_QUERY_VIEW_INPUT)
-      .min(1)
-      .max(MAX_SEMANTIC_QUERIES)
-      .describe(
-        "数据问题。分组、时间与筛选一致的多个指标写进同一个查询的 measures，得到一张宽表；" +
-          "只有需要跨查询逐行算术时才声明第二个查询，此时必须同时声明 derived。" +
-          "行结构不相容或属于不同业务问题时分成多次 run_analysis",
-      ),
+    query: SEMANTIC_QUERY_VIEW_INPUT.describe(
+      "数据问题。分组、时间与筛选一致的多个指标写进同一个查询的 measures，得到一张宽表；" +
+        "行结构不相容或属于不同业务问题时分成多次 run_analysis",
+    ),
     derived: SEMANTIC_DERIVED_VIEW_INPUT.optional().describe(
-      "对 queries 逐行算术后交付的结果；声明它时全部 queries 都成为中间节点。" +
+      "对来源查询逐行算术后交付的结果；声明它时来源查询都成为中间节点。" +
         "已有正式指标不要用它复刻除法",
     ),
   })
-  .strict();
+  // 多写一个查询是最常见的错法，strict 的默认文案只会说「多余的键」，这里替它指路。
+  .strict(
+    "分析定义只有 title / query / derived 三个字段：分组、时间与筛选一致的多个指标合并进 " +
+      "query.measures；需要跨查询逐行算术时把第二个查询放进 derived.joined；" +
+      "属于不同业务问题则分成多次 run_analysis",
+  );
 
 export type AnalysisDefinition = z.infer<typeof ANALYSIS_DEFINITION_INPUT>;
 
@@ -458,25 +465,31 @@ function semanticOperands(column: SemanticDerivedColumn): SemanticColumnOperand[
   return operands;
 }
 
+/** 派生结果在执行层的视图身份；来源视图身份即来源角色本身。 */
+export const SEMANTIC_DERIVED_VIEW_ID = "result";
+
 /** 结果节点由形状决定：声明 derived 时它就是结果，否则唯一的查询就是结果。 */
 export function semanticResultView(definition: AnalysisDefinition): SemanticAnalysisView {
-  return definition.derived ?? definition.queries[0];
+  return definition.derived ?? definition.query;
 }
 
 export function semanticResultIsDerived(definition: AnalysisDefinition): boolean {
   return definition.derived !== undefined;
 }
 
-/**
- * 派生结果在执行层需要一个视图身份，但它不是用户声明的一部分：
- * 这里按查询 id 确定性地让出一个不冲突的名字，编译与记录投影共用同一个结果。
- */
 export function semanticResultViewId(definition: AnalysisDefinition): string {
-  if (!definition.derived) return definition.queries[0].id;
-  const taken = new Set(definition.queries.map((query) => query.id));
-  let id = "result";
-  for (let index = 1; taken.has(id); index += 1) id = `result_${index}`;
-  return id;
+  return definition.derived ? SEMANTIC_DERIVED_VIEW_ID : "query";
+}
+
+/** 来源查询按角色展开；角色名即执行层视图 id，调用方不再发明也不再引用自造 id。 */
+export function semanticSourceViews(
+  definition: AnalysisDefinition,
+): { role: SemanticSourceRole; query: SemanticQueryView }[] {
+  const joined = definition.derived?.joined;
+  return [
+    { role: "query", query: definition.query },
+    ...(joined ? [{ role: "joined" as const, query: joined.query }] : []),
+  ];
 }
 
 export function parseAnalysisDefinition(value: unknown): AnalysisDefinition {
@@ -487,47 +500,42 @@ export function parseAnalysisDefinition(value: unknown): AnalysisDefinition {
     );
   }
   try {
-    const { queries, derived } = parsed.data;
-    const ids = queries.map((query) => query.id);
-    const duplicate = ids.find((id, index) => ids.indexOf(id) !== index);
-    if (duplicate) throw new Error(`查询视图 id「${duplicate}」重复；每个查询需要唯一 id`);
-    if (queries.length > 1 && !derived) {
-      throw new Error(
-        `声明了 ${queries.length} 个查询却没有 derived：一次分析只交付一个结果。` +
-          "若这些指标的分组、时间与筛选一致，把它们的 measures 合并进一个查询；" +
-          "需要跨查询逐行算术时补上 derived；属于不同业务问题则分成多次 run_analysis",
-      );
-    }
+    const { derived } = parsed.data;
+    const sources = semanticSourceViews(parsed.data);
     if (derived) {
-      if (queries.length === 2 && !derived.join) {
-        throw new Error(`派生结果「${derived.view_title}」合并两个查询时必须声明 join`);
+      const usesJoined = derived.columns.some((column) =>
+        semanticOperands(column).some((operand) => operand.source === "joined"),
+      );
+      if (usesJoined && !derived.joined) {
+        throw new Error(
+          `派生结果「${derived.view_title}」的列引用了 joined，但没有声明 derived.joined；` +
+            "补上第二个查询与它的关联合同，或把这些列改成引用 query",
+        );
       }
-      if (queries.length === 1 && derived.join) {
-        throw new Error(`派生结果「${derived.view_title}」只有一个来源查询时不能声明 join`);
-      }
-      for (const query of queries) {
+      validateDerivedColumns(
+        derived,
+        sources.map(({ role }) => role),
+        {
+          operands: (column) =>
+            semanticOperands(column).map((operand) => ({ source: operand.source })),
+          outputName: (column) => column.as,
+        },
+      );
+      for (const { role, query } of sources) {
         if (!query.view_title?.trim()) {
-          throw new Error(`声明 derived 时每个来源查询都必须提供 view_title；${query.id} 缺少标题`);
+          throw new Error(
+            `声明 derived 时每个来源查询都必须提供 view_title；来源 ${role} 缺少标题`,
+          );
+        }
+        if (query.calculations?.length) {
+          throw new Error(
+            `报告级构成占比只能声明在直接交付的查询上；来源 ${role} 是 derived 的中间节点`,
+          );
+        }
+        if (query.group_sort) {
+          throw new Error(`分组排序只能声明在直接交付的查询上；中间查询 ${role} 不能独立选择分组`);
         }
       }
-      validateDerivedColumns(derived, ids, {
-        operands: (column) =>
-          semanticOperands(column).map((operand) => ({ source: operand.source })),
-        outputName: (column) => column.as,
-      });
-    }
-    const resultId = derived ? undefined : queries[0].id;
-    const strayCalculation = queries.find((query) => query.calculations?.length);
-    if (strayCalculation && strayCalculation.id !== resultId) {
-      throw new Error(
-        `报告级构成占比只能声明在直接交付的查询上；${strayCalculation.id} 是 derived 的中间节点`,
-      );
-    }
-    const strayGroupSort = queries.find((query) => query.group_sort && query.id !== resultId);
-    if (strayGroupSort) {
-      throw new Error(
-        `分组排序只能声明在直接交付的查询上；中间查询 ${strayGroupSort.id} 不能独立选择分组`,
-      );
     }
     return parsed.data;
   } catch (error) {

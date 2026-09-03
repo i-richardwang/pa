@@ -45,14 +45,11 @@ const compiled = {
 };
 
 const pivotDefinition: AnalysisDefinition = {
-  queries: [
-    {
-      id: "structure",
-      measures: ["measure:active_employee_count"],
-      dimensions: ["dimension:organization_name", "dimension:department_name"],
-      time: { window: { kind: "current_month", month: "2026-07" } },
-    },
-  ],
+  query: {
+    measures: ["measure:active_employee_count"],
+    dimensions: ["dimension:organization_name", "dimension:department_name"],
+    time: { window: { kind: "current_month", month: "2026-07" } },
+  },
 };
 const pivotIntent: SemanticViewIntent = {
   type: "table",
@@ -318,17 +315,13 @@ describe("analysis service 身份与呈现边界", () => {
     await expect(
       service.run(
         principal,
-        {
-          queries: [
-            { ...definition.queries[0], id: "a" },
-            { ...definition.queries[0], id: "b" },
-          ],
-        },
+        // 定义里没有并列查询的落脚点：越过类型验被拒时仍然留痕。
+        { queries: [definition.query, definition.query] } as unknown as AnalysisDefinition,
         { type: "table" },
       ),
-    ).rejects.toThrow(/合并进一个查询/);
+    ).rejects.toThrow(/query\.measures/);
     expect(logged).toHaveLength(1);
     expect(logged[0]).toMatchObject({ tool: "run_analysis", outcome: "error" });
-    expect(logged[0].error).toMatch(/合并进一个查询/);
+    expect(logged[0].error).toMatch(/query\.measures/);
   });
 });

@@ -192,7 +192,7 @@ describe("dashboard report routes", () => {
       REPORTS_PAYLOAD_SCHEMA.parse(await (await app.request("/api/reports")).json()),
     ).toMatchObject({
       total: 1,
-      rows: [{ id: created.id, name: "组织人数报告", result_view_id: "structure" }],
+      rows: [{ id: created.id, name: "组织人数报告", result_view_id: "query" }],
     });
     expect((await app.request(`/api/reports/${created.id}`)).status).toBe(200);
     expect(
@@ -223,16 +223,13 @@ describe("dashboard report routes", () => {
     const presentation = createPresentationService();
     const usage = { log: async () => {} };
     const semanticAnalysis: AnalysisDefinition = {
-      queries: [
-        {
-          id: "structure",
-          measures: ["measure:active_employee_count"],
-          dimensions: ["dimension:category_level"],
-          time: {
-            window: { kind: "current_month" as const, month: "2026-07" },
-          },
+      query: {
+        measures: ["measure:active_employee_count"],
+        dimensions: ["dimension:category_level"],
+        time: {
+          window: { kind: "current_month" as const, month: "2026-07" },
         },
-      ],
+      },
     };
     const semanticView: SemanticViewIntent = {
       type: "bar",
@@ -262,7 +259,7 @@ describe("dashboard report routes", () => {
             [
               {
                 status: "incompatible",
-                result_view_id: "structure",
+                result_view_id: "query",
                 reason: "没有一个当前可见的执行来源能够承载维度「分类层级」",
               },
             ],
@@ -274,7 +271,7 @@ describe("dashboard report routes", () => {
           plan: planExecution(STRUCTURE_ARGS, { delivery: "identity" }),
           presentation: compiledPresentation,
           render_decl: compiledPresentation,
-          routes: [{ status: "direct" as const, result_view_id: "structure" }],
+          routes: [{ status: "direct" as const, result_view_id: "query" }],
           record_projection_bindings: { views: [] },
         };
       },
@@ -353,7 +350,7 @@ describe("dashboard report routes", () => {
           routes: [
             {
               status: "incompatible",
-              result_view_id: "structure",
+              result_view_id: "query",
               reason: "没有一个当前可见的执行来源能够承载维度「分类层级」",
             },
           ],

@@ -313,13 +313,10 @@ describe("dashboard app routes and access control", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         analysis: {
-          queries: [
-            {
-              id: "result",
-              measures: ["measure:active_employee_count"],
-              time: { window: { kind: "current_month", month: "2026-07" } },
-            },
-          ],
+          query: {
+            measures: ["measure:active_employee_count"],
+            time: { window: { kind: "current_month", month: "2026-07" } },
+          },
         },
         view: { type: "table" },
         view_preferences: {},

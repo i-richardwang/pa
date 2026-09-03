@@ -202,7 +202,7 @@ function trackedSymlinks(): string[] {
 
 test("pa-analytics 教学以合并宽表为先，派生只是唯一交付出口", async () => {
   const patterns = await readFile(new URL(skillQueryPatterns, root), "utf8");
-  for (const marker of ["同一个查询", "derived", "provenance", "多次 `run_analysis`"]) {
+  for (const marker of ["同一个查询", "derived.joined", "provenance", "多次 `run_analysis`"]) {
     expect(patterns.includes(marker), `query_patterns 缺交付模型标记「${marker}」`).toBe(true);
   }
   // 结果图的形状已由 schema 表达，教学不再复述它，否则两份说法会各自过期。

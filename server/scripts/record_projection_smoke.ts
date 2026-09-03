@@ -89,14 +89,11 @@ try {
 
   const definition: AnalysisDefinition = {
     title: "公开 Demo 人员明细",
-    queries: [
-      {
-        id: "organization_summary",
-        measures: [active.id],
-        dimensions: [organization.id],
-        time: { window: { kind: "current_month", month: context.dataAsOf } },
-      },
-    ],
+    query: {
+      measures: [active.id],
+      dimensions: [organization.id],
+      time: { window: { kind: "current_month", month: context.dataAsOf } },
+    },
   };
   const executed = await application.analysis.run(principal, definition, { type: "table" });
   assert(executed.record_projection_bindings.views[0], "分析没有生成记录投影绑定");

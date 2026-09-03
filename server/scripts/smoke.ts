@@ -76,14 +76,11 @@ try {
           arguments: {
             analysis: {
               title: "公开 Demo 月末人员规模",
-              queries: [
-                {
-                  id: "workforce",
-                  measures: [active],
-                  dimensions: [organization],
-                  time: { window: { kind: "current_month" } },
-                },
-              ],
+              query: {
+                measures: [active],
+                dimensions: [organization],
+                time: { window: { kind: "current_month" } },
+              },
             },
             view: { type: "table" },
           },

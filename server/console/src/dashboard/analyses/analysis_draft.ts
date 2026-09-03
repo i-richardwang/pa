@@ -60,7 +60,7 @@ export const DEFAULT_TIME_WINDOW = {
 export function blankAnalysisDefinition(title: string): AnalysisDefinition {
   return {
     title,
-    queries: [{ id: "result", time: { window: DEFAULT_TIME_WINDOW.current_month } }],
+    query: { time: { window: DEFAULT_TIME_WINDOW.current_month } },
   };
 }
 
@@ -99,7 +99,7 @@ export function analysisReadiness(
   draft: Pick<AnalysisEditState, "analysis">,
   catalog: CatalogPayload,
 ): { issues: AnalysisReadinessIssue[]; time?: TimeSelectionResult } {
-  const view = semanticSinkQueryView(draft.analysis);
+  const view = semanticEditableQuery(draft.analysis);
   if (!view) return { issues: [] };
   const issues: AnalysisReadinessIssue[] = [];
   const hasMembers = (view.measures?.length ?? 0) + (view.dimensions?.length ?? 0) > 0;
@@ -222,7 +222,7 @@ export function setSemanticSummary(
   enabled: boolean,
   catalog: CatalogPayload,
 ): AnalysisEditState {
-  const current = semanticSinkQueryView(draft.analysis);
+  const current = semanticEditableQuery(draft.analysis);
   if (!current) return draft;
   const { summary: _summary, ...withoutSummary } = current;
   const resultView: SemanticQueryView = enabled
@@ -232,7 +232,7 @@ export function setSemanticSummary(
   const preferences = normalizeViewPreferences(draft.view_preferences, viewIntent);
   return {
     ...draft,
-    analysis: { ...draft.analysis, queries: [resultView] },
+    analysis: { ...draft.analysis, query: resultView },
     view: viewIntent,
     view_preferences: preferences,
     previewed_analysis: null,
@@ -432,16 +432,14 @@ export function setSemanticViewIntent(
 
 export function setSemanticQueryView(
   draft: AnalysisEditState,
-  viewId: string,
   nextView: SemanticQueryView,
   catalog: CatalogPayload,
 ): AnalysisEditState {
-  const current = semanticSinkQueryView(draft.analysis);
-  if (!current || current.id !== viewId) return draft;
+  if (!semanticEditableQuery(draft.analysis)) return draft;
   const viewIntent = normalizeViewIntent(draft.view, nextView, catalog);
   return {
     ...draft,
-    analysis: { ...draft.analysis, queries: [clone(nextView)] },
+    analysis: { ...draft.analysis, query: clone(nextView) },
     view: viewIntent,
     view_preferences: normalizeViewPreferences(draft.view_preferences, viewIntent),
     previewed_analysis: null,
@@ -451,12 +449,11 @@ export function setSemanticQueryView(
 }
 
 /**
- * 编辑器只处理直接交付的单查询：声明了 derived 或多个查询即整体只读（null）——
+ * 编辑器只处理直接交付的查询：声明了 derived 即整体只读（null）——
  * 时间栏与 Inspector 对「可编辑」的判定不允许分叉。
  */
-export function semanticSinkQueryView(analysis: AnalysisDefinition): SemanticQueryView | null {
-  if (analysis.derived || analysis.queries.length !== 1) return null;
-  return analysis.queries[0];
+export function semanticEditableQuery(analysis: AnalysisDefinition): SemanticQueryView | null {
+  return analysis.derived ? null : analysis.query;
 }
 
 /**
@@ -478,9 +475,9 @@ export function setDraftTime(
   time: TimeIntent,
   catalog: CatalogPayload,
 ): AnalysisEditState {
-  const view = semanticSinkQueryView(draft.analysis);
+  const view = semanticEditableQuery(draft.analysis);
   if (!view) return draft;
-  return setSemanticQueryView(draft, view.id, { ...view, time }, catalog);
+  return setSemanticQueryView(draft, { ...view, time }, catalog);
 }
 
 /** 删除查询成员时原子清理依赖它的分组排序；筛选是独立人群约束，不随分组列删除。 */

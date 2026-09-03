@@ -3,9 +3,8 @@ import { derivedFormulaSummaries, queryFingerprint } from "./query_fingerprint.j
 
 const QUERY_FINGERPRINT_PATTERN = /^q-[0-9a-f]{10}$/;
 
-const queryView = (id = "source", cutoff = "2026-07") => ({
-  id,
-  view_title: "结果",
+const queryView = (title = "结果", cutoff = "2026-07") => ({
+  view_title: title,
   measures: ["measure:active_employee_count"],
   dimensions: ["dimension:organization_name"],
   filters: [
@@ -21,29 +20,29 @@ const queryView = (id = "source", cutoff = "2026-07") => ({
   },
 });
 
-const spec = (queries: unknown[], derived?: unknown) => ({
+const spec = (query: unknown, derived?: unknown) => ({
   title: "在职人数",
-  queries,
+  query,
   ...(derived ? { derived } : {}),
 });
 
 describe("queryFingerprint", () => {
   test("canonical 语义规格生成稳定短哈希", () => {
-    const fingerprint = queryFingerprint(spec([queryView()]));
+    const fingerprint = queryFingerprint(spec(queryView()));
     expect(fingerprint).toMatch(QUERY_FINGERPRINT_PATTERN);
-    expect(queryFingerprint(spec([queryView()]))).toBe(fingerprint);
+    expect(queryFingerprint(spec(queryView()))).toBe(fingerprint);
   });
 
-  test("标题、局部 id、过滤顺序与对象键序不影响内容身份", () => {
-    const fingerprint = queryFingerprint(spec([queryView()]));
-    const view = queryView("renamed");
+  test("标题、过滤顺序与对象键序不影响内容身份", () => {
+    const fingerprint = queryFingerprint(spec(queryView()));
+    const view = queryView();
     view.view_title = "另一标签";
     view.filters = [...view.filters].reverse().map((filter) => ({
       values: filter.values,
       relation: filter.relation,
       member: filter.member,
     }));
-    const renamed = spec([view]);
+    const renamed = spec(view);
     renamed.title = "另一标题";
     expect(queryFingerprint(renamed)).toBe(fingerprint);
   });
@@ -51,39 +50,42 @@ describe("queryFingerprint", () => {
   test("集合筛选的值顺序、空白与重复项不改变内容身份", () => {
     const canonical = queryView();
     canonical.filters[0].values = ["Aurora Labs", "Harbor Works"];
-    const fingerprint = queryFingerprint(spec([canonical]));
+    const fingerprint = queryFingerprint(spec(canonical));
     const reordered = queryView();
     reordered.filters[0].values = [" Harbor Works ", "Aurora Labs", "Aurora Labs"];
-    expect(queryFingerprint(spec([reordered]))).toBe(fingerprint);
+    expect(queryFingerprint(spec(reordered))).toBe(fingerprint);
   });
 
   test("数据选择、列序与派生算式参与指纹", () => {
-    const fingerprint = queryFingerprint(spec([queryView()]));
+    const fingerprint = queryFingerprint(spec(queryView()));
     const changed = queryView();
     changed.measures = ["measure:ytd_primary_event_rate"];
-    expect(queryFingerprint(spec([changed]))).not.toBe(fingerprint);
+    expect(queryFingerprint(spec(changed))).not.toBe(fingerprint);
 
     const delta = {
       view_title: "差值",
-      join: { on: ["dimension:organization_name"], how: "left" as const },
+      joined: {
+        query: queryView("上年同期", "2025-07"),
+        on: ["dimension:organization_name"],
+        how: "left" as const,
+      },
       columns: [
-        { member: "dimension:organization_name", source: "current", as: "org" },
+        { member: "dimension:organization_name", source: "query", as: "org" },
         {
           expr: {
             op: "-" as const,
-            left: { member: "measure:active_employee_count", source: "current" },
-            right: { member: "measure:active_employee_count", source: "previous" },
+            left: { member: "measure:active_employee_count", source: "query" },
+            right: { member: "measure:active_employee_count", source: "joined" },
           },
           as: "delta",
         },
       ],
     };
-    const comparison = spec([queryView("current"), queryView("previous", "2025-07")], delta);
-    const derivedFingerprint = queryFingerprint(comparison);
+    const derivedFingerprint = queryFingerprint(spec(queryView("当期"), delta));
     expect(derivedFingerprint).toMatch(QUERY_FINGERPRINT_PATTERN);
     expect(
       queryFingerprint(
-        spec([queryView("current"), queryView("previous", "2025-07")], {
+        spec(queryView("当期"), {
           ...delta,
           columns: [delta.columns[0], { ...delta.columns[1], as: "renamed_delta" }],
         }),
@@ -91,15 +93,9 @@ describe("queryFingerprint", () => {
     ).not.toBe(derivedFingerprint);
   });
 
-  test("两个来源查询缺少 derived 时不是合法的可指纹分析", () => {
-    expect(
-      queryFingerprint(spec([queryView("current"), queryView("previous", "2025-07")])),
-    ).toBeUndefined();
-  });
-
   test("无效或物理规格不产生指纹", () => {
     expect(queryFingerprint({})).toBeUndefined();
-    expect(queryFingerprint(spec([]))).toBeUndefined();
+    expect(queryFingerprint(spec({}))).toBeUndefined();
     // 物理 view 限定成员不是语义入口的合法输入
     expect(
       queryFingerprint({
@@ -115,21 +111,21 @@ describe("queryFingerprint", () => {
   });
 
   test("派生观察只生成公式摘要，不复制完整分析入参", () => {
-    const current = queryView("current");
-    current.view_title = "当期";
-    const previous = queryView("previous", "2025-07");
-    previous.view_title = "上年同期";
     expect(
       derivedFormulaSummaries(
-        spec([current, previous], {
+        spec(queryView("当期"), {
           view_title: "变化",
-          join: { on: ["dimension:organization_name"], how: "left" },
+          joined: {
+            query: queryView("上年同期", "2025-07"),
+            on: ["dimension:organization_name"],
+            how: "left",
+          },
           columns: [
             {
               expr: {
                 op: "-",
-                left: { member: "measure:active_employee_count", source: "current" },
-                right: { member: "measure:active_employee_count", source: "previous" },
+                left: { member: "measure:active_employee_count", source: "query" },
+                right: { member: "measure:active_employee_count", source: "joined" },
               },
               as: "headcount_delta",
             },

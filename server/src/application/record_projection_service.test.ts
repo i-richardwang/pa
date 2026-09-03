@@ -256,14 +256,11 @@ function reportDocumentOf(fixture: AnalysisViewFixture, revision: number) {
 
 const spec: AnalysisViewFixture = {
   analysis: {
-    queries: [
-      {
-        id: "result",
-        measures: ["measure:active_employee_count"],
-        dimensions: ["dimension:organization_name"],
-        time: currentMonth("2026-07"),
-      },
-    ],
+    query: {
+      measures: ["measure:active_employee_count"],
+      dimensions: ["dimension:organization_name"],
+      time: currentMonth("2026-07"),
+    },
   },
   view: { type: "table" },
 };
@@ -271,12 +268,10 @@ const spec: AnalysisViewFixture = {
 const rateSpec: AnalysisViewFixture = {
   ...spec,
   analysis: {
-    queries: [
-      {
-        ...spec.analysis.queries[0],
-        measures: ["measure:ytd_event_rate"],
-      },
-    ],
+    query: {
+      ...spec.analysis.query,
+      measures: ["measure:ytd_event_rate"],
+    },
   },
 };
 
@@ -367,7 +362,7 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
 
   const result = await service.runReport(principal, "report_1", {
     revision: 3,
-    result_view_id: "result",
+    result_view_id: "query",
     metric_id: "measure:active_employee_count",
     coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
     time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -418,7 +413,7 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
     "report_1",
     {
       revision: 3,
-      result_view_id: "result",
+      result_view_id: "query",
       metric_id: "measure:active_employee_count",
       coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
       time_coordinate: { from: "2026-06", to: "2026-06" },
@@ -429,10 +424,7 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
     currentMonth("2026-06"),
   );
   expect(boardResult.rows).toHaveLength(1);
-  const effectiveView = compiledDefinitions.at(-1)?.queries[0];
-  expect(effectiveView && "time" in effectiveView ? effectiveView.time : null).toEqual(
-    currentMonth("2026-06"),
-  );
+  expect(compiledDefinitions.at(-1)?.query.time).toEqual(currentMonth("2026-06"));
   expect(seen.at(-1)?.timeDimensions?.[0].dateRange).toEqual(["2026-06-01", "2026-06-30"]);
   expect(audit.at(-1)).toEqual(
     expect.objectContaining({
@@ -447,7 +439,7 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
   await expect(
     service.runBoard(principal, "missing_board", "report_1", {
       revision: 3,
-      result_view_id: "result",
+      result_view_id: "query",
       metric_id: "measure:active_employee_count",
       coordinates: [],
       time_coordinate: { from: "2026-06", to: "2026-06" },
@@ -481,7 +473,7 @@ test("报告修订漂移时 fail-closed，记录失败审计且不执行查询",
   await expect(
     service.runReport(principal, "report_1", {
       revision: 3,
-      result_view_id: "result",
+      result_view_id: "query",
       metric_id: "measure:active_employee_count",
       coordinates: [],
       time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -544,7 +536,7 @@ test("率指标只投影分子名单，YTD 时间仍由指标口径解释", asyn
 
   const result = await service.runReport(principal, "report_rate", {
     revision: 1,
-    result_view_id: "result",
+    result_view_id: "query",
     metric_id: "measure:ytd_event_rate",
     coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
     time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -570,21 +562,18 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
   expect(metric).toBeDefined();
   const entitySpec: AnalysisViewFixture = {
     analysis: {
-      queries: [
-        {
-          id: "result",
-          measures: [metric!.id],
-          dimensions: ["dimension:organization_name"],
-          filters: [
-            {
-              member: "dimension:organization_name",
-              relation: "one_of",
-              values: ["研发", "产品"],
-            },
-          ],
-          time: currentMonth("2026-07"),
-        },
-      ],
+      query: {
+        measures: [metric!.id],
+        dimensions: ["dimension:organization_name"],
+        filters: [
+          {
+            member: "dimension:organization_name",
+            relation: "one_of",
+            values: ["研发", "产品"],
+          },
+        ],
+        time: currentMonth("2026-07"),
+      },
     },
     view: { type: "table" },
   };
@@ -693,7 +682,7 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
 
   const result = await service.runReport(principal, "report_entities", {
     revision: 1,
-    result_view_id: "result",
+    result_view_id: "query",
     metric_id: metric!.id,
     coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
     time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -750,7 +739,7 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
   await expect(
     service.runReport(principal, "report_entities", {
       revision: 1,
-      result_view_id: "result",
+      result_view_id: "query",
       metric_id: metric!.id,
       coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
       time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -765,7 +754,7 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
   await expect(
     service.runReport(principal, "report_entities", {
       revision: 1,
-      result_view_id: "result",
+      result_view_id: "query",
       metric_id: metric!.id,
       coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
       time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -799,7 +788,7 @@ test("分组坐标缺失时不能把单个格子扩大成整份名单", async ()
   await expect(
     service.runReport(principal, "report_1", {
       revision: 3,
-      result_view_id: "result",
+      result_view_id: "query",
       metric_id: "measure:active_employee_count",
       coordinates: [],
       time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -811,29 +800,26 @@ test("分组坐标缺失时不能把单个格子扩大成整份名单", async ()
   expect(loads).toBe(0);
 });
 
-test("隐藏 source 不是交付结果，不能通过手写 result_view_id 投影记录", async () => {
+test("来源查询不是交付结果，不能通过手写 result_view_id 投影记录", async () => {
   const document = buildCatalogDocument(fixtureViews);
   const derivedSpec: AnalysisViewFixture = {
     analysis: {
-      queries: [
-        {
-          id: "source",
-          view_title: "组织在职人数数据",
-          measures: ["measure:active_employee_count"],
-          dimensions: ["dimension:organization_name"],
-          time: currentMonth("2026-07"),
-        },
-      ],
+      query: {
+        view_title: "组织在职人数数据",
+        measures: ["measure:active_employee_count"],
+        dimensions: ["dimension:organization_name"],
+        time: currentMonth("2026-07"),
+      },
       derived: {
         view_title: "在职人数",
         columns: [
           {
-            source: "source",
+            source: "query",
             member: "dimension:organization_name",
             as: "org",
           },
           {
-            source: "source",
+            source: "query",
             member: "measure:active_employee_count",
             as: "headcount",
           },
@@ -872,7 +858,7 @@ test("隐藏 source 不是交付结果，不能通过手写 result_view_id 投�
   await expect(
     service.runReport(principal, "report_derived", {
       revision: 1,
-      result_view_id: "source",
+      result_view_id: "joined",
       metric_id: "measure:active_employee_count",
       coordinates: [{ dimension_id: "dimension:organization_name", value: "研发" }],
       time_coordinate: { from: "2026-07", to: "2026-07" },
@@ -891,20 +877,17 @@ test("Agent 名单从单一聚合结果格投影记录，分类条件保留在�
   const catalog = toCompilerCatalog(document);
   const listSpec: AnalysisViewFixture = {
     analysis: {
-      queries: [
-        {
-          id: "result",
-          measures: ["measure:active_employee_count"],
-          filters: [
-            {
-              member: "dimension:organization_name",
-              relation: "one_of",
-              values: ["研发"],
-            },
-          ],
-          time: currentMonth("2026-07"),
-        },
-      ],
+      query: {
+        measures: ["measure:active_employee_count"],
+        filters: [
+          {
+            member: "dimension:organization_name",
+            relation: "one_of",
+            values: ["研发"],
+          },
+        ],
+        time: currentMonth("2026-07"),
+      },
     },
     view: { type: "table" },
   };

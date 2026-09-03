@@ -51,7 +51,7 @@ import {
   analysisReadiness,
   removeSemanticQueryMember,
   replaceSemanticQueryDimension,
-  semanticSinkQueryView,
+  semanticEditableQuery,
   setSemanticQueryView,
   type AnalysisEditState,
 } from "./analysis_draft";
@@ -541,7 +541,7 @@ export function ReportQueryRail({
 }) {
   // 被编辑的视图取自草稿规格的收敛点：草稿是编辑对象的真相，结果只是它上一次运行的产物。
   const resultTitleOf = replay ? makeTitleOf(replay.payload.view) : (member: string) => member;
-  const queryView = semanticSinkQueryView(draft.analysis);
+  const queryView = semanticEditableQuery(draft.analysis);
 
   if (!queryView || !catalog) {
     return (
@@ -578,7 +578,7 @@ export function ReportQueryRail({
     return issue ? queryFeasibilityIssueMessage(issue) : undefined;
   };
   const updateIntent = (next: SemanticQueryView) => {
-    onChange(setSemanticQueryView(draft, next.id, next, catalog));
+    onChange(setSemanticQueryView(draft, next, catalog));
   };
 
   const calculationMeasures = catalog.measures.filter(

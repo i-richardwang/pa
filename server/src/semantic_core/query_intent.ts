@@ -143,6 +143,7 @@ function supports(member: CompilerCatalogMember, view: string): boolean {
 export function planQueryIntent(
   catalog: CompilerCatalog,
   intent: SemanticQueryView,
+  viewId: string,
 ): QueryIntentPlan {
   const feasibilityIssue = queryFeasibilityIssue(catalog, intent);
   if (feasibilityIssue) return { status: "incompatible", issue: feasibilityIssue };
@@ -209,7 +210,7 @@ export function planQueryIntent(
       member: bindDimension(member),
     })),
     query: {
-      id: intent.id,
+      id: viewId,
       ...(intent.view_title ? { view_title: intent.view_title } : {}),
       time_view: anchorView,
       time: compileTimeIntent(intent.time),

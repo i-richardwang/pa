@@ -13,6 +13,7 @@ import type { ViewPreferences } from "../presentation_core/view_preferences.js";
 import { bindSemanticFilter } from "../semantic_core/query_intent.js";
 import {
   semanticResultViewId,
+  semanticSourceViews,
   type SemanticDerivedView,
   type SemanticColumnOperand,
   type SemanticExprNode,
@@ -238,16 +239,16 @@ function stubPresentation(
 
 /** 测试替身里的派生结果编译：与真实编译器同形，只省去 catalog 绑定。 */
 function derivedStubView(derived: SemanticDerivedView, semantic: AnalysisDefinition) {
-  const { join: semanticJoin, ...rest } = derived;
+  const { joined, ...rest } = derived;
   return {
     ...rest,
     id: semanticResultViewId(semantic),
-    from: semantic.queries.map((query) => query.id),
-    ...(semanticJoin
+    from: semanticSourceViews(semantic).map(({ role }) => role),
+    ...(joined
       ? {
           join: {
-            ...semanticJoin,
-            on: semanticJoin.on.map((member) => ({
+            how: joined.how,
+            on: joined.on.map((member) => ({
               left: memberShortName(member),
               right: memberShortName(member),
             })),
@@ -276,9 +277,10 @@ export const semanticPlanningStub = {
     const analysis: AnalysisSpec = {
       ...(semantic.title ? { title: semantic.title } : {}),
       views: [
-        ...semantic.queries.map((view) => {
+        ...semanticSourceViews(semantic).map(({ role, query: view }) => {
           const { filters, group_sort: groupSort, time, ...query } = view;
           return {
+            id: role,
             ...query,
             ...(filters
               ? { filters: filters.map((filter) => bindSemanticFilter(filter, filter.member)) }

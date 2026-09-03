@@ -155,18 +155,31 @@ describe("拒绝文案", () => {
    * 要么点名当前可用的取值。反向断言保证合法写法不被这些护栏误伤。
    */
   test("Agent 走过的死路各自有唯一出口", () => {
-    const query = (id: string) => ({
-      id,
+    const query = {
       measures: ["measure:active_employee_count"],
       time: { window: { kind: "current_month" as const } },
-    });
+    };
 
-    // 并列两组指标：正确的改法是合并 measures，不是拆成多次调用。
-    const parallel = errorMessage(() =>
-      parseAnalysisDefinition({ queries: [query("headcount"), query("turnover")] }),
-    );
-    expect(parallel).toMatch(/合并进一个查询/);
+    // 并列两组指标：定义里根本没有这个落脚点，文案要指出合并与 derived.joined 两条出路。
+    const parallel = errorMessage(() => parseAnalysisDefinition({ queries: [query, query] }));
+    expect(parallel).toMatch(/query\.measures/);
+    expect(parallel).toMatch(/derived\.joined/);
     expect(parallel).not.toMatch(/拆成多次 run_analysis 调用$/);
+
+    // 引用不存在的来源角色：文案要说补 derived.joined，而不是只说「来源不存在」。
+    expect(
+      errorMessage(() =>
+        parseAnalysisDefinition({
+          query,
+          derived: {
+            view_title: "结果",
+            columns: [
+              { source: "joined", member: "measure:active_employee_count", as: "headcount" },
+            ],
+          },
+        }),
+      ),
+    ).toMatch(/没有声明 derived\.joined/);
 
     // 指标 id 写进表格列轴：文案要说清列轴的词汇，而不是「不在查询中」。
     expect(
@@ -191,7 +204,7 @@ describe("拒绝文案", () => {
     ).toMatch(/分类通道/);
 
     // 反向：合法写法必须过，省略 dimensions / filters 是正确的「没有」。
-    expect(() => parseAnalysisDefinition({ queries: [query("result")] })).not.toThrow();
+    expect(() => parseAnalysisDefinition({ query })).not.toThrow();
     expect(() =>
       parseSemanticViewIntent({ type: "table", columns: ["time", "dimension:org"] }),
     ).not.toThrow();

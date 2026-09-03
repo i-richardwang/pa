@@ -34,7 +34,7 @@ import {
   type RecordProjectionDialogRequest,
 } from "../reports/record_projection_dialog";
 import { useRecordProjection, type RecordProjectionSource } from "../reports/use_record_projection";
-import { semanticSinkQueryView, setDraftTime, timeCapabilitiesOf } from "./analysis_draft";
+import { semanticEditableQuery, setDraftTime, timeCapabilitiesOf } from "./analysis_draft";
 import { ChartStage, ChartStageHeading } from "./chart_stage";
 import { ReportInspector } from "./report_inspector";
 import { TimeBar, windowSummary } from "./time_editor";
@@ -157,7 +157,7 @@ export function AnalysisWorkbench({
 
   // 四个内容态共用同一底栏壳。
 
-  const queryView = draft && catalog ? semanticSinkQueryView(draft.analysis) : null;
+  const queryView = draft && catalog ? semanticEditableQuery(draft.analysis) : null;
   const timeBar =
     draft && catalog && queryView ? (
       <TimeBar

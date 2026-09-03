@@ -50,7 +50,6 @@ const catalog = {
 } satisfies Parameters<typeof queryFeasibilityIssue>[0];
 
 const view = (overrides: Partial<SemanticQueryView> = {}): SemanticQueryView => ({
-  id: "result",
   measures: [EMPLOYEES],
   dimensions: [COMPANY],
   time: { window: { kind: "current_month", month: "2026-07" } },
