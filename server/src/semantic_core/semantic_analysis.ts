@@ -160,13 +160,6 @@ export const SEMANTIC_QUERY_VIEW_INPUT = z
         });
       }
     }
-    if (calculations.length && view.group_sort?.max_items) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["group_sort", "max_items"],
-        message: "构成占比暂不支持 Top-N；请展示完整分类，避免可见占比合计失真",
-      });
-    }
     const filterMembers = (view.filters ?? []).map((filter) => filter.member);
     const duplicateFilterMember = filterMembers.find(
       (member, index) => filterMembers.indexOf(member) !== index,

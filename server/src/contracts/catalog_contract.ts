@@ -11,6 +11,7 @@ import {
 } from "../semantic_core/metric_domain_id.js";
 import { TIME_CAPABILITIES_INPUT, type TimeCapabilities } from "../semantic_core/time_contract.js";
 import type { ReportCalculationKind } from "../semantic_core/report_calculation.js";
+import type { MeasureQueryCapabilities } from "../semantic_core/query_feasibility.js";
 
 export type CatalogDimensionKind = "categorical" | "overlapping";
 
@@ -25,23 +26,23 @@ export type PublicCatalogFormula = {
   denominator_id?: string;
 };
 
-export type PublicCatalogMember = {
+type PublicCatalogMemberBase = {
   /** 跨视图稳定的语义身份；报告、查询意图与翻值入口只引用此值。 */
   id: string;
-  kind: "measure" | "dimension";
   title: string;
   description: string;
   format?: string;
   /** 模型给 Agent 的选材与避坑规则（meta.ai_context），亮出供人核对 AI 的查询行为。 */
   ai_context?: string;
   sensitivity?: string;
-  dimension_kind?: CatalogDimensionKind;
-  /** 维度在当前语义包中的导航分组；不参与物理选路。 */
-  dimension_group?: { id: string; title: string };
+};
+
+export type PublicCatalogMeasure = PublicCatalogMemberBase & {
+  kind: "measure";
   /** 指标结果可查看构成记录；具体目标由服务端按指标关系解析。 */
   records_available?: true;
-  /** 与当前成员不能同时分组的维度语义 id。 */
-  incompatible_dimensions?: string[];
+  /** 指标在查询中的可组合维度与层级。 */
+  query_capabilities: MeasureQueryCapabilities;
   /** 该正式指标允许在报告中承载的受控临时计算。 */
   report_calculations?: ReportCalculationKind[];
   formula?: PublicCatalogFormula;
@@ -51,8 +52,17 @@ export type PublicCatalogMember = {
   time_constraints?: TimeCapabilities;
 };
 
+export type PublicCatalogDimension = PublicCatalogMemberBase & {
+  kind: "dimension";
+  dimension_kind?: CatalogDimensionKind;
+  /** 维度在当前语义包中的导航分组；不参与物理选路。 */
+  dimension_group?: { id: string; title: string };
+};
+
+export type PublicCatalogMember = PublicCatalogMeasure | PublicCatalogDimension;
+
 export function isSearchableCatalogDimension(
-  member: Pick<PublicCatalogMember, "kind" | "dimension_kind"> | undefined,
+  member: { kind: PublicCatalogMember["kind"]; dimension_kind?: CatalogDimensionKind } | undefined,
 ): boolean {
   return (
     member?.kind === "dimension" &&
@@ -87,8 +97,8 @@ export type PublicCatalogDocument = {
     plan_through?: string;
   }[];
   metric_domains: PublicMetricDomain[];
-  measures: PublicCatalogMember[];
-  dimensions: PublicCatalogMember[];
+  measures: PublicCatalogMeasure[];
+  dimensions: PublicCatalogDimension[];
 };
 
 /** GET /dashboard/api/catalog/values?member&contains */
@@ -99,36 +109,64 @@ export type CatalogDimensionValues = {
   truncated?: string;
 };
 
-const CATALOG_MEMBER_SCHEMA: z.ZodType<PublicCatalogMember> = z
+export const MEASURE_QUERY_CAPABILITIES_SCHEMA: z.ZodType<MeasureQueryCapabilities> = z
+  .object({
+    dimension_ids: z.array(z.string()).describe("可用于分组、筛选与排序的维度语义 id"),
+    hierarchies: z
+      .array(z.array(z.string()))
+      .optional()
+      .describe("该指标查询空间中的语义层级链，从粗到细"),
+    grouping: z
+      .object({
+        minimum_varying_dimensions: z
+          .number()
+          .int()
+          .positive()
+          .describe("指标成立所需的最少非单值分组维度数"),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+const CATALOG_MEMBER_BASE_SCHEMA = z
   .object({
     id: z.string(),
-    kind: z.enum(["measure", "dimension"]),
     title: z.string(),
     description: z.string(),
     format: z.string().optional(),
     ai_context: z.string().optional(),
     sensitivity: z.string().optional(),
-    dimension_kind: z.enum(["categorical", "overlapping"]).optional(),
-    dimension_group: z.object({ id: z.string(), title: z.string() }).strict().optional(),
-    records_available: z.literal(true).optional(),
-    incompatible_dimensions: z.array(z.string()).optional(),
-    report_calculations: z.array(z.literal("percent_of_total")).optional(),
-    formula: z
-      .object({
-        numerator: z.string(),
-        denominator: z.string(),
-        numerator_id: z.string().optional(),
-        denominator_id: z.string().optional(),
-      })
-      .strict()
-      .optional(),
-    relation: z
-      .object({ kind: z.literal("structure_share"), numerator_id: z.string() })
-      .strict()
-      .optional(),
-    time_constraints: TIME_CAPABILITIES_INPUT.optional(),
   })
   .strict();
+
+const CATALOG_MEASURE_SCHEMA: z.ZodType<PublicCatalogMeasure> = CATALOG_MEMBER_BASE_SCHEMA.extend({
+  kind: z.literal("measure"),
+  records_available: z.literal(true).optional(),
+  query_capabilities: MEASURE_QUERY_CAPABILITIES_SCHEMA,
+  report_calculations: z.array(z.literal("percent_of_total")).optional(),
+  formula: z
+    .object({
+      numerator: z.string(),
+      denominator: z.string(),
+      numerator_id: z.string().optional(),
+      denominator_id: z.string().optional(),
+    })
+    .strict()
+    .optional(),
+  relation: z
+    .object({ kind: z.literal("structure_share"), numerator_id: z.string() })
+    .strict()
+    .optional(),
+  time_constraints: TIME_CAPABILITIES_INPUT.optional(),
+});
+
+const CATALOG_DIMENSION_SCHEMA: z.ZodType<PublicCatalogDimension> =
+  CATALOG_MEMBER_BASE_SCHEMA.extend({
+    kind: z.literal("dimension"),
+    dimension_kind: z.enum(["categorical", "overlapping"]).optional(),
+    dimension_group: z.object({ id: z.string(), title: z.string() }).strict().optional(),
+  });
 
 const METRIC_DOMAIN_SCHEMA: z.ZodType<PublicMetricDomain> = z
   .object({
@@ -158,8 +196,8 @@ export const PUBLIC_CATALOG_DOCUMENT_SCHEMA: z.ZodType<PublicCatalogDocument> = 
         .strict(),
     ),
     metric_domains: z.array(METRIC_DOMAIN_SCHEMA),
-    measures: z.array(CATALOG_MEMBER_SCHEMA),
-    dimensions: z.array(CATALOG_MEMBER_SCHEMA),
+    measures: z.array(CATALOG_MEASURE_SCHEMA),
+    dimensions: z.array(CATALOG_DIMENSION_SCHEMA),
   })
   .strict();
 

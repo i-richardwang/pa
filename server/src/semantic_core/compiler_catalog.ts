@@ -13,6 +13,8 @@ import type { MetricTimeContract } from "./metric_time_contract.js";
 import type { ReportCalculationKind } from "./report_calculation.js";
 import type { TimeComparisonPolicy } from "./time_source.js";
 import type { AccessScopeDefinition } from "./access_scope_definition.js";
+import type { MeasureQueryCapabilities } from "./query_feasibility.js";
+import type { TimeCapabilities } from "./time_contract.js";
 
 /** 率指标公式行的分子分母，已解析为中文标题（人读公式不读成员名）。 */
 export type CompilerCatalogFormula = {
@@ -30,12 +32,11 @@ export type CompilerCatalogAvailability = {
   records_available?: true;
 };
 
-export type CompilerCatalogMember = {
+type CompilerCatalogMemberBase = {
   /** 跨视图稳定的语义身份；报告与查询意图只持久化此值。 */
   id: string;
   /** 首个可查视图的限定名；仅供编译器选路与对账，不上线。 */
   name: string;
-  kind: "measure" | "dimension";
   /** 指标的唯一业务归属；维度不声明。业务归属不参与物理选路。 */
   metric_domain_id?: MetricDomainId;
   title: string;
@@ -47,6 +48,8 @@ export type CompilerCatalogMember = {
   dimension_group?: { id: string; title: string };
   /** 引擎私有的时间聚合合同；对外 Catalog 不暴露。 */
   time_contract?: MetricTimeContract;
+  /** 从时间合同推导的公共时间能力。 */
+  time_constraints?: TimeCapabilities;
   records_available?: true;
   /** 与当前成员不能同时分组的维度语义 id（已在目录装配阶段按声明视图上下文解析，绝无物理短名）。 */
   incompatible_dimensions?: string[];
@@ -57,6 +60,18 @@ export type CompilerCatalogMember = {
   /** 可查执行 View 及其中的精确成员名（物理绑定），随浏览者权限裁剪。 */
   available_in: CompilerCatalogAvailability[];
 };
+
+export type CompilerCatalogMeasure = CompilerCatalogMemberBase & {
+  kind: "measure";
+  /** 从物理可用性与语义限制共同推导的公共查询能力。 */
+  query_capabilities: MeasureQueryCapabilities;
+};
+
+export type CompilerCatalogDimension = CompilerCatalogMemberBase & {
+  kind: "dimension";
+};
+
+export type CompilerCatalogMember = CompilerCatalogMeasure | CompilerCatalogDimension;
 
 /** Cube 执行 View：只承载物理绑定、权限、时间源与层级；业务指标域不在此层。 */
 export type CompilerCatalogView = {
@@ -84,6 +99,6 @@ export type CompilerCatalog = {
   observation_scopes: string[];
   views: CompilerCatalogView[];
   metric_domains: CompilerCatalogMetricDomain[];
-  measures: CompilerCatalogMember[];
-  dimensions: CompilerCatalogMember[];
+  measures: CompilerCatalogMeasure[];
+  dimensions: CompilerCatalogDimension[];
 };

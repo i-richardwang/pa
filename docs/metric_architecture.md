@@ -56,7 +56,19 @@ Cube `/load` 使用同一用户 security context 执行行权限，因此成员�
 Application 抛出的领域错误由所有传输层共用一份公开分类。MCP 工具把失败交付为原生
 `isError: true` 结果，文本内容是稳定的 `{ error: { code, message, details? } }` JSON，供所有客户端
 和 Agent 读取并修正请求；成功结果的 `structuredContent` 始终匹配工具 `outputSchema`。MCP 资源读取
-没有工具错误结果通道，只抛出同一分类生成的安全消息。未知异常的诊断仅写服务端日志，不进入公共结果。
+没有工具错误结果通道，只抛出同一分类生成的安全消息。Web API 使用相同的错误载荷，Console 保留
+`code` 与 `details`，不会把结构化原因压扁成字符串。未知异常的诊断仅写服务端日志，不进入公共结果。
+
+Catalog 为每个指标交付必有的正向 `query_capabilities`：`dimension_ids` 是可用于分组、筛选和排序的
+完整维度白名单，`hierarchies` 是这些维度中的层级链，`grouping` 是指标成立所需的最少可变分组数；
+`time_constraints` 与 `report_calculations` 分别描述时间和报告级计算能力。内部模型可以用负向声明
+表达局部限制，但目录装配时必须折叠成这份正向能力，客户端不解释物理 View 或负向例外。
+
+纯函数 Query Feasibility Evaluator 只消费 Analysis 查询视图与公共能力，统一判断成员引用、共同维度、
+时间选择、对照策略和报告计算。Console 用它在候选进入草稿前置灰并解释，语义编译器用它在物理规划前
+复验；两端共享同一个结构化 issue 和消息渲染。物理 Planner 与 Executor 负责验证已编译计划的不可变量。
+依赖真实返回规模才能判断的容量限制不伪装成预检能力，执行后统一交付
+`limit_exceeded` 及其 `limit`、`row_count` 证据。
 
 ## 查询执行
 

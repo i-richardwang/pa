@@ -282,6 +282,7 @@ export type TimeSelectionCoordinate =
 export type ResolvedTimeSelection = {
   coordinates: TimeSelectionCoordinate[];
   outputGrain: TimeOutputGrain;
+  comparison: "none" | "relative" | "custom";
 };
 
 export type TimeSelectionIssue =
@@ -313,6 +314,11 @@ export type TimeSelectionIssue =
       from: string;
       to: string;
       selected_grain: "total";
+    }
+  | {
+      code: "metric_time_comparison_incompatible";
+      metric_titles: string[];
+      required_comparison: "custom";
     };
 
 export type TimeSelectionResult =
@@ -356,6 +362,12 @@ export function timeSelectionIssueMessage(issue: TimeSelectionIssue): string {
         `${subject}按日历年重新起算，不能把跨年的「${issue.from} 至 ${issue.to}」合并为一个总计；` +
         "请改为按年或按月呈现，或选择单一日历年"
       );
+    }
+    case "metric_time_comparison_incompatible": {
+      const subject = issue.metric_titles.length
+        ? `指标「${issue.metric_titles.join("、")}」`
+        : "所选指标";
+      return `${subject}只允许显式对照期间；请改用明确的自定义对照期间`;
     }
   }
 }
@@ -508,6 +520,13 @@ export function resolveTimeSelection(time: TimeInput, defaultCutoff: string): Ti
     return { status: "invalid", issue: { code: "time_anchor_unavailable" } };
   }
   const windowed = expandTimeWindow(time, defaultCutoff);
+  const comparison = !windowed.compare?.length
+    ? "none"
+    : windowed.compare.some(
+          (coordinate) => "years_ago" in coordinate || "previous_period" in coordinate,
+        )
+      ? "relative"
+      : "custom";
   const coordinates = outputCoordinates(expandTimeCompare(windowed, defaultCutoff), defaultCutoff);
   const invalidRange = coordinates.find(
     (coordinate) => coordinate.kind === "range" && coordinate.from > coordinate.to,
@@ -530,7 +549,7 @@ export function resolveTimeSelection(time: TimeInput, defaultCutoff: string): Ti
   if (coordinates.length === 1) {
     return {
       status: "resolved",
-      selection: { coordinates, outputGrain: requested ?? "total" },
+      selection: { coordinates, outputGrain: requested ?? "total", comparison },
     };
   }
   if (requested === "total") {
@@ -560,7 +579,7 @@ export function resolveTimeSelection(time: TimeInput, defaultCutoff: string): Ti
       },
     };
   }
-  return { status: "resolved", selection: { coordinates, outputGrain: grain } };
+  return { status: "resolved", selection: { coordinates, outputGrain: grain, comparison } };
 }
 
 export function resolveTimeIntentSelection(time: unknown, latest: string): TimeSelectionResult {
@@ -604,6 +623,7 @@ export const TIME_CAPABILITIES_INPUT = z
       .literal(true)
       .optional()
       .describe("指标按日历年归零（年初累计族）；跨日历年的窗口没有单一合计"),
+    comparison: z.literal("explicit_only").optional().describe("指标只允许显式自定义对照期间"),
   })
   .strict();
 
@@ -624,6 +644,9 @@ export function mergeTimeCapabilities(capabilities: readonly TimeCapabilities[])
   return {
     ...(capabilities.some((item) => item.grain === "month") ? { grain: "month" as const } : {}),
     ...(capabilities.some((item) => item.year_scoped) ? { year_scoped: true as const } : {}),
+    ...(capabilities.some((item) => item.comparison === "explicit_only")
+      ? { comparison: "explicit_only" as const }
+      : {}),
   };
 }
 
@@ -636,11 +659,30 @@ const requirementTitles = (requirements: readonly MetricTimeRequirement[]) => [
   ...new Set(requirements.flatMap((requirement) => (requirement.title ? [requirement.title] : []))),
 ];
 
+export function metricTimeComparisonIssue(
+  requirements: readonly MetricTimeRequirement[],
+  comparison: ResolvedTimeSelection["comparison"],
+): TimeSelectionIssue | undefined {
+  if (comparison !== "relative") return undefined;
+  const restricted = requirements.filter(
+    (requirement) => requirement.capabilities.comparison === "explicit_only",
+  );
+  return restricted.length
+    ? {
+        code: "metric_time_comparison_incompatible",
+        metric_titles: requirementTitles(restricted),
+        required_comparison: "custom",
+      }
+    : undefined;
+}
+
 /** 指标能力只消费已解析时间，不重新解释用户意图。 */
 export function metricTimeSelectionIssue(
   requirements: readonly MetricTimeRequirement[],
   selection: ResolvedTimeSelection,
 ): TimeSelectionIssue | undefined {
+  const comparison = metricTimeComparisonIssue(requirements, selection.comparison);
+  if (comparison) return comparison;
   const monthly = requirements.filter((requirement) => requirement.capabilities.grain === "month");
   const combinesMonths = selection.coordinates.some(
     (coordinate) => coordinate.kind === "range" && coordinate.from !== coordinate.to,

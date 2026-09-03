@@ -1,7 +1,12 @@
 import type { CatalogQueryPayload } from "../application/catalog_service.js";
+import type {
+  PublicCatalogDimension,
+  PublicCatalogMeasure,
+  PublicCatalogMember,
+} from "../contracts/catalog_contract.js";
 import { CATALOG_OUTPUT_SCHEMA, type AgentCatalogPayload } from "./contracts.js";
 
-const member = (source: CatalogQueryPayload["measures"][number]) => ({
+const memberBase = (source: PublicCatalogMember) => ({
   id: source.id,
   kind: source.kind,
   title: source.title,
@@ -9,11 +14,12 @@ const member = (source: CatalogQueryPayload["measures"][number]) => ({
   ...(source.format ? { format: source.format } : {}),
   ...(source.ai_context ? { ai_context: source.ai_context } : {}),
   ...(source.sensitivity ? { sensitivity: source.sensitivity } : {}),
-  ...(source.dimension_kind ? { dimension_kind: source.dimension_kind } : {}),
+});
+
+const measure = (source: PublicCatalogMeasure) => ({
+  ...memberBase(source),
   ...(source.records_available ? { records_available: true as const } : {}),
-  ...(source.incompatible_dimensions?.length
-    ? { incompatible_dimensions: source.incompatible_dimensions }
-    : {}),
+  query_capabilities: source.query_capabilities,
   ...(source.report_calculations?.length
     ? { report_calculations: source.report_calculations }
     : {}),
@@ -27,6 +33,11 @@ const member = (source: CatalogQueryPayload["measures"][number]) => ({
     : {}),
   ...(source.relation ? { relation: source.relation } : {}),
   ...(source.time_constraints ? { time_constraints: source.time_constraints } : {}),
+});
+
+const dimension = (source: PublicCatalogDimension) => ({
+  ...memberBase(source),
+  ...(source.dimension_kind ? { dimension_kind: source.dimension_kind } : {}),
 });
 
 /** MCP 目录只投影 Agent 查询所需字段；Web 导航字段保留在 PublicCatalogDocument。 */
@@ -43,8 +54,8 @@ export function projectAgentCatalog(source: CatalogQueryPayload): AgentCatalogPa
       measure_ids: domain.measure_ids,
       dimension_ids: domain.dimension_ids,
     })),
-    measures: source.measures.map(member),
-    dimensions: source.dimensions.map(member),
+    measures: source.measures.map(measure),
+    dimensions: source.dimensions.map(dimension),
     matched_terms: source.matched_terms,
     ambiguous_terms: source.ambiguous_terms,
     unmatched_terms: source.unmatched_terms,

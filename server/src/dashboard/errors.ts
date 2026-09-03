@@ -7,9 +7,11 @@ export function dashboardError(c: Context<DashboardEnv>, error: unknown) {
   if (safe.internal) console.error("[pa] dashboard 请求失败:", error);
   return c.json(
     {
-      error: safe.message,
-      code: safe.code,
-      ...(safe.details ?? {}),
+      error: {
+        code: safe.code,
+        message: safe.message,
+        ...(safe.details ? { details: safe.details } : {}),
+      },
     },
     safe.status,
   );

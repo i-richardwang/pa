@@ -10,6 +10,17 @@ export const AGGREGATE_CARD_ROWS = 2000;
 /** 聚合结果进模型上下文的样本上限 */
 export const AGGREGATE_MODEL_ROWS = 200;
 
+export class ResultLimitExceededError extends Error {
+  override name = "ResultLimitExceededError";
+
+  constructor(
+    message: string,
+    readonly details: { limit: number; row_count?: number },
+  ) {
+    super(message);
+  }
+}
+
 /** 模型样本注记：防 agent 把样本内合计/计数当总量，或误以为用户没看到全量 */
 export function modelSampleNote(delivered: number): string {
   return (

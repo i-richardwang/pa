@@ -21,6 +21,7 @@ test("公共 MCP 响应 schema 递归 strict，物理字段不能被静默剥离
         kind: "measure",
         title: "在职人数",
         description: "月末在职人数。",
+        query_capabilities: { dimension_ids: [] },
       },
     ],
     dimensions: [],
@@ -31,6 +32,26 @@ test("公共 MCP 响应 schema 递归 strict，物理字段不能被静默剥离
     term_resolutions: [],
   };
   expect(CATALOG_OUTPUT_SCHEMA.safeParse(catalog).success).toBe(true);
+  expect(
+    CATALOG_OUTPUT_SCHEMA.safeParse({
+      ...catalog,
+      measures: [{ ...catalog.measures[0], query_capabilities: undefined }],
+    }).success,
+  ).toBe(false);
+  expect(
+    CATALOG_OUTPUT_SCHEMA.safeParse({
+      ...catalog,
+      dimensions: [
+        {
+          id: "dimension:organization_name",
+          kind: "dimension",
+          title: "组织",
+          description: "组织。",
+          query_capabilities: { dimension_ids: [] },
+        },
+      ],
+    }).success,
+  ).toBe(false);
   expect(
     CATALOG_OUTPUT_SCHEMA.safeParse({
       ...catalog,

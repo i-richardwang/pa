@@ -22,7 +22,15 @@ const catalog: CatalogPayload = {
   data_as_of: "2026-07",
   time_context: [],
   metric_domains: [],
-  measures: [{ id: MEASURE, kind: "measure", title: "在职人数", description: "在职人数。" }],
+  measures: [
+    {
+      id: MEASURE,
+      kind: "measure",
+      title: "在职人数",
+      description: "在职人数。",
+      query_capabilities: { dimension_ids: [] },
+    },
+  ],
   dimensions: [],
 };
 

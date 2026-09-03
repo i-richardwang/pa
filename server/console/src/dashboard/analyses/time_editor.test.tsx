@@ -276,6 +276,38 @@ test("对比浮层：会撞桶的对照档点击前就灰，可用的照常", ()
   expect(rowAttrs(ytd, "去年同期")).not.toContain("aria-disabled");
 });
 
+test("只允许显式对照的指标在点击前禁用日历平移，保留自定义期间", () => {
+  const out = renderToStaticMarkup(
+    <ComparisonPopup
+      capabilities={{ comparison: "explicit_only" }}
+      latest="2026-08"
+      onChange={() => true}
+      onPick={() => {}}
+      time={{ window: { kind: "current_month" } }}
+    />,
+  );
+  const rowAttrs = (label: string) => {
+    const match = out.match(new RegExp(`<button([^>]*)><span[^>]*>${label}</span>`));
+    if (!match) throw new Error(`找不到行「${label}」`);
+    return match[1] ?? "";
+  };
+  expect(rowAttrs("上月")).toContain('aria-disabled="true"');
+  expect(rowAttrs("去年同月")).toContain('aria-disabled="true"');
+  expect(rowAttrs("自定义对照")).not.toContain("aria-disabled");
+  expect(
+    issueText(
+      timeChangeIssue(
+        {
+          window: { kind: "current_month" },
+          comparison: { kind: "previous_year" },
+        },
+        "2026-08",
+        { comparison: "explicit_only" },
+      ),
+    ),
+  ).toContain("只允许显式对照期间");
+});
+
 test("单月对上月与去年同月都不需要粒度：时间键由对照坐标决定，落值闸放行", () => {
   for (const kind of ["previous_period", "previous_year"] as const) {
     const time: TimeIntent = { window: { kind: "current_month" }, comparison: { kind } };

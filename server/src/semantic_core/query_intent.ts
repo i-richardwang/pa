@@ -10,6 +10,7 @@ import type { QueryViewSpec } from "./analysis_spec.js";
 import { completeHierarchyDimensions } from "./hierarchy_completion.js";
 import type { SemanticQueryView } from "./semantic_analysis.js";
 import { compileTimeIntent } from "./time_contract.js";
+import { queryFeasibilityIssue, type QueryFeasibilityIssue } from "./query_feasibility.js";
 
 export type PlannedGroupDimension = {
   id: string;
@@ -29,7 +30,7 @@ export type QueryIntentResolution = {
 
 export type IncompatibleQueryResolution = {
   status: "incompatible";
-  reason: string;
+  issue: QueryFeasibilityIssue;
 };
 
 export type QueryIntentPlan = QueryIntentResolution | IncompatibleQueryResolution;
@@ -51,74 +52,6 @@ function candidates(catalog: CompilerCatalog, kind: MemberKind): CompilerCatalog
   if (kind === "measure") return catalog.measures;
   if (kind === "dimension") return catalog.dimensions;
   return [...catalog.measures, ...catalog.dimensions];
-}
-
-type ReferenceRequirement = {
-  reference: string;
-  kind: MemberKind;
-  field: string;
-};
-
-function invalidReferenceReason(
-  catalog: CompilerCatalog,
-  intent: SemanticQueryView,
-): string | undefined {
-  const requirements: ReferenceRequirement[] = [
-    ...(intent.measures ?? []).map((reference) => ({
-      reference,
-      kind: "measure" as const,
-      field: "measures",
-    })),
-    ...(intent.dimensions ?? []).map((reference) => ({
-      reference,
-      kind: "dimension" as const,
-      field: "dimensions",
-    })),
-    ...(intent.filters ?? []).map((filter) => ({
-      reference: filter.member,
-      kind: "dimension" as const,
-      field: "filters.member",
-    })),
-    ...(intent.group_sort
-      ? [
-          {
-            reference: intent.group_sort.dimension,
-            kind: "dimension" as const,
-            field: "group_sort.dimension",
-          },
-          ...(intent.group_sort.by === "name"
-            ? []
-            : [
-                {
-                  reference: intent.group_sort.by,
-                  kind: "measure" as const,
-                  field: "group_sort.by",
-                },
-              ]),
-        ]
-      : []),
-  ];
-  const invalid = requirements.filter(
-    ({ reference, kind }) => !catalogMember(catalog, reference, kind),
-  );
-  if (!invalid.length) return undefined;
-
-  const kindTitle = (kind: Exclude<MemberKind, "either">) => (kind === "measure" ? "指标" : "维度");
-  const details = invalid.map(({ reference, kind, field }) => {
-    const sameId = catalogMember(catalog, reference);
-    if (sameId && kind !== "either") {
-      return `${field} 中的 ${reference} 是${kindTitle(sameId.kind)}，此处需要${kindTitle(kind)} id`;
-    }
-    const titleMatch = candidates(catalog, kind).find((member) => member.title === reference);
-    if (titleMatch) {
-      return `${field} 使用了标题「${reference}」，应改为语义 id ${titleMatch.id}`;
-    }
-    return `${field} 中的「${reference}」不在当前可见目录`;
-  });
-  return (
-    `分析成员引用无效：${[...new Set(details)].join("；")}。` +
-    "成员必须使用 catalog(terms=[业务概念]) 返回的语义 id，不能使用中文标题、物理字段名或猜测值"
-  );
 }
 
 /** 客户端只引用 catalog 的稳定语义 id，物理 Cube 成员名在此边界 fail-closed。 */
@@ -187,20 +120,6 @@ function effectiveGroupDimensions(
   });
 }
 
-function incompatibleDimensionReason(
-  catalog: CompilerCatalog,
-  intent: SemanticQueryView,
-): string | undefined {
-  const dimensions = membersOf(catalog, intent.dimensions ?? [], "dimension");
-  for (const measure of membersOf(catalog, intent.measures ?? [], "measure")) {
-    const conflict = dimensions.find((dimension) =>
-      measure.incompatible_dimensions?.includes(dimension.id),
-    );
-    if (conflict) return `指标「${measure.title}」不能按「${conflict.title}」分组`;
-  }
-  return undefined;
-}
-
 function dimensionMembers(
   catalog: CompilerCatalog,
   intent: SemanticQueryView,
@@ -211,10 +130,6 @@ function dimensionMembers(
     ...(intent.group_sort ? [intent.group_sort.dimension] : []),
   ];
   return membersOf(catalog, [...new Set(ids)], "dimension");
-}
-
-function sourceTitle(catalog: CompilerCatalog, name: string): string {
-  return catalog.views.find((view) => view.name === name)?.title ?? name;
 }
 
 function supports(member: CompilerCatalogMember, view: string): boolean {
@@ -229,49 +144,13 @@ export function planQueryIntent(
   catalog: CompilerCatalog,
   intent: SemanticQueryView,
 ): QueryIntentPlan {
-  const invalidReference = invalidReferenceReason(catalog, intent);
-  if (invalidReference) return { status: "incompatible", reason: invalidReference };
-  const conflict = incompatibleDimensionReason(catalog, intent);
-  if (conflict) return { status: "incompatible", reason: conflict };
+  const feasibilityIssue = queryFeasibilityIssue(catalog, intent);
+  if (feasibilityIssue) return { status: "incompatible", issue: feasibilityIssue };
 
   const measures = membersOf(catalog, intent.measures ?? [], "measure");
-  let owners: { view: string; member: string }[];
-  try {
-    owners = measures.map(measureOwner);
-  } catch (error) {
-    return {
-      status: "incompatible",
-      reason: error instanceof Error ? error.message : String(error),
-    };
-  }
+  const owners = measures.map(measureOwner);
   const ownerViews = [...new Set(owners.map((owner) => owner.view))];
-  const comparison = intent.time.comparison;
-  if (comparison && comparison.kind !== "custom") {
-    const explicitOnlyView = ownerViews.find(
-      (view) =>
-        catalog.views.find((candidate) => candidate.name === view)?.comparison_policy ===
-        "explicit_only",
-    );
-    if (explicitOnlyView) {
-      return {
-        status: "incompatible",
-        reason:
-          `指标来源「${sourceTitle(catalog, explicitOnlyView)}」只允许显式对照，` +
-          "日历相对对照可能匹配到错误的数据时点；" +
-          "请改用明确的自定义对照期间",
-      };
-    }
-  }
   const dimensions = dimensionMembers(catalog, intent);
-  for (const view of ownerViews) {
-    const unsupported = dimensions.find((dimension) => !supports(dimension, view));
-    if (unsupported) {
-      return {
-        status: "incompatible",
-        reason: `指标来源「${sourceTitle(catalog, view)}」不支持维度「${unsupported.title}」；请移除该维度或拆成独立分析`,
-      };
-    }
-  }
 
   let anchorView = ownerViews[0];
   if (!anchorView) {
@@ -283,7 +162,11 @@ export function planQueryIntent(
   if (!anchorView) {
     return {
       status: "incompatible",
-      reason: "没有一个当前可见的执行来源能够承载所选维度、筛选与排序",
+      issue: {
+        code: "query_dimensions_unavailable",
+        dimension_ids: dimensions.map(({ id }) => id),
+        dimension_titles: dimensions.map(({ title }) => title),
+      },
     };
   }
 
@@ -312,10 +195,9 @@ export function planQueryIntent(
     (dimension) => !groupedIds.has(dimension.id),
   );
   if (missingSelectionDimension) {
-    return {
-      status: "incompatible",
-      reason: `分组最大项数所作用的维度「${missingSelectionDimension.title}」不在查询分组中`,
-    };
+    throw new Error(
+      `可行性规划放行了不在结果分组中的排序维度「${missingSelectionDimension.title}」`,
+    );
   }
   return {
     status: "direct",

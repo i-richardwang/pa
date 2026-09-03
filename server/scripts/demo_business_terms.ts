@@ -5,7 +5,7 @@ import {
   type BusinessTermContentInput,
   type PublicBusinessTerm,
 } from "../src/contracts/business_term_contract.js";
-import type { PublicCatalogMember } from "../src/contracts/catalog_contract.js";
+import type { VisibleCatalogMember } from "../src/application/business_term_registry.js";
 
 export const DEMO_BUSINESS_TERMS = [
   {
@@ -44,7 +44,7 @@ export const DEMO_BUSINESS_TERMS = [
 
 type Seed_dependencies = {
   registry: BusinessTermRegistry;
-  members: PublicCatalogMember[];
+  members: VisibleCatalogMember[];
 };
 
 const labels_of = (term: Pick<PublicBusinessTerm, "canonical_term" | "aliases">): string[] => [

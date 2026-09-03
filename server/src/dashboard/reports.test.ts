@@ -109,8 +109,7 @@ describe("dashboard report routes", () => {
     });
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
-      error: "服务暂时无法完成请求，请稍后重试",
-      code: "internal",
+      error: { code: "internal", message: "服务暂时无法完成请求，请稍后重试" },
     });
   });
 
@@ -129,8 +128,7 @@ describe("dashboard report routes", () => {
     });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      error: "当前指标不提供人员明细",
-      code: "invalid_request",
+      error: { code: "invalid_request", message: "当前指标不提供人员明细" },
     });
   });
 
@@ -146,8 +144,7 @@ describe("dashboard report routes", () => {
     const response = await app.request("/api/reports");
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
-      error: "服务暂时无法完成请求，请稍后重试",
-      code: "internal",
+      error: { code: "internal", message: "服务暂时无法完成请求，请稍后重试" },
     });
   });
 
@@ -256,13 +253,20 @@ describe("dashboard report routes", () => {
       ) => {
         plannedFor.push(principal.email);
         if (candidate.title === "不兼容") {
-          throw new SemanticQueryIncompatibleError("所选业务字段无法安全组合", [
+          throw new SemanticQueryIncompatibleError(
             {
-              status: "incompatible",
-              result_view_id: "structure",
-              reason: "所选业务字段无法安全组合",
+              code: "query_dimensions_unavailable",
+              dimension_ids: ["dimension:category_level"],
+              dimension_titles: ["分类层级"],
             },
-          ]);
+            [
+              {
+                status: "incompatible",
+                result_view_id: "structure",
+                reason: "没有一个当前可见的执行来源能够承载维度「分类层级」",
+              },
+            ],
+          );
         }
         const planned = await semanticPlanningStub.plan(principal, candidate, view);
         return {
@@ -337,15 +341,24 @@ describe("dashboard report routes", () => {
     });
     expect(incompatible.status).toBe(400);
     expect(await incompatible.json()).toEqual({
-      error: "所选业务字段无法安全组合",
-      code: "invalid_request",
-      routes: [
-        {
-          status: "incompatible",
-          result_view_id: "structure",
-          reason: "所选业务字段无法安全组合",
+      error: {
+        code: "invalid_request",
+        message: "没有一个当前可见的执行来源能够承载维度「分类层级」",
+        details: {
+          issue: {
+            code: "query_dimensions_unavailable",
+            dimension_ids: ["dimension:category_level"],
+            dimension_titles: ["分类层级"],
+          },
+          routes: [
+            {
+              status: "incompatible",
+              result_view_id: "structure",
+              reason: "没有一个当前可见的执行来源能够承载维度「分类层级」",
+            },
+          ],
         },
-      ],
+      },
     });
 
     const saved = await app.request(`/api/reports/${report.id}`, {
@@ -670,8 +683,7 @@ describe("dashboard report routes", () => {
     const response = await app.request(`/api/reports/${report.id}/replay`);
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
-      error: "数据查询服务暂时不可用",
-      code: "unavailable",
+      error: { code: "unavailable", message: "数据查询服务暂时不可用" },
     });
   });
 });

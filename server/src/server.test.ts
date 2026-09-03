@@ -504,7 +504,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     }
     expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(260);
     expect(SERVER_INSTRUCTIONS).toContain("time_constraints");
-    expect(SERVER_INSTRUCTIONS).toContain("incompatible_dimensions");
+    expect(SERVER_INSTRUCTIONS).toContain("query_capabilities");
     expect(TOOL_DESCRIPTIONS.run_analysis).toContain("code/details");
     expect(TOOL_DESCRIPTIONS.run_analysis).toContain("错误 JSON");
     expect(UI_RESOURCE_URI).toBe("ui://pa/result.html");

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CircleAlertIcon, InboxIcon, LockIcon, PlusIcon } from "lucide-react";
 import type {
+  PublicCatalogMeasure as CatalogMeasurePayload,
   PublicCatalogMember as CatalogMemberPayload,
   PublicCatalogDocument as CatalogPayload,
   PublicMetricDomain as MetricDomainPayload,
@@ -883,7 +884,7 @@ function FormulaRow({
   formula,
   onOpenMember,
 }: {
-  formula: NonNullable<CatalogMemberPayload["formula"]>;
+  formula: NonNullable<CatalogMeasurePayload["formula"]>;
   onOpenMember: (id: string) => void;
 }) {
   const end = (title: string, id: string | undefined) =>
@@ -922,7 +923,9 @@ function MemberProfileBody({
     term.related_members.some((relatedMember) => relatedMember.id === member.id),
   );
   const format = formatLabel(member.format);
-  const dimensionKind = member.dimension_kind === "overlapping" ? "可重叠" : null;
+  const dimensionKind =
+    member.kind === "dimension" && member.dimension_kind === "overlapping" ? "可重叠" : null;
+  const formula = member.kind === "measure" ? member.formula : undefined;
   const action = isSearchableCatalogDimension(member) ? (
     <Button
       onClick={() => onValues({ member: member.id, title: member.title })}
@@ -940,9 +943,7 @@ function MemberProfileBody({
   return (
     <>
       <InspectorProfileCard action={action} description={member.description} title={member.title}>
-        {member.formula ? (
-          <FormulaRow formula={member.formula} onOpenMember={onOpenMember} />
-        ) : null}
+        {formula ? <FormulaRow formula={formula} onOpenMember={onOpenMember} /> : null}
         {facts > 0 ? (
           <>
             {domain ? <InspectorRow label="指标域">{domain.title}</InspectorRow> : null}

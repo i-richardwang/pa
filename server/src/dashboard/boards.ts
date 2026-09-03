@@ -8,18 +8,20 @@ import { RECORD_PROJECTION_REQUEST_BODY } from "../contracts/record_projection_c
 import { TIME_INTENT_INPUT, type TimeIntent } from "../semantic_core/time_contract.js";
 import type { DashboardDependencies, DashboardEnv } from "./types.js";
 import { projectReplayPayload } from "../application/replay_projection.js";
+import { InvalidRequestError } from "../application/errors.js";
 
-function timeOverride(c: Context<DashboardEnv>): TimeIntent | undefined | Response {
+function timeOverride(c: Context<DashboardEnv>): TimeIntent | undefined {
   const raw = c.req.query("time");
   if (raw === undefined) return undefined;
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return c.json({ error: "时间覆盖参数无效" }, 400);
+    throw new InvalidRequestError("时间覆盖参数无效");
   }
   const checked = TIME_INTENT_INPUT.safeParse(parsed);
-  return checked.success ? checked.data : c.json({ error: "时间覆盖参数无效" }, 400);
+  if (!checked.success) throw new InvalidRequestError("时间覆盖参数无效");
+  return checked.data;
 }
 
 export function registerBoardRoutes(
@@ -34,7 +36,7 @@ export function registerBoardRoutes(
 
   dashboard.post("/api/boards", async (c) => {
     const parsed = CREATE_BOARD_BODY.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "看板请求无效" }, 400);
+    if (!parsed.success) throw new InvalidRequestError("看板请求无效");
     return c.json(await boardService.create(c.get("principal"), parsed.data.name));
   });
 
@@ -44,7 +46,7 @@ export function registerBoardRoutes(
 
   dashboard.patch("/api/boards/:id", async (c) => {
     const parsed = UPDATE_BOARD_BODY.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "看板修改请求无效" }, 400);
+    if (!parsed.success) throw new InvalidRequestError("看板修改请求无效");
     return c.json(
       await boardService.update(
         c.get("principal"),
@@ -57,7 +59,7 @@ export function registerBoardRoutes(
 
   dashboard.post("/api/boards/:id/items", async (c) => {
     const parsed = ADD_BOARD_ITEM_BODY.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "加入看板请求无效" }, 400);
+    if (!parsed.success) throw new InvalidRequestError("加入看板请求无效");
     return c.json(
       await boardService.addReport({
         principal: c.get("principal"),
@@ -79,7 +81,6 @@ export function registerBoardRoutes(
 
   dashboard.get("/api/boards/:id/items/:reportId/replay", async (c) => {
     const time = timeOverride(c);
-    if (time instanceof Response) return time;
     const { report, executed, time_override } = await boardService.runReport(
       c.get("principal"),
       c.req.param("id"),
@@ -98,9 +99,8 @@ export function registerBoardRoutes(
 
   dashboard.post("/api/boards/:id/items/:reportId/records", async (c) => {
     const parsed = RECORD_PROJECTION_REQUEST_BODY.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "明细请求无效，请刷新看板后重试" }, 400);
+    if (!parsed.success) throw new InvalidRequestError("明细请求无效，请刷新看板后重试");
     const time = timeOverride(c);
-    if (time instanceof Response) return time;
     return c.json(
       await records.runBoard(
         c.get("principal"),

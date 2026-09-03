@@ -1,7 +1,16 @@
 /** Canonical 执行目录及其服务端/公开投影。公开投影不含物理成员绑定。 */
 import { hitCount, memberFallbackTokens, memberHit, rankMembers } from "./catalog_search.js";
-import type { PublicCatalogDocument, PublicCatalogMember } from "../contracts/catalog_contract.js";
-import type { CompilerCatalog, CompilerCatalogMember } from "../semantic_core/compiler_catalog.js";
+import type {
+  PublicCatalogDimension,
+  PublicCatalogDocument,
+  PublicCatalogMeasure,
+} from "../contracts/catalog_contract.js";
+import type {
+  CompilerCatalog,
+  CompilerCatalogDimension,
+  CompilerCatalogMeasure,
+  CompilerCatalogMember,
+} from "../semantic_core/compiler_catalog.js";
 import type { CubeMember, CubeView } from "../ports/cube_gateway.js";
 import { recordProjectionTargetsOf } from "./record_metadata.js";
 import { memberDisplayTitle } from "./member_presentation.js";
@@ -30,6 +39,7 @@ import { metricTimeCapabilities } from "../semantic_core/time_contract.js";
 import { resolveMetricTime } from "./metric_time.js";
 import type { ReportCalculationKind } from "../semantic_core/report_calculation.js";
 import type { AccessScopeDefinition } from "../contracts/access_scope.js";
+import type { MeasureQueryCapabilities } from "../semantic_core/query_feasibility.js";
 
 export type CatalogComponents = { numerator: string; denominator: string };
 
@@ -125,8 +135,8 @@ export type CatalogMetricDomainRow = {
 
 export type CatalogQueryResult = {
   metric_domains: CatalogMetricDomainRow[];
-  measures: PublicCatalogMember[];
-  dimensions: PublicCatalogMember[];
+  measures: PublicCatalogMeasure[];
+  dimensions: PublicCatalogDimension[];
   matched_terms: string[];
   unmatched_terms: string[];
 };
@@ -535,10 +545,12 @@ function projectionMaps(document: CatalogDocument, catalog: CanonicalCatalog): P
   return { titles, ids, shortIds, recordProjectionBindings };
 }
 
+type CompilerCatalogSeedMember = Omit<CompilerCatalogMember, "query_capabilities">;
+
 function compilerMember(
   member: CanonicalCatalogMember,
   { titles, ids, shortIds, recordProjectionBindings }: ProjectionMaps,
-): CompilerCatalogMember {
+): CompilerCatalogSeedMember {
   const named = (component: string) =>
     titles.get(component) ?? titles.get(memberShortName(component));
   const identified = (component: string) =>
@@ -563,6 +575,13 @@ function compilerMember(
             : {}),
         }
       : undefined;
+  const structureShareNumerator =
+    member.calculation_role === "structure_share"
+      ? ids.get(member.components?.numerator ?? "")
+      : undefined;
+  if (member.calculation_role === "structure_share" && !structureShareNumerator) {
+    throw new Error(`结构占比指标「${member.title}」的分子必须具有公共语义身份`);
+  }
   return {
     id: member.id,
     name: member.name,
@@ -586,11 +605,11 @@ function compilerMember(
       ? { report_calculations: member.report_calculations }
       : {}),
     ...(namedFormula ? { formula: namedFormula } : {}),
-    ...(member.calculation_role === "structure_share" && ids.get(member.components?.numerator ?? "")
+    ...(structureShareNumerator
       ? {
           relation: {
             kind: "structure_share" as const,
-            numerator_id: ids.get(member.components?.numerator ?? "") as string,
+            numerator_id: structureShareNumerator,
           },
         }
       : {}),
@@ -605,27 +624,110 @@ function compilerMember(
   };
 }
 
-/** 对外目录投影不含物理成员绑定。 */
-function stripMember(member: CompilerCatalogMember): PublicCatalogMember {
-  const {
-    name: _name,
-    available_in: _availableIn,
-    metric_domain_id: _metricDomainId,
-    time_contract: _timeContract,
-    ...semantic
-  } = member;
-  const capabilities = metricTimeCapabilities(member.time_contract);
+function publicMemberBase(member: CompilerCatalogMember) {
   return {
-    ...semantic,
-    ...(Object.keys(capabilities).length ? { time_constraints: capabilities } : {}),
+    id: member.id,
+    title: member.title,
+    description: member.description,
+    ...(member.format ? { format: member.format } : {}),
+    ...(member.ai_context ? { ai_context: member.ai_context } : {}),
+    ...(member.sensitivity ? { sensitivity: member.sensitivity } : {}),
   };
+}
+
+function stripMeasure(member: CompilerCatalogMeasure): PublicCatalogMeasure {
+  return {
+    ...publicMemberBase(member),
+    kind: "measure",
+    query_capabilities: member.query_capabilities,
+    ...(member.records_available ? { records_available: true } : {}),
+    ...(member.report_calculations?.length
+      ? { report_calculations: member.report_calculations }
+      : {}),
+    ...(member.formula ? { formula: member.formula } : {}),
+    ...(member.relation ? { relation: member.relation } : {}),
+    ...(member.time_constraints ? { time_constraints: member.time_constraints } : {}),
+  };
+}
+
+function stripDimension(member: CompilerCatalogDimension): PublicCatalogDimension {
+  return {
+    ...publicMemberBase(member),
+    kind: "dimension",
+    ...(member.dimension_kind ? { dimension_kind: member.dimension_kind } : {}),
+    ...(member.dimension_group ? { dimension_group: member.dimension_group } : {}),
+  };
+}
+
+function measureExecutionView(member: CompilerCatalogSeedMember): string {
+  const views = member.available_in
+    .filter((binding) => !binding.detail)
+    .map((binding) => binding.view);
+  if (views.length !== 1) {
+    throw new Error(
+      `指标「${member.title}」必须且只能绑定一个普通执行 View；当前为 ${views.length} 个`,
+    );
+  }
+  return views[0];
+}
+
+function measureQueryCapabilities(
+  member: CompilerCatalogSeedMember,
+  catalog: {
+    views: CompilerCatalog["views"];
+    dimensions: CompilerCatalogSeedMember[];
+  },
+): MeasureQueryCapabilities {
+  const ownerView = measureExecutionView(member);
+  const incompatible = new Set(member.incompatible_dimensions ?? []);
+  const dimensionIds = catalog.dimensions
+    .filter(
+      (dimension) =>
+        !incompatible.has(dimension.id) &&
+        dimension.available_in.some((binding) => !binding.detail && binding.view === ownerView),
+    )
+    .map(({ id }) => id)
+    .sort();
+  const allowed = new Set(dimensionIds);
+  const seenHierarchies = new Set<string>();
+  const hierarchies = catalog.views
+    .filter((view) => view.name === ownerView)
+    .flatMap(({ hierarchies: chains }) => chains ?? [])
+    .map((chain) => chain.filter((dimension) => allowed.has(dimension)))
+    .filter((chain) => chain.length > 1)
+    .filter((chain) => {
+      const key = JSON.stringify(chain);
+      if (seenHierarchies.has(key)) return false;
+      seenHierarchies.add(key);
+      return true;
+    });
+  return {
+    dimension_ids: dimensionIds,
+    ...(hierarchies.length ? { hierarchies } : {}),
+    ...(member.relation?.kind === "structure_share"
+      ? { grouping: { minimum_varying_dimensions: 1 } }
+      : {}),
+  };
+}
+
+function requiresExplicitComparison(
+  member: CompilerCatalogSeedMember,
+  views: CompilerCatalog["views"],
+): boolean {
+  const ownerView = measureExecutionView(member);
+  return views.some(
+    (view) => view.name === ownerView && view.comparison_policy === "explicit_only",
+  );
 }
 
 /** 编译器目录保留物理绑定，仅供服务端规划与记录投影使用。 */
 export function toCompilerCatalog(document: CatalogDocument): CompilerCatalog {
   const catalog = canonicalCatalog(document);
   const maps = projectionMaps(document, catalog);
-  return {
+  const compiler: Omit<CompilerCatalog, "measures" | "dimensions"> & {
+    measures: CompilerCatalogSeedMember[];
+    dimensions: CompilerCatalogSeedMember[];
+  } = {
     access_scope: document.access_scope,
     observation_scopes: document.observation_scopes,
     views: document.views.filter(isMetricSource).map((view) => ({
@@ -655,6 +757,30 @@ export function toCompilerCatalog(document: CatalogDocument): CompilerCatalog {
       .filter((member) => member.calculation_role !== SCOPE_DENOMINATOR)
       .map((member) => compilerMember(member, maps)),
     dimensions: catalog.dimensions.map((member) => compilerMember(member, maps)),
+  };
+  const measures: CompilerCatalogMeasure[] = compiler.measures.map((member) => {
+    if (member.kind !== "measure") throw new Error(`指标目录成员 ${member.id} 的类型无效`);
+    const timeConstraints = {
+      ...metricTimeCapabilities(member.time_contract),
+      ...(requiresExplicitComparison(member, compiler.views)
+        ? { comparison: "explicit_only" as const }
+        : {}),
+    };
+    return {
+      ...member,
+      kind: "measure",
+      query_capabilities: measureQueryCapabilities(member, compiler),
+      ...(Object.keys(timeConstraints).length ? { time_constraints: timeConstraints } : {}),
+    };
+  });
+  const dimensions: CompilerCatalogDimension[] = compiler.dimensions.map((member) => {
+    if (member.kind !== "dimension") throw new Error(`维度目录成员 ${member.id} 的类型无效`);
+    return { ...member, kind: "dimension" };
+  });
+  return {
+    ...compiler,
+    measures,
+    dimensions,
   };
 }
 
@@ -687,8 +813,8 @@ export function toSemanticCatalog(
       measure_ids: links.get(domain.id)?.measure_ids ?? [],
       dimension_ids: links.get(domain.id)?.dimension_ids ?? [],
     })),
-    measures: compiler.measures.map(stripMember),
-    dimensions: compiler.dimensions.map(stripMember),
+    measures: compiler.measures.map(stripMeasure),
+    dimensions: compiler.dimensions.map(stripDimension),
   };
 }
 
@@ -725,8 +851,8 @@ export function browseCatalogDocument(document: CatalogDocument): CatalogQueryRe
   const compiler = toCompilerCatalog(document);
   return {
     metric_domains: catalogMetricDomains(compiler, compiler.measures, compiler.dimensions),
-    measures: compiler.measures.map(stripMember),
-    dimensions: compiler.dimensions.map(stripMember),
+    measures: compiler.measures.map(stripMeasure),
+    dimensions: compiler.dimensions.map(stripDimension),
     matched_terms: [],
     unmatched_terms: [],
   };
@@ -749,7 +875,6 @@ export function searchCatalogDocument(
   const fallbackTokens = memberFallbackTokens(terms, [
     { measures: publicMeasures, dimensions: catalog.dimensions },
   ]);
-  const maps = projectionMaps(document, catalog);
   const domainHit = (domain: CatalogMetricDomainDocument) =>
     hitCount(terms, domainHaystack(domain)) > 0;
 
@@ -781,8 +906,16 @@ export function searchCatalogDocument(
   }
 
   const compiler = toCompilerCatalog(document);
-  const compilerMeasures = measures.map((member) => compilerMember(member, maps));
-  const compilerDimensions = dimensions.map((member) => compilerMember(member, maps));
+  const compilerMeasureById = new Map(compiler.measures.map((member) => [member.id, member]));
+  const compilerDimensionById = new Map(compiler.dimensions.map((member) => [member.id, member]));
+  const compilerMeasures = measures.flatMap((member) => {
+    const resolved = compilerMeasureById.get(member.id);
+    return resolved ? [resolved] : [];
+  });
+  const compilerDimensions = dimensions.flatMap((member) => {
+    const resolved = compilerDimensionById.get(member.id);
+    return resolved ? [resolved] : [];
+  });
   const directlyHitDomains = document.metric_domains.filter(domainHit).map((domain) => domain.id);
   const includedDomains = new Set<MetricDomainId>([
     ...directlyHitDomains,
@@ -809,8 +942,8 @@ export function searchCatalogDocument(
       compilerDimensions,
       includedDomains,
     ),
-    measures: compilerMeasures.map(stripMember),
-    dimensions: compilerDimensions.map(stripMember),
+    measures: compilerMeasures.map(stripMeasure),
+    dimensions: compilerDimensions.map(stripDimension),
     matched_terms: matched,
     unmatched_terms: terms.filter((term) => !matched.includes(term)),
   };

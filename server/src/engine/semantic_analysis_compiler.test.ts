@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import type { CompilerCatalog, CompilerCatalogMember } from "../semantic_core/compiler_catalog.js";
-import { compileAnalysisView } from "./semantic_analysis_compiler.js";
+import type {
+  CompilerCatalog,
+  CompilerCatalogDimension,
+  CompilerCatalogMeasure,
+  CompilerCatalogMember,
+} from "../semantic_core/compiler_catalog.js";
+import {
+  compileAnalysisView,
+  SemanticQueryIncompatibleError,
+} from "./semantic_analysis_compiler.js";
 import {
   parseAnalysisDefinition,
   type SemanticViewIntent,
@@ -14,26 +22,33 @@ function member(
   id: string,
   name: string,
   title: string,
+  kind: "measure",
+  bindings: Array<[string, string]>,
+  relation?: CompilerCatalogMember["relation"],
+  recordProjectionViews?: string[],
+): CompilerCatalogMeasure;
+function member(
+  id: string,
+  name: string,
+  title: string,
+  kind: "dimension",
+  bindings: Array<[string, string]>,
+  relation?: undefined,
+  recordProjectionViews?: string[],
+): CompilerCatalogDimension;
+function member(
+  id: string,
+  name: string,
+  title: string,
   kind: CompilerCatalogMember["kind"],
   bindings: Array<[string, string]>,
   relation?: CompilerCatalogMember["relation"],
   recordProjectionViews: string[] = [],
-): CompilerCatalogMember {
-  return {
+): CompilerCatalogMeasure | CompilerCatalogDimension {
+  const common = {
     id,
     name,
     title,
-    kind,
-    ...(kind === "measure"
-      ? {
-          metric_domain_id:
-            id === CURRENT_MONTH_FULFILLMENT_RATE
-              ? ("metric_domain:headcount_plan" as const)
-              : id === YTD_EVENT_RATE
-                ? ("metric_domain:workforce_movement" as const)
-                : ("metric_domain:workforce_structure" as const),
-        }
-      : {}),
     description: `${title}。`,
     available_in: [
       ...bindings.map(([view, qualified]) => ({
@@ -51,8 +66,25 @@ function member(
           ]
         : []),
     ],
-    ...(relation ? { relation } : {}),
     ...(recordProjectionViews.length ? { records_available: true as const } : {}),
+  };
+  if (kind === "dimension") return { ...common, kind };
+  return {
+    ...common,
+    kind,
+    metric_domain_id:
+      id === CURRENT_MONTH_FULFILLMENT_RATE
+        ? "metric_domain:headcount_plan"
+        : id === YTD_EVENT_RATE
+          ? "metric_domain:workforce_movement"
+          : "metric_domain:workforce_structure",
+    query_capabilities: {
+      dimension_ids: bindings.some(([view]) => view === "headcount_plan")
+        ? [ORG, DEPARTMENT]
+        : [ORG, DEPARTMENT, AGE_BAND],
+      hierarchies: [[ORG, DEPARTMENT]],
+    },
+    ...(relation ? { relation } : {}),
   };
 }
 
@@ -224,6 +256,45 @@ describe("semantic analysis compiler", () => {
       calculationId,
     );
     expect(compiled.routes).toEqual([{ status: "direct", result_view_id: "result" }]);
+  });
+
+  test("层级中间级构成占比在物理规划前返回结构化冲突", () => {
+    try {
+      compileAnalysisView(catalog, {
+        analysis: {
+          views: [
+            {
+              id: "result",
+              measures: [ACTIVE_EMPLOYEE],
+              dimensions: [ORG, DEPARTMENT],
+              calculations: [
+                {
+                  id: "calculation:organization_share",
+                  title: "组织构成占比",
+                  kind: "percent_of_total",
+                  measure: ACTIVE_EMPLOYEE,
+                  category_dimension: ORG,
+                },
+              ],
+              time: JULY_2026,
+            },
+          ],
+        },
+        view: { type: "table" },
+      });
+      throw new Error("层级中间级构成占比必须被拒绝");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SemanticQueryIncompatibleError);
+      expect((error as SemanticQueryIncompatibleError).issue).toEqual({
+        code: "query_calculation_hierarchy_conflict",
+        calculation_id: "calculation:organization_share",
+        calculation_title: "组织构成占比",
+        category_dimension: ORG,
+        category_title: "组织",
+        descendant_dimensions: [DEPARTMENT],
+        descendant_titles: ["部门"],
+      });
+    }
   });
 
   test("维度最大项数编译为层级补全后的私有选择规格，不生成物理行 limit", () => {

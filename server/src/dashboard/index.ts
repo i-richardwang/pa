@@ -10,6 +10,7 @@ import { registerUsageRoutes } from "./usage.js";
 import type { MePayload } from "../contracts/session_contract.js";
 import { dashboardError } from "./errors.js";
 import { registerUserRoutes } from "./users.js";
+import { ForbiddenError, UnauthorizedError } from "../application/errors.js";
 
 function toMe(
   user: SessionUser,
@@ -40,7 +41,7 @@ export function dashboardRoutes(deps: DashboardDependencies) {
 
   dashboard.use("/api/*", async (c, next) => {
     const session = await deps.auth.api.getSession({ headers: c.req.raw.headers });
-    if (!session) return c.json({ error: "未登录" }, 401);
+    if (!session) throw new UnauthorizedError("未登录");
     const principal = principalFromAttributes(session.user, deps.accessScopeDefinition);
     c.set("me", toMe(session.user, principal, deps.accessScopeDefinition));
     c.set("principal", principal);
@@ -48,7 +49,7 @@ export function dashboardRoutes(deps: DashboardDependencies) {
   });
 
   const requireAdmin = createMiddleware<DashboardEnv>(async (c, next) => {
-    if (!c.get("me").is_admin) return c.json({ error: "需要管理员权限" }, 403);
+    if (!c.get("me").is_admin) throw new ForbiddenError("需要管理员权限");
     return next();
   });
 

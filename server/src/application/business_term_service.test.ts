@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { createBusinessTermRepository } from "../storage/business_term_repository.js";
 import { createTestAppDatabase } from "../test_support/app_database.js";
 import type { Principal } from "../contracts/principal.js";
-import type { PublicCatalogMember } from "../contracts/catalog_contract.js";
+import type { PublicCatalogDimension } from "../contracts/catalog_contract.js";
 import { createBusinessTermRegistry } from "./business_term_registry.js";
 import { createBusinessTermService } from "./business_term_service.js";
 import { ForbiddenError, InvalidRequestError } from "./errors.js";
 
-const members: PublicCatalogMember[] = [
+const members: PublicCatalogDimension[] = [
   {
     id: "dimension:category_band",
     kind: "dimension",

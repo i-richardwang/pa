@@ -12,9 +12,10 @@ import { TIME_CAPABILITIES_INPUT } from "../semantic_core/time_contract.js";
 import { BUSINESS_TERM_RESOLUTION_SCHEMA } from "../contracts/business_term_contract.js";
 import { EXPORT_TICKET_TTL_MINUTES } from "../contracts/export_contract.js";
 import { ACCESS_SCOPE_DEFINITION_SCHEMA } from "../contracts/access_scope.js";
+import { MEASURE_QUERY_CAPABILITIES_SCHEMA } from "../contracts/catalog_contract.js";
 
 export const SERVER_INSTRUCTIONS =
-  "PA 是权限裁剪的封闭查询面。成员只引用 catalog 的语义 id，并遵守其 time_constraints 与 incompatible_dimensions；先用 catalog(terms) 读取 term_resolutions，值不确定时用 values_of。" +
+  "PA 是权限裁剪的封闭查询面。成员只用 catalog 的语义 id，并遵守 query_capabilities、time_constraints 与 report_calculations；先用 catalog(terms) 解析术语，值不确定时用 values_of。" +
   "术语只供理解，不改写查询；歧义先确认。查询只声明指标、维度与 time，不用标题、物理字段或 SQL，也不补充未要求的范围或比较。" +
   "构成记录仅用于单结果格、单时间桶且 records_available 的分析，个体行只在受控 App 展示。";
 
@@ -72,7 +73,6 @@ export const OPENAI_WIDGET_CSP = {
 const CATALOG_MEMBER_OUTPUT = z
   .object({
     id: z.string().describe("跨指标域稳定的语义成员标识；分析意图与翻值只引用此值"),
-    kind: z.enum(["measure", "dimension"]),
     title: z.string(),
     description: z.string(),
     format: z
@@ -81,31 +81,38 @@ const CATALOG_MEMBER_OUTPUT = z
       .describe("呈现格式；percent 与 percentage_point 的原始值均为 0–1"),
     ai_context: z.string().optional().describe("仅供 Agent 的成员选择、查询方式与避坑规则"),
     sensitivity: z.string().optional(),
-    dimension_kind: z.enum(["categorical", "overlapping"]).optional(),
-    records_available: z.literal(true).optional().describe("指标结果可投影受控构成记录"),
-    incompatible_dimensions: z
-      .array(z.string())
-      .optional()
-      .describe("不能与本成员同时分组的维度语义 id"),
-    report_calculations: z
-      .array(z.literal("percent_of_total"))
-      .optional()
-      .describe("该正式指标允许在报告规格中使用的受控临时计算"),
-    formula: z
-      .object({ numerator: z.string(), denominator: z.string() })
-      .strict()
-      .optional()
-      .describe("率指标的分子与分母口径（中文标题）"),
-    relation: z
-      .object({ kind: z.literal("structure_share"), numerator_id: z.string() })
-      .strict()
-      .optional()
-      .describe("指标的机器可读呈现关系；numerator_id 为分子指标的语义 id"),
-    time_constraints: TIME_CAPABILITIES_INPUT.optional().describe(
-      "时间能力卡：指标对序列粒度和日历期间的约束；省略表示没有额外限制",
-    ),
   })
   .strict();
+
+const CATALOG_MEASURE_OUTPUT = CATALOG_MEMBER_OUTPUT.extend({
+  kind: z.literal("measure"),
+  records_available: z.literal(true).optional().describe("指标结果可投影受控构成记录"),
+  query_capabilities: MEASURE_QUERY_CAPABILITIES_SCHEMA.describe(
+    "指标允许使用的维度及其层级；构造分组、筛选、排序和构成占比前必须遵守",
+  ),
+  report_calculations: z
+    .array(z.literal("percent_of_total"))
+    .optional()
+    .describe("该正式指标允许在报告规格中使用的受控临时计算"),
+  formula: z
+    .object({ numerator: z.string(), denominator: z.string() })
+    .strict()
+    .optional()
+    .describe("率指标的分子与分母口径（中文标题）"),
+  relation: z
+    .object({ kind: z.literal("structure_share"), numerator_id: z.string() })
+    .strict()
+    .optional()
+    .describe("指标的机器可读呈现关系；numerator_id 为分子指标的语义 id"),
+  time_constraints: TIME_CAPABILITIES_INPUT.optional().describe(
+    "时间能力卡：指标对序列粒度和日历期间的约束；省略表示没有额外限制",
+  ),
+});
+
+const CATALOG_DIMENSION_OUTPUT = CATALOG_MEMBER_OUTPUT.extend({
+  kind: z.literal("dimension"),
+  dimension_kind: z.enum(["categorical", "overlapping"]).optional(),
+});
 
 /** 数据时间为有序展示数组：每项 title 是语义包提供的业务标签，内部 source key 不上线。 */
 export const TIME_CONTEXT_OUTPUT = PUBLIC_TIME_CONTEXT_SCHEMA;
@@ -133,10 +140,10 @@ export const CATALOG_OUTPUT = {
       .strict(),
   ),
   measures: z
-    .array(CATALOG_MEMBER_OUTPUT)
+    .array(CATALOG_MEASURE_OUTPUT)
     .describe("全部可见或检索命中的指标，按唯一语义身份返回；用 id 声明分析"),
   dimensions: z
-    .array(CATALOG_MEMBER_OUTPUT)
+    .array(CATALOG_DIMENSION_OUTPUT)
     .describe("全部可见或检索命中的维度，跨指标域去重；用 id 声明分析"),
   matched_terms: z.array(z.string()).describe("检索词中已命中目录或词典的词；浏览时为空数组"),
   ambiguous_terms: z.array(z.string()).describe("命中多个业务术语含义、需要向用户确认的词"),

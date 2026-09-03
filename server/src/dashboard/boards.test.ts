@@ -157,7 +157,9 @@ describe("dashboard board routes", () => {
       ...json({ name: "过期写入", if_revision: created.revision }),
     });
     expect(stale.status).toBe(409);
-    expect(await stale.json()).toMatchObject({ error: expect.stringContaining("请刷新后重试") });
+    expect(await stale.json()).toMatchObject({
+      error: { code: "conflict", message: expect.stringContaining("请刷新后重试") },
+    });
 
     expect((await bob.request(`/api/boards/${created.id}`)).status).toBe(200);
     expect(

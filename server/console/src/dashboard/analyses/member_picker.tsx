@@ -19,7 +19,12 @@ import {
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-export type PickableMember = CatalogMemberPayload & {
+export type PickableMember = {
+  id: string;
+  kind: CatalogMemberPayload["kind"];
+  title: string;
+  description: string;
+  dimension_group?: { id: string; title: string };
   canonical_name: string;
   incompatible: boolean;
   incompatible_reason?: string;
@@ -69,24 +74,10 @@ export function DiamondOutline({ className }: { className?: string }) {
 
 export function pickableMembers(
   members: CatalogMemberPayload[],
-  {
-    selectedDimensions,
-    blockedDimensions = [],
-    candidateIssue,
-  }: {
-    selectedDimensions: string[];
-    blockedDimensions?: string[];
-    candidateIssue?: (member: CatalogMemberPayload) => string | undefined;
-  },
+  candidateIssue?: (member: CatalogMemberPayload) => string | undefined,
 ): PickableMember[] {
-  const selected = new Set(selectedDimensions);
-  const blocked = new Set(blockedDimensions);
   return members.map((member) => {
-    const reason =
-      ((member.kind === "dimension" && blocked.has(member.id)) ||
-      member.incompatible_dimensions?.some((dimension) => selected.has(dimension))
-        ? "与当前分组不兼容"
-        : undefined) ?? candidateIssue?.(member);
+    const reason = candidateIssue?.(member);
     return {
       ...member,
       canonical_name: member.id,
@@ -193,8 +184,6 @@ export function MemberPopover({
   members,
   selected,
   emptyLabel = "没有可用字段",
-  selectedDimensions,
-  blockedDimensions = [],
   candidateIssue,
   extras,
   metricDomains,
@@ -204,8 +193,6 @@ export function MemberPopover({
   members: CatalogMemberPayload[];
   selected?: string[];
   emptyLabel?: string;
-  selectedDimensions: string[];
-  blockedDimensions?: string[];
   candidateIssue?: (member: CatalogMemberPayload) => string | undefined;
   /** 非目录条目（如构成占比）与目录成员共用同一份行与不可选理由；无第二个添加入口。 */
   extras?: MemberGroup;
@@ -218,11 +205,11 @@ export function MemberPopover({
   const { contains } = useAutocompleteFilter({ sensitivity: "base" });
   const groups = useMemo(() => {
     const grouped = groupMembers(
-      pickableMembers(members, { selectedDimensions, blockedDimensions, candidateIssue }),
+      pickableMembers(members, candidateIssue),
       metricDomainTitles(metricDomains ?? []),
     );
     return extras?.items.length ? [...grouped, extras] : grouped;
-  }, [members, selectedDimensions, blockedDimensions, candidateIssue, extras, metricDomains]);
+  }, [members, candidateIssue, extras, metricDomains]);
   const chosen = new Set(selected ?? []);
 
   return (

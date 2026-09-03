@@ -26,6 +26,10 @@ export default defineConfig(({ mode }) => {
         "@format": path.resolve(import.meta.dirname, "../src/presentation_core/view_format.ts"),
         "@member": path.resolve(import.meta.dirname, "../src/semantic_core/member_name.ts"),
         "@time": path.resolve(import.meta.dirname, "../src/semantic_core/time_contract.ts"),
+        "@query-feasibility": path.resolve(
+          import.meta.dirname,
+          "../src/semantic_core/query_feasibility.ts",
+        ),
         "@canonical-json": path.resolve(
           import.meta.dirname,
           "../src/semantic_core/canonical_json.ts",

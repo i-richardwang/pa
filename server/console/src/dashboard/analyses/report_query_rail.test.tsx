@@ -28,6 +28,9 @@ const catalog: CatalogPayload = {
       kind: "measure",
       title: "在职人数",
       description: "在职人数。",
+      query_capabilities: {
+        dimension_ids: ["dimension:organization_name"],
+      },
       report_calculations: ["percent_of_total"],
     },
     {
@@ -35,6 +38,9 @@ const catalog: CatalogPayload = {
       kind: "measure",
       title: "月度入职率",
       description: "所选月份的入职率。",
+      query_capabilities: {
+        dimension_ids: ["dimension:organization_name"],
+      },
       time_constraints: { grain: "month" },
     },
   ],
@@ -375,6 +381,13 @@ test("构成占比候选：前置条件不满足时仍列出、只是灰，理�
     chosen: false,
   });
   expect(ready.incompatible).toBe(false);
+  const conflicting = percentOfTotalPick({
+    measures: catalog.measures,
+    dimensions: catalog.dimensions,
+    chosen: false,
+    incompatibleReason: "构成占比需要完整分类",
+  });
+  expect(conflicting.incompatible_reason).toBe("构成占比需要完整分类");
   const chosen = percentOfTotalPick({ measures: [], dimensions: [], chosen: true });
   expect(chosen.incompatible).toBe(false);
   const measure = catalog.measures[0];

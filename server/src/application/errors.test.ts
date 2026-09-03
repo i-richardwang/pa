@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { CubeGatewayError } from "../ports/cube_gateway.js";
 import { AnalysisDefinitionError } from "../semantic_core/semantic_analysis.js";
 import { TimeSelectionError, timeSelectionIssueMessage } from "../semantic_core/time_contract.js";
+import { SemanticQueryIncompatibleError } from "../engine/semantic_analysis_compiler.js";
+import { ResultLimitExceededError } from "../engine/result_limit.js";
 import { InvalidRequestError, publicApplicationError } from "./errors.js";
 
 describe("application error boundary", () => {
@@ -67,6 +69,33 @@ describe("application error boundary", () => {
       message: timeSelectionIssueMessage(calendarYearTotal),
       status: 400,
       details: { issue: calendarYearTotal },
+      internal: false,
+    });
+    const feasibility = {
+      code: "query_dimension_unsupported" as const,
+      measure_id: "measure:employee_count",
+      measure_title: "人数",
+      dimension_id: "dimension:employee_id",
+      dimension_title: "员工编号",
+      usage: "filter" as const,
+    };
+    expect(
+      publicApplicationError(new SemanticQueryIncompatibleError(feasibility, [])),
+    ).toMatchObject({
+      code: "invalid_request",
+      status: 400,
+      details: { issue: feasibility, routes: [] },
+      internal: false,
+    });
+    expect(
+      publicApplicationError(
+        new ResultLimitExceededError("结果超过交付上限", { limit: 2_000, row_count: 2_001 }),
+      ),
+    ).toMatchObject({
+      code: "limit_exceeded",
+      message: "结果超过交付上限",
+      status: 413,
+      details: { limit: 2_000, row_count: 2_001 },
       internal: false,
     });
   });

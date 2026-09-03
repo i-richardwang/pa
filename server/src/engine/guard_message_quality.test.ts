@@ -1,12 +1,11 @@
 /**
- * 拒绝文案质量的横切门禁：分析规格解析、查询语义护栏（`query_contract`）、时间规划
- * （`time_plan`）与目录可见性各自 fail-closed，判据只有一条——文案必须给出可执行的
+ * 拒绝文案质量的横切门禁：分析规格解析、时间规划与目录可见性各自 fail-closed，
+ * 判据只有一条——面向用户的文案必须给出可执行的
  * 下一步，调用方读完就知道改哪个参数。故断言落在文案本身，不在是否抛错上；
  * 各护栏的判定逻辑由它们自己的用例覆盖。
  */
 import { describe, expect, test } from "bun:test";
 import type { CubeView, TimeContext } from "../ports/cube_gateway.js";
-import { assertMeasureFilterCompatibility } from "./query_contract.js";
 import { parseAnalysisSpec } from "../semantic_core/analysis_spec.js";
 import { observationScopes } from "./catalog_document.js";
 import { planTimeQuery } from "../test_support/planning.js";
@@ -141,7 +140,6 @@ describe("拒绝文案", () => {
           context,
           views,
         ),
-      () => assertMeasureFilterCompatibility({ measures: ["flow.share"] }, views),
     ];
     for (const run of cases) {
       expect(errorMessage(run)).toMatch(/请|必须|只能|删除|拆|改用|改为/);

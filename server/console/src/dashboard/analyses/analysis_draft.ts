@@ -1,7 +1,4 @@
-import type {
-  PublicCatalogDocument as CatalogPayload,
-  PublicCatalogMember as CatalogMemberPayload,
-} from "@contracts/catalog_contract";
+import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
 import type { ReplayPayload } from "@contracts/replay_contract";
 import {
   isSemanticDerivedView,
@@ -19,7 +16,6 @@ import { proposeChartDecl } from "@shape";
 import { canonicalJson } from "@canonical-json";
 import {
   mergeTimeCapabilities,
-  metricTimeSelectionIssue,
   resolveTimeIntentSelection,
   timeSelectionIssueMessage,
   type TimeCapabilities,
@@ -27,6 +23,11 @@ import {
   type TimeSelectionIssue,
   type TimeSelectionResult,
 } from "@time";
+import {
+  queryFeasibilityIssue,
+  queryFeasibilityIssueMessage,
+  type QueryFeasibilityIssue,
+} from "@query-feasibility";
 
 export type AnalysisEditState = {
   name: string;
@@ -80,25 +81,19 @@ export function blankAnalysisSeed(name: string): {
 
 export type AnalysisReadinessIssue =
   | { code: "analysis_empty" | "analysis_unavailable" | "filter_incomplete"; message: string }
-  | (TimeSelectionIssue & { message: string });
+  | (QueryFeasibilityIssue & { message: string });
 
 const presentTimeIssue = (issue: TimeSelectionIssue): TimeSelectionIssue & { message: string } => ({
   ...issue,
   message: timeSelectionIssueMessage(issue),
 });
 
-export function memberTimeSelectionIssue(
-  member: CatalogMemberPayload,
-  time: TimeSelectionResult,
-): TimeSelectionIssue | undefined {
-  if (member.kind !== "measure") return undefined;
-  if (time.status === "invalid") return time.issue;
-  if (!member.time_constraints) return undefined;
-  return metricTimeSelectionIssue(
-    [{ capabilities: member.time_constraints, title: member.title }],
-    time.selection,
-  );
-}
+const presentQueryIssue = (
+  issue: QueryFeasibilityIssue,
+): QueryFeasibilityIssue & { message: string } => ({
+  ...issue,
+  message: queryFeasibilityIssueMessage(issue),
+});
 
 /** 当前草稿的执行阻断及其唯一时间解析；服务端仍在权威规划后复验。 */
 export function analysisReadiness(
@@ -128,16 +123,8 @@ export function analysisReadiness(
   if (time.status === "invalid") {
     issues.push(presentTimeIssue(time.issue));
   } else {
-    const selected = new Set(view.measures ?? []);
-    const members = catalog.measures.filter((member) => selected.has(member.id));
-    const issue = metricTimeSelectionIssue(
-      members.map((member) => ({
-        capabilities: member.time_constraints ?? {},
-        title: member.title,
-      })),
-      time.selection,
-    );
-    if (issue) issues.push(presentTimeIssue(issue));
+    const issue = queryFeasibilityIssue(catalog, view, time.selection);
+    if (issue) issues.push(presentQueryIssue(issue));
   }
   return { issues, time };
 }

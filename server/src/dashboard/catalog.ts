@@ -4,6 +4,7 @@ import {
   CREATE_BUSINESS_TERM_BODY,
   UPDATE_BUSINESS_TERM_BODY,
 } from "../contracts/business_term_contract.js";
+import { InvalidRequestError } from "../application/errors.js";
 
 export function registerCatalogRoutes(
   dashboard: Hono<DashboardEnv>,
@@ -24,9 +25,9 @@ export function registerCatalogRoutes(
     const member = c.req.query("member")?.trim() ?? "";
     const rawContains = c.req.query("contains");
     const contains = rawContains?.trim();
-    if (!member) return c.json({ error: "member 必填" }, 400);
+    if (!member) throw new InvalidRequestError("member 必填");
     if (rawContains !== undefined && !contains) {
-      return c.json({ error: "contains 不能是空字符串" }, 400);
+      throw new InvalidRequestError("contains 不能是空字符串");
     }
     return c.json(await catalog.dimensionValues(c.get("principal"), member, contains));
   });
@@ -42,7 +43,7 @@ export function registerCatalogRoutes(
   dashboard.post("/api/admin/business_terms", requireAdmin, async (c) => {
     const parsed = CREATE_BUSINESS_TERM_BODY.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
-      return c.json({ error: parsed.error.issues[0]?.message ?? "需要规范术语与定义" }, 400);
+      throw new InvalidRequestError(parsed.error.issues[0]?.message ?? "需要规范术语与定义");
     }
     const row = await businessTerms.create(c.get("principal"), parsed.data);
     return c.json(row);
@@ -51,7 +52,7 @@ export function registerCatalogRoutes(
   dashboard.put("/api/admin/business_terms/:id", requireAdmin, async (c) => {
     const parsed = UPDATE_BUSINESS_TERM_BODY.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
-      return c.json({ error: parsed.error.issues[0]?.message ?? "业务术语输入无效" }, 400);
+      throw new InvalidRequestError(parsed.error.issues[0]?.message ?? "业务术语输入无效");
     }
     const row = await businessTerms.update(c.get("principal"), c.req.param("id"), parsed.data);
     return c.json(row);

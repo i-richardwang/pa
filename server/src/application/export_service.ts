@@ -7,7 +7,7 @@ import { EXPORT_MAX_ROWS, type MaterializedExport } from "../engine/export.js";
 import type { Principal } from "../contracts/principal.js";
 import { cubeSecurityContext } from "../engine/cube_security.js";
 import type { CubeGateway, CubeQuery, CubeSecurityContext } from "../ports/cube_gateway.js";
-import { assertMeasureFilterCompatibility } from "../engine/query_contract.js";
+import { assertPhysicalQueryInvariants } from "../engine/query_contract.js";
 import { prepareMetricQueryExecution } from "../engine/metric_executor.js";
 import type { MetricQueryPlan } from "../engine/metric_planner.js";
 import { exportableOutput } from "../semantic_core/execution_plan.js";
@@ -151,7 +151,7 @@ export function createExportService(deps: {
         filters: view.filters,
         order,
       };
-      assertMeasureFilterCompatibility(query, authViews);
+      assertPhysicalQueryInvariants(query, authViews);
       const shaped = completeHierarchy(query, authViews).query;
       const { plan } = await prepareMetricQueryExecution({
         cube: deps.cube,

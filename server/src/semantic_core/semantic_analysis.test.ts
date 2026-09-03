@@ -226,7 +226,7 @@ describe("semantic analysis report calculations", () => {
     ).toThrow("分类维度必须同时出现在 dimensions");
   });
 
-  test("构成占比可与不同分组集的总体共存，仍拒绝改变分母人群的 Top-N", () => {
+  test("构成占比、总体与分组选择是结构上独立的查询声明", () => {
     expect(() =>
       parseAnalysisDefinition(calculated({ summary: { mode: "grand_total" } })),
     ).not.toThrow();
@@ -241,7 +241,7 @@ describe("semantic analysis report calculations", () => {
           },
         }),
       ),
-    ).toThrow("暂不支持 Top-N");
+    ).not.toThrow();
   });
 });
 

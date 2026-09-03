@@ -6,17 +6,13 @@ import { CubeGatewayError } from "../ports/cube_gateway.js";
 import { ReportConflictError, ReportNotFoundError } from "../ports/report_repository.js";
 import { AnalysisDefinitionError, ViewIntentError } from "../semantic_core/semantic_analysis.js";
 import { TimeSelectionError } from "../semantic_core/time_contract.js";
+import { ResultLimitExceededError } from "../engine/result_limit.js";
+import type { PublicErrorCode, PublicErrorPayload } from "../contracts/error_contract.js";
 
-export type ApplicationErrorCode =
-  | "invalid_request"
-  | "forbidden"
-  | "not_found"
-  | "conflict"
-  | "limit_exceeded"
-  | "unavailable"
-  | "internal";
+type ApplicationErrorCode = PublicErrorCode;
 
-const HTTP_STATUS: Record<ApplicationErrorCode, 400 | 403 | 404 | 409 | 413 | 500 | 503> = {
+const HTTP_STATUS: Record<ApplicationErrorCode, 400 | 401 | 403 | 404 | 409 | 413 | 500 | 503> = {
+  unauthorized: 401,
   invalid_request: 400,
   forbidden: 403,
   not_found: 404,
@@ -47,6 +43,12 @@ export class InvalidRequestError extends ApplicationError {
   }
 }
 
+export class UnauthorizedError extends ApplicationError {
+  constructor(message: string) {
+    super("unauthorized", message);
+  }
+}
+
 export class ForbiddenError extends ApplicationError {
   constructor(message: string) {
     super("forbidden", message);
@@ -66,8 +68,8 @@ export class ConflictError extends ApplicationError {
 }
 
 export class LimitExceededError extends ApplicationError {
-  constructor(message: string) {
-    super("limit_exceeded", message);
+  constructor(message: string, details?: Record<string, unknown>) {
+    super("limit_exceeded", message, { details });
   }
 }
 
@@ -77,11 +79,8 @@ export class UnavailableError extends ApplicationError {
   }
 }
 
-export type PublicApplicationError = {
-  code: ApplicationErrorCode;
-  message: string;
-  status: 400 | 403 | 404 | 409 | 413 | 500 | 503;
-  details?: Record<string, unknown>;
+export type PublicApplicationError = PublicErrorPayload & {
+  status: 400 | 401 | 403 | 404 | 409 | 413 | 500 | 503;
   internal: boolean;
 };
 
@@ -93,9 +92,14 @@ export function publicApplicationError(error: unknown): PublicApplicationError {
   } else if (error instanceof AuthzError) {
     classified = new ForbiddenError(error.message);
   } else if (error instanceof SemanticQueryIncompatibleError) {
-    classified = new InvalidRequestError(error.message, { routes: error.routes });
+    classified = new InvalidRequestError(error.message, {
+      issue: error.issue,
+      routes: error.routes,
+    });
   } else if (error instanceof TimeSelectionError) {
     classified = new InvalidRequestError(error.message, { issue: error.issue });
+  } else if (error instanceof ResultLimitExceededError) {
+    classified = new LimitExceededError(error.message, error.details);
   } else if (error instanceof AnalysisDefinitionError || error instanceof ViewIntentError) {
     classified = new InvalidRequestError(error.message);
   } else if (

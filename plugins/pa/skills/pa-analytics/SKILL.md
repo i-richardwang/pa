@@ -17,8 +17,10 @@ description: 查询 PA 组织与人才数据；用于人员规模、入离职、
      猜测当成术语解释。
    - `unmatched_terms`：换业务同义词重试；仍未命中则说明当前目录不支持，不自行拼算，
      并用 `feedback` 提报未满足的需求。
-   - 构造分析前遵守所选成员的 `time_constraints` 与 `incompatible_dimensions`；它们是兼容性判断的
-     机器可读事实源。
+   - 构造分析前取所选指标 `query_capabilities.dimension_ids` 的交集；分组、筛选和排序只使用交集内
+     的维度，并满足可选的 `query_capabilities.grouping`。构成占比同时遵守其中的 `hierarchies`，时间
+     选择遵守 `time_constraints`，报告计算遵守 `report_calculations`。这些正向能力是客户端唯一需要
+     解释的机器可读事实源。
    - 用户表达确实需要落到分类维度过滤值时，调用
      `values_of(dimension=<相关维度语义 id>, contains=<可选子串>)` 核实真实值；不要从术语定义
      反推出未经目录和数据确认的值。

@@ -10,6 +10,7 @@ import type {
   TimeContext,
 } from "../ports/cube_gateway.js";
 import { planQueryIntent } from "../semantic_core/query_intent.js";
+import { queryFeasibilityIssueMessage } from "../semantic_core/query_feasibility.js";
 import { applyFormalMetricModel } from "./metric_model.js";
 import { executeMetricQuery } from "./metric_executor.js";
 import { planMetricQuery } from "../test_support/planning.js";
@@ -148,6 +149,10 @@ test("非 HR 语义包走通注册、canonical model、比较策略、规划与�
     "metric_domain:sales_performance",
     "metric_domain:inventory_position",
   ]);
+  expect(compiler.measures.find(({ id }) => id === "measure:counted_units")).toMatchObject({
+    query_capabilities: { dimension_ids: ["dimension:region"] },
+    time_constraints: { comparison: "explicit_only" },
+  });
 
   const blocked = planQueryIntent(compiler, {
     id: "inventory_comparison",
@@ -166,7 +171,7 @@ test("非 HR 语义包走通注册、canonical model、比较策略、规划与�
     dimensions: ["dimension:region"],
     time: { window: { kind: "current_month", month: "2026-07" } },
   });
-  if (intent.status !== "direct") throw new Error(intent.reason);
+  if (intent.status !== "direct") throw new Error(queryFeasibilityIssueMessage(intent.issue));
 
   const context: TimeContext = {
     dataAsOf: "2026-07",

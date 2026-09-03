@@ -6,6 +6,7 @@ import {
   PREVIEW_ANALYSIS_BODY,
 } from "../contracts/analysis_contract.js";
 import { projectReplayPayload } from "../application/replay_projection.js";
+import { InvalidRequestError } from "../application/errors.js";
 
 export function registerAnalysisRoutes(
   dashboard: Hono<DashboardEnv>,
@@ -15,7 +16,7 @@ export function registerAnalysisRoutes(
 
   dashboard.post("/api/analyses", async (c) => {
     const body = PREVIEW_ANALYSIS_BODY.safeParse(await c.req.json().catch(() => null));
-    if (!body.success) return c.json({ error: "分析请求无效" }, 400);
+    if (!body.success) throw new InvalidRequestError("分析请求无效");
     const executed = await analyses.preview(
       c.get("principal"),
       body.data.analysis,
@@ -32,7 +33,7 @@ export function registerAnalysisRoutes(
 
   dashboard.post("/api/analysis_views", async (c) => {
     const body = CREATE_ANALYSIS_VIEW_BODY.safeParse(await c.req.json().catch(() => null));
-    if (!body.success) return c.json({ error: "分析视图请求无效" }, 400);
+    if (!body.success) throw new InvalidRequestError("分析视图请求无效");
     const materialized = await analyses.materializeView(
       c.get("principal"),
       body.data.analysis_id,

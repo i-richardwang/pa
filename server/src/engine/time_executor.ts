@@ -8,6 +8,7 @@ import type {
   LoadResponse,
 } from "../ports/cube_gateway.js";
 import type { PlannedQuery } from "./time_plan.js";
+import { ResultLimitExceededError } from "./result_limit.js";
 
 const MULTI_QUERY_LIMIT = 5000;
 
@@ -143,8 +144,9 @@ export async function executePlanned(
     compare &&
     results.some((result) => result.data.length >= (executionQuery.limit ?? multiLimit))
   ) {
-    throw new Error(
+    throw new ResultLimitExceededError(
       `多窗查询命中取回上限（${executionQuery.limit ?? multiLimit} 行），请增加过滤或减少分组维度`,
+      { limit: executionQuery.limit ?? multiLimit },
     );
   }
   return resolvePlannedResults(plan, results);
@@ -166,7 +168,10 @@ export async function executeCompletePlanned(
     ? await cube.loadMulti(executionQuery, context)
     : [await cube.load(executionQuery, context)];
   if (results.some((result) => result.data.length >= perWindowLimit)) {
-    throw new Error(`完整查询命中单窗取回上限（${perWindowLimit} 行），请增加过滤或减少分组维度`);
+    throw new ResultLimitExceededError(
+      `完整查询命中单窗取回上限（${perWindowLimit} 行），请增加过滤或减少分组维度`,
+      { limit: perWindowLimit },
+    );
   }
   return resolvePlannedResults(plan, results);
 }

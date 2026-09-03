@@ -17,6 +17,7 @@
       "@format": ["../src/presentation_core/view_format.ts"],
       "@member": ["../src/semantic_core/member_name.ts"],
       "@time": ["../src/semantic_core/time_contract.ts"],
+      "@query-feasibility": ["../src/semantic_core/query_feasibility.ts"],
       "@canonical-json": ["../src/semantic_core/canonical_json.ts"],
       "@semantic-analysis": ["../src/semantic_core/semantic_analysis.ts"],
       "@view-preferences": ["../src/presentation_core/view_preferences.ts"],

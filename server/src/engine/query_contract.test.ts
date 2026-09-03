@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { CubeQuery, CubeView } from "../ports/cube_gateway.js";
-import { assertMeasureFilterCompatibility, filterMembers } from "./query_contract.js";
+import { assertPhysicalQueryInvariants, filterMembers } from "./query_contract.js";
 
 const views: CubeView[] = [
   {
@@ -130,7 +130,7 @@ describe("query contract", () => {
         },
       ],
     };
-    expect(() => assertMeasureFilterCompatibility(query, views)).not.toThrow();
+    expect(() => assertPhysicalQueryInvariants(query, views)).not.toThrow();
   });
 
   test("资格人群允许按共同单值属性分析", () => {
@@ -139,7 +139,7 @@ describe("query contract", () => {
       "qualified_cohort_metrics.category_band",
     ]) {
       expect(() =>
-        assertMeasureFilterCompatibility(
+        assertPhysicalQueryInvariants(
           {
             measures: ["qualified_cohort_metrics.ytd_qualified_cohort_event_rate"],
             dimensions: [dimension],
@@ -168,14 +168,14 @@ describe("query contract", () => {
           ],
         },
       ] satisfies CubeQuery[]) {
-        expect(() => assertMeasureFilterCompatibility(query, views)).toThrow(/期末目标数.*组织/);
+        expect(() => assertPhysicalQueryInvariants(query, views)).toThrow(/期末目标数.*组织/);
       }
     }
   });
 
   test("时点目标指标可按部门和团队分析", () => {
     expect(() =>
-      assertMeasureFilterCompatibility(
+      assertPhysicalQueryInvariants(
         {
           measures: ["headcount_plan.point_in_time_target_count"],
           dimensions: ["headcount_plan.department_name", "headcount_plan.team_name"],
@@ -192,17 +192,17 @@ describe("query contract", () => {
       ["test_people_metrics.period_month"],
     ]) {
       expect(() =>
-        assertMeasureFilterCompatibility(
+        assertPhysicalQueryInvariants(
           { measures: ["test_people_metrics.active_employee_share"], dimensions },
           views,
         ),
-      ).toThrow(/在职人数占比.*分类维度.*100%/);
+      ).toThrow(/物理查询不变量失效.*在职人数占比.*可变分类分组/);
     }
   });
 
   test("结构占比的唯一分类维度被单值筛选时拒绝", () => {
     expect(() =>
-      assertMeasureFilterCompatibility(
+      assertPhysicalQueryInvariants(
         {
           measures: ["test_people_metrics.active_employee_share"],
           dimensions: ["test_people_metrics.gender"],
@@ -216,7 +216,7 @@ describe("query contract", () => {
         },
         views,
       ),
-    ).toThrow(/性别.*不要先只筛选.*100%/);
+    ).toThrow(/物理查询不变量失效.*性别.*固定为单值/);
   });
 
   test("结构占比按未筛死的分类分组时放行", () => {
@@ -237,13 +237,13 @@ describe("query contract", () => {
         ],
       },
     ] satisfies CubeQuery[]) {
-      expect(() => assertMeasureFilterCompatibility(query, views)).not.toThrow();
+      expect(() => assertPhysicalQueryInvariants(query, views)).not.toThrow();
     }
   });
 
   test("OR 单腿的单值条件不被误判为整个查询已筛死分类", () => {
     expect(() =>
-      assertMeasureFilterCompatibility(
+      assertPhysicalQueryInvariants(
         {
           measures: ["test_people_metrics.active_employee_share"],
           dimensions: ["test_people_metrics.classification_level"],

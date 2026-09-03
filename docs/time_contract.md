@@ -97,19 +97,22 @@ meta:
 `time_contract` 是计算引擎的内部元数据，不进入 Agent Catalog、MCP schema 或查询结果。用户只需理解
 指标业务口径和可用的时间选择，不需要选择求值形态。
 
-目录公开的是它的一层投影——**时间能力卡** `time_constraints`，只写会约束用户选择的时间性格：
+目录把指标时间合同与其时间来源策略投影为**时间能力卡** `time_constraints`，只写会约束用户选择的
+时间性格：
 
 | 能力位 | 由合同推导 | 它决定什么 |
 |---|---|---|
 | `grain: "month"` | `grain: month` | 跨月期间要求按年即拒绝；合计位退到终点当月。 |
 | `year_scoped: true` | `window: year_to_date` | 业务桶跨日历年时没有单一合计；合计位退到终点所在年的年初至终点。 |
+| `comparison: "explicit_only"` | 时间来源的 `comparison_policy: explicit_only` | 禁止上一期、去年同期等日历平移，只接受明确的自定义对照期间。 |
 
-两位各自既约束序列粒度，也决定合计位怎么求值——不能整窗合并的指标不留空，而是退到期间终点
+`grain` 与 `year_scoped` 既约束序列粒度，也决定合计位怎么求值——不能整窗合并的指标不留空，而是退到期间终点
 求值并写实其真实覆盖期间（`totalPeriodOf`）。时间解析产出 `ResolvedTimeSelection` 或判别式
 `TimeSelectionIssue`；时间意图、坐标唯一性、输出桶唯一性、数据可用范围和指标能力冲突都沿这份
 结构化协议交付。编辑器解析一次当前时间，用同一结果评价指标、期间和粒度候选；Planner 在所选数据源
 的权威范围与合同上复验，用户可修正的冲突统一返回带稳定 code 的 `invalid_request`。能力卡永不手写，
-一致性由跨层用例逐组合双向断言把守。求值形态本身（interval / endpoint / year_to_date）仍是引擎私有，
+一致性由跨层用例逐组合双向断言把守。时间能力卡不由客户端或指标作者重复维护；求值形态本身
+（interval / endpoint / year_to_date）仍是引擎私有，
 不出现在任何消费面。
 
 Agent 在取得语义 id 的同一次 Catalog 调用中读取 `time_constraints`。若请求与指标能力冲突，MCP

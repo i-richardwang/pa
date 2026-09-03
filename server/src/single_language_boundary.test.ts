@@ -154,8 +154,8 @@ describe("单语言物理绑定不上线", () => {
       expect(topic).not.toHaveProperty("time_source");
       expect(topic.time_context_title).toBe("人员数据");
     }
-    // incompatible_dimensions 归一为语义 id（规范短名 organization_name → dimension:organization_name）
-    expect(semantic.measures[0]?.incompatible_dimensions).toEqual([ORG_ID]);
+    // 客户端只消费正向能力；物理负向规则在目录装配时已折叠。
+    expect(semantic.measures[0]?.query_capabilities?.dimension_ids).not.toContain(ORG_ID);
     const wire = JSON.stringify(semantic);
     expect(wire).not.toContain("hc_col");
     expect(wire).not.toContain('"time_source":"workforce"');

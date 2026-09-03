@@ -11,8 +11,12 @@ import type { ExportService } from "./export_service.js";
 import { completeHierarchy } from "../engine/hierarchy.js";
 import { memberDisplayTitle, showDimensionNote } from "../engine/member_presentation.js";
 import { structureSharesOf } from "../engine/measure_relations.js";
-import { assertMeasureFilterCompatibility, filterMembers } from "../engine/query_contract.js";
-import { AGGREGATE_CARD_ROWS, resolveLimitOutcome } from "../engine/result_limit.js";
+import { assertPhysicalQueryInvariants, filterMembers } from "../engine/query_contract.js";
+import {
+  AGGREGATE_CARD_ROWS,
+  resolveLimitOutcome,
+  ResultLimitExceededError,
+} from "../engine/result_limit.js";
 import {
   runQueryPipeline,
   type ExecutedViewResult,
@@ -199,9 +203,9 @@ async function executeView(
     ...(spec.selection ? [spec.selection.by, ...spec.selection.dimensions] : []),
   ];
   if (requestedMembers.some((member) => !publicMembers.has(member))) {
-    throw new Error("所选字段不在当前可用的数据目录中，请重新选择字段后再试");
+    throw new Error("执行计划引用了当前授权目录中不存在的物理成员");
   }
-  assertMeasureFilterCompatibility({ measures, dimensions, filters, order }, authViews);
+  assertPhysicalQueryInvariants({ measures, dimensions, filters, order }, authViews);
   const { query: shaped, added: hierarchyDimensions } = completeHierarchy(
     { measures, dimensions, filters, order },
     authViews,
@@ -283,15 +287,17 @@ async function executeView(
   const finalResolved = groupingResolved.load;
   const summaryResolved = groupingResolved.summary;
   if (selection && finalResolved.data.length > AGGREGATE_CARD_ROWS) {
-    throw new Error(
+    throw new ResultLimitExceededError(
       `Top-N 分组的完整结果共 ${finalResolved.data.length} 行，超过交付上限 ${AGGREGATE_CARD_ROWS}；` +
         "请减少 Top-N 数量或分组维度",
+      { limit: AGGREGATE_CARD_ROWS, row_count: finalResolved.data.length },
     );
   }
   if (groupingPlan.calculations.length && finalResolved.data.length > AGGREGATE_CARD_ROWS) {
-    throw new Error(
+    throw new ResultLimitExceededError(
       `构成占比结果共 ${finalResolved.data.length} 行，超过交付上限 ${AGGREGATE_CARD_ROWS}；` +
         "请增加筛选条件或减少分组维度",
+      { limit: AGGREGATE_CARD_ROWS, row_count: finalResolved.data.length },
     );
   }
   const annotations = [

@@ -23,7 +23,7 @@ import type { ReplayPayload } from "@contracts/replay_contract";
 import { LoadingMark } from "pa-result-view";
 import type { SemanticPercentOfTotalCalculation, SemanticQueryView } from "@semantic-analysis";
 import { makeTitleOf } from "@shape";
-import { timeSelectionIssueMessage } from "@time";
+import { queryCandidateFeasibilityIssue, queryFeasibilityIssueMessage } from "@query-feasibility";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/hint";
 import { PopupSection, PopupTitle } from "@/components/ui/surface";
@@ -49,7 +49,6 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   analysisReadiness,
-  memberTimeSelectionIssue,
   removeSemanticQueryMember,
   replaceSemanticQueryDimension,
   semanticSinkQueryView,
@@ -140,10 +139,12 @@ export function percentOfTotalPick({
   measures,
   dimensions,
   chosen,
+  incompatibleReason,
 }: {
   measures: CatalogMemberPayload[];
   dimensions: CatalogMemberPayload[];
   chosen: boolean;
+  incompatibleReason?: string;
 }): PickableMember {
   const reason = chosen
     ? undefined
@@ -151,7 +152,7 @@ export function percentOfTotalPick({
       ? "先添加一个可以算占比的指标（例如人数）"
       : !dimensions.length
         ? "先添加一个分组"
-        : undefined;
+        : incompatibleReason;
   return {
     id: PERCENT_OF_TOTAL_PICK_ID,
     canonical_name: PERCENT_OF_TOTAL_PICK_ID,
@@ -317,7 +318,8 @@ function BreakdownField({
   sort,
   dimensionMembers,
   selectedDimensions,
-  blockedDimensions,
+  candidateIssue,
+  rangeIssue,
   titleOf,
   onChange,
   onReplace,
@@ -329,7 +331,8 @@ function BreakdownField({
   sort: GroupSort | undefined;
   dimensionMembers: CatalogMemberPayload[];
   selectedDimensions: string[];
-  blockedDimensions: string[];
+  candidateIssue: (member: CatalogMemberPayload) => string | undefined;
+  rangeIssue: (sort: GroupSort) => string | undefined;
   titleOf: (member: string) => string;
   onChange: (sort: GroupSort) => void;
   onReplace: (next: string) => void;
@@ -341,14 +344,18 @@ function BreakdownField({
   const direction = active?.direction ?? (byName ? "asc" : "desc");
 
   const commit = (next: Partial<GroupSort>) => {
-    onChange({
+    const resolved = {
       dimension: member,
       by,
       direction,
       ...(active?.max_items ? { max_items: active.max_items } : {}),
       ...next,
-    });
+    };
+    if (!rangeIssue(resolved)) onChange(resolved);
   };
+  const maxItemsIssue = active?.max_items
+    ? undefined
+    : rangeIssue({ dimension: member, by, direction, max_items: 1 });
   const directionLabel = byName
     ? direction === "asc"
       ? "A 到 Z"
@@ -378,11 +385,10 @@ function BreakdownField({
     <>
       <div className="mr-2.5 min-w-0" data-slot="breakdown-field">
         <MemberPopover
-          blockedDimensions={blockedDimensions}
+          candidateIssue={candidateIssue}
           members={dimensionMembers}
           onPick={(picked) => onReplace(picked.canonical_name)}
           selected={selectedDimensions}
-          selectedDimensions={selectedDimensions}
           trigger={
             <SelectButton
               aria-label={`分组维度：${label}`}
@@ -470,12 +476,15 @@ function BreakdownField({
               </Select>
             </div>
           ) : null}
-          <PopupSection blocked={measures.length ? undefined : NO_MEASURE_REASON} label="最大项数">
+          <PopupSection
+            blocked={measures.length ? maxItemsIssue : NO_MEASURE_REASON}
+            label="最大项数"
+          >
             <div className="px-2 pb-0.5">
               <Input
                 aria-label={`${label}最大项数`}
                 defaultValue={active?.max_items?.toString() ?? ""}
-                disabled={!measures.length}
+                disabled={!measures.length || Boolean(maxItemsIssue)}
                 inputMode="numeric"
                 key={active?.max_items ?? "all"}
                 onBlur={(event) => {
@@ -563,18 +572,15 @@ export function ReportQueryRail({
   const titleOf = (member: string) => catalogById.get(member)?.title ?? resultTitleOf(member);
   const readiness = analysisReadiness(draft, catalog);
   const runIssue = readiness.issues[0];
-  const candidateTimeIssue = (member: CatalogMemberPayload) => {
-    if (!readiness.time) return undefined;
-    const issue = memberTimeSelectionIssue(member, readiness.time);
-    return issue ? timeSelectionIssueMessage(issue) : undefined;
+  const resolvedTime = readiness.time?.status === "resolved" ? readiness.time.selection : undefined;
+  const candidateIssueOf = (candidate: SemanticQueryView) => {
+    const issue = queryCandidateFeasibilityIssue(catalog, intent, candidate, resolvedTime);
+    return issue ? queryFeasibilityIssueMessage(issue) : undefined;
   };
   const updateIntent = (next: SemanticQueryView) => {
     onChange(setSemanticQueryView(draft, next.id, next, catalog));
   };
 
-  const incompatibleDimensions = catalog.measures
-    .filter((member) => measures.includes(member.id))
-    .flatMap((member) => member.incompatible_dimensions ?? []);
   const calculationMeasures = catalog.measures.filter(
     (member) =>
       measures.includes(member.id) && member.report_calculations?.includes("percent_of_total"),
@@ -583,10 +589,44 @@ export function ReportQueryRail({
     (member) => dimensions.includes(member.id) && member.dimension_kind !== "overlapping",
   );
   const calculation = calculations[0];
+  const calculationIssue = (measure: CatalogMemberPayload, dimension: CatalogMemberPayload) =>
+    candidateIssueOf({
+      ...intent,
+      calculations: [defaultPercentOfTotal(measure, dimension)],
+      summary: undefined,
+    });
+  const calculationCandidates = calculationMeasures.flatMap((measure) =>
+    calculationDimensions.map((dimension) => ({
+      measure,
+      dimension,
+      issue: calculationIssue(measure, dimension),
+    })),
+  );
+  const calculationPairs = calculationCandidates.filter(({ issue }) => !issue);
+  const currentCalculationMeasure = calculation
+    ? catalog.measures.find((measure) => measure.id === calculation.measure)
+    : undefined;
+  const currentCalculationDimension = calculation
+    ? catalog.dimensions.find((dimension) => dimension.id === calculation.category_dimension)
+    : undefined;
+  const selectableCalculationMeasures = currentCalculationDimension
+    ? calculationMeasures.filter(
+        (measure) => !calculationIssue(measure, currentCalculationDimension),
+      )
+    : [];
+  const selectableCalculationDimensions = currentCalculationMeasure
+    ? calculationDimensions.filter(
+        (dimension) => !calculationIssue(currentCalculationMeasure, dimension),
+      )
+    : [];
   const calculationPick = percentOfTotalPick({
     measures: calculationMeasures,
     dimensions: calculationDimensions,
     chosen: Boolean(calculation),
+    incompatibleReason:
+      calculationPairs.length > 0
+        ? undefined
+        : calculationCandidates.find(({ issue }) => issue)?.issue,
   });
 
   return (
@@ -596,6 +636,12 @@ export function ReportQueryRail({
         <InspectorSection
           actions={
             <MemberPopover
+              candidateIssue={(member) =>
+                candidateIssueOf({
+                  ...intent,
+                  filters: [...filters, { member: member.id, relation: "one_of", values: [] }],
+                })
+              }
               members={catalog.dimensions}
               onPick={(member) =>
                 updateIntent({
@@ -607,7 +653,6 @@ export function ReportQueryRail({
                 })
               }
               selected={filters.map((filter) => filter.member)}
-              selectedDimensions={dimensions}
               trigger={addButton("添加筛选条件")}
             />
           }
@@ -632,18 +677,19 @@ export function ReportQueryRail({
         <InspectorSection
           actions={
             <MemberPopover
-              candidateIssue={candidateTimeIssue}
+              candidateIssue={(member) =>
+                candidateIssueOf({ ...intent, measures: [...measures, member.id] })
+              }
               extras={{ label: "用已选指标再算", items: [calculationPick] }}
               members={catalog.measures}
               metricDomains={catalog.metric_domains}
               onPick={(member) => {
                 if (member.id === PERCENT_OF_TOTAL_PICK_ID) {
-                  const [measure] = calculationMeasures;
-                  const [dimension] = calculationDimensions;
-                  if (!measure || !dimension) return;
+                  const pair = calculationPairs[0];
+                  if (!pair) return;
                   updateIntent({
                     ...intent,
-                    calculations: [defaultPercentOfTotal(measure, dimension)],
+                    calculations: [defaultPercentOfTotal(pair.measure, pair.dimension)],
                     summary: undefined,
                   });
                   return;
@@ -651,7 +697,6 @@ export function ReportQueryRail({
                 updateIntent({ ...intent, measures: [...measures, member.canonical_name] });
               }}
               selected={[...measures, ...(calculation ? [PERCENT_OF_TOTAL_PICK_ID] : [])]}
-              selectedDimensions={dimensions}
               trigger={addButton("选择指标")}
             />
           }
@@ -681,9 +726,9 @@ export function ReportQueryRail({
               {calculation ? (
                 <CalculationRow
                   calculation={calculation}
-                  dimensions={calculationDimensions}
+                  dimensions={selectableCalculationDimensions}
                   key={calculation.id}
-                  measures={calculationMeasures}
+                  measures={selectableCalculationMeasures}
                   onChange={(next) => updateIntent({ ...intent, calculations: [next] })}
                   onRemove={() => updateIntent({ ...intent, calculations: undefined })}
                   titleOf={titleOf}
@@ -696,13 +741,14 @@ export function ReportQueryRail({
         <InspectorSection
           actions={
             <MemberPopover
-              blockedDimensions={incompatibleDimensions}
+              candidateIssue={(member) =>
+                candidateIssueOf({ ...intent, dimensions: [...dimensions, member.id] })
+              }
               members={catalog.dimensions}
               onPick={(member) =>
                 updateIntent({ ...intent, dimensions: [...dimensions, member.canonical_name] })
               }
               selected={dimensions}
-              selectedDimensions={dimensions}
               trigger={addButton("选择分组维度")}
             />
           }
@@ -713,7 +759,9 @@ export function ReportQueryRail({
           {dimensions.length
             ? dimensions.map((member) => (
                 <BreakdownField
-                  blockedDimensions={incompatibleDimensions}
+                  candidateIssue={(candidate) =>
+                    candidateIssueOf(replaceSemanticQueryDimension(intent, member, candidate.id))
+                  }
                   dimensionMembers={catalog.dimensions}
                   key={member}
                   label={titleOf(member)}
@@ -726,6 +774,7 @@ export function ReportQueryRail({
                   onReplace={(next) =>
                     updateIntent(replaceSemanticQueryDimension(intent, member, next))
                   }
+                  rangeIssue={(groupSort) => candidateIssueOf({ ...intent, group_sort: groupSort })}
                   selectedDimensions={dimensions}
                   sort={intent.group_sort}
                   titleOf={titleOf}

@@ -10,7 +10,6 @@ import {
   hasAnalysisChanges,
   hasViewChanges,
   isAnalysisEditDirty,
-  memberTimeSelectionIssue,
   isPreviewCurrent,
   removeSemanticQueryMember,
   renameAnalysisDraft,
@@ -36,12 +35,18 @@ const catalog: CatalogPayload = {
       kind: "measure",
       title: "在职人数",
       description: "所选期间内处于在职状态的人数。",
+      query_capabilities: {
+        dimension_ids: ["dimension:organization_name", "dimension:department_name"],
+      },
     },
     {
       id: "measure:new_hire_count",
       kind: "measure",
       title: "入职人数",
       description: "所选期间内入职的人数。",
+      query_capabilities: {
+        dimension_ids: ["dimension:organization_name", "dimension:department_name"],
+      },
     },
   ],
   dimensions: [
@@ -357,12 +362,13 @@ describe("analysis draft 三层状态", () => {
     ).toEqual([]);
   });
 
-  test("按月定义的指标在年度草稿与候选中返回同一结构化阻断", () => {
+  test("按月定义的指标在年度草稿中返回结构化阻断", () => {
     const monthly = {
       id: "measure:monthly_hire_rate",
       kind: "measure" as const,
       title: "月度入职率",
       description: "所选月份的入职率。",
+      query_capabilities: { dimension_ids: [] },
       time_constraints: { grain: "month" as const },
     };
     const annual = beginAnalysisEdit(
@@ -386,18 +392,12 @@ describe("analysis draft 三层状态", () => {
       ...catalog,
       measures: [...catalog.measures, monthly],
     });
-    if (!readiness.time) throw new Error("查询草稿必须产出时间解析");
-    const issue = memberTimeSelectionIssue(monthly, readiness.time);
-    if (!issue) throw new Error("按月定义指标必须拒绝年度呈现");
-    expect(issue).toEqual({
-      code: "metric_time_grain_incompatible",
-      metric_titles: ["月度入职率"],
-      required_grain: "month",
-      selected_grain: "year",
-    });
     expect(readiness.issues).toEqual([
       {
-        ...issue,
+        code: "metric_time_grain_incompatible",
+        metric_titles: ["月度入职率"],
+        required_grain: "month",
+        selected_grain: "year",
         message: "指标「月度入职率」按月定义；连续期间请改为按月呈现，不能合并多个月份",
       },
     ]);

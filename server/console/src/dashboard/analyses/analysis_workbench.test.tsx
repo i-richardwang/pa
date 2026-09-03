@@ -31,6 +31,7 @@ const catalog: CatalogPayload = {
       kind: "measure",
       title: "在职人数",
       description: "在职人数。",
+      query_capabilities: { dimension_ids: ["dimension:organization_name"] },
     },
   ],
   dimensions: [

@@ -1,8 +1,9 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { publicApplicationError, type PublicApplicationError } from "../application/errors.js";
+import type { PublicErrorPayload } from "../contracts/error_contract.js";
 
 type McpToolErrorContent = {
-  error: Pick<PublicApplicationError, "code" | "message" | "details">;
+  error: PublicErrorPayload;
 };
 
 type McpToolErrorResult = Omit<CallToolResult, "structuredContent"> & {

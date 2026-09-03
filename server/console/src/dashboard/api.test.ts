@@ -32,13 +32,22 @@ test("Dashboard API 成功响应必须通过运行时契约", async () => {
 test("Dashboard API 错误响应保留业务文案，非 JSON 应答明确归因", async () => {
   await expect(
     parseJsonResponse(
-      new Response(JSON.stringify({ error: "报告已更新" }), {
-        status: 409,
-        headers: { "Content-Type": "application/json" },
-      }),
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "conflict",
+            message: "报告已更新",
+            details: { expected_revision: 2 },
+          },
+        }),
+        {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
       PAYLOAD,
     ),
-  ).rejects.toEqual(new ApiError(409, "报告已更新"));
+  ).rejects.toEqual(new ApiError(409, "报告已更新", "conflict", { expected_revision: 2 }));
 
   await expect(
     parseJsonResponse(new Response("bad gateway", { status: 502 }), PAYLOAD),

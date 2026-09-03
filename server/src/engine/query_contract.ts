@@ -1,7 +1,4 @@
-/**
- * 查询形态契约。跨事实边界由窄 View 的显式 includes 白名单决定；同一 View 内仍有
- * 少数指标专属限制由结构化元数据声明，不在查询协议中写业务分支。
- */
+/** 物理查询不变量。语义可行性在编译前判定，此层验证授权模型与执行计划保持一致。 */
 import type {
   CubeFilter,
   CubeFilterCondition,
@@ -61,8 +58,8 @@ function isTimeAxis(dimension: ReturnType<typeof findDimension>): boolean {
   );
 }
 
-/** 不成立的查询形态返回的数值业务含义已改变，一律拒绝。 */
-export function assertMeasureFilterCompatibility(query: CubeQuery, views: CubeView[]): void {
+/** 语义可行性已放行的物理查询必须仍满足模型不变量；破裂表示规划或目录投影错误。 */
+export function assertPhysicalQueryInvariants(query: CubeQuery, views: CubeView[]): void {
   const filters = filterMembers(query.filters);
   const dimensions = [...(query.dimensions ?? []), ...filters];
   for (const measureName of query.measures ?? []) {
@@ -82,9 +79,8 @@ export function assertMeasureFilterCompatibility(query: CubeQuery, views: CubeVi
           .map(({ name, dimension }) => `「${dimension?.title ?? name}」`)
           .join("、");
         throw new Error(
-          `指标「${measure.title ?? measureName}」必须按至少一个未被单值筛选的分类维度分组；` +
-            `当前分类维度${categoryNames || "已被筛选"}被固定为单值；` +
-            "请保留分类的多个取值进行分组，不要先只筛选其中一个值，否则占比恒为 100%。",
+          `物理查询不变量失效：结构占比指标「${measure.title ?? measureName}」没有可变分类分组；` +
+            `当前分类维度${categoryNames || "已被筛选"}被固定为单值`,
         );
       }
     }
@@ -101,8 +97,8 @@ export function assertMeasureFilterCompatibility(query: CubeQuery, views: CubeVi
       const dimension = findDimension(views, hit);
       const reason = `：${item.reason}`;
       throw new Error(
-        `指标「${measure?.title ?? measureName}」不能按维度「${dimension?.title ?? hit}」分组或筛选${reason}；` +
-          "请移除该维度及其过滤，或调用 catalog 改选与该维度兼容的指标",
+        `物理查询不变量失效：指标「${measure?.title ?? measureName}」带有不兼容维度` +
+          `「${dimension?.title ?? hit}」${reason}`,
       );
     }
   }

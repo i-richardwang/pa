@@ -47,6 +47,10 @@ import {
   planQueryIntent,
   type QueryIntentPlan,
 } from "../semantic_core/query_intent.js";
+import {
+  queryFeasibilityIssueMessage,
+  type QueryFeasibilityIssue,
+} from "../semantic_core/query_feasibility.js";
 import type {
   RecordProjectionBindings,
   RecordProjectionViewBinding,
@@ -119,10 +123,10 @@ function recordProjectionBindingForIntent(
 
 export class SemanticQueryIncompatibleError extends Error {
   constructor(
-    message: string,
+    readonly issue: QueryFeasibilityIssue,
     readonly routes: SemanticRoute[],
   ) {
-    super(message);
+    super(queryFeasibilityIssueMessage(issue));
     this.name = "SemanticQueryIncompatibleError";
   }
 }
@@ -133,7 +137,11 @@ function routesForPlans(intents: SemanticQueryView[], plans: QueryIntentPlan[]):
     if (plan.status === "direct") {
       return { status: "direct", result_view_id: viewId };
     }
-    return { status: "incompatible", result_view_id: viewId, reason: plan.reason };
+    return {
+      status: "incompatible",
+      result_view_id: viewId,
+      reason: queryFeasibilityIssueMessage(plan.issue),
+    };
   });
 }
 
@@ -544,21 +552,16 @@ function groupingShareCalculations(
 ): GroupingShareCalculationSpec[] {
   return (intent.calculations ?? []).map((calculation) => {
     const measure = catalogMember(catalog, calculation.measure, "measure");
-    if (!measure)
-      throw new AnalysisDefinitionError(`catalog 中不存在基础指标 ${calculation.measure}`);
+    if (!measure) throw new Error(`可行性规划遗漏了基础指标 ${calculation.measure}`);
     if (!measure.report_calculations?.includes("percent_of_total")) {
-      throw new AnalysisDefinitionError(`指标「${measure.title}」不支持报告级构成占比`);
+      throw new Error(`可行性规划放行了不支持构成占比的指标「${measure.title}」`);
     }
     const category = catalogMember(catalog, calculation.category_dimension, "dimension");
     if (!category) {
-      throw new AnalysisDefinitionError(
-        `catalog 中不存在构成维度 ${calculation.category_dimension}`,
-      );
+      throw new Error(`可行性规划遗漏了构成维度 ${calculation.category_dimension}`);
     }
     if (category.dimension_kind === "overlapping") {
-      throw new AnalysisDefinitionError(
-        `维度「${category.title}」不是互斥分类，不能计算合计为 100% 的构成占比`,
-      );
+      throw new Error(`可行性规划放行了重叠构成维度「${category.title}」`);
     }
     return {
       kind: "grouping_share",
@@ -588,7 +591,7 @@ export function compileAnalysisView(
     (plan): plan is Extract<QueryIntentPlan, { status: "incompatible" }> =>
       plan.status === "incompatible",
   );
-  if (incompatible) throw new SemanticQueryIncompatibleError(incompatible.reason, routes);
+  if (incompatible) throw new SemanticQueryIncompatibleError(incompatible.issue, routes);
   const outputId = semanticAnalysisSink(definition.views);
   const intentById = new Map(intents.map((intent) => [intent.id, intent]));
   const directPlans = resolved.filter(

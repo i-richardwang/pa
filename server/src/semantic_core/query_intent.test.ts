@@ -1,27 +1,52 @@
 import { describe, expect, test } from "bun:test";
-import type { CompilerCatalog, CompilerCatalogMember } from "./compiler_catalog.js";
+import type {
+  CompilerCatalog,
+  CompilerCatalogDimension,
+  CompilerCatalogMeasure,
+  CompilerCatalogMember,
+} from "./compiler_catalog.js";
 import { planQueryIntent } from "./query_intent.js";
 
 function member(
   id: string,
   title: string,
+  kind: "measure",
+  bindings: Array<[view: string, member: string, detail?: boolean]>,
+  options: Partial<Omit<CompilerCatalogMeasure, "kind">> &
+    Pick<CompilerCatalogMeasure, "metric_domain_id" | "query_capabilities">,
+): CompilerCatalogMeasure;
+function member(
+  id: string,
+  title: string,
+  kind: "dimension",
+  bindings: Array<[view: string, member: string, detail?: boolean]>,
+  options?: Partial<Omit<CompilerCatalogDimension, "kind">>,
+): CompilerCatalogDimension;
+function member(
+  id: string,
+  title: string,
   kind: CompilerCatalogMember["kind"],
   bindings: Array<[view: string, member: string, detail?: boolean]>,
-  options: Partial<CompilerCatalogMember> = {},
-): CompilerCatalogMember {
-  return {
+  options: Partial<Omit<CompilerCatalogMeasure, "kind">> = {},
+): CompilerCatalogMeasure | CompilerCatalogDimension {
+  const common = {
     id,
     name: id,
     title,
-    kind,
     description: `${title}。`,
     available_in: bindings.map(([view, qualified, detail]) => ({
       view,
       member: qualified,
       ...(detail ? { detail: true as const, records_available: true as const } : {}),
     })),
-    ...options,
   };
+  if (kind === "dimension") {
+    const { query_capabilities: queryCapabilities, ...dimensionOptions } = options;
+    if (queryCapabilities) throw new Error(`测试维度 ${id} 不能声明指标查询能力`);
+    return { ...common, ...dimensionOptions, kind };
+  }
+  if (!options.query_capabilities) throw new Error(`测试指标 ${id} 缺少查询能力`);
+  return { ...common, ...options, kind, query_capabilities: options.query_capabilities };
 }
 
 const ACTIVE_EMPLOYEE = "measure:active_employee_count";
@@ -86,7 +111,10 @@ const catalog: CompilerCatalog = {
         ["employee_snapshot_metrics", "employee_snapshot_metrics.active_employee_count"],
         ["employee_detail", "employee_detail.active_employee_count", true],
       ],
-      { metric_domain_id: "metric_domain:workforce_structure" },
+      {
+        metric_domain_id: "metric_domain:workforce_structure",
+        query_capabilities: { dimension_ids: [ORG, AGE_BAND] },
+      },
     ),
     member(
       YTD_EVENT_RATE,
@@ -96,14 +124,20 @@ const catalog: CompilerCatalog = {
         ["employee_leave_metrics", "employee_leave_metrics.ytd_event_rate"],
         ["employee_detail", "employee_detail.ytd_event_rate", true],
       ],
-      { metric_domain_id: "metric_domain:workforce_movement" },
+      {
+        metric_domain_id: "metric_domain:workforce_movement",
+        query_capabilities: { dimension_ids: [ORG, AGE_BAND] },
+      },
     ),
     member(
       CURRENT_MONTH_FULFILLMENT_RATE,
       "当月编制完成率",
       "measure",
       [["headcount_plan_metrics", "headcount_plan_metrics.current_month_fulfillment_rate"]],
-      { metric_domain_id: "metric_domain:headcount_plan" },
+      {
+        metric_domain_id: "metric_domain:headcount_plan",
+        query_capabilities: { dimension_ids: [ORG] },
+      },
     ),
   ],
   dimensions: [
@@ -175,7 +209,35 @@ describe("semantic query intent", () => {
     });
     expect(plan).toEqual({
       status: "incompatible",
-      reason: "指标来源「部门编制计划」不支持维度「年龄段」；请移除该维度或拆成独立分析",
+      issue: {
+        code: "query_dimension_unsupported",
+        measure_id: CURRENT_MONTH_FULFILLMENT_RATE,
+        measure_title: "当月编制完成率",
+        dimension_id: AGE_BAND,
+        dimension_title: "年龄段",
+        usage: "group",
+      },
+    });
+  });
+
+  test("筛选维度与分组维度遵守同一指标能力交集", () => {
+    expect(
+      planQueryIntent(catalog, {
+        id: "query_1",
+        measures: [CURRENT_MONTH_FULFILLMENT_RATE],
+        filters: [{ member: AGE_BAND, relation: "one_of", values: ["示例年龄段"] }],
+        time: JULY_2026,
+      }),
+    ).toEqual({
+      status: "incompatible",
+      issue: {
+        code: "query_dimension_unsupported",
+        measure_id: CURRENT_MONTH_FULFILLMENT_RATE,
+        measure_title: "当月编制完成率",
+        dimension_id: AGE_BAND,
+        dimension_title: "年龄段",
+        usage: "filter",
+      },
     });
   });
 
@@ -229,7 +291,14 @@ describe("semantic query intent", () => {
       }),
     ).toEqual({
       status: "incompatible",
-      reason: "指标来源「员工月末快照」不支持维度「员工工号」；请移除该维度或拆成独立分析",
+      issue: {
+        code: "query_dimension_unsupported",
+        measure_id: ACTIVE_EMPLOYEE,
+        measure_title: "在职人数",
+        dimension_id: "dimension:employee_id",
+        dimension_title: "员工工号",
+        usage: "group",
+      },
     });
   });
 
@@ -252,7 +321,11 @@ describe("semantic query intent", () => {
           "盘点数量",
           "measure",
           [["inventory_count_metrics", "inventory_count_metrics.counted_units"]],
-          { metric_domain_id: "metric_domain:workforce_movement" },
+          {
+            metric_domain_id: "metric_domain:workforce_movement",
+            query_capabilities: { dimension_ids: ["dimension:warehouse"] },
+            time_constraints: { comparison: "explicit_only" },
+          },
         ),
       ],
       dimensions: [
@@ -274,7 +347,11 @@ describe("semantic query intent", () => {
       });
       expect(blocked.status).toBe("incompatible");
       if (blocked.status === "incompatible") {
-        expect(blocked.reason).toContain("只允许显式对照");
+        expect(blocked.issue).toEqual({
+          code: "metric_time_comparison_incompatible",
+          metric_titles: ["盘点数量"],
+          required_comparison: "custom",
+        });
       }
     }
     expect(

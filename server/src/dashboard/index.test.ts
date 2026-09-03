@@ -34,7 +34,11 @@ describe("dashboard app routes and access control", () => {
     const page = await app.request("/");
     expect(page.status).toBe(302);
     expect(page.headers.get("location")).toBe("/login?redirect=/dashboard");
-    expect((await app.request("/api/me")).status).toBe(401);
+    const api = await app.request("/api/me");
+    expect(api.status).toBe(401);
+    expect(await api.json()).toEqual({
+      error: { code: "unauthorized", message: "未登录" },
+    });
     expect((await app.request("/api/usage/mine")).status).toBe(401);
     expect((await app.request("/api/usage/overview")).status).toBe(401);
   });
@@ -124,6 +128,7 @@ describe("dashboard app routes and access control", () => {
                   title: "YTD主要事件率",
                   description: "主要事件数除以月均基数。",
                   ai_context: "只供 Agent",
+                  query_capabilities: { dimension_ids: [] },
                 },
               ],
               dimensions: [],
@@ -284,8 +289,7 @@ describe("dashboard app routes and access control", () => {
       const response = await app.request("/api/usage/mine");
       expect(response.status).toBe(500);
       expect(await response.json()).toEqual({
-        error: "服务暂时无法完成请求，请稍后重试",
-        code: "internal",
+        error: { code: "internal", message: "服务暂时无法完成请求，请稍后重试" },
       });
       expect(logged).toHaveBeenCalledWith("[pa] dashboard 请求失败:", failure);
     } finally {
@@ -323,8 +327,7 @@ describe("dashboard app routes and access control", () => {
     });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      error: "一次分析只能回答一个问题；请拆分分析",
-      code: "invalid_request",
+      error: { code: "invalid_request", message: "一次分析只能回答一个问题；请拆分分析" },
     });
   });
 
@@ -532,8 +535,7 @@ describe("dashboard app routes and access control", () => {
     );
     expect(duplicate.status).toBe(400);
     expect(await duplicate.json()).toEqual({
-      error: "术语叫法已存在",
-      code: "invalid_request",
+      error: { code: "invalid_request", message: "术语叫法已存在" },
     });
 
     listError = new Error("SQLITE_CANTOPEN");
@@ -542,8 +544,7 @@ describe("dashboard app routes and access control", () => {
       const failed = await admin.request("/api/admin/business_terms");
       expect(failed.status).toBe(500);
       expect(await failed.json()).toEqual({
-        error: "服务暂时无法完成请求，请稍后重试",
-        code: "internal",
+        error: { code: "internal", message: "服务暂时无法完成请求，请稍后重试" },
       });
       expect(errorLog).toHaveBeenCalledWith("[pa] dashboard 请求失败:", listError);
     } finally {

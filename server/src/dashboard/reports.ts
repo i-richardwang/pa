@@ -10,6 +10,7 @@ import {
 import { RECORD_PROJECTION_REQUEST_BODY } from "../contracts/record_projection_contract.js";
 import type { ReportDocument } from "../application/report_service.js";
 import { projectReplayPayload } from "../application/replay_projection.js";
+import { InvalidRequestError } from "../application/errors.js";
 
 export function registerReportRoutes(
   dashboard: Hono<DashboardEnv>,
@@ -63,13 +64,13 @@ export function registerReportRoutes(
 
   dashboard.post("/api/reports/:id/records", async (c) => {
     const parsed = RECORD_PROJECTION_REQUEST_BODY.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "明细请求无效，请刷新报告后重试" }, 400);
+    if (!parsed.success) throw new InvalidRequestError("明细请求无效，请刷新报告后重试");
     return c.json(await records.runReport(c.get("principal"), c.req.param("id"), parsed.data));
   });
 
   dashboard.post("/api/reports", async (c) => {
     const parsed = CREATE_REPORT_BODY.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "缺少 view_id 或 name" }, 400);
+    if (!parsed.success) throw new InvalidRequestError("缺少 view_id 或 name");
     const body = parsed.data;
     const row = await reportService.save({
       principal: c.get("principal"),
@@ -82,11 +83,8 @@ export function registerReportRoutes(
   dashboard.patch("/api/reports/:id", async (c) => {
     const parsed = UPDATE_REPORT_BODY.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
-      return c.json(
-        {
-          error: `报告修改无效：${parsed.error.issues.map((issue) => issue.message).join("；")}`,
-        },
-        400,
+      throw new InvalidRequestError(
+        `报告修改无效：${parsed.error.issues.map((issue) => issue.message).join("；")}`,
       );
     }
     const row = await reportService.update(

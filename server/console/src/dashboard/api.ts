@@ -1,10 +1,13 @@
 /** /dashboard/api 取数：未登录统一回登录页（带回跳），报错透出服务端 error 文案 */
 import type { z } from "zod";
+import { PUBLIC_ERROR_RESPONSE_SCHEMA, type PublicErrorCode } from "@contracts/error_contract";
 
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?: PublicErrorCode,
+    public details?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -58,11 +61,6 @@ async function sendJson<T>(
   );
 }
 
-const errorMessage = (value: unknown): string | null => {
-  if (!value || typeof value !== "object" || !("error" in value)) return null;
-  return typeof value.error === "string" && value.error ? value.error : null;
-};
-
 export async function parseJsonResponse<T>(res: Response, schema: JsonSchema<T>): Promise<T> {
   if (res.status === 401) {
     window.location.assign("/login?redirect=/dashboard");
@@ -75,7 +73,10 @@ export async function parseJsonResponse<T>(res: Response, schema: JsonSchema<T>)
     throw new ApiError(res.ok ? 502 : res.status, `服务端返回无法解析（${res.status}）`);
   }
   if (!res.ok) {
-    throw new ApiError(res.status, errorMessage(body) ?? `请求失败（${res.status}）`);
+    const parsedError = PUBLIC_ERROR_RESPONSE_SCHEMA.safeParse(body);
+    if (!parsedError.success) throw new ApiError(res.status, `请求失败（${res.status}）`);
+    const { code, message, details } = parsedError.data.error;
+    throw new ApiError(res.status, message, code, details);
   }
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
@@ -87,13 +88,13 @@ export async function parseJsonResponse<T>(res: Response, schema: JsonSchema<T>)
 
 const request = parseJsonResponse;
 
-/** 控制台时间戳的唯一拼法：本地时区、年月日时分、数字等宽。 */
 /** 已登录整页跳转由 getJson 处理，401 在此不作为可展示错误。 */
 export function errorText(error: unknown): string | null {
   if (!error || (error instanceof ApiError && error.status === 401)) return null;
   return error instanceof Error ? error.message : String(error);
 }
 
+/** 控制台时间戳的唯一拼法：本地时区、年月日时分、数字等宽。 */
 export function formatAt(at: string | Date | null | undefined): string {
   if (!at) return "—";
   return new Date(at).toLocaleString("zh-CN", {

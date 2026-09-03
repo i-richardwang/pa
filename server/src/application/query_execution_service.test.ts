@@ -143,7 +143,7 @@ test("Agent 指标域拒绝手写技术维度与计算辅助指标，且不会�
       views: [{ id: "result", ...query, time: { cutoff: "2026-07" } }],
     };
     await expect(service.execute(planned(identityExecution(spec)))).rejects.toThrow(
-      "所选字段不在当前可用的数据目录中",
+      "执行计划引用了当前授权目录中不存在的物理成员",
     );
   }
   expect(loads).toBe(0);

@@ -402,17 +402,22 @@ describe("CatalogDocument", () => {
     expect(payload.measures.find((m) => m.title === "在职人数")?.report_calculations).toEqual([
       "percent_of_total",
     ]);
+    expect(
+      payload.measures.find((m) => m.title === "在职人数占比")?.query_capabilities,
+    ).toMatchObject({
+      grouping: { minimum_varying_dimensions: 1 },
+    });
     expect(payload.dimensions.find((d) => d.title === "组织")?.dimension_kind).toBe("categorical");
     // Agent 选材与避坑规则随成员亮出，供人核对 AI 的查询行为
     expect(payload.measures.find((m) => m.title === "YTD主要事件率")?.ai_context).toBe(
       "只供 Agent 的时间选择规则",
     );
-    // incompatible_dimensions 在声明它的视图（人员总览）内解析为语义 id（物理短名 department_name → 部门维度）
+    // 查询能力以正向白名单交付，客户端只需计算所选指标的能力交集。
     const deptId = payload.dimensions.find((d) => d.title === "部门")?.id ?? "";
     expect(deptId).toBe("dimension:department_name");
     expect(
-      payload.measures.find((m) => m.title === "YTD主要事件率")?.incompatible_dimensions,
-    ).toEqual([deptId]);
+      payload.measures.find((m) => m.title === "YTD主要事件率")?.query_capabilities?.dimension_ids,
+    ).not.toContain(deptId);
 
     // 引擎零件仍不跨受众：夹具里真实存在的执行 view 名与限定成员名一个都不上线
     const json = JSON.stringify(payload);
@@ -444,6 +449,50 @@ describe("CatalogDocument", () => {
     for (const id of [...structure.dimension_ids, ...movement.dimension_ids]) {
       expect(ids).toContain(id);
     }
+  });
+
+  test("查询能力把物理可用性、负向限制与层级折叠成一份正向语义投影", () => {
+    const hierarchical = views.map((view) =>
+      view.name === "employee_attributes_fixture"
+        ? {
+            ...view,
+            measures: view.measures.map((measure) =>
+              measure.name === "employee_attributes_fixture.active_employee_share"
+                ? {
+                    ...measure,
+                    meta: {
+                      ...measure.meta,
+                      incompatible_dimensions: [
+                        {
+                          member: "classification_source",
+                          reason: "该指标只按稳定分类层级分析。",
+                        },
+                      ],
+                    },
+                  }
+                : measure,
+            ),
+            hierarchies: [
+              {
+                name: "organization_category",
+                levels: [
+                  "employee_attributes_fixture.organization_name",
+                  "employee_attributes_fixture.classification_source",
+                  "employee_attributes_fixture.category_band",
+                ],
+              },
+            ],
+          }
+        : view,
+    );
+    const capabilities = toSemanticCatalog(buildCatalogDocument(hierarchical)).measures.find(
+      ({ id }) => id === "measure:active_employee_share",
+    )?.query_capabilities;
+    expect(capabilities).toEqual({
+      dimension_ids: ["dimension:category_band", "dimension:organization_name"],
+      hierarchies: [["dimension:organization_name", "dimension:category_band"]],
+      grouping: { minimum_varying_dimensions: 1 },
+    });
   });
 
   test("公共目录只投影会约束选择的时间能力，不泄漏内部时间合同", () => {

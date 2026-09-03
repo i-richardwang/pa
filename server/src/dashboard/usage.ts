@@ -1,6 +1,7 @@
 import type { Hono, MiddlewareHandler } from "hono";
 import type { DashboardDependencies, DashboardEnv } from "./types.js";
 import { RESOLVE_FEEDBACK_BODY } from "../contracts/feedback_contract.js";
+import { InvalidRequestError, NotFoundError } from "../application/errors.js";
 
 const days = (request: { query(name: string): string | undefined }) =>
   Number(request.query("days") ?? 30);
@@ -43,7 +44,7 @@ export function registerUsageRoutes(
 
   dashboard.patch("/api/feedback/:topic_key", requireAdmin, async (c) => {
     const parsed = RESOLVE_FEEDBACK_BODY.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "status 须为 accepted 或 rejected" }, 400);
+    if (!parsed.success) throw new InvalidRequestError("status 须为 accepted 或 rejected");
     const body = parsed.data;
     const result = await feedback.resolve(
       c.get("principal"),
@@ -51,7 +52,7 @@ export function registerUsageRoutes(
       body.status,
       body.note,
     );
-    if (!result) return c.json({ error: "反馈主题不存在" }, 404);
+    if (!result) throw new NotFoundError("反馈主题不存在");
     return c.json(result);
   });
 }
