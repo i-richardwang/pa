@@ -223,7 +223,7 @@ describe("dashboard report routes", () => {
     const presentation = createPresentationService();
     const usage = { log: async () => {} };
     const semanticAnalysis: AnalysisDefinition = {
-      views: [
+      queries: [
         {
           id: "structure",
           measures: ["measure:active_employee_count"],
@@ -427,7 +427,7 @@ describe("dashboard report routes", () => {
           id: "summary",
           view_title: "汇总",
           from: ["structure"],
-          columns: [{ col: "measure:active_employee_count", source: "structure" }],
+          columns: [{ col: "measure:active_employee_count", source: "structure", as: "headcount" }],
         },
       ],
     };
@@ -515,8 +515,8 @@ describe("dashboard report routes", () => {
     const chartDefinition = semanticAnalysisOf(STRUCTURE_ARGS).analysis;
     const chartView: SemanticViewIntent = {
       type: "bar",
-      category: "test_people_metrics.category_level",
-      series: ["test_people_metrics.active_employee_count"],
+      category: "dimension:category_level",
+      series: ["measure:active_employee_count"],
     };
     const chartAnalysis = await repository.create("alice@x", chartDefinition, chartView);
     const updated = await app.request(`/api/reports/${report.id}`, {

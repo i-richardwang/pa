@@ -30,7 +30,6 @@ import {
   type RecordProjectionRequestBody,
 } from "../contracts/record_projection_contract.js";
 import {
-  isSemanticDerivedView,
   semanticResultViewId,
   type AnalysisDefinition,
   type SemanticViewIntent,
@@ -269,8 +268,8 @@ export function createRecordProjectionService(deps: {
     options: { metricId?: string; offset?: number; limit?: number; dataAsOf?: string },
   ): ProjectionRequest {
     const resultViewId = semanticResultViewId(definition);
-    const semanticView = definition.views.find((candidate) => candidate.id === resultViewId);
-    if (!semanticView || isSemanticDerivedView(semanticView)) {
+    const semanticView = definition.derived ? undefined : definition.queries[0];
+    if (!semanticView) {
       throw new RecordProjectionRequestError("当前分析没有可直接展开的指标结果");
     }
     if ((semanticView.dimensions?.length ?? 0) > 0) {
@@ -360,8 +359,8 @@ export function createRecordProjectionService(deps: {
       if (input.result_view_id !== semanticResultViewId(access.definition)) {
         throw new RecordProjectionRequestError("当前结果列没有可追溯的基础指标");
       }
-      const semanticView = access.definition.views.find((view) => view.id === input.result_view_id);
-      if (!semanticView || isSemanticDerivedView(semanticView)) {
+      const semanticView = access.definition.derived ? undefined : access.definition.queries[0];
+      if (!semanticView) {
         throw new RecordProjectionRequestError("当前结果列没有可追溯的基础指标");
       }
       const planned =

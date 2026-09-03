@@ -36,7 +36,7 @@ const catalog: CatalogPayload = {
 
 const analysis: AnalysisDefinition = {
   title: "月度在职",
-  views: [{ id: "result", measures: [MEASURE], time: MONTHLY_TIME }],
+  queries: [{ id: "result", measures: [MEASURE], time: MONTHLY_TIME }],
 };
 
 const rawView = {

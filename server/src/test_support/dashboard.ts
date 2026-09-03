@@ -12,7 +12,8 @@ import type { PresentationSpec } from "../presentation_core/presentation_spec.js
 import type { ViewPreferences } from "../presentation_core/view_preferences.js";
 import { bindSemanticFilter } from "../semantic_core/query_intent.js";
 import {
-  isSemanticDerivedView,
+  semanticResultViewId,
+  type SemanticDerivedView,
   type SemanticColumnOperand,
   type SemanticExprNode,
   type SemanticLiteralOperand,
@@ -235,6 +236,36 @@ function stubPresentation(
   };
 }
 
+/** 测试替身里的派生结果编译：与真实编译器同形，只省去 catalog 绑定。 */
+function derivedStubView(derived: SemanticDerivedView, semantic: AnalysisDefinition) {
+  const { join: semanticJoin, ...rest } = derived;
+  return {
+    ...rest,
+    id: semanticResultViewId(semantic),
+    from: semantic.queries.map((query) => query.id),
+    ...(semanticJoin
+      ? {
+          join: {
+            ...semanticJoin,
+            on: semanticJoin.on.map((member) => ({
+              left: memberShortName(member),
+              right: memberShortName(member),
+            })),
+          },
+        }
+      : {}),
+    columns: derived.columns.map((column) =>
+      "member" in column
+        ? { source: column.source, col: memberShortName(column.member), as: column.as }
+        : {
+            expr: testExpression(column.expr),
+            as: column.as,
+            ...(column.format ? { format: column.format } : {}),
+          },
+    ),
+  };
+}
+
 export const semanticPlanningStub = {
   plan: async (
     principal: Principal,
@@ -244,8 +275,8 @@ export const semanticPlanningStub = {
   ) => {
     const analysis: AnalysisSpec = {
       ...(semantic.title ? { title: semantic.title } : {}),
-      views: semantic.views.map((view) => {
-        if (!isSemanticDerivedView(view)) {
+      views: [
+        ...semantic.queries.map((view) => {
           const { filters, group_sort: groupSort, time, ...query } = view;
           return {
             ...query,
@@ -275,32 +306,9 @@ export const semanticPlanningStub = {
                   }
                 : {}),
           };
-        }
-        const { join: semanticJoin, ...derived } = view;
-        return {
-          ...derived,
-          ...(semanticJoin
-            ? {
-                join: {
-                  ...semanticJoin,
-                  on: semanticJoin.on.map((member) => ({
-                    left: memberShortName(member),
-                    right: memberShortName(member),
-                  })),
-                },
-              }
-            : {}),
-          columns: view.columns.map((column) =>
-            "member" in column
-              ? { source: column.source, col: memberShortName(column.member), as: column.as }
-              : {
-                  expr: testExpression(column.expr),
-                  as: column.as,
-                  ...(column.format ? { format: column.format } : {}),
-                },
-          ),
-        };
-      }),
+        }),
+        ...(semantic.derived ? [derivedStubView(semantic.derived, semantic)] : []),
+      ],
     };
     const presentation = stubPresentation(declared, preferences);
     const plan = planExecution(analysis, { delivery: "identity" });

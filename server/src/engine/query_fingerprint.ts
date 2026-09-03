@@ -1,13 +1,12 @@
 /**
  * 查询指纹：对归一后的 AnalysisDefinition 生成稳定内容哈希，仅用于使用报告聚合重复分析候选。
- * title/view_title 与局部 view id 不进哈希（纯命名）；filters 按序列化排序，
+ * title/view_title 与查询 id 不进哈希（纯命名）；filters 按序列化排序，
  * measures/dimensions 保持原序——列顺序是表格形态的一部分。
  * 入参先过 canonical AnalysisDefinition 校验；定义无效（含物理 view 限定成员名）返回 undefined。
  */
 import { createHash } from "node:crypto";
 import { canonicalJson } from "../semantic_core/canonical_json.js";
 import {
-  isSemanticDerivedView,
   parseAnalysisDefinition,
   type SemanticColumnOperand,
   type SemanticExprNode,
@@ -23,8 +22,9 @@ export function queryFingerprint(input: unknown): string | undefined {
   } catch {
     return undefined;
   }
-  const analysisViews = definition.views;
-  const stableId = new Map(analysisViews.map((view, index) => [view.id, `view_${index + 1}`]));
+  const stableId = new Map(
+    definition.queries.map((query, index) => [query.id, `query_${index + 1}`] as const),
+  );
   const normalizeSources = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(normalizeSources);
     if (value === null || typeof value !== "object") return value;
@@ -37,25 +37,31 @@ export function queryFingerprint(input: unknown): string | undefined {
       ]),
     );
   };
-  const views = analysisViews.map((s) => {
-    if (isSemanticDerivedView(s)) {
-      return {
-        from: s.from.map((id) => stableId.get(id) ?? id),
-        ...(s.join ? { join: { how: s.join.how, on: [...s.join.on].sort() } } : {}),
-        columns: normalizeSources(s.columns),
-        order: s.order ?? [],
-        ...(s.limit !== undefined ? { limit: s.limit } : {}),
-      };
-    }
-    return {
-      measures: s.measures ?? [],
-      dimensions: s.dimensions ?? [],
-      filters: (s.filters ?? []).map(canonicalJson).sort(),
-      ...(s.time ? { time: s.time } : {}),
-      ...(s.group_sort ? { group_sort: s.group_sort } : {}),
-    };
-  });
-  const digest = createHash("sha256").update(canonicalJson({ views })).digest("hex");
+  const queries = definition.queries.map((query) => ({
+    measures: query.measures ?? [],
+    dimensions: query.dimensions ?? [],
+    filters: (query.filters ?? []).map(canonicalJson).sort(),
+    ...(query.time ? { time: query.time } : {}),
+    ...(query.group_sort ? { group_sort: query.group_sort } : {}),
+  }));
+  const derived = definition.derived
+    ? {
+        ...(definition.derived.join
+          ? {
+              join: {
+                how: definition.derived.join.how,
+                on: [...definition.derived.join.on].sort(),
+              },
+            }
+          : {}),
+        columns: normalizeSources(definition.derived.columns),
+        order: definition.derived.order ?? [],
+        ...(definition.derived.limit !== undefined ? { limit: definition.derived.limit } : {}),
+      }
+    : undefined;
+  const digest = createHash("sha256")
+    .update(canonicalJson({ queries, ...(derived ? { derived } : {}) }))
+    .digest("hex");
   return `q-${digest.slice(0, 10)}`;
 }
 
@@ -82,16 +88,15 @@ export function derivedFormulaSummaries(input: unknown): string[] {
   } catch {
     return [];
   }
+  const derived = definition.derived;
+  if (!derived) return [];
   const titles = new Map(
-    definition.views.map((view) => [view.id, view.view_title ?? view.id] as const),
+    definition.queries.map((query) => [query.id, query.view_title ?? query.id] as const),
   );
-  return definition.views.flatMap((view) => {
-    if (!isSemanticDerivedView(view)) return [];
-    const expressions = view.columns.flatMap((column) =>
-      "expr" in column ? [`${column.as} = ${renderOperand(column.expr, titles)}`] : [],
-    );
-    if (expressions.length || !view.join) return expressions;
-    const sources = view.from.map((source) => titles.get(source) ?? source);
-    return [`${sources.join(` ${view.join.how} join `)}（${view.join.on.join(" + ")}）`];
-  });
+  const expressions = derived.columns.flatMap((column) =>
+    "expr" in column ? [`${column.as} = ${renderOperand(column.expr, titles)}`] : [],
+  );
+  if (expressions.length || !derived.join) return expressions;
+  const sources = definition.queries.map((query) => titles.get(query.id) ?? query.id);
+  return [`${sources.join(` ${derived.join.how} join `)}（${derived.join.on.join(" + ")}）`];
 }

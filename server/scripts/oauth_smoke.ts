@@ -267,7 +267,7 @@ const q = await callTool({
   arguments: {
     analysis: {
       title: smokeTitle,
-      views: [{ id: "result", measures: [ACTIVE_EMPLOYEE], time: currentMonthTime() }],
+      queries: [{ id: "result", measures: [ACTIVE_EMPLOYEE], time: currentMonthTime() }],
     },
     view: { type: "table" },
   },
@@ -364,20 +364,18 @@ const periodQuery = await callTool({
   name: "run_analysis",
   arguments: {
     analysis: {
-      views: [
-        {
-          id: "result",
-          measures: [HIRE_COUNT],
-          time: {
-            window: {
-              kind: "range",
-              from: `${asOfYear - 2}-01`,
-              to: `${asOfYear - 1}-06`,
-              grain: "month",
-            },
+      queries: [],
+      derived: {
+        measures: [HIRE_COUNT],
+        time: {
+          window: {
+            kind: "range",
+            from: `${asOfYear - 2}-01`,
+            to: `${asOfYear - 1}-06`,
+            grain: "month",
           },
         },
-      ],
+      },
     },
     view: { type: "table" },
   },
@@ -406,7 +404,7 @@ await callTool({
   arguments: {
     analysis: {
       title: smokeTitle2,
-      views: [
+      queries: [
         {
           id: "result",
           measures: [ACTIVE_EMPLOYEE],
@@ -427,7 +425,7 @@ const scopedQuery = await callTool({
   arguments: {
     analysis: {
       title: scopedTitle,
-      views: [
+      queries: [
         {
           id: "current",
           view_title: `${asOfYear}年`,
@@ -442,26 +440,24 @@ const scopedQuery = await callTool({
           dimensions: [ORG_NAME],
           time: currentMonthTime(`${asOfYear - 1}-${String(queryPayload.data_as_of).slice(5)}`),
         },
-        {
-          id: "delta",
-          view_title: "同比变化",
-          from: ["current", "previous"],
-          join: { on: [ORG_NAME], how: "left" },
-          columns: [
-            { member: ORG_NAME, source: "current", as: "组织" },
-            { member: ACTIVE_EMPLOYEE, source: "current", as: `${asOfYear}年在职人数` },
-            { member: ACTIVE_EMPLOYEE, source: "previous", as: `${asOfYear - 1}年在职人数` },
-            {
-              expr: {
-                op: "-",
-                left: { member: ACTIVE_EMPLOYEE, source: "current" },
-                right: { member: ACTIVE_EMPLOYEE, source: "previous" },
-              },
-              as: "在职人数同比变化",
-            },
-          ],
-        },
       ],
+      derived: {
+        view_title: "同比变化",
+        join: { on: [ORG_NAME], how: "left" },
+        columns: [
+          { member: ORG_NAME, source: "current", as: "组织" },
+          { member: ACTIVE_EMPLOYEE, source: "current", as: `${asOfYear}年在职人数` },
+          { member: ACTIVE_EMPLOYEE, source: "previous", as: `${asOfYear - 1}年在职人数` },
+          {
+            expr: {
+              op: "-",
+              left: { member: ACTIVE_EMPLOYEE, source: "current" },
+              right: { member: ACTIVE_EMPLOYEE, source: "previous" },
+            },
+            as: "在职人数同比变化",
+          },
+        ],
+      },
     },
     view: { type: "table" },
   },

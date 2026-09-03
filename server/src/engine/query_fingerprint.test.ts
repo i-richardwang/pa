@@ -21,9 +21,10 @@ const queryView = (id = "source", cutoff = "2026-07") => ({
   },
 });
 
-const spec = (views: unknown[]) => ({
+const spec = (queries: unknown[], derived?: unknown) => ({
   title: "在职人数",
-  views,
+  queries,
+  ...(derived ? { derived } : {}),
 });
 
 describe("queryFingerprint", () => {
@@ -63,12 +64,10 @@ describe("queryFingerprint", () => {
     expect(queryFingerprint(spec([changed]))).not.toBe(fingerprint);
 
     const delta = {
-      id: "delta",
       view_title: "差值",
-      from: ["current", "previous"],
       join: { on: ["dimension:organization_name"], how: "left" as const },
       columns: [
-        { member: "dimension:organization_name", source: "current", as: "组织" },
+        { member: "dimension:organization_name", source: "current", as: "org" },
         {
           expr: {
             op: "-" as const,
@@ -79,26 +78,23 @@ describe("queryFingerprint", () => {
         },
       ],
     };
-    const comparison = spec([queryView("current"), queryView("previous", "2025-07"), delta]);
+    const comparison = spec([queryView("current"), queryView("previous", "2025-07")], delta);
     const derivedFingerprint = queryFingerprint(comparison);
     expect(derivedFingerprint).toMatch(QUERY_FINGERPRINT_PATTERN);
     expect(
       queryFingerprint(
-        spec([
-          queryView("current"),
-          queryView("previous", "2025-07"),
-          {
-            ...delta,
-            columns: [delta.columns[0], { ...delta.columns[1], as: "renamed_delta" }],
-          },
-        ]),
+        spec([queryView("current"), queryView("previous", "2025-07")], {
+          ...delta,
+          columns: [delta.columns[0], { ...delta.columns[1], as: "renamed_delta" }],
+        }),
       ),
     ).not.toBe(derivedFingerprint);
   });
 
-  test("多个独立终点不是合法的可指纹分析", () => {
-    const views = [queryView("current"), queryView("previous", "2025-07")];
-    expect(queryFingerprint(spec(views))).toBeUndefined();
+  test("两个来源查询缺少 derived 时不是合法的可指纹分析", () => {
+    expect(
+      queryFingerprint(spec([queryView("current"), queryView("previous", "2025-07")])),
+    ).toBeUndefined();
   });
 
   test("无效或物理规格不产生指纹", () => {
@@ -125,29 +121,23 @@ describe("queryFingerprint", () => {
     previous.view_title = "上年同期";
     expect(
       derivedFormulaSummaries(
-        spec([
-          current,
-          previous,
-          {
-            id: "delta",
-            view_title: "变化",
-            from: ["current", "previous"],
-            join: { on: ["dimension:organization_name"], how: "left" },
-            columns: [
-              {
-                expr: {
-                  op: "-",
-                  left: { member: "measure:active_employee_count", source: "current" },
-                  right: { member: "measure:active_employee_count", source: "previous" },
-                },
-                as: "人数变化",
+        spec([current, previous], {
+          view_title: "变化",
+          join: { on: ["dimension:organization_name"], how: "left" },
+          columns: [
+            {
+              expr: {
+                op: "-",
+                left: { member: "measure:active_employee_count", source: "current" },
+                right: { member: "measure:active_employee_count", source: "previous" },
               },
-            ],
-          },
-        ]),
+              as: "headcount_delta",
+            },
+          ],
+        }),
       ),
     ).toEqual([
-      "人数变化 = measure:active_employee_count(当期) − measure:active_employee_count(上年同期)",
+      "headcount_delta = measure:active_employee_count(当期) − measure:active_employee_count(上年同期)",
     ]);
     expect(derivedFormulaSummaries({ invalid: true })).toEqual([]);
   });

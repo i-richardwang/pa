@@ -1,6 +1,6 @@
 /**
- * 分析计算图的结构约束：语义层与物理层共用同一套判定与文案。两层只提供各自派生列的
- * 读法（来源操作数与输出列名），图本身的规则单源在此。
+ * 派生结果的公共判定与文案：语义层与物理层的图形状不同，但「列来源、输出列名、排序引用」
+ * 三条规则和它们的措辞只有这一份。物理层额外校验 views 图的引用与出口。
  */
 
 type GraphNode = { id: string; view_title?: string; from?: readonly string[] };
@@ -13,31 +13,64 @@ export type DerivedColumnReader<Column> = {
   outputName: (column: Column) => string;
 };
 
-type DerivedGraphNode<Column> = {
-  id: string;
+type DerivedColumns<Column> = {
   view_title: string;
-  from: string[];
-  join?: unknown;
   columns: Column[];
   order?: { by: string }[];
 };
 
+type DerivedGraphNode<Column> = DerivedColumns<Column> & {
+  id: string;
+  from: string[];
+  join?: unknown;
+};
+
 const isDerived = (view: GraphNode): boolean => "from" in view;
 
-/** 一次分析只有一个答案：计算图必须恰好收敛到一个未被继续消费的结果节点。 */
+/** 物理计算图只有一个答案：必须恰好收敛到一个未被继续消费的结果节点。 */
 export function analysisGraphSink(views: readonly GraphNode[]): string {
   const consumed = new Set(views.flatMap((view) => [...(view.from ?? [])]));
   const sinks = views.filter((view) => !consumed.has(view.id)).map((view) => view.id);
   if (sinks.length !== 1) {
     throw new Error(
-      `一次分析只能回答一个问题；当前有 ${sinks.length} 个独立结果` +
-        `${sinks.length ? `（${sinks.join("、")}）` : ""}，请拆成多次 run_analysis 调用`,
+      `执行图必须恰好收敛到一个结果；当前有 ${sinks.length} 个` +
+        `${sinks.length ? `（${sinks.join("、")}）` : ""}`,
     );
   }
   return sinks[0];
 }
 
-/** 派生节点的引用、join 元数与输出列约束。 */
+/** 派生列自身的约束：来源属于给定集合、输出列名不重复、排序列在输出中。 */
+export function validateDerivedColumns<Column>(
+  view: DerivedColumns<Column>,
+  sources: readonly string[],
+  read: DerivedColumnReader<Column>,
+): void {
+  const allowed = new Set(sources);
+  for (const column of view.columns) {
+    for (const operand of read.operands(column)) {
+      if (!allowed.has(operand.source)) {
+        throw new Error(
+          `派生结果「${view.view_title}」${operand.label ? `的列 ${operand.label} ` : ""}` +
+            `引用了不存在的来源 ${operand.source}；可用来源：${sources.join("、")}`,
+        );
+      }
+    }
+  }
+  const resultColumns = view.columns.map(read.outputName);
+  const duplicate = resultColumns.find((name, index) => resultColumns.indexOf(name) !== index);
+  if (duplicate) throw new Error(`派生结果「${view.view_title}」的输出列名「${duplicate}」重复`);
+  for (const order of view.order ?? []) {
+    if (!resultColumns.includes(order.by)) {
+      throw new Error(
+        `派生结果「${view.view_title}」的排序列「${order.by}」不在输出列中；` +
+          `输出列：${resultColumns.join("、")}`,
+      );
+    }
+  }
+}
+
+/** 物理派生节点的引用、join 元数与输出列约束。 */
 export function validateDerivedGraphView<Column>(
   view: DerivedGraphNode<Column>,
   views: readonly GraphNode[],
@@ -63,23 +96,5 @@ export function validateDerivedGraphView<Column>(
   if (view.from.length === 1 && view.join) {
     throw new Error(`派生视图「${view.view_title}」只引用一个视图时不能声明 join`);
   }
-  const allowed = new Set(view.from);
-  for (const column of view.columns) {
-    for (const operand of read.operands(column)) {
-      if (!allowed.has(operand.source)) {
-        throw new Error(
-          `派生视图「${view.view_title}」${operand.label ? `的列 ${operand.label} ` : ""}` +
-            `引用了未在 from 声明的视图 ${operand.source}`,
-        );
-      }
-    }
-  }
-  const resultColumns = view.columns.map(read.outputName);
-  const duplicate = resultColumns.find((name, index) => resultColumns.indexOf(name) !== index);
-  if (duplicate) throw new Error(`派生视图「${view.view_title}」的输出列名「${duplicate}」重复`);
-  for (const order of view.order ?? []) {
-    if (!resultColumns.includes(order.by)) {
-      throw new Error(`派生视图「${view.view_title}」的排序列「${order.by}」不在输出列中`);
-    }
-  }
+  validateDerivedColumns(view, view.from, read);
 }

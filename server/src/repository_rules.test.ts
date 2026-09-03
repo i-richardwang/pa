@@ -200,13 +200,13 @@ function trackedSymlinks(): string[] {
   return entries;
 }
 
-test("pa-analytics 教学采用唯一 sink 交付模型", async () => {
+test("pa-analytics 教学以合并宽表为先，派生只是唯一交付出口", async () => {
   const patterns = await readFile(new URL(skillQueryPatterns, root), "utf8");
-  for (const marker of ["唯一", "sink", "provenance", "多次 `run_analysis`"]) {
-    expect(patterns.includes(marker), `query_patterns 缺唯一 sink 交付模型标记「${marker}」`).toBe(
-      true,
-    );
+  for (const marker of ["同一个查询", "derived", "provenance", "多次 `run_analysis`"]) {
+    expect(patterns.includes(marker), `query_patterns 缺交付模型标记「${marker}」`).toBe(true);
   }
+  // 结果图的形状已由 schema 表达，教学不再复述它，否则两份说法会各自过期。
+  expect(patterns).not.toContain("sink");
 });
 
 test("记录投影教学使用唯一领域语言", async () => {

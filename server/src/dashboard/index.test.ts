@@ -313,7 +313,7 @@ describe("dashboard app routes and access control", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         analysis: {
-          views: [
+          queries: [
             {
               id: "result",
               measures: ["measure:active_employee_count"],

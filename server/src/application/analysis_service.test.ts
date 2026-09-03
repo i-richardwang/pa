@@ -23,8 +23,8 @@ const principal: Principal = { email: "alice@x", roles: ["user"], accessScope: {
 const definition: AnalysisDefinition = semanticAnalysisOf(STRUCTURE_ARGS).analysis;
 const barIntent: SemanticViewIntent = {
   type: "bar",
-  category: "test_people_metrics.category_level",
-  series: ["test_people_metrics.active_employee_count"],
+  category: "dimension:category_level",
+  series: ["measure:active_employee_count"],
 };
 
 const compiled = {
@@ -45,7 +45,7 @@ const compiled = {
 };
 
 const pivotDefinition: AnalysisDefinition = {
-  views: [
+  queries: [
     {
       id: "structure",
       measures: ["measure:active_employee_count"],
@@ -293,5 +293,42 @@ describe("analysis service 身份与呈现边界", () => {
     expect(replayed.intent.type).toBe("table");
     expect(replayed.presentation.type).toBe("table");
     expect(current.executions()).toBe(3);
+  });
+
+  test("定义被拒同样留下使用记录：最常见的失败不能在观察面上消失", async () => {
+    const logged: { outcome: string; error?: string; tool: string }[] = [];
+    const service = createAnalysisService({
+      repository: createAnalysisRepository(createTestAppDatabase()),
+      plan: async () => {
+        throw new Error("不应规划");
+      },
+      execute: async () => {
+        throw new Error("不应执行");
+      },
+      usage: {
+        log: async (record) => {
+          logged.push({
+            outcome: record.outcome,
+            ...(record.error ? { error: record.error } : {}),
+            tool: record.tool,
+          });
+        },
+      },
+    });
+    await expect(
+      service.run(
+        principal,
+        {
+          queries: [
+            { ...definition.queries[0], id: "a" },
+            { ...definition.queries[0], id: "b" },
+          ],
+        },
+        { type: "table" },
+      ),
+    ).rejects.toThrow(/合并进一个查询/);
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatchObject({ tool: "run_analysis", outcome: "error" });
+    expect(logged[0].error).toMatch(/合并进一个查询/);
   });
 });

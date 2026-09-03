@@ -7,6 +7,10 @@
 import { describe, expect, test } from "bun:test";
 import type { CubeView, TimeContext } from "../ports/cube_gateway.js";
 import { parseAnalysisSpec } from "../semantic_core/analysis_spec.js";
+import {
+  parseAnalysisDefinition,
+  parseSemanticViewIntent,
+} from "../semantic_core/semantic_analysis.js";
 import { observationScopes } from "./catalog_document.js";
 import { planTimeQuery } from "../test_support/planning.js";
 
@@ -88,7 +92,7 @@ describe("拒绝文案", () => {
           views: [
             { id: "source", measures: ["flow.active_employee_count"], time: {} },
             {
-              id: "derived",
+              id: "combined",
               view_title: "派生",
               from: ["missing"],
               columns: [{ col: "active_employee_count", source: "missing" }],
@@ -144,6 +148,56 @@ describe("拒绝文案", () => {
     for (const run of cases) {
       expect(errorMessage(run)).toMatch(/请|必须|只能|删除|拆|改用|改为/);
     }
+  });
+
+  /**
+   * 每条用例都来自真实会话里 Agent 走进的死路：文案要么指向唯一正确的改法，
+   * 要么点名当前可用的取值。反向断言保证合法写法不被这些护栏误伤。
+   */
+  test("Agent 走过的死路各自有唯一出口", () => {
+    const query = (id: string) => ({
+      id,
+      measures: ["measure:active_employee_count"],
+      time: { window: { kind: "current_month" as const } },
+    });
+
+    // 并列两组指标：正确的改法是合并 measures，不是拆成多次调用。
+    const parallel = errorMessage(() =>
+      parseAnalysisDefinition({ queries: [query("headcount"), query("turnover")] }),
+    );
+    expect(parallel).toMatch(/合并进一个查询/);
+    expect(parallel).not.toMatch(/拆成多次 run_analysis 调用$/);
+
+    // 指标 id 写进表格列轴：文案要说清列轴的词汇，而不是「不在查询中」。
+    expect(
+      errorMessage(() =>
+        parseSemanticViewIntent({
+          type: "table",
+          columns: ["time", "measure:active_employee_count"],
+        }),
+      ),
+    ).toMatch(/列轴|分类通道/);
+
+    // 维度画成系列、指标当分类轴：跨通道引用在解析期就点名通道。
+    expect(
+      errorMessage(() =>
+        parseSemanticViewIntent({ type: "bar", series: ["dimension:organization_name"] }),
+      ),
+    ).toMatch(/指标通道/);
+    expect(
+      errorMessage(() =>
+        parseSemanticViewIntent({ type: "bar", category: "measure:active_employee_count" }),
+      ),
+    ).toMatch(/分类通道/);
+
+    // 反向：合法写法必须过，省略 dimensions / filters 是正确的「没有」。
+    expect(() => parseAnalysisDefinition({ queries: [query("result")] })).not.toThrow();
+    expect(() =>
+      parseSemanticViewIntent({ type: "table", columns: ["time", "dimension:org"] }),
+    ).not.toThrow();
+    expect(() =>
+      parseSemanticViewIntent({ type: "bar", category: "dimension:org", series: ["measure:x"] }),
+    ).not.toThrow();
   });
 
   test("零可见视图明确归因授权", () => {

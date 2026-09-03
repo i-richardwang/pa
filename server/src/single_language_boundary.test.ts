@@ -198,7 +198,7 @@ describe("单语言物理绑定不上线", () => {
   it("编译产出的语义路由只讲业务血缘，键集合全等", () => {
     const compiled = compileAnalysisView(toCompilerCatalog(DOCUMENT), {
       analysis: parseAnalysisDefinition({
-        views: [
+        queries: [
           {
             id: "v1",
             measures: [HEADCOUNT_ID],

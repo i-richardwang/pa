@@ -118,7 +118,7 @@ try {
       name: "组织人员规模",
       analysis: {
         title: "按组织查看月末在职人数与平均年龄",
-        views: [
+        queries: [
           {
             id: "workforce",
             measures: [active, averageAge],
@@ -134,7 +134,7 @@ try {
       name: "入离职率趋势",
       analysis: {
         title: "本年逐月入职率与离职率趋势",
-        views: [
+        queries: [
           {
             id: "movement",
             measures: [hireRate, turnoverRate],
@@ -148,7 +148,7 @@ try {
       name: "组织编制达成率",
       analysis: {
         title: "按组织查看月末人数、计划编制与达成率",
-        views: [
+        queries: [
           {
             id: "staffing",
             measures: [active, planned, fulfillment],
@@ -164,7 +164,7 @@ try {
       name: "Q12组织敬业度",
       analysis: {
         title: "按组织查看最近一期Q12得分、正向作答率与回复率",
-        views: [
+        queries: [
           {
             id: "engagement",
             measures: [q12Average, q12Favorable, q12Response, q12Respondents],
@@ -180,7 +180,7 @@ try {
       name: "Q12层级得分",
       analysis: {
         title: "按组织比较最近一期Q12四个层级的平均得分",
-        views: [
+        queries: [
           {
             id: "engagement_layers",
             measures: [q12BasicNeeds, q12IndividualContribution, q12Teamwork, q12Growth],

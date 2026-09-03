@@ -164,12 +164,12 @@ describe("AnalysisSpec", () => {
     ).not.toThrow();
   });
 
-  test("一次分析必须恰好收敛到一个结果，多余顶层字段一律拒绝", () => {
+  test("执行图必须恰好收敛到一个结果，多余顶层字段一律拒绝", () => {
     expect(() =>
       parseAnalysisSpec({
         views: [query("current"), query("previous", "2025-07")],
       }),
-    ).toThrow(/一次分析只能回答一个问题.*拆成多次 run_analysis 调用/);
+    ).toThrow(/执行图必须恰好收敛到一个结果/);
     expect(() => parseAnalysisSpec({ views: [query("current")], outputs: ["current"] })).toThrow(
       /分析规格无效/,
     );
@@ -341,7 +341,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     };
   };
   const pivotDefinition = {
-    views: [
+    queries: [
       {
         id: "result",
         measures: ["measure:active_employee_count"],
@@ -526,6 +526,33 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     expect(runAnalysisInput).not.toContain('"years_ago"');
     expect(runAnalysisInput).not.toContain('"alignment"');
     expect(runAnalysisInput).not.toContain('"windows"');
+    // 客户端只拿得到这份 JSON Schema：形状表达不出的约束，调用方在本地就无法自愈。
+    const analysisSchema = findJsonObject(tools.run_analysis?.inputSchema, (candidate) => {
+      const properties = candidate.properties;
+      return typeof properties === "object" && properties !== null && "queries" in properties;
+    });
+    const analysisProperties = analysisSchema?.properties as JsonObject;
+    const queriesSchema = analysisProperties.queries as JsonObject;
+    expect(queriesSchema.maxItems).toBe(2);
+    // 查询节点不是联合：客户端报错能落到具体字段，而不是「不匹配任何分支」。
+    expect(queriesSchema.items).not.toHaveProperty("anyOf");
+    expect(analysisProperties).toHaveProperty("derived");
+    expect(analysisSchema).not.toHaveProperty("properties.views");
+    const tableColumnsSchema = findJsonObject(tools.run_analysis?.inputSchema, (candidate) => {
+      const items = candidate.items;
+      return (
+        typeof candidate.description === "string" &&
+        candidate.description.startsWith("table 专用有序列轴") &&
+        typeof items === "object" &&
+        items !== null
+      );
+    });
+    const columnItems = tableColumnsSchema?.items as JsonObject;
+    const columnPattern = new RegExp(columnItems.pattern as string);
+    expect(columnPattern.test("time")).toBe(true);
+    expect(columnPattern.test("dimension:organization_name")).toBe(true);
+    expect(columnPattern.test("measure:active_employee_count")).toBe(false);
+
     const filterSchema = findJsonObject(tools.run_analysis?.inputSchema, (candidate) => {
       const properties = candidate.properties;
       return (
@@ -651,7 +678,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
         analysis_id: baseAnalysisId,
         view: {
           type: "bar",
-          category: "test_people_metrics.organization_name",
+          category: "dimension:organization_name",
         },
       },
     });
@@ -722,9 +749,9 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
       name: "run_analysis",
       arguments: {
         analysis: {
-          views: [
-            { ...pivotDefinition.views[0], id: "first" },
-            { ...pivotDefinition.views[0], id: "second" },
+          queries: [
+            { ...pivotDefinition.queries[0], id: "first" },
+            { ...pivotDefinition.queries[0], id: "second" },
           ],
         },
         view: { type: "table" },
@@ -734,7 +761,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     expect(mcpToolError(invalidAnalysis)).toEqual({
       error: {
         code: "invalid_request",
-        message: expect.stringContaining("一次分析只能回答一个问题"),
+        message: expect.stringContaining("合并进一个查询"),
       },
     });
 

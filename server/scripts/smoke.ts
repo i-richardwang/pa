@@ -76,7 +76,7 @@ try {
           arguments: {
             analysis: {
               title: "公开 Demo 月末人员规模",
-              views: [
+              queries: [
                 {
                   id: "workforce",
                   measures: [active],

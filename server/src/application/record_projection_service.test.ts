@@ -256,7 +256,7 @@ function reportDocumentOf(fixture: AnalysisViewFixture, revision: number) {
 
 const spec: AnalysisViewFixture = {
   analysis: {
-    views: [
+    queries: [
       {
         id: "result",
         measures: ["measure:active_employee_count"],
@@ -271,9 +271,9 @@ const spec: AnalysisViewFixture = {
 const rateSpec: AnalysisViewFixture = {
   ...spec,
   analysis: {
-    views: [
+    queries: [
       {
-        ...spec.analysis.views[0],
+        ...spec.analysis.queries[0],
         measures: ["measure:ytd_event_rate"],
       },
     ],
@@ -429,7 +429,7 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
     currentMonth("2026-06"),
   );
   expect(boardResult.rows).toHaveLength(1);
-  const effectiveView = compiledDefinitions.at(-1)?.views[0];
+  const effectiveView = compiledDefinitions.at(-1)?.queries[0];
   expect(effectiveView && "time" in effectiveView ? effectiveView.time : null).toEqual(
     currentMonth("2026-06"),
   );
@@ -570,7 +570,7 @@ test("去重人数先按实体分页，再从贡献记录中稳定选择每人�
   expect(metric).toBeDefined();
   const entitySpec: AnalysisViewFixture = {
     analysis: {
-      views: [
+      queries: [
         {
           id: "result",
           measures: [metric!.id],
@@ -815,7 +815,7 @@ test("隐藏 source 不是交付结果，不能通过手写 result_view_id 投�
   const document = buildCatalogDocument(fixtureViews);
   const derivedSpec: AnalysisViewFixture = {
     analysis: {
-      views: [
+      queries: [
         {
           id: "source",
           view_title: "组织在职人数数据",
@@ -823,24 +823,22 @@ test("隐藏 source 不是交付结果，不能通过手写 result_view_id 投�
           dimensions: ["dimension:organization_name"],
           time: currentMonth("2026-07"),
         },
-        {
-          id: "result",
-          view_title: "在职人数",
-          from: ["source"],
-          columns: [
-            {
-              source: "source",
-              member: "dimension:organization_name",
-              as: "组织",
-            },
-            {
-              source: "source",
-              member: "measure:active_employee_count",
-              as: "在职人数",
-            },
-          ],
-        },
       ],
+      derived: {
+        view_title: "在职人数",
+        columns: [
+          {
+            source: "source",
+            member: "dimension:organization_name",
+            as: "org",
+          },
+          {
+            source: "source",
+            member: "measure:active_employee_count",
+            as: "headcount",
+          },
+        ],
+      },
     },
     view: { type: "table" },
   };
@@ -893,7 +891,7 @@ test("Agent 名单从单一聚合结果格投影记录，分类条件保留在�
   const catalog = toCompilerCatalog(document);
   const listSpec: AnalysisViewFixture = {
     analysis: {
-      views: [
+      queries: [
         {
           id: "result",
           measures: ["measure:active_employee_count"],

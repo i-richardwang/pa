@@ -1,8 +1,7 @@
 import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
 import type { ReplayPayload } from "@contracts/replay_contract";
 import {
-  isSemanticDerivedView,
-  semanticAnalysisSink,
+  semanticResultView,
   type SemanticAnalysisView,
   type SemanticViewIntent,
   type SemanticQueryView,
@@ -61,7 +60,7 @@ export const DEFAULT_TIME_WINDOW = {
 export function blankAnalysisDefinition(title: string): AnalysisDefinition {
   return {
     title,
-    views: [{ id: "result", time: { window: DEFAULT_TIME_WINDOW.current_month } }],
+    queries: [{ id: "result", time: { window: DEFAULT_TIME_WINDOW.current_month } }],
   };
 }
 
@@ -100,14 +99,8 @@ export function analysisReadiness(
   draft: Pick<AnalysisEditState, "analysis">,
   catalog: CatalogPayload,
 ): { issues: AnalysisReadinessIssue[]; time?: TimeSelectionResult } {
-  const viewId = semanticAnalysisSink(draft.analysis.views);
-  const view = draft.analysis.views.find((candidate) => candidate.id === viewId);
-  if (!view) {
-    return {
-      issues: [{ code: "analysis_unavailable", message: "分析缺少可执行的结果视图" }],
-    };
-  }
-  if (isSemanticDerivedView(view)) return { issues: [] };
+  const view = semanticSinkQueryView(draft.analysis);
+  if (!view) return { issues: [] };
   const issues: AnalysisReadinessIssue[] = [];
   const hasMembers = (view.measures?.length ?? 0) + (view.dimensions?.length ?? 0) > 0;
   if (!hasMembers) {
@@ -221,8 +214,7 @@ export function renameAnalysisDraft(draft: AnalysisEditState, name: string): Ana
 }
 
 export function semanticSummaryEnabled(draft: Pick<AnalysisEditState, "analysis">): boolean {
-  const viewId = semanticAnalysisSink(draft.analysis.views);
-  return draft.analysis.views.find((view) => view.id === viewId)?.summary?.mode === "grand_total";
+  return semanticResultView(draft.analysis).summary?.mode === "grand_total";
 }
 
 export function setSemanticSummary(
@@ -230,19 +222,17 @@ export function setSemanticSummary(
   enabled: boolean,
   catalog: CatalogPayload,
 ): AnalysisEditState {
-  const viewId = semanticAnalysisSink(draft.analysis.views);
-  const views = draft.analysis.views.map((view) => {
-    if (view.id !== viewId) return view;
-    if (enabled) return { ...view, summary: { mode: "grand_total" as const } };
-    const { summary: _summary, ...rest } = view;
-    return rest;
-  });
-  const resultView = views.find((view) => view.id === viewId);
-  const viewIntent = resultView ? normalizeViewIntent(draft.view, resultView, catalog) : draft.view;
+  const current = semanticSinkQueryView(draft.analysis);
+  if (!current) return draft;
+  const { summary: _summary, ...withoutSummary } = current;
+  const resultView: SemanticQueryView = enabled
+    ? { ...current, summary: { mode: "grand_total" as const } }
+    : withoutSummary;
+  const viewIntent = normalizeViewIntent(draft.view, resultView, catalog);
   const preferences = normalizeViewPreferences(draft.view_preferences, viewIntent);
   return {
     ...draft,
-    analysis: { ...draft.analysis, views },
+    analysis: { ...draft.analysis, queries: [resultView] },
     view: viewIntent,
     view_preferences: preferences,
     previewed_analysis: null,
@@ -255,7 +245,7 @@ export function semanticViewContext(
   view: SemanticAnalysisView,
   catalog: CatalogPayload,
 ): { measures: string[]; dimensions: string[] } {
-  if (!isSemanticDerivedView(view)) {
+  if (!("columns" in view)) {
     return {
       measures: [...(view.measures ?? []), ...(view.calculations ?? []).map(({ id }) => id)],
       dimensions: view.dimensions ?? [],
@@ -284,7 +274,7 @@ function shareAnnotations(
   catalog: CatalogPayload,
   series: string[],
 ): string[] {
-  if (type !== "bar" || isSemanticDerivedView(view)) return [];
+  if (type !== "bar" || "columns" in view) return [];
   return semanticViewContext(view, catalog).measures.filter((member) => {
     const local = view.calculations?.find((calculation) => calculation.id === member);
     const relation = local
@@ -429,10 +419,7 @@ export function setSemanticViewIntent(
   chart: SemanticViewIntent,
   catalog: CatalogPayload,
 ): AnalysisEditState {
-  const viewId = semanticAnalysisSink(draft.analysis.views);
-  const view = draft.analysis.views.find((candidate) => candidate.id === viewId);
-  if (!view) return draft;
-  const normalized = normalizeViewIntent(chart, view, catalog);
+  const normalized = normalizeViewIntent(chart, semanticResultView(draft.analysis), catalog);
   return {
     ...draft,
     view_preferences: normalizeViewPreferences(draft.view_preferences, normalized),
@@ -449,15 +436,12 @@ export function setSemanticQueryView(
   nextView: SemanticQueryView,
   catalog: CatalogPayload,
 ): AnalysisEditState {
-  const current = draft.analysis.views.find((view) => view.id === viewId);
-  if (!current || isSemanticDerivedView(current)) return draft;
-  const views = draft.analysis.views.map((view) => (view.id === viewId ? clone(nextView) : view));
-  const resultId = semanticAnalysisSink(views);
-  const viewIntent =
-    resultId === viewId ? normalizeViewIntent(draft.view, nextView, catalog) : draft.view;
+  const current = semanticSinkQueryView(draft.analysis);
+  if (!current || current.id !== viewId) return draft;
+  const viewIntent = normalizeViewIntent(draft.view, nextView, catalog);
   return {
     ...draft,
-    analysis: { ...draft.analysis, views },
+    analysis: { ...draft.analysis, queries: [clone(nextView)] },
     view: viewIntent,
     view_preferences: normalizeViewPreferences(draft.view_preferences, viewIntent),
     previewed_analysis: null,
@@ -467,14 +451,12 @@ export function setSemanticQueryView(
 }
 
 /**
- * 语义收敛点的查询视图：存在任何派生视图即整体只读（null）——与查询分区同一严格规则，
+ * 编辑器只处理直接交付的单查询：声明了 derived 或多个查询即整体只读（null）——
  * 时间栏与 Inspector 对「可编辑」的判定不允许分叉。
  */
 export function semanticSinkQueryView(analysis: AnalysisDefinition): SemanticQueryView | null {
-  if (analysis.views.some(isSemanticDerivedView)) return null;
-  const sinkId = semanticAnalysisSink(analysis.views);
-  const view = analysis.views.find((candidate) => candidate.id === sinkId);
-  return view && !isSemanticDerivedView(view) ? view : null;
+  if (analysis.derived || analysis.queries.length !== 1) return null;
+  return analysis.queries[0];
 }
 
 /**
@@ -559,9 +541,8 @@ export function defaultSemanticViewIntent(
   catalog: CatalogPayload,
   result?: ViewBlock,
 ): SemanticViewIntent {
-  const viewId = semanticAnalysisSink(draft.analysis.views);
-  const view = draft.analysis.views.find((candidate) => candidate.id === viewId);
-  if (!view || type === "table") return { type: "table" };
+  const view = semanticResultView(draft.analysis);
+  if (type === "table") return { type: "table" };
   if (type === "kpi") return normalizeViewIntent({ type }, view, catalog);
   const { measures, dimensions } = semanticViewContext(view, catalog);
   const proposal = result ? proposeChartDecl(result, type) : null;

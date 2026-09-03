@@ -3,7 +3,7 @@ import type { AnalysisDefinition } from "../semantic_core/semantic_analysis.js";
 import { applyBoardTimeOverride } from "./board_time_override.js";
 
 const singleView: AnalysisDefinition = {
-  views: [
+  queries: [
     {
       id: "result",
       measures: ["active_employee_count"],
@@ -27,16 +27,15 @@ describe("applyBoardTimeOverride", () => {
     };
     const result = applyBoardTimeOverride(singleView, override);
     expect(result.status).toBe("applied");
-    const view = result.definition.views[0];
-    expect("from" in view).toBe(false);
-    if ("from" in view) return;
+    const view = result.definition.queries[0];
+    expect(result.definition.derived).toBeUndefined();
     expect(view.time).toEqual(override);
     expect(view.time.comparison).toBeUndefined();
   });
 
   test("多 query view：unsupported，规格原样", () => {
     const multi: AnalysisDefinition = {
-      views: [
+      queries: [
         {
           id: "a",
           measures: ["active_employee_count"],
@@ -66,14 +65,18 @@ describe("applyBoardTimeOverride", () => {
 
   test("含派生视图：unsupported", () => {
     const derived: AnalysisDefinition = {
-      views: [
+      queries: [
         {
-          id: "joined",
-          view_title: "组合",
-          from: ["a"],
-          columns: [{ member: "active_employee_count", source: "a", as: "active_employee_count" }],
+          id: "a",
+          view_title: "来源",
+          measures: ["active_employee_count"],
+          time: { window: { kind: "current_month" } },
         },
       ],
+      derived: {
+        view_title: "组合",
+        columns: [{ member: "active_employee_count", source: "a", as: "active_employee_count" }],
+      },
     };
     const result = applyBoardTimeOverride(derived, {
       window: { kind: "trailing", count: 12, unit: "month", grain: "month" },

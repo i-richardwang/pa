@@ -89,10 +89,11 @@ export function semanticAnalysisOf(
     (view): view is QueryViewSpec => !isDerivedViewSpec(view),
   );
   const queryById = new Map(queryViews.map((view) => [view.id, view]));
+  const derivedView = analysis.views.find(isDerivedViewSpec);
   const definition = parseAnalysisDefinition({
     ...(analysis.title ? { title: analysis.title } : {}),
-    views: analysis.views.map((view) => {
-      if (!isDerivedViewSpec(view)) {
+    queries: queryViews.map((view) => {
+      {
         const groupSort = view.selection
           ? {
               dimension: semanticMember(view, view.selection.dimensions.at(-1)!),
@@ -141,46 +142,45 @@ export function semanticAnalysisOf(
           ...(groupSort ? { group_sort: groupSort } : {}),
         };
       }
-      return {
-        id: view.id,
-        view_title: view.view_title,
-        from: view.from,
-        ...(view.join
-          ? {
-              join: {
-                how: view.join.how,
-                on: view.join.on.map((binding) => {
-                  const left = queryById.get(view.from[0]);
-                  const right = queryById.get(view.from[1]);
-                  if (!left || !right) throw new Error("测试报告缺少 join 输入视图");
-                  const leftMember = semanticMember(left, binding.left);
-                  const rightMember = semanticMember(right, binding.right);
-                  if (leftMember !== rightMember) {
-                    throw new Error(
-                      `测试报告 join 字段 ${binding.left} / ${binding.right} 的语义成员不一致`,
-                    );
-                  }
-                  return leftMember;
-                }),
-              },
-            }
-          : {}),
-        columns: view.columns.map((column) =>
-          "col" in column
-            ? {
-                ...semanticOperand(queryById, column),
-                as: column.as ?? column.col,
-              }
-            : {
-                expr: semanticExpression(queryById, column.expr),
-                as: column.as,
-                ...(column.format ? { format: column.format } : {}),
-              },
-        ),
-        ...(view.order ? { order: view.order } : {}),
-        ...(view.limit ? { limit: view.limit } : {}),
-      };
     }),
+    ...(derivedView
+      ? {
+          derived: {
+            view_title: derivedView.view_title,
+            ...(derivedView.join
+              ? {
+                  join: {
+                    how: derivedView.join.how,
+                    on: derivedView.join.on.map((binding) => {
+                      const left = queryById.get(derivedView.from[0]);
+                      const right = queryById.get(derivedView.from[1]);
+                      if (!left || !right) throw new Error("测试报告缺少 join 输入视图");
+                      const leftMember = semanticMember(left, binding.left);
+                      const rightMember = semanticMember(right, binding.right);
+                      if (leftMember !== rightMember) {
+                        throw new Error(
+                          `测试报告 join 字段 ${binding.left} / ${binding.right} 的语义成员不一致`,
+                        );
+                      }
+                      return leftMember;
+                    }),
+                  },
+                }
+              : {}),
+            columns: derivedView.columns.map((column) =>
+              "col" in column
+                ? { ...semanticOperand(queryById, column), as: column.as ?? column.col }
+                : {
+                    expr: semanticExpression(queryById, column.expr),
+                    as: column.as,
+                    ...(column.format ? { format: column.format } : {}),
+                  },
+            ),
+            ...(derivedView.order ? { order: derivedView.order } : {}),
+            ...(derivedView.limit ? { limit: derivedView.limit } : {}),
+          },
+        }
+      : {}),
   });
   const view: SemanticViewIntent = (() => {
     const outputId = analysisSink(analysis.views);

@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { PRESENTATION_TYPE_SCHEMA } from "./presentation_type.js";
 import {
-  MAX_SEMANTIC_VIEWS,
+  MAX_SEMANTIC_QUERIES,
   parseAnalysisDefinition,
   SEMANTIC_VIEW_INTENT_INPUT,
 } from "./semantic_analysis.js";
 
 const specWithFilters = (filters: unknown[]) => ({
-  views: [
+  queries: [
     {
       id: "result",
       measures: ["measure:active_employee_count"],
@@ -17,11 +17,11 @@ const specWithFilters = (filters: unknown[]) => ({
   ],
 });
 
-test("视图预算只约束用户声明的语义查询图", () => {
+test("查询预算只约束用户声明的来源查询", () => {
   expect(() =>
     parseAnalysisDefinition({
-      views: Array.from({ length: MAX_SEMANTIC_VIEWS + 1 }, (_, index) => ({
-        id: `result_${index}`,
+      queries: Array.from({ length: MAX_SEMANTIC_QUERIES + 1 }, (_, index) => ({
+        id: `source_${index}`,
         measures: ["measure:active_employee_count"],
         time: { window: { kind: "current_month" } },
       })),
@@ -33,7 +33,7 @@ describe("semantic analysis filters", () => {
   test("语义成员必须携带种类前缀", () => {
     expect(() =>
       parseAnalysisDefinition({
-        views: [
+        queries: [
           {
             id: "result",
             measures: ["active_employee_count"],
@@ -55,7 +55,7 @@ describe("semantic analysis filters", () => {
         },
       ]),
     );
-    const view = parsed.views[0];
+    const view = parsed.queries[0];
     expect(view && !("from" in view) ? view.filters?.[0]?.values : undefined).toEqual([
       "部门乙",
       "部门甲",
@@ -111,7 +111,7 @@ describe("semantic analysis filters", () => {
 
 describe("semantic analysis group sort", () => {
   const grouped = (groupSort?: unknown) => ({
-    views: [
+    queries: [
       {
         id: "result",
         measures: ["measure:active_employee_count"],
@@ -124,7 +124,7 @@ describe("semantic analysis group sort", () => {
 
   test("省略分组排序即展示全部，不自动产生 Top 10", () => {
     const parsed = parseAnalysisDefinition(grouped());
-    const view = parsed.views[0];
+    const view = parsed.queries[0];
     expect(view && !("from" in view) ? view.group_sort : undefined).toBeUndefined();
   });
 
@@ -165,9 +165,9 @@ describe("semantic analysis group sort", () => {
     expect(() =>
       parseAnalysisDefinition({
         ...base,
-        views: [
+        queries: [
           {
-            ...base.views[0],
+            ...base.queries[0],
             order: [{ member: "measure:active_employee_count", direction: "desc" }],
           },
         ],
@@ -176,9 +176,9 @@ describe("semantic analysis group sort", () => {
     expect(() =>
       parseAnalysisDefinition({
         ...base,
-        views: [
+        queries: [
           {
-            ...base.views[0],
+            ...base.queries[0],
             selection: {
               type: "top_n",
               grain: ["dimension:organization_name"],
@@ -196,7 +196,7 @@ describe("semantic analysis group sort", () => {
 
 describe("semantic analysis report calculations", () => {
   const calculated = (overrides: Record<string, unknown> = {}) => ({
-    views: [
+    queries: [
       {
         id: "result",
         measures: ["measure:active_employee_count"],

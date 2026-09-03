@@ -68,10 +68,10 @@ describe("export capability", () => {
     ).toBeUndefined();
   });
 
-  test("多个独立终点不是合法分析", () => {
+  test("多个独立终点不是合法执行图", () => {
     expect(() =>
       planExecution({ views: [query("first"), query("second")] }, { delivery: "identity" }),
-    ).toThrow(/一次分析只能回答一个问题/);
+    ).toThrow(/执行图必须恰好收敛到一个结果/);
   });
 });
 

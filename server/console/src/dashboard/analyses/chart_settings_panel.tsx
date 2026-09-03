@@ -20,7 +20,7 @@ import { SERIES_COLORS } from "@charts";
 import { type ChartSpecContext, normalizeTableColumns, type TableAxis } from "@chart-spec";
 import { chartChannels, splitCandidates } from "@channels";
 import { memberShortName } from "@member";
-import type { SemanticViewIntent } from "@semantic-analysis";
+import { semanticResultView, type SemanticViewIntent } from "@semantic-analysis";
 import type { SeriesPreferences, TableShadingPreferences } from "@view-preferences";
 import {
   analyzeResultShape,
@@ -182,8 +182,7 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
 
   const resultView = replay.payload.view;
   const resultTitleOf = makeTitleOf(resultView);
-  const semanticView = draft.analysis.views.find((view) => view.id === resultView.id) ?? null;
-  const context = semanticView ? semanticViewContext(semanticView, catalog) : null;
+  const context = semanticViewContext(semanticResultView(draft.analysis), catalog);
   const titleOf = (member: string) =>
     [...catalog.measures, ...catalog.dimensions].find((item) => item.id === member)?.title ??
     resultTitleOf(member);

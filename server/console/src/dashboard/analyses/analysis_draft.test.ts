@@ -67,7 +67,7 @@ const catalog: CatalogPayload = {
 
 const definition: AnalysisDefinition = {
   title: "组织人数",
-  views: [
+  queries: [
     {
       id: "result",
       measures: ["measure:active_employee_count", "measure:new_hire_count"],
@@ -376,7 +376,7 @@ describe("analysis draft 三层状态", () => {
         name: "年度分析",
         analysis: {
           title: "年度分析",
-          views: [
+          queries: [
             {
               id: "result",
               measures: [monthly.id],
@@ -409,7 +409,7 @@ describe("analysis draft 三层状态", () => {
         name: "历史分析",
         analysis: {
           title: "历史分析",
-          views: [
+          queries: [
             {
               id: "result",
               measures: ["measure:active_employee_count"],
@@ -437,21 +437,17 @@ describe("analysis draft 三层状态", () => {
 
   test("派生分析没有唯一可编辑查询收敛点", () => {
     const derived: AnalysisDefinition = {
-      views: [
-        definition.views[0]!,
-        {
-          id: "derived",
-          view_title: "派生结果",
-          from: ["result"],
-          columns: [
-            {
-              source: "result",
-              member: "measure:active_employee_count",
-              as: "active_employee_count",
-            },
-          ],
-        },
-      ],
+      queries: [{ ...definition.queries[0]!, view_title: "来源" }],
+      derived: {
+        view_title: "派生结果",
+        columns: [
+          {
+            source: "result",
+            member: "measure:active_employee_count",
+            as: "active_employee_count",
+          },
+        ],
+      },
     };
     expect(semanticSinkQueryView(derived)).toBeNull();
   });

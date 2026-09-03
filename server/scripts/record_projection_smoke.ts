@@ -89,7 +89,7 @@ try {
 
   const definition: AnalysisDefinition = {
     title: "公开 Demo 人员明细",
-    views: [
+    queries: [
       {
         id: "organization_summary",
         measures: [active.id],

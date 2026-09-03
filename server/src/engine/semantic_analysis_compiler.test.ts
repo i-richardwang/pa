@@ -147,7 +147,7 @@ const catalog: CompilerCatalog = {
       ...member(
         ACTIVE_EMPLOYEE,
         "test_people_metrics.active_employee_count",
-        "在职人数",
+        "headcount",
         "measure",
         [["test_people_metrics", "test_people_metrics.active_employee_count"]],
         undefined,
@@ -211,7 +211,7 @@ describe("semantic analysis compiler", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
         title: "组织内年龄段结构",
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE],
@@ -262,7 +262,7 @@ describe("semantic analysis compiler", () => {
     try {
       compileAnalysisView(catalog, {
         analysis: {
-          views: [
+          queries: [
             {
               id: "result",
               measures: [ACTIVE_EMPLOYEE],
@@ -300,7 +300,7 @@ describe("semantic analysis compiler", () => {
   test("维度最大项数编译为层级补全后的私有选择规格，不生成物理行 limit", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE, YTD_EVENT_RATE],
@@ -343,7 +343,7 @@ describe("semantic analysis compiler", () => {
   test("按名称限制维度项数时，以目标维度自身作为私有排名字段", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE],
@@ -377,7 +377,7 @@ describe("semantic analysis compiler", () => {
     expect(() =>
       parseDefinitionFrom({
         analysis: {
-          views: [
+          queries: [
             {
               id: "result",
               measures: [ACTIVE_EMPLOYEE],
@@ -396,7 +396,7 @@ describe("semantic analysis compiler", () => {
     expect(() =>
       parseDefinitionFrom({
         analysis: {
-          views: [
+          queries: [
             {
               id: "result",
               measures: [ACTIVE_EMPLOYEE],
@@ -413,7 +413,7 @@ describe("semantic analysis compiler", () => {
     expect(() =>
       parseDefinitionFrom({
         analysis: {
-          views: [
+          queries: [
             {
               id: "source",
               view_title: "人员数据",
@@ -427,38 +427,32 @@ describe("semantic analysis compiler", () => {
                 max_items: 20,
               },
             },
-            {
-              id: "result",
-              view_title: "结果",
-              from: ["source"],
-              columns: [{ member: ACTIVE_EMPLOYEE, source: "source", as: "在职人数" }],
-            },
           ],
+          derived: {
+            view_title: "结果",
+            columns: [{ member: ACTIVE_EMPLOYEE, source: "source", as: "headcount" }],
+          },
         },
       }),
-    ).toThrow(/只能声明在唯一直接结果视图/);
+    ).toThrow(/只能声明在直接交付的查询上/);
   });
 
   test("公共语义规格对派生来源强制业务标题，独立直查不被额外约束", () => {
     expect(() =>
       parseDefinitionFrom({
         analysis: {
-          views: [
-            { id: "source", measures: [ACTIVE_EMPLOYEE], time: JULY_2026 },
-            {
-              id: "result",
-              view_title: "结果",
-              from: ["source"],
-              columns: [{ source: "source", member: ACTIVE_EMPLOYEE, as: "在职人数" }],
-            },
-          ],
+          queries: [{ id: "source", measures: [ACTIVE_EMPLOYEE], time: JULY_2026 }],
+          derived: {
+            view_title: "结果",
+            columns: [{ source: "source", member: ACTIVE_EMPLOYEE, as: "headcount" }],
+          },
         },
       }),
-    ).toThrow(/来源查询.*业务标题/);
+    ).toThrow(/每个来源查询都必须提供 view_title/);
     expect(() =>
       parseDefinitionFrom({
         analysis: {
-          views: [{ id: "standalone", measures: [ACTIVE_EMPLOYEE], time: JULY_2026 }],
+          queries: [{ id: "standalone", measures: [ACTIVE_EMPLOYEE], time: JULY_2026 }],
         },
       }),
     ).not.toThrow();
@@ -468,7 +462,7 @@ describe("semantic analysis compiler", () => {
     expect(() =>
       compileAnalysisView(catalog, {
         analysis: parseAnalysisDefinition({
-          views: [
+          queries: [
             {
               id: "result",
               measures: [ACTIVE_EMPLOYEE],
@@ -486,7 +480,7 @@ describe("semantic analysis compiler", () => {
     expect(() =>
       parseDefinitionFrom({
         analysis: {
-          views: [
+          queries: [
             {
               id: "result",
               unknown_field: "anything",
@@ -503,7 +497,7 @@ describe("semantic analysis compiler", () => {
   test("KPI 作为显式呈现直接编译，不注入图表通道", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE],
@@ -519,7 +513,7 @@ describe("semantic analysis compiler", () => {
   test("table 的语义列轴绑定编译为内部行列布局", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE],
@@ -540,7 +534,9 @@ describe("semantic analysis compiler", () => {
     const shading = { palette: "traffic_lights", flipped: true, thresholds: { mid: 0.5 } };
     const spec = {
       analysis: {
-        views: [{ id: "result", measures: [ACTIVE_EMPLOYEE], dimensions: [ORG], time: JULY_2026 }],
+        queries: [
+          { id: "result", measures: [ACTIVE_EMPLOYEE], dimensions: [ORG], time: JULY_2026 },
+        ],
       },
       view: { type: "table" as const },
     };
@@ -560,7 +556,7 @@ describe("semantic analysis compiler", () => {
   test("副轴系列与主系列一样投影为公共列身份，交付端才对得上结果列", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           { id: "result", measures: [ACTIVE_EMPLOYEE, YTD_EVENT_RATE], time: JAN_TO_JULY_2026 },
         ],
       },
@@ -575,7 +571,7 @@ describe("semantic analysis compiler", () => {
       catalog,
       {
         analysis: {
-          views: [
+          queries: [
             {
               id: "result",
               measures: [ACTIVE_EMPLOYEE],
@@ -608,7 +604,7 @@ describe("semantic analysis compiler", () => {
   test("table 列轴支持时间，业务维度轴拒绝总体行和未查询维度", () => {
     const temporal = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE],
@@ -625,7 +621,7 @@ describe("semantic analysis compiler", () => {
     expect(() =>
       compileAnalysisView(catalog, {
         analysis: {
-          views: [
+          queries: [
             {
               id: "result",
               measures: [ACTIVE_EMPLOYEE],
@@ -641,7 +637,7 @@ describe("semantic analysis compiler", () => {
     expect(() =>
       compileAnalysisView(catalog, {
         analysis: {
-          views: [
+          queries: [
             {
               id: "result",
               measures: [ACTIVE_EMPLOYEE],
@@ -658,7 +654,7 @@ describe("semantic analysis compiler", () => {
   test("同月在职人数与 YTD 事件率落到人员总览", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE, YTD_EVENT_RATE],
@@ -684,7 +680,7 @@ describe("semantic analysis compiler", () => {
       {
         result_view_id: "result",
         metrics: {
-          [ACTIVE_EMPLOYEE]: { metric_id: ACTIVE_EMPLOYEE, title: "在职人数" },
+          [ACTIVE_EMPLOYEE]: { metric_id: ACTIVE_EMPLOYEE, title: "headcount" },
           [YTD_EVENT_RATE]: { metric_id: YTD_EVENT_RATE, title: "YTD事件率" },
         },
         dimensions: {
@@ -698,7 +694,7 @@ describe("semantic analysis compiler", () => {
   test("部门在职人数与编制完成率落到人员与编制", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE, CURRENT_MONTH_FULFILLMENT_RATE],
@@ -718,14 +714,14 @@ describe("semantic analysis compiler", () => {
       dimensions: ["test_people_metrics.organization_name", "test_people_metrics.department_name"],
     });
     expect(compiled.record_projection_bindings.views[0]?.metrics).toEqual({
-      [ACTIVE_EMPLOYEE]: { metric_id: ACTIVE_EMPLOYEE, title: "在职人数" },
+      [ACTIVE_EMPLOYEE]: { metric_id: ACTIVE_EMPLOYEE, title: "headcount" },
     });
   });
 
   test("单值上级过滤同时约束查询输出与明细坐标", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE],
@@ -755,7 +751,7 @@ describe("semantic analysis compiler", () => {
   test("公开排除关系只在编译边界映射为物理 notEquals", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE],
@@ -780,7 +776,7 @@ describe("semantic analysis compiler", () => {
   test("多值下级过滤补出的上级同时进入查询输出与明细坐标", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE],
@@ -802,7 +798,7 @@ describe("semantic analysis compiler", () => {
   test("组织维度上的人员、离职与编制指标跨指标域原生直查", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE, YTD_EVENT_RATE, CURRENT_MONTH_FULFILLMENT_RATE],
@@ -848,7 +844,7 @@ describe("semantic analysis compiler", () => {
   test("人员与编制直查与明细共用单值上级过滤后的有效分组", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [YTD_EVENT_RATE, CURRENT_MONTH_FULFILLMENT_RATE],
@@ -880,7 +876,7 @@ describe("semantic analysis compiler", () => {
   test("人员单值维度与流动指标编译为直接查询", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [YTD_EVENT_RATE],
@@ -900,7 +896,7 @@ describe("semantic analysis compiler", () => {
     });
   });
 
-  test("多个独立结果在规划前被拒绝", () => {
+  test("并列的两组指标被拒时，文案指向合并而不是拆调用", () => {
     const view = (id: string) => ({
       id,
       measures: [YTD_EVENT_RATE, CURRENT_MONTH_FULFILLMENT_RATE],
@@ -909,20 +905,30 @@ describe("semantic analysis compiler", () => {
     });
     try {
       compileAnalysisView(catalog, {
-        analysis: { views: [view("first"), view("second")] },
+        analysis: { queries: [view("first"), view("second")] },
         view: { type: "table" },
       });
       throw new Error("预期单结果护栏失败");
     } catch (error) {
-      expect((error as Error).message).toMatch(/一次分析只能回答一个问题.*拆成多次/);
+      expect((error as Error).message).toMatch(/合并进一个查询/);
       expect((error as Error).message).not.toMatch(/Array|element|Zod/);
     }
+  });
+
+  test("三组并列指标在形状上就写不出来", () => {
+    const view = (id: string) => ({ id, measures: [ACTIVE_EMPLOYEE], time: JULY_2026 });
+    expect(() =>
+      compileAnalysisView(catalog, {
+        analysis: { queries: [view("a"), view("b"), view("c")] },
+        view: { type: "table" },
+      }),
+    ).toThrow(/分析定义无效/);
   });
 
   test("分子与结构占比显式分流为柱系列和辅助标注", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE, ACTIVE_EMPLOYEE_SHARE],
@@ -955,7 +961,7 @@ describe("semantic analysis compiler", () => {
   test("只选结构占比时它仍是一等柱系列", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE_SHARE],
@@ -978,7 +984,7 @@ describe("semantic analysis compiler", () => {
   test("趋势图中的分子与结构占比都是显式主系列", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "result",
             measures: [ACTIVE_EMPLOYEE, ACTIVE_EMPLOYEE_SHARE],
@@ -999,7 +1005,7 @@ describe("semantic analysis compiler", () => {
     expect(() =>
       compileAnalysisView(catalog, {
         analysis: {
-          views: [
+          queries: [
             {
               id: "result",
               measures: [ACTIVE_EMPLOYEE, ACTIVE_EMPLOYEE_SHARE],
@@ -1038,7 +1044,7 @@ describe("semantic analysis compiler", () => {
     };
     const compiled = compileAnalysisView(renamedCatalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "test_people_metrics",
             view_title: "人员数据",
@@ -1053,27 +1059,25 @@ describe("semantic analysis compiler", () => {
             dimensions: [DEPARTMENT],
             time: JULY_2026,
           },
-          {
-            id: "combined",
-            view_title: "人员与编制",
-            from: ["test_people_metrics", "staffing"],
-            join: { on: [DEPARTMENT], how: "left" },
-            columns: [
-              { source: "test_people_metrics", member: DEPARTMENT, as: "org" },
-              {
-                source: "test_people_metrics",
-                member: ACTIVE_EMPLOYEE,
-                as: "active_employee_count",
-              },
-              {
-                source: "staffing",
-                member: CURRENT_MONTH_FULFILLMENT_RATE,
-                as: "current_month_fulfillment_rate",
-              },
-            ],
-            summary: { mode: "grand_total" },
-          },
         ],
+        derived: {
+          view_title: "人员与编制",
+          join: { on: [DEPARTMENT], how: "left" },
+          columns: [
+            { source: "test_people_metrics", member: DEPARTMENT, as: "org" },
+            {
+              source: "test_people_metrics",
+              member: ACTIVE_EMPLOYEE,
+              as: "active_employee_count",
+            },
+            {
+              source: "staffing",
+              member: CURRENT_MONTH_FULFILLMENT_RATE,
+              as: "current_month_fulfillment_rate",
+            },
+          ],
+          summary: { mode: "grand_total" },
+        },
       },
       view: { type: "table" },
     });
@@ -1093,7 +1097,7 @@ describe("semantic analysis compiler", () => {
   test("派生视图按输出别名编译 table 列轴声明", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
-        views: [
+        queries: [
           {
             id: "source",
             view_title: "组织人数数据",
@@ -1101,23 +1105,21 @@ describe("semantic analysis compiler", () => {
             dimensions: [ORG, DEPARTMENT],
             time: JULY_2026,
           },
-          {
-            id: "result",
-            view_title: "组织人数",
-            from: ["source"],
-            columns: [
-              { source: "source", member: ORG, as: "一级组织" },
-              { source: "source", member: DEPARTMENT, as: "二级组织" },
-              { source: "source", member: ACTIVE_EMPLOYEE, as: "在职人数" },
-            ],
-          },
         ],
+        derived: {
+          view_title: "组织人数",
+          columns: [
+            { source: "source", member: ORG, as: "org_1" },
+            { source: "source", member: DEPARTMENT, as: "org_2" },
+            { source: "source", member: ACTIVE_EMPLOYEE, as: "headcount" },
+          ],
+        },
       },
-      view: { type: "table", columns: ["二级组织"] },
+      view: { type: "table", columns: ["org_2"] },
     });
     expect(compiled.presentation).toEqual({
       type: "table",
-      tableColumns: [{ kind: "field", column: "二级组织" }, { kind: "metrics" }],
+      tableColumns: [{ kind: "field", column: "org_2" }, { kind: "metrics" }],
     });
   });
 
@@ -1125,7 +1127,7 @@ describe("semantic analysis compiler", () => {
     expect(() =>
       compileAnalysisView(catalog, {
         analysis: {
-          views: [
+          queries: [
             {
               id: "source",
               view_title: "组织人数数据",
@@ -1133,24 +1135,22 @@ describe("semantic analysis compiler", () => {
               dimensions: [ORG, DEPARTMENT],
               time: JULY_2026,
             },
-            {
-              id: "result",
-              view_title: "组织人数",
-              from: ["source"],
-              columns: [
-                { source: "source", member: ORG, as: "一级组织" },
-                { source: "source", member: DEPARTMENT, as: "二级组织" },
-                { source: "source", member: ACTIVE_EMPLOYEE, as: "在职人数" },
-              ],
-            },
           ],
+          derived: {
+            view_title: "组织人数",
+            columns: [
+              { source: "source", member: ORG, as: "org_1" },
+              { source: "source", member: DEPARTMENT, as: "org_2" },
+              { source: "source", member: ACTIVE_EMPLOYEE, as: "headcount" },
+            ],
+          },
         },
         // 意图联合已让这个组合不可表达，此处刻意越过类型验运行时边界仍在拦。
         view: {
           type: "bar",
-          columns: ["二级组织"],
-          category: "一级组织",
-          series: ["在职人数"],
+          columns: ["org_2"],
+          category: "org_1",
+          series: ["headcount"],
         } as unknown as SemanticViewIntent,
       }),
     ).toThrow(/Unrecognized key.*columns/);
