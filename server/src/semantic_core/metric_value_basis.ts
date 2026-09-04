@@ -12,11 +12,17 @@ export const METRIC_VALUE_BASIS_INPUT = z
 
 export type MetricValueBasis = (typeof METRIC_VALUE_BASES)[number];
 
-/** 基准在一个业务桶上展开出的真实期间。执行与结果声明共用它，两边因此不会分叉。 */
+/**
+ * 基准在一个业务桶上展开出的真实期间。执行、结果声明与协议校验共用这一处展开。
+ *
+ * degraded 表示该指标在这个桶上没有合计（按月定义的指标遇上跨月桶），值只在桶末当月成立。
+ */
 export function basisPeriod(
   basis: MetricValueBasis,
   bucket: { from: string; to: string },
+  degraded = false,
 ): { from: string; to: string } {
+  if (degraded) return { from: bucket.to, to: bucket.to };
   switch (basis) {
     case "bucket_end":
       return { from: bucket.to, to: bucket.to };

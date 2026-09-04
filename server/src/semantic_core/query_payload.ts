@@ -401,9 +401,7 @@ export const VIEW_BLOCK_SCHEMA = z
           const coordinate = coordinates[periodIndex];
           // 声明的期间必须就是该列的求值基准在这个坐标上展开出来的那一段，一个字节都不许差。
           // 年初累计的起点会早于坐标起点（选七月看到的是一到七月），这是它的定义而不是越界。
-          const expected = period.degraded
-            ? { from: coordinate.to, to: coordinate.to }
-            : basisPeriod(basis, coordinate);
+          const expected = basisPeriod(basis, coordinate, period.degraded === true);
           if (period.from !== expected.from || period.to !== expected.to) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,

@@ -12,6 +12,7 @@ import {
   totalPeriodOf,
   type TimeInput,
 } from "./time_contract.js";
+import type { MetricTimeResolution } from "./metric_time_contract.js";
 
 function resolved(time: TimeInput, latest = "2026-07") {
   const result = resolveTimeSelection(time, latest);
@@ -285,51 +286,46 @@ describe("business time intent", () => {
 describe("整窗合计的求值期间", () => {
   const window = { from: "2025-06", to: "2026-07" };
 
+  const flow: MetricTimeResolution = {
+    contract: { aggregation: "sum", window: "selected" },
+    basis: "whole_bucket",
+  };
+  const snapshot: MetricTimeResolution = {
+    contract: { aggregation: "last", window: "selected" },
+    basis: "bucket_end",
+  };
+  const ytd: MetricTimeResolution = {
+    contract: { aggregation: "recompute", window: "year_to_date" },
+    basis: "year_start_to_bucket_end",
+  };
+  const monthly: MetricTimeResolution = {
+    contract: { aggregation: "recompute", window: "selected", grain: "month" },
+    basis: "whole_bucket",
+  };
+
   test("期间指标覆盖整个坐标，时点指标只覆盖终点当月", () => {
-    expect(totalPeriodOf("whole_bucket", {}, window)).toEqual({
-      ...window,
-      basis: "whole_bucket",
-    });
+    expect(totalPeriodOf(flow, window)).toEqual(window);
     // 快照指标的合计是终点当月的时点值，不是四年的什么东西。
-    expect(totalPeriodOf("bucket_end", {}, window)).toEqual({
-      from: "2026-07",
-      to: "2026-07",
-      basis: "bucket_end",
-    });
+    expect(totalPeriodOf(snapshot, window)).toEqual({ from: "2026-07", to: "2026-07" });
   });
 
   test("年初累计指标恒从终点所在年的一月起算，与坐标起点无关", () => {
-    expect(totalPeriodOf("year_start_to_bucket_end", { year_scoped: true }, window)).toEqual({
+    expect(totalPeriodOf(ytd, window)).toEqual({ from: "2026-01", to: "2026-07" });
+    // 同一日历年内也一样：值按年初归零，不因为坐标从三月起就少算两个月。
+    expect(totalPeriodOf(ytd, { from: "2026-03", to: "2026-07" })).toEqual({
       from: "2026-01",
       to: "2026-07",
-      basis: "year_start_to_bucket_end",
     });
-    // 同一日历年内也一样：值按年初归零，不因为坐标从三月起就少算两个月。
-    expect(
-      totalPeriodOf(
-        "year_start_to_bucket_end",
-        { year_scoped: true },
-        {
-          from: "2026-03",
-          to: "2026-07",
-        },
-      ),
-    ).toEqual({ from: "2026-01", to: "2026-07", basis: "year_start_to_bucket_end" });
   });
 
   test("按月定义的指标跨月即降级到终点当月，并显式标记；单月窗口不降级", () => {
-    const monthly = { grain: "month" } as const;
-    expect(totalPeriodOf("whole_bucket", monthly, window)).toEqual({
+    expect(totalPeriodOf(monthly, window)).toEqual({
       from: "2026-07",
       to: "2026-07",
-      basis: "whole_bucket",
       degraded: true,
     });
     const single = { from: "2026-07", to: "2026-07" };
-    expect(totalPeriodOf("whole_bucket", monthly, single)).toEqual({
-      ...single,
-      basis: "whole_bucket",
-    });
+    expect(totalPeriodOf(monthly, single)).toEqual(single);
   });
 
   test("能力卡由指标合同推导，与目录装配同出一源", () => {

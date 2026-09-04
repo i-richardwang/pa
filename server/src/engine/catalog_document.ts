@@ -242,7 +242,6 @@ function memberDocument(
   };
 }
 
-/** 公开时间合同必须与解析出的求值窗口一致。 */
 /** 一次遍历解出全部指标的业务求值基准；顺带守住「声明的 window 与解析结果不得背离」。 */
 function resolveMetricValueBases(views: CubeView[]): ReadonlyMap<string, MetricValueBasis> {
   const members = new Map<string, CubeMember>();

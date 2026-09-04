@@ -26,6 +26,7 @@ import {
   TEST_TIME_SOURCE_REGISTRY,
 } from "../test_support/semantic_taxonomy.js";
 import { planMetricQuery } from "../test_support/planning.js";
+import { resolveMetricTime } from "./metric_time.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
   buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY, {
@@ -77,6 +78,14 @@ const compiler = toCompilerCatalog(document);
 
 const cardOf = (id: string): TimeCapabilities =>
   semantic.measures.find((member) => member.id === id)?.time.constraints ?? {};
+
+const members = new Map(views.flatMap((view) => view.measures).map((m) => [m.name, m]));
+/** 指标的时间解析，与生产同源。 */
+const metricTimeOf = (name: string) => {
+  const member = members.get(`flow.${name}`);
+  if (!member) throw new Error(`fixture 缺指标 ${name}`);
+  return resolveMetricTime(member, members);
+};
 
 const basisOf = (id: string) => {
   const basis = semantic.measures.find((member) => member.id === id)?.time.value_basis;
@@ -234,16 +243,12 @@ test("年初归零不表现为显示档拒绝，合计位由求值基准写实�
   expect(basisOf("measure:ytd_event_rate")).toBe("year_start_to_bucket_end");
   expect(cardOf("measure:ytd_event_rate")).toEqual({ year_scoped: true });
   const crossYear = { from: "2024-01", to: "2026-07" };
-  expect(
-    totalPeriodOf(basisOf("measure:ytd_event_rate"), cardOf("measure:ytd_event_rate"), crossYear),
-  ).toEqual({
+  // 合计期间走生产同一条路：由指标自己的时间解析展开，不经过能力卡。
+  expect(totalPeriodOf(metricTimeOf("ytd_event_rate"), crossYear)).toEqual({
     from: "2026-01",
     to: "2026-07",
-    basis: "year_start_to_bucket_end",
   });
-  expect(
-    totalPeriodOf(basisOf("measure:turnover_count"), cardOf("measure:turnover_count"), crossYear),
-  ).toEqual({ ...crossYear, basis: "whole_bucket" });
+  expect(totalPeriodOf(metricTimeOf("turnover_count"), crossYear)).toEqual(crossYear);
 });
 
 test("年初归零的跨年总计在能力投影与生产路径返回同一结构化 issue", () => {

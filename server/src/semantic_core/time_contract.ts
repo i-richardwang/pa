@@ -1,10 +1,6 @@
 import { z } from "zod";
-import type { MetricTimeContract } from "./metric_time_contract.js";
-import {
-  basisPeriod,
-  METRIC_VALUE_BASIS_INPUT,
-  type MetricValueBasis,
-} from "./metric_value_basis.js";
+import type { MetricTimeContract, MetricTimeResolution } from "./metric_time_contract.js";
+import { basisPeriod, METRIC_VALUE_BASIS_INPUT } from "./metric_value_basis.js";
 
 const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -730,27 +726,24 @@ export function metricTimeSelectionIssue(
 }
 
 /**
- * 指标在一个时间坐标上的合计求值期间：由基准展开，degraded 另记。
+ * 指标在一个时间坐标上的合计求值期间。
  *
- * degraded 与基准正交——按月定义的指标在跨月坐标上没有合计可言，只能退到终点当月求值。
- * 它由能力卡判定并显式写出，消费方不必拿基准和起止月份去对比推断。
+ * degraded 与基准正交：按月定义的指标在跨月坐标上没有合计可言，只能退到终点当月求值。
+ * 它显式写出，消费方不必拿基准和起止月份去对比推断。
  */
 export type TotalPeriod = {
   from: string;
   to: string;
-  basis: MetricValueBasis;
   degraded?: true;
 };
 
+/** 期间只出自指标自己的时间解析——能力卡回答的是「用户能选什么」，与这里无关。 */
 export function totalPeriodOf(
-  basis: MetricValueBasis,
-  capabilities: TimeCapabilities,
+  time: MetricTimeResolution,
   coordinate: { from: string; to: string },
 ): TotalPeriod {
-  if (capabilities.grain === "month" && coordinate.from !== coordinate.to) {
-    return { from: coordinate.to, to: coordinate.to, basis, degraded: true };
-  }
-  return { ...basisPeriod(basis, coordinate), basis };
+  const degraded = time.contract.grain === "month" && coordinate.from !== coordinate.to;
+  return { ...basisPeriod(time.basis, coordinate, degraded), ...(degraded ? { degraded } : {}) };
 }
 
 /** 主期间的绝对起止；相对窗口按 latest 展开，截止月份形态起止同月。 */

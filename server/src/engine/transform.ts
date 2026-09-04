@@ -288,30 +288,29 @@ function zhMonth(value: string): string {
 }
 
 function businessTimeLabel(time: BusinessTimeResolution, basis: MetricValueBasis): string {
-  if (basis === "bucket_end") {
-    const points = bucketEndpoints(time);
-    if (points.length === 1) return `${zhMonth(points[0])}月末时点`;
-    if (time.outputGrain === "year") {
-      return points.map((point) => `${zhMonth(point)}月末时点`).join("、");
+  switch (basis) {
+    case "bucket_end": {
+      const points = bucketEndpoints(time);
+      if (points.length === 1) return `${zhMonth(points[0])}月末时点`;
+      if (time.outputGrain === "year") {
+        return points.map((point) => `${zhMonth(point)}月末时点`).join("、");
+      }
+      return `${zhMonth(points[0])}至${zhMonth(points[points.length - 1])}逐月月末时点`;
     }
-    return `${zhMonth(points[0])}至${zhMonth(points.at(-1)!)}逐月月末时点`;
+    case "whole_bucket":
+      return intervalRanges(time)
+        .map(({ from, to }) =>
+          from === to ? `${zhMonth(from)}当月` : `${zhMonth(from)}至${zhMonth(to)}期间`,
+        )
+        .join("、");
+    case "year_start_to_bucket_end":
+      return bucketEndpoints(time)
+        .map((cutoff) => {
+          const [year, month] = cutoff.split("-").map(Number);
+          return `${year}年1月至${month}月（YTD）`;
+        })
+        .join("、");
   }
-  if (basis === "whole_bucket") {
-    return intervalRanges(time)
-      .map(({ from, to }) =>
-        from === to ? `${zhMonth(from)}当月` : `${zhMonth(from)}至${zhMonth(to)}期间`,
-      )
-      .join("、");
-  }
-  if (basis === "year_start_to_bucket_end") {
-    return bucketEndpoints(time)
-      .map((cutoff) => {
-        const [year, month] = cutoff.split("-").map(Number);
-        return `${year}年1月至${month}月（YTD）`;
-      })
-      .join("、");
-  }
-  return "无法归一的业务期间";
 }
 
 function assertExpressionSemantics(

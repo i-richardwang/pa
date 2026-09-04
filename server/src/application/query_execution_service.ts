@@ -505,10 +505,14 @@ async function executeView(
     ),
   );
   // 求值基准同时进指标自己的说明：column_time_basis 是给程序读的，这句是给模型读的，同一个来源。
-  for (const semantics of sourceSemantics.columns.values()) {
-    if (!semantics.timeBasis) continue;
-    const note = notes.find((candidate) => candidate.member === semantics.member);
-    if (note) appendNote(note, basisNote(semantics.timeBasis));
+  const basisByMember = new Map(
+    [...sourceSemantics.columns.values()].flatMap((semantics) =>
+      semantics.timeBasis ? [[semantics.member, semantics.timeBasis] as const] : [],
+    ),
+  );
+  for (const note of notes) {
+    const basis = basisByMember.get(note.member);
+    if (basis) appendNote(note, basisNote(basis));
   }
   const modelStructureShares = structureSharesOf(baseMemberKeys, columns, visibleMembers);
   const columnOfMember = new Map(memberKeys.map((key, index) => [key, columns[index]]));

@@ -1,4 +1,5 @@
 import { completeHierarchy } from "../engine/hierarchy.js";
+import { physicalForm } from "../engine/metric_time.js";
 import type { Principal } from "../contracts/principal.js";
 import type {
   CubeGateway,
@@ -71,7 +72,7 @@ function selectedTime(
 ) {
   const { from, to } = coordinate;
   if (from > to) throw new RecordProjectionRequestError("明细时间范围无效，请刷新报告后重试");
-  if (target.basis === "whole_bucket" && from !== to) {
+  if (physicalForm(target.basis) === "interval" && from !== to) {
     return { range: { from, to }, grain: "total" as const };
   }
   return { cutoff: to };

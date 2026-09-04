@@ -63,8 +63,9 @@ meta:
 | `year_start_to_bucket_end` | 业务桶末月所在日历年的一月至末月。 |
 
 `constraints` 只承载选择限制：`grain: month` 限制跨月查询的输出粒度，`year_scoped` 表示整段读数不能跨
-日历年，`comparison: explicit_only` 表示该时间源只接受明确的自定义对照。按月定义的指标在跨月坐标上
-没有整段值时，合计位退到终点月并标记 `degraded`。
+日历年，`comparison: explicit_only` 表示该时间源只接受明确的自定义对照。它回答不了任何「这个数覆盖
+哪一段」的问题——包括合计位：按月定义的指标在跨月坐标上没有整段值，合计位退到终点月并标记
+`degraded`，这一判定同样出自指标合同的 `grain`。
 
 ## 3. 时间来源由语义包声明
 

@@ -1,14 +1,9 @@
 import type { CubeMember } from "../ports/cube_gateway.js";
 import {
   parseMetricTimeContract,
-  type MetricTimeContract,
+  type MetricTimeResolution,
 } from "../semantic_core/metric_time_contract.js";
 import type { MetricValueBasis } from "../semantic_core/metric_value_basis.js";
-
-export type ResolvedMetricTime = {
-  contract: MetricTimeContract;
-  basis: MetricValueBasis;
-};
 
 function qualify(member: CubeMember, reference: string): string {
   return reference.includes(".") ? reference : `${member.name.split(".")[0]}.${reference}`;
@@ -29,7 +24,7 @@ export function resolveMetricTime(
   member: CubeMember,
   members: ReadonlyMap<string, CubeMember>,
   resolving: Set<string> = new Set(),
-): ResolvedMetricTime {
+): MetricTimeResolution {
   const contract = parseMetricTimeContract(member.meta?.time_contract, member.title ?? member.name);
   if (contract.window === "year_to_date") {
     return { contract, basis: "year_start_to_bucket_end" };

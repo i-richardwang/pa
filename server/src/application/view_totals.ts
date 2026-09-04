@@ -16,13 +16,9 @@ import { executeMetricQuery } from "../engine/metric_executor.js";
 import { planMetricQuery } from "../engine/metric_planner.js";
 import { physicalForm, resolveMetricTime } from "../engine/metric_time.js";
 import type { BusinessTimeResolution } from "../engine/time_plan.js";
+import type { MetricTimeResolution } from "../semantic_core/metric_time_contract.js";
 import type { TotalPeriodValue } from "../semantic_core/query_payload.js";
-import {
-  metricTimeCapabilities,
-  totalPeriodOf,
-  type TimeInput,
-  type TotalPeriod,
-} from "../semantic_core/time_contract.js";
+import { totalPeriodOf, type TimeInput, type TotalPeriod } from "../semantic_core/time_contract.js";
 
 /** 一个指标在全部时间坐标上的合计；periods 与 businessTime.coordinates 等长同序。 */
 export type MetricTotals = { member: string; periods: TotalPeriodValue[] };
@@ -31,15 +27,10 @@ export type MetricTotals = { member: string; periods: TotalPeriodValue[] };
  * 腿的物理形态由求值基准决定：时点与年初累计都在截止月份上求值，期间指标才发整段范围。
  * 降级的按月指标同样只在终点当月成立。
  */
-function legTime(period: TotalPeriod): TimeInput {
-  return period.degraded || physicalForm(period.basis) === "endpoint"
+function legTime(time: MetricTimeResolution, period: TotalPeriod): TimeInput {
+  return period.degraded || physicalForm(time.basis) === "endpoint"
     ? { cutoff: period.to, grain: "total" }
     : { range: { from: period.from, to: period.to }, grain: "total" };
-}
-
-/** 求值期间相同、物理形态也相同的指标合成一条腿。 */
-function legKey(period: TotalPeriod): string {
-  return JSON.stringify(legTime(period));
 }
 
 function measureIndex(views: CubeView[]): ReadonlyMap<string, CubeMember> {
@@ -70,37 +61,37 @@ export async function computeMetricTotals(input: {
   const measures = query.measures ?? [];
   if (!measures.length) return [];
   const members = measureIndex(views);
-  const periodOf = (name: string, coordinate: { from: string; to: string }) => {
+  const timeOf = (name: string): MetricTimeResolution => {
     const member = members.get(name);
     if (!member) throw new Error(`合计求值缺少指标 ${name} 的时间合同`);
-    const resolved = resolveMetricTime(member, members);
-    return totalPeriodOf(resolved.basis, metricTimeCapabilities(resolved.contract), coordinate);
+    return resolveMetricTime(member, members);
   };
-  const periods = businessTime.coordinates.map((coordinate) =>
-    measures.map((name) => periodOf(name, { from: coordinate.from, to: coordinate.to })),
+
+  // 每个（坐标 × 指标）格先各自定下求值期间与物理腿；后面的分腿、取值、交付都读同一份格子。
+  const cells = businessTime.coordinates.map((coordinate) =>
+    measures.map((member) => {
+      const time = timeOf(member);
+      const period = totalPeriodOf(time, { from: coordinate.from, to: coordinate.to });
+      return { member, period, leg: legTime(time, period), value: null as number | null };
+    }),
   );
 
-  const legs = businessTime.coordinates.flatMap((_coordinate, coordinateIndex) => {
-    const grouped = new Map<string, { period: TotalPeriod; measures: string[] }>();
-    measures.forEach((name, index) => {
-      const period = periods[coordinateIndex][index];
-      const key = legKey(period);
-      const leg = grouped.get(key) ?? { period, measures: [] };
-      leg.measures.push(name);
-      grouped.set(key, leg);
-    });
-    return [...grouped.values()].map((leg) => ({
-      coordinateIndex,
-      measures: leg.measures,
-      time: legTime(leg.period),
-    }));
+  /** 求值期间与物理形态都相同的指标合成一条腿。 */
+  const legs = cells.flatMap((row) => {
+    const grouped = new Map<string, typeof row>();
+    for (const cell of row) {
+      const key = JSON.stringify(cell.leg);
+      grouped.set(key, [...(grouped.get(key) ?? []), cell]);
+    }
+    return [...grouped.values()].map((group) => ({ time: group[0].leg, cells: group }));
   });
-  const loaded = await Promise.all(
+
+  await Promise.all(
     legs.map(async (leg) => {
       const plan = planMetricQuery(
         {
           ...query,
-          measures: leg.measures,
+          measures: leg.cells.map((cell) => cell.member),
           dimensions: undefined,
           order: undefined,
           limit: undefined,
@@ -112,28 +103,13 @@ export async function computeMetricTotals(input: {
         timeView ? { timeView } : {},
       );
       const load = await executeMetricQuery(cube, plan, securityContext, views);
-      return { leg, row: load.data[0] };
+      for (const cell of leg.cells) cell.value = totalValue(load.data[0]?.[cell.member]);
     }),
   );
 
-  const valueKey = (coordinateIndex: number, member: string) => `${coordinateIndex}\u0000${member}`;
-  const values = new Map<string, number | null>();
-  for (const { leg, row } of loaded) {
-    for (const member of leg.measures) {
-      values.set(valueKey(leg.coordinateIndex, member), totalValue(row?.[member]));
-    }
-  }
   // 基准不随合计位交付：它在结果里由指标列声明一次，这里只交出它展开出的期间与值。
   return measures.map((member, index) => ({
     member,
-    periods: businessTime.coordinates.map((_, coordinateIndex) => {
-      const { from, to, degraded } = periods[coordinateIndex][index];
-      return {
-        from,
-        to,
-        ...(degraded ? { degraded } : {}),
-        value: values.get(valueKey(coordinateIndex, member)) ?? null,
-      };
-    }),
+    periods: cells.map((row) => ({ ...row[index].period, value: row[index].value })),
   }));
 }
