@@ -106,7 +106,8 @@ export type QueryFeasibilityIssue =
     };
 
 type DimensionReference = { id: string; usage: QueryDimensionUsage };
-type MemberKind = "measure" | "dimension" | "either";
+/** 成员引用可以接受的成员类型；either 表示两种都成立。 */
+export type MemberKind = "measure" | "dimension" | "either";
 
 type ReferenceRequirement = {
   reference: string;

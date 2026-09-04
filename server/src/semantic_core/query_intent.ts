@@ -10,7 +10,11 @@ import type { QueryViewSpec } from "./analysis_spec.js";
 import { completeHierarchyDimensions } from "./hierarchy_completion.js";
 import type { SemanticQueryView } from "./semantic_analysis.js";
 import { compileTimeIntent } from "./time_contract.js";
-import { queryFeasibilityIssue, type QueryFeasibilityIssue } from "./query_feasibility.js";
+import {
+  queryFeasibilityIssue,
+  type MemberKind,
+  type QueryFeasibilityIssue,
+} from "./query_feasibility.js";
 
 export type PlannedGroupDimension = {
   id: string;
@@ -34,8 +38,6 @@ export type IncompatibleQueryResolution = {
 };
 
 export type QueryIntentPlan = QueryIntentResolution | IncompatibleQueryResolution;
-
-type MemberKind = "measure" | "dimension" | "either";
 
 export function bindSemanticFilter(
   filter: NonNullable<SemanticQueryView["filters"]>[number],

@@ -319,26 +319,28 @@ function assertExpressionSemantics(
   semantics: ReadonlyMap<string, DerivedSourceSemantics>,
   derivedTitle: string,
 ): string[] {
-  const operands = expressionColumns(expr).map((operand) => ({
-    operand,
-    column: resolvedColumn(operand.source, operand.col, semantics, derivedTitle),
-    source: assertSourceSemantics(operand.source, semantics, derivedTitle),
-  }));
-  for (const { operand, column } of operands) {
+  const operands = expressionColumns(expr).map((operand) => {
+    const column = resolvedColumn(operand.source, operand.col, semantics, derivedTitle);
     if (column.kind !== "measure" || !column.timeBasis) {
       throw new Error(
         `派生视图「${derivedTitle}」的算式操作数「${operand.col}」不是标准度量；` +
           "算式只能引用 measure 或数值 literal，数值维度不能参与指标算术",
       );
     }
-  }
+    return {
+      operand,
+      column,
+      basis: column.timeBasis,
+      source: assertSourceSemantics(operand.source, semantics, derivedTitle),
+    };
+  });
   const comparisons: string[] = [];
   for (let i = 0; i < operands.length; i++) {
     for (let j = i + 1; j < operands.length; j++) {
       const left = operands[i];
       const right = operands[j];
-      const leftTime = left.column.timeBasis!;
-      const rightTime = right.column.timeBasis!;
+      const leftTime = left.basis;
+      const rightTime = right.basis;
       if (leftTime !== rightTime) {
         throw new Error(
           `派生视图「${derivedTitle}」的算式混用了${basisLabel(leftTime)}与${basisLabel(rightTime)}；` +

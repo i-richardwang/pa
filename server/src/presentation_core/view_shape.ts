@@ -22,7 +22,7 @@ import {
   type TableShading,
 } from "./table_shading.js";
 import type { RenderShape } from "./render_shape.js";
-import type { ChartDecl, ChartTypeOf, TableAxis } from "./chart_decl.js";
+import type { ChartDecl, ChartTypeOf, PlottedDeclType, TableAxis } from "./chart_decl.js";
 import {
   assignChannels,
   splitScales,
@@ -1327,7 +1327,7 @@ function declaredChart(
   view: ViewBlock,
   roles: Roles,
   titleOf: (c: string) => string,
-  decl: ChartTypeOf<"line" | "bar" | "pie">,
+  decl: ChartTypeOf<PlottedDeclType>,
 ): ChartSpec | null {
   const measureIdx = decl.y.map((y) => declaredIdx(view, roles.measureIdx, y));
   if (measureIdx.some((i) => i === undefined)) return null;
@@ -1542,14 +1542,14 @@ export function proposeChartDecl(
   type: Exclude<ChannelForm, "kpi">,
   preferences: ChannelPreferences = {},
   shape: ResultShape = analyzeResultShape(view),
-): ChartTypeOf<"line" | "bar" | "pie"> | null {
+): ChartTypeOf<PlottedDeclType> | null {
   const assignment = assignChannels(type, resultChannelPool(view, shape), preferences);
   if (!assignment) return null;
   const groupBy = assignment.groupBy !== undefined ? { groupBy: assignment.groupBy } : {};
   const y2 = assignment.y2 !== undefined ? { y2: assignment.y2 } : {};
   // 分类轴是 bar/pie 的必备通道；装箱填不上它时上一行已经返回了 null。
   if (type !== "line" && assignment.x === undefined) return null;
-  const decl: ChartTypeOf<"line" | "bar" | "pie"> =
+  const decl: ChartTypeOf<PlottedDeclType> =
     type === "line"
       ? { type, y: assignment.y, ...y2, ...groupBy }
       : type === "pie"

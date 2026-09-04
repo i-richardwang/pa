@@ -96,3 +96,5 @@ export const CHART_DECL_SCHEMA = z
 
 export type ChartDecl = z.infer<typeof CHART_DECL_SCHEMA>;
 export type ChartTypeOf<T extends ChartDecl["type"]> = Extract<ChartDecl, { type: T }>;
+/** 落在绘图区的图型；table 与 kpi 不在其中。 */
+export type PlottedDeclType = Extract<ChartDecl["type"], "line" | "bar" | "pie">;

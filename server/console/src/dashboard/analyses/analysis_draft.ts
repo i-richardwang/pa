@@ -3,6 +3,7 @@ import type { ReplayPayload } from "@contracts/replay_contract";
 import {
   semanticResultView,
   type SemanticAnalysisView,
+  type PlottedIntentType,
   type SemanticViewIntent,
   type SemanticQueryView,
   type AnalysisDefinition,
@@ -286,7 +287,7 @@ function shareAnnotations(
 
 /** 按图型只挂它声明过的通道：哪个通道属于哪个图型出自意图联合，这里不另立一套。 */
 function chartIntent(
-  type: "line" | "bar" | "pie",
+  type: PlottedIntentType,
   channels: {
     category?: string;
     series: string[];

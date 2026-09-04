@@ -43,7 +43,7 @@ const SEMANTIC_FILTER_VALUES = z
  * 来源角色是固定词汇，不是调用方发明的名字：query 指顶层查询，joined 指 derived.joined.query。
  * 派生列据此引用来源，引用错误在 schema 层就能判定。
  */
-export const SEMANTIC_SOURCE_ROLE = z
+const SEMANTIC_SOURCE_ROLE = z
   .enum(["query", "joined"])
   .describe("派生列的来源：query = 顶层 query，joined = derived.joined.query");
 
@@ -416,6 +416,8 @@ export const SEMANTIC_VIEW_INTENT_INPUT = z
 
 /** 呈现意图按图型判别：哪些通道属于哪个图型出自这一份形状，下游不再复述适用性。 */
 export type SemanticViewIntent = z.infer<typeof SEMANTIC_VIEW_INTENT_INPUT>;
+/** 落在绘图区的呈现意图图型；table 与 kpi 不在其中。 */
+export type PlottedIntentType = Extract<SemanticViewIntent["type"], "line" | "bar" | "pie">;
 
 /**
  * 一次分析只交付一个结果，所以结果节点由形状固定：声明 derived 时它就是结果，
@@ -473,10 +475,6 @@ export const SEMANTIC_DERIVED_VIEW_ID = "result";
 /** 结果节点由形状决定：声明 derived 时它就是结果，否则唯一的查询就是结果。 */
 export function semanticResultView(definition: AnalysisDefinition): SemanticAnalysisView {
   return definition.derived ?? definition.query;
-}
-
-export function semanticResultIsDerived(definition: AnalysisDefinition): boolean {
-  return definition.derived !== undefined;
 }
 
 export function semanticResultViewId(definition: AnalysisDefinition): string {
