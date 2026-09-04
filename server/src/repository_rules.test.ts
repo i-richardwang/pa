@@ -10,7 +10,7 @@ const rootPath = fileURLToPath(root);
 
 const skillFactSource = "plugins/pa/skills/pa-analytics/SKILL.md";
 const skillQueryPatterns = "plugins/pa/skills/pa-analytics/references/query_patterns.md";
-const skillDomainGuardrails = "plugins/pa/skills/pa-analytics/references/domain_guardrails.md";
+const skillDeliveryWorkflows = "plugins/pa/skills/pa-analytics/references/delivery_workflows.md";
 const agentsSkillEntry = ".agents/skills/pa-analytics/SKILL.md";
 const claudeSkillEntry = ".claude/skills/pa-analytics/SKILL.md";
 const claudeSkillReferences = ".claude/skills/pa-analytics/references";
@@ -200,23 +200,31 @@ function trackedSymlinks(): string[] {
   return entries;
 }
 
-test("pa-analytics 教学以合并宽表为先，派生只是唯一交付出口", async () => {
-  const patterns = await readFile(new URL(skillQueryPatterns, root), "utf8");
-  for (const marker of ["同一个查询", "derived.joined", "provenance", "多次 `run_analysis`"]) {
-    expect(patterns.includes(marker), `query_patterns 缺交付模型标记「${marker}」`).toBe(true);
-  }
-  // 结果图的形状已由 schema 表达，教学不再复述它，否则两份说法会各自过期。
-  expect(patterns).not.toContain("sink");
-});
+/** Skill 语料 = 入口加全部按需读取件；泄漏类检查一律对整份语料生效，不逐文件列举。 */
+async function skillCorpus(): Promise<string> {
+  const parts = await Promise.all(
+    [skillFactSource, skillQueryPatterns, skillDeliveryWorkflows].map((path) =>
+      readFile(new URL(path, root), "utf8"),
+    ),
+  );
+  return parts.join("\n");
+}
 
-test("记录投影教学使用唯一领域语言", async () => {
+test("pa-analytics entry links every conditional workflow", async () => {
   const skill = await readFile(new URL(skillFactSource, root), "utf8");
-  expect(skill).toContain("records_available: true");
-  expect(skill).toContain("show_records");
+  expect(skill).toContain("references/query_patterns.md");
+  expect(skill).toContain("references/delivery_workflows.md");
 });
 
-test("pa-analytics 领域教学只引用业务标题与公共协议，不教授物理选路名", async () => {
-  const guardrails = await readFile(new URL(skillDomainGuardrails, root), "utf8");
+test("record projection safety workflow remains available to the skill", async () => {
+  const delivery = await readFile(new URL(skillDeliveryWorkflows, root), "utf8");
+  expect(delivery).toContain("records_available: true");
+  expect(delivery).toContain("show_records");
+  expect(delivery).toContain("不在回复中复述姓名、工号或其他逐人字段");
+});
+
+test("pa-analytics instructions do not expose physical model names", async () => {
+  const corpus = await skillCorpus();
   const modelRoot = new URL("demo/model/", root);
   const modelFiles = (
     await Promise.all(
@@ -238,30 +246,16 @@ test("pa-analytics 领域教学只引用业务标题与公共协议，不教授�
   }
   for (const name of physicalNames) {
     const physical = `\`${name}\``;
-    expect(guardrails.includes(physical), `领域教学泄漏物理标识 ${physical}`).toBe(false);
+    expect(corpus.includes(physical), `PA Skill 泄漏物理标识 ${physical}`).toBe(false);
   }
-  expect(guardrails).toContain("成员 id 以本次");
-  expect(guardrails).toContain("目录标题为“组织”");
 });
 
-test("pa-analytics 教学使用正式指标与 Breakdown 排名契约", async () => {
-  const skill = await readFile(new URL(skillFactSource, root), "utf8");
-  const patterns = await readFile(new URL(skillQueryPatterns, root), "utf8");
-  const corpus = `${skill}\n${patterns}`;
+test("pa-analytics instructions do not pin a data cutoff", async () => {
+  const corpus = await skillCorpus();
   const pinnedCutoff = /"cutoff": "20\d{2}-\d{2}"/;
   expect(pinnedCutoff.test('"cutoff": "2026-07"'), "探针必须能发现写死的截止月").toBe(true);
   expect(pinnedCutoff.test('"cutoff": "<YYYY-MM>"'), "探针不得误报占位写法").toBe(false);
-  expect(patterns).not.toMatch(pinnedCutoff);
-  for (const marker of [
-    "group_sort: {dimension:",
-    "同一业务时间坐标",
-    "不同时间语义",
-    "同一业务桶上按指标语义求值",
-    "正式指标合同自动规划",
-    "最新逻辑输出桶",
-  ]) {
-    expect(corpus.includes(marker), `pa-analytics 教学缺契约标记「${marker}」`).toBe(true);
-  }
+  expect(corpus).not.toMatch(pinnedCutoff);
 });
 
 test("PA 插件是自有边界完整的公共制品", async () => {

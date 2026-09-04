@@ -3,13 +3,7 @@ import { z } from "zod";
 export const METRIC_TIME_AGGREGATIONS = ["sum", "average", "last", "recompute"] as const;
 export const METRIC_TIME_WINDOWS = ["selected", "year_to_date"] as const;
 
-/**
- * 指标侧的时间合同：字段语义、典型映射与能力卡投影见 docs/time_contract.md §2。查询时间不在
- * 指标上复制；year_to_date 标识由 Cube rolling measure 计算的固定年初窗口。
- *
- * `window: year_to_date` 与 `grain: month` 在合同入口 fail-closed：年初累计已经把期间钉在
- * 日历年内，再声明按月定义就没有一致的求值基准可言。
- */
+/** 指标侧的时间合同；业务语义与公共投影见 docs/time_contract.md §2。 */
 export const METRIC_TIME_CONTRACT_SCHEMA = z
   .object({
     aggregation: z.enum(METRIC_TIME_AGGREGATIONS),

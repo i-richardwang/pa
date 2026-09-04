@@ -60,9 +60,9 @@ Application 抛出的领域错误由所有传输层共用一份公开分类。MC
 `code` 与 `details`，不会把结构化原因压扁成字符串。未知异常的诊断仅写服务端日志，不进入公共结果。
 
 Catalog 为每个指标交付必有的正向 `query_capabilities`：`dimension_ids` 是可用于分组、筛选和排序的
-完整维度白名单，`hierarchies` 是这些维度中的层级链，`grouping` 是指标成立所需的最少可变分组数；
-`time_constraints` 与 `report_calculations` 分别描述时间和报告级计算能力。内部模型可以用负向声明
-表达局部限制，但目录装配时必须折叠成这份正向能力，客户端不解释物理 View 或负向例外。
+完整维度白名单，`hierarchies` 是这些维度中的层级链，`grouping` 是指标成立所需的最少可变分组数。
+指标的求值期间与时间选择限制分别由 `time.value_basis` 和 `time.constraints` 表达，报告级计算能力由
+`report_calculations` 表达。客户端不解释物理 View 或内部负向声明。
 
 纯函数 Query Feasibility Evaluator 只消费 Analysis 查询视图与公共能力，统一判断成员引用、共同维度、
 时间选择、对照策略和报告计算。Console 用它在候选进入草稿前置灰并解释，语义编译器用它在物理规划前
