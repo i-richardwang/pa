@@ -635,8 +635,8 @@ export const TIME_CAPABILITIES_INPUT = z
 export type TimeCapabilities = z.infer<typeof TIME_CAPABILITIES_INPUT>;
 
 /**
- * 指标的时间面：两个问题各占一个字段。value_basis 说这个数代表什么时间，constraints 说
- * 用户能选什么时间。合成一个字段过一次，结果是快照指标的合计被声明成覆盖整个窗口。
+ * 指标的时间面：两个问题各占一个字段，互不替代。value_basis 说这个数代表什么时间，
+ * constraints 说用户能选什么时间。
  */
 export const METRIC_TIME_INPUT = z
   .object({
@@ -649,10 +649,7 @@ export const METRIC_TIME_INPUT = z
 
 export type MetricTime = z.infer<typeof METRIC_TIME_INPUT>;
 
-/**
- * 由指标合同推导能力卡。卡上只有查询限制位：能不能跨月合并、能不能跨日历年、能不能隐式对照。
- * 「这个数覆盖哪一段」不在卡上，那是 MetricValueBasis 的事。
- */
+/** 由指标合同推导能力卡：能不能跨月合并、能不能跨日历年、能不能隐式对照。 */
 export function metricTimeCapabilities(contract: MetricTimeContract | undefined): TimeCapabilities {
   return {
     ...(contract?.grain === "month" ? { grain: "month" as const } : {}),
@@ -733,11 +730,10 @@ export function metricTimeSelectionIssue(
 }
 
 /**
- * 指标在一个时间坐标上的合计求值期间。期间出自指标的业务求值基准，不出自能力卡——
- * 能力卡只回答「用户能选什么」，回答不了「这个数覆盖哪一段」。
+ * 指标在一个时间坐标上的合计求值期间：由基准展开，degraded 另记。
  *
- * degraded 是另一件事：按月定义的指标在跨月坐标上没有合计可言，只能退到终点当月求值。
- * 它由能力卡判定，必须显式写出来，不能让消费方拿 basis 和 from/to 去对比推断。
+ * degraded 与基准正交——按月定义的指标在跨月坐标上没有合计可言，只能退到终点当月求值。
+ * 它由能力卡判定并显式写出，消费方不必拿基准和起止月份去对比推断。
  */
 export type TotalPeriod = {
   from: string;

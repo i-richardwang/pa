@@ -26,6 +26,7 @@ import { memberShortName } from "../semantic_core/member_name.js";
 import { compareCells } from "../presentation_core/view_format.js";
 import type { BusinessTimeResolution } from "./time_plan.js";
 import { basisLabel, type MetricValueBasis } from "../semantic_core/metric_value_basis.js";
+import { physicalForm } from "./metric_time.js";
 
 type Cell = string | number | null;
 type Row = Cell[];
@@ -233,7 +234,7 @@ function exactMetricTime(
   basis: MetricValueBasis,
 ): boolean {
   if (left.time.outputGrain !== right.time.outputGrain) return false;
-  if (basis === "whole_bucket") {
+  if (physicalForm(basis) === "interval") {
     return JSON.stringify(intervalRanges(left.time)) === JSON.stringify(intervalRanges(right.time));
   }
   return JSON.stringify(bucketEndpoints(left.time)) === JSON.stringify(bucketEndpoints(right.time));
@@ -341,7 +342,7 @@ function assertExpressionSemantics(
       if (leftTime !== rightTime) {
         throw new Error(
           `派生视图「${derivedTitle}」的算式混用了${basisLabel(leftTime)}与${basisLabel(rightTime)}；` +
-            "期末值、期间值和年初窗口之间的新计算应在模型层定义",
+            "不同求值基准之间的新计算应在模型层定义",
         );
       }
       if (exactMetricTime(left.source, right.source, leftTime)) continue;

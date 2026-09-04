@@ -359,8 +359,8 @@ function periodLabel(period: { from: string; to: string }): string {
     : monthRangeLabel(period.from, period.to);
 }
 
-/** 合计覆盖期间须写实到月：图例名可以粗到年，副标不行。 */
-function coverageLabel(period: { from: string; to: string }): string {
+/** 合计期间须写实到月：图例名可以粗到年，副标不行。 */
+function totalPeriodLabel(period: { from: string; to: string }): string {
   const year = (month: string) => Number(month.slice(0, 4));
   const month = (value: string) => Number(value.slice(5, 7));
   if (period.from === period.to) return `${year(period.to)}年${month(period.to)}月`;
@@ -1055,7 +1055,7 @@ export function compileTotalBand(
       value: primary.value,
       format,
       ...(decimals !== undefined ? { decimals } : {}),
-      period: { label: coverageLabel(primary), from: primary.from, to: primary.to },
+      period: { label: totalPeriodLabel(primary), from: primary.from, to: primary.to },
       comparisons: comparisons.map((period, index) => ({
         // 对照名取坐标本身（与表格差值列同一措辞），期内降级不改变「和谁比」。
         label: `较${periodLabel(coordinates[index + 1])}`,

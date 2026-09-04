@@ -22,8 +22,8 @@ import {
   type PlannedQuery,
   type PlannedQueryLeg,
   type ResolvedTimePlanning,
-  type TimeEvalForm,
 } from "./time_plan.js";
+import type { TimeEvalForm } from "./metric_time.js";
 
 type AggregateMetricNode = { kind: "aggregate"; member: string };
 export type ExecutableMetricNode = AggregateMetricNode | MetricNode;

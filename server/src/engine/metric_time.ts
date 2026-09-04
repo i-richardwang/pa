@@ -67,6 +67,8 @@ export function resolveMetricTime(
 }
 
 /** 物理求值形态：年初累计与月末时点都落在同一条截止月份腿上。 */
-export function physicalForm(basis: MetricValueBasis): "interval" | "endpoint" {
+export type TimeEvalForm = "interval" | "endpoint";
+
+export function physicalForm(basis: MetricValueBasis): TimeEvalForm {
   return basis === "whole_bucket" ? "interval" : "endpoint";
 }

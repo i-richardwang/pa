@@ -1,17 +1,7 @@
 import { z } from "zod";
 
-/**
- * 指标值的业务求值基准：给定一个业务时间桶，这个数实际覆盖桶里的哪一段。
- *
- * 它与时间能力卡回答两个不同的问题，不能互相代替：能力卡说「用户能选什么时间」，
- * 基准说「返回的数代表什么时间」。合并成一张卡时，`aggregation: last` 这类没有查询
- * 限制的指标会投影成空卡，合计位因此把月末快照声明成覆盖整个窗口。
- */
-export const METRIC_VALUE_BASES = [
-  "bucket_end",
-  "whole_bucket",
-  "year_start_to_bucket_end",
-] as const;
+/** 指标值的业务求值基准：给定一个业务时间桶，这个数实际覆盖桶里的哪一段。 */
+const METRIC_VALUE_BASES = ["bucket_end", "whole_bucket", "year_start_to_bucket_end"] as const;
 
 export const METRIC_VALUE_BASIS_INPUT = z
   .enum(METRIC_VALUE_BASES)
@@ -37,29 +27,22 @@ export function basisPeriod(
   }
 }
 
-/** 面向用户的短称；错误消息与说明文字都从这里取，措辞只有一处。 */
+/** 三种基准的业务短称与一句话口径；面向用户和 Agent 的措辞只有这一份。 */
+const BASIS_WORDING: Record<MetricValueBasis, { label: string; detail: string }> = {
+  bucket_end: { label: "时点值", detail: "每个时间桶只取桶末那个月的值，不跨月累计" },
+  whole_bucket: { label: "期间值", detail: "按本指标自己的口径在整个时间桶上求值" },
+  year_start_to_bucket_end: {
+    label: "年初累计值",
+    detail: "每个时间桶取桶末月所在日历年的一月到该月",
+  },
+};
+
 export function basisLabel(basis: MetricValueBasis): string {
-  switch (basis) {
-    case "bucket_end":
-      return "时点值";
-    case "year_start_to_bucket_end":
-      return "年初累计值";
-    case "whole_bucket":
-      return "期间值";
-  }
+  return BASIS_WORDING[basis].label;
 }
 
-/**
- * 面向 Agent 的一句话口径，随指标列的说明一同交付：不读 Skill 的调用方也能知道这一列的数
- * 代表哪一段时间。措辞与 column_time_basis 同源，只有这一处。
- */
+/** 随指标列的说明一同交付，不读 Skill 的调用方也能知道这一列的数代表哪一段时间。 */
 export function basisNote(basis: MetricValueBasis): string {
-  switch (basis) {
-    case "bucket_end":
-      return "时点值：每个时间桶只取桶末那个月的值，不跨月累计";
-    case "year_start_to_bucket_end":
-      return "年初累计值：每个时间桶取桶末月所在日历年的一月到该月";
-    case "whole_bucket":
-      return "期间值：按本指标自己的口径在整个时间桶上求值";
-  }
+  const { label, detail } = BASIS_WORDING[basis];
+  return `${label}：${detail}`;
 }

@@ -9,7 +9,7 @@ import type {
   TimeContext,
 } from "../ports/cube_gateway.js";
 import { filterMembers } from "./query_contract.js";
-import { physicalForm, resolveMetricTime } from "./metric_time.js";
+import { physicalForm, resolveMetricTime, type TimeEvalForm } from "./metric_time.js";
 import {
   metricTimeSelectionIssue,
   metricTimeCapabilities,
@@ -245,8 +245,6 @@ function measureContracts(query: CubeQuery, views: CubeView[]) {
     };
   });
 }
-
-export type TimeEvalForm = "interval" | "endpoint";
 
 function assertMetricTimeSelection(
   contracts: ReturnType<typeof measureContracts>,
