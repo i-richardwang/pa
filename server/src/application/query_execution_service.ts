@@ -40,6 +40,7 @@ import type {
   SourceColumnSemantics,
 } from "../engine/transform.js";
 import { resolveMetricTime } from "../engine/metric_time.js";
+import { basisNote } from "../semantic_core/metric_value_basis.js";
 import { computeMetricTotals } from "./view_totals.js";
 import { applyValueOrder } from "../engine/value_order.js";
 import { memberSemanticId } from "../engine/model_contract.js";
@@ -503,6 +504,12 @@ async function executeView(
       semantics.timeBasis ? [[column, semantics.timeBasis] as const] : [],
     ),
   );
+  // 求值基准同时进指标自己的说明：column_time_basis 是给程序读的，这句是给模型读的，同一个来源。
+  for (const semantics of sourceSemantics.columns.values()) {
+    if (!semantics.timeBasis) continue;
+    const note = notes.find((candidate) => candidate.member === semantics.member);
+    if (note) appendNote(note, basisNote(semantics.timeBasis));
+  }
   const modelStructureShares = structureSharesOf(baseMemberKeys, columns, visibleMembers);
   const columnOfMember = new Map(memberKeys.map((key, index) => [key, columns[index]]));
   const resolvedDeliveryColumns = Object.fromEntries(

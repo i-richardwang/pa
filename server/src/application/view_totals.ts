@@ -123,11 +123,17 @@ export async function computeMetricTotals(input: {
       values.set(valueKey(leg.coordinateIndex, member), totalValue(row?.[member]));
     }
   }
+  // 基准不随合计位交付：它在结果里由指标列声明一次，这里只交出它展开出的期间与值。
   return measures.map((member, index) => ({
     member,
-    periods: businessTime.coordinates.map((_, coordinateIndex) => ({
-      ...periods[coordinateIndex][index],
-      value: values.get(valueKey(coordinateIndex, member)) ?? null,
-    })),
+    periods: businessTime.coordinates.map((_, coordinateIndex) => {
+      const { from, to, degraded } = periods[coordinateIndex][index];
+      return {
+        from,
+        to,
+        ...(degraded ? { degraded } : {}),
+        value: values.get(valueKey(coordinateIndex, member)) ?? null,
+      };
+    }),
   }));
 }

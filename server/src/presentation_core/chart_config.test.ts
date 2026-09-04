@@ -1269,7 +1269,7 @@ describe("整窗读数进呈现块", () => {
       metrics: [
         {
           column: "turnover_count",
-          periods: [{ from: "2026-01", to: "2026-02", value: 22, basis: "whole_bucket" }],
+          periods: [{ from: "2026-01", to: "2026-02", value: 22 }],
         },
       ],
     },

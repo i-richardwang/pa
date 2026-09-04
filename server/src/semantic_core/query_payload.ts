@@ -120,12 +120,12 @@ const SUMMARY_BLOCK_SCHEMA = z
  */
 const TOTAL_PERIOD_SCHEMA = z
   .object({
-    from: z.string().regex(MONTH),
+    from: z
+      .string()
+      .regex(MONTH)
+      .describe("该值实际覆盖的起始月；由本列的求值基准在这个坐标上展开"),
     to: z.string().regex(MONTH),
     value: z.number().finite().nullable(),
-    basis: METRIC_VALUE_BASIS_INPUT.describe(
-      "该指标值覆盖桶里哪一段；from/to 是它在本坐标上的展开",
-    ),
     degraded: z
       .literal(true)
       .optional()
@@ -210,7 +210,8 @@ export const VIEW_BLOCK_SCHEMA = z
       .optional()
       .describe(
         "每个指标列的业务求值基准：这一列的数覆盖每个时间桶里的哪一段。" +
-          "与 time.buckets 合起来就是该列每格的真实期间，不需要按标题猜",
+          "与 time.buckets 合起来就是该列每格的真实期间，也是 totals 各期间的来源，不需要按标题猜。" +
+          "直查结果逐个指标列声明；派生结果只有搬运列有基准，算式列的期间由 provenance 表达",
       ),
     structure_shares: z
       .array(STRUCTURE_SHARE_SCHEMA)
@@ -335,6 +336,29 @@ export const VIEW_BLOCK_SCHEMA = z
         if (view.summary) validateRows(view.summary.rows, "summary");
       }
     }
+    // 求值基准只在指标列上声明一次；合计位的期间由它展开，两边因此不存在「互相矛盾」这种状态。
+    const measureColumns = view.columns.filter((column) => view.column_roles[column] === "measure");
+    const declaredBasis = view.column_time_basis ?? {};
+    for (const column of Object.keys(declaredBasis)) {
+      if (!measureColumns.includes(column)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["column_time_basis", column],
+          message: "求值基准只能声明在本结果的指标列上",
+        });
+      }
+    }
+    if (view.time) {
+      for (const column of measureColumns) {
+        if (!(column in declaredBasis)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["column_time_basis", column],
+            message: "直查结果的每个指标列都必须声明求值基准",
+          });
+        }
+      }
+    }
     if (view.totals) {
       const coordinates = view.time?.coordinates;
       if (!coordinates) {
@@ -370,18 +394,21 @@ export const VIEW_BLOCK_SCHEMA = z
           });
           return;
         }
+        const basis = declaredBasis[metric.column];
+        // 基准缺失已由上面的完整性规则报出，这里不重复报。
+        if (!basis) return;
         metric.periods.forEach((period, periodIndex) => {
           const coordinate = coordinates[periodIndex];
-          // 声明的期间必须就是该指标的求值基准在这个坐标上展开出来的那一段，一个字节都不许差。
+          // 声明的期间必须就是该列的求值基准在这个坐标上展开出来的那一段，一个字节都不许差。
           // 年初累计的起点会早于坐标起点（选七月看到的是一到七月），这是它的定义而不是越界。
           const expected = period.degraded
             ? { from: coordinate.to, to: coordinate.to }
-            : basisPeriod(period.basis, coordinate);
+            : basisPeriod(basis, coordinate);
           if (period.from !== expected.from || period.to !== expected.to) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
               path: ["totals", "metrics", index, "periods", periodIndex],
-              message: `整窗合计的期间必须与求值基准一致：${period.basis} 在 ${coordinate.from}~${coordinate.to} 上应为 ${expected.from}~${expected.to}`,
+              message: `整窗合计的期间必须与求值基准一致：${basis} 在 ${coordinate.from}~${coordinate.to} 上应为 ${expected.from}~${expected.to}`,
             });
           }
         });

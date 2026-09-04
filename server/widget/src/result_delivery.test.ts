@@ -15,6 +15,7 @@ const payload: QueryPayload = {
     id: "result",
     columns: ["organization_name", "active_employee_count"],
     column_roles: { organization_name: "dimension", active_employee_count: "measure" },
+    column_time_basis: { active_employee_count: "bucket_end" },
     rows: [["A", 10]],
     row_count: 2,
     sampled: "模型仅接收头部样本。",

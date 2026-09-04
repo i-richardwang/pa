@@ -299,6 +299,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
         organization_name: "dimension" as const,
         active_employee_count: "measure" as const,
       },
+      column_time_basis: { active_employee_count: "bucket_end" as const },
       column_formats: { active_employee_count: "number" as const },
       rows: [],
       row_count: 0,
@@ -359,6 +360,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
       id: "result",
       columns: ["organization_name", "department_name", "active_employee_count"],
       column_formats: { active_employee_count: "number" as const },
+      column_time_basis: { active_employee_count: "bucket_end" as const },
       column_roles: {
         organization_name: "dimension" as const,
         department_name: "dimension" as const,

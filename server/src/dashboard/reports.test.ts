@@ -50,6 +50,7 @@ const emptyStructureView = {
   id: "structure",
   columns: ["category_level", "active_employee_count"],
   column_roles: { category_level: "dimension" as const, active_employee_count: "measure" as const },
+  column_time_basis: { active_employee_count: "bucket_end" as const },
   column_formats: { active_employee_count: "number" as const },
   rows: [],
   row_count: 0,

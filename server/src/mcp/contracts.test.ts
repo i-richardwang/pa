@@ -76,6 +76,7 @@ test("公共 MCP 响应 schema 递归 strict，物理字段不能被静默剥离
       id: "result",
       columns: ["measure:active_employee_count"],
       column_roles: { "measure:active_employee_count": "measure" },
+      column_time_basis: { "measure:active_employee_count": "bucket_end" },
       rows: [[12]],
       row_count: 1,
       time: {

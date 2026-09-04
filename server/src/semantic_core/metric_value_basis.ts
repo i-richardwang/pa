@@ -48,3 +48,18 @@ export function basisLabel(basis: MetricValueBasis): string {
       return "期间值";
   }
 }
+
+/**
+ * 面向 Agent 的一句话口径，随指标列的说明一同交付：不读 Skill 的调用方也能知道这一列的数
+ * 代表哪一段时间。措辞与 column_time_basis 同源，只有这一处。
+ */
+export function basisNote(basis: MetricValueBasis): string {
+  switch (basis) {
+    case "bucket_end":
+      return "时点值：每个时间桶只取桶末那个月的值，不跨月累计";
+    case "year_start_to_bucket_end":
+      return "年初累计值：每个时间桶取桶末月所在日历年的一月到该月";
+    case "whole_bucket":
+      return "期间值：按本指标自己的口径在整个时间桶上求值";
+  }
+}

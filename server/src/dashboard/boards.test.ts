@@ -47,6 +47,7 @@ describe("dashboard board routes", () => {
         category_level: "dimension" as const,
         active_employee_count: "measure" as const,
       },
+      column_time_basis: { active_employee_count: "bucket_end" as const },
       column_formats: { active_employee_count: "number" as const },
       rows: [
         ["P5", 10],

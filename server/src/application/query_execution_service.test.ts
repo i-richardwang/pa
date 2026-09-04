@@ -1093,13 +1093,11 @@ test("合计位按各指标的求值基准写实覆盖期间，执行腿与声�
       {
         // 月末快照的合计就是终点当月的时点值，不覆盖 2025-06 起的十四个月。
         column: "active_employee_count",
-        periods: [{ from: "2026-07", to: "2026-07", value: 100, basis: "bucket_end" }],
+        periods: [{ from: "2026-07", to: "2026-07", value: 100 }],
       },
       {
         column: "ytd_event_rate",
-        periods: [
-          { from: "2026-01", to: "2026-07", value: 0.05, basis: "year_start_to_bucket_end" },
-        ],
+        periods: [{ from: "2026-01", to: "2026-07", value: 0.05 }],
       },
       {
         // 按月定义的率跨月没有合计，退到终点当月并显式标记降级。
@@ -1109,7 +1107,6 @@ test("合计位按各指标的求值基准写实覆盖期间，执行腿与声�
             from: "2026-07",
             to: "2026-07",
             value: 0.01,
-            basis: "whole_bucket",
             degraded: true,
           },
         ],
@@ -1129,6 +1126,17 @@ test("合计位按各指标的求值基准写实覆盖期间，执行腿与声�
         JSON.stringify(["2026-07-01", "2026-07-31"]),
     ),
   ).toBe(true);
+  // 基准同时以自然语言进入指标自己的说明：不加载 Skill 的调用方也拿得到这句口径。
+  expect(result.payload.view.column_time_basis).toEqual({
+    active_employee_count: "bucket_end",
+    ytd_event_rate: "year_start_to_bucket_end",
+    monthly_turnover_rate: "whole_bucket",
+  });
+  const noteOf = (member: string) =>
+    result.payload.view.query_notes.find((note) => note.member.endsWith(member))?.text ?? "";
+  expect(noteOf("active_employee_count")).toContain("时点值");
+  expect(noteOf("ytd_event_rate")).toContain("年初累计值");
+  expect(noteOf("monthly_turnover_rate")).toContain("期间值");
 });
 
 test("带对照时每个指标逐期间给出合计", async () => {
@@ -1159,8 +1167,8 @@ test("带对照时每个指标逐期间给出合计", async () => {
       {
         column: "active_employee_count",
         periods: [
-          { from: "2026-07", to: "2026-07", value: 2026, basis: "bucket_end" },
-          { from: "2025-07", to: "2025-07", value: 2025, basis: "bucket_end" },
+          { from: "2026-07", to: "2026-07", value: 2026 },
+          { from: "2025-07", to: "2025-07", value: 2025 },
         ],
       },
     ],
