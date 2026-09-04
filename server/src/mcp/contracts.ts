@@ -21,7 +21,7 @@ export const SERVER_INSTRUCTIONS =
 
 export const TOOL_DESCRIPTIONS = {
   catalog:
-    "发现当前调用者可用的 PA 指标、维度与业务术语解释。不传 terms 返回全部成员，传 terms 按业务概念筛选；成员 id 可直接用于分析。",
+    "发现当前调用者可用的 PA 指标、维度与业务术语解释。查数时传 terms 按业务概念筛选；不传 terms 返回全部成员，响应很大，只用于浏览能力面。成员 id 可直接用于分析。",
   values_of: "搜索一个分类维度在当前调用者权限范围内的真实值，可按子串收窄。",
   run_analysis:
     "用 catalog 的语义 id 与呈现意图执行分析；不接受视觉设置、物理字段、SQL 或个体字段。自动规划兼容指标域；成功返回分析结果，失败返回含 code/details 的错误 JSON。",

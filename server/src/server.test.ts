@@ -504,6 +504,12 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     expect(SERVER_INSTRUCTIONS).toContain("query_capabilities");
     expect(TOOL_DESCRIPTIONS.run_analysis).toContain("code/details");
     expect(TOOL_DESCRIPTIONS.run_analysis).toContain("错误 JSON");
+    // 客户端只按 input schema 组装参数，把 view 嵌进 analysis 是实测中最常见的错法，
+    // 平级这件事必须写在两个属性的描述里才到得了模型。
+    const runSchema = listed.tools.find((candidate) => candidate.name === "run_analysis")
+      ?.inputSchema as { properties: Record<string, { description?: string }> };
+    expect(runSchema.properties.analysis.description).toContain("与 view 平级");
+    expect(runSchema.properties.view.description).toContain("不嵌在 analysis 内");
     expect(UI_RESOURCE_URI).toBe("ui://pa/result.html");
     expect(RECORDS_UI_RESOURCE_URI).toBe("ui://pa/records.html");
     expect(UI_RESOURCE_META).toEqual({

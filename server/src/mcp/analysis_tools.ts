@@ -39,8 +39,8 @@ export function registerAnalysisTools(
       title: "执行人才分析",
       description: TOOL_DESCRIPTIONS.run_analysis,
       inputSchema: {
-        analysis: ANALYSIS_DEFINITION_INPUT,
-        view: SEMANTIC_VIEW_INTENT_INPUT,
+        analysis: ANALYSIS_DEFINITION_INPUT.describe("数据问题；与 view 平级，不包含呈现意图"),
+        view: SEMANTIC_VIEW_INTENT_INPUT.describe("呈现意图；顶层参数，不嵌在 analysis 内"),
       },
       outputSchema: RUN_OUTPUT,
       annotations: WRITE_ANNOTATIONS,

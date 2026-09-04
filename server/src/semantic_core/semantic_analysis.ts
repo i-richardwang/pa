@@ -434,11 +434,13 @@ export const ANALYSIS_DEFINITION_INPUT = z
         "已有正式指标不要用它复刻除法",
     ),
   })
-  // 多写一个查询是最常见的错法，strict 的默认文案只会说「多余的键」，这里替它指路。
+  // 多写一个查询、把 view 写进来是最常见的两种错法，strict 的默认文案只会说「多余的键」，
+  // 这里替它指路。
   .strict(
     "分析定义只有 title / query / derived 三个字段：分组、时间与筛选一致的多个指标合并进 " +
       "query.measures；需要跨查询逐行算术时把第二个查询放进 derived.joined；" +
-      "属于不同业务问题则分成多次 run_analysis",
+      "属于不同业务问题则分成多次 run_analysis。呈现意图写在与 analysis 平级的 view 参数里，" +
+      "不放进分析定义",
   );
 
 export type AnalysisDefinition = z.infer<typeof ANALYSIS_DEFINITION_INPUT>;
