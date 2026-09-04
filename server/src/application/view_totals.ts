@@ -1,6 +1,8 @@
 /**
- * 整窗合计的唯一供给点：值恒由 grain=total 的无分组腿独立求得，不对已返回序列加总或取末；
- * 不能整窗合并的指标按 totalPeriodOf 退到期间终点。
+ * 整窗合计的唯一供给点：值恒由 grain=total 的无分组腿独立求得，不对已返回序列加总或取末。
+ *
+ * 求值期间先由指标的业务求值基准解出，再按期间分腿——执行用的期间与结果声明的期间因此
+ * 是同一个对象，不会出现「数值取终点、声明写整窗」。
  */
 import type {
   CubeGateway,
@@ -12,20 +14,33 @@ import type {
 } from "../ports/cube_gateway.js";
 import { executeMetricQuery } from "../engine/metric_executor.js";
 import { planMetricQuery } from "../engine/metric_planner.js";
-import { resolveMetricTime } from "../engine/metric_time.js";
+import { physicalForm, resolveMetricTime } from "../engine/metric_time.js";
 import type { BusinessTimeResolution } from "../engine/time_plan.js";
 import type { TotalPeriodValue } from "../semantic_core/query_payload.js";
 import {
   metricTimeCapabilities,
   totalPeriodOf,
   type TimeInput,
-  type TotalCoverage,
+  type TotalPeriod,
 } from "../semantic_core/time_contract.js";
 
 /** 一个指标在全部时间坐标上的合计；periods 与 businessTime.coordinates 等长同序。 */
 export type MetricTotals = { member: string; periods: TotalPeriodValue[] };
 
-const COVERAGES = ["window", "endpoint"] as const satisfies readonly TotalCoverage[];
+/**
+ * 腿的物理形态由求值基准决定：时点与年初累计都在截止月份上求值，期间指标才发整段范围。
+ * 降级的按月指标同样只在终点当月成立。
+ */
+function legTime(period: TotalPeriod): TimeInput {
+  return period.degraded || physicalForm(period.basis) === "endpoint"
+    ? { cutoff: period.to, grain: "total" }
+    : { range: { from: period.from, to: period.to }, grain: "total" };
+}
+
+/** 求值期间相同、物理形态也相同的指标合成一条腿。 */
+function legKey(period: TotalPeriod): string {
+  return JSON.stringify(legTime(period));
+}
 
 function measureIndex(views: CubeView[]): ReadonlyMap<string, CubeMember> {
   return new Map(
@@ -55,30 +70,31 @@ export async function computeMetricTotals(input: {
   const measures = query.measures ?? [];
   if (!measures.length) return [];
   const members = measureIndex(views);
-  const capabilitiesOf = (name: string) => {
+  const periodOf = (name: string, coordinate: { from: string; to: string }) => {
     const member = members.get(name);
     if (!member) throw new Error(`合计求值缺少指标 ${name} 的时间合同`);
-    return metricTimeCapabilities(resolveMetricTime(member, members).contract);
+    const resolved = resolveMetricTime(member, members);
+    return totalPeriodOf(resolved.basis, metricTimeCapabilities(resolved.contract), coordinate);
   };
   const periods = businessTime.coordinates.map((coordinate) =>
-    measures.map((name) =>
-      totalPeriodOf(capabilitiesOf(name), { from: coordinate.from, to: coordinate.to }),
-    ),
+    measures.map((name) => periodOf(name, { from: coordinate.from, to: coordinate.to })),
   );
 
-  const legs = businessTime.coordinates.flatMap((coordinate, coordinateIndex) =>
-    COVERAGES.flatMap((coverage) => {
-      const legMeasures = measures.filter(
-        (_, index) => periods[coordinateIndex][index].coverage === coverage,
-      );
-      if (!legMeasures.length) return [];
-      const time: TimeInput =
-        coverage === "window"
-          ? { range: { from: coordinate.from, to: coordinate.to }, grain: "total" }
-          : { cutoff: coordinate.to, grain: "total" };
-      return [{ coordinateIndex, measures: legMeasures, time }];
-    }),
-  );
+  const legs = businessTime.coordinates.flatMap((_coordinate, coordinateIndex) => {
+    const grouped = new Map<string, { period: TotalPeriod; measures: string[] }>();
+    measures.forEach((name, index) => {
+      const period = periods[coordinateIndex][index];
+      const key = legKey(period);
+      const leg = grouped.get(key) ?? { period, measures: [] };
+      leg.measures.push(name);
+      grouped.set(key, leg);
+    });
+    return [...grouped.values()].map((leg) => ({
+      coordinateIndex,
+      measures: leg.measures,
+      time: legTime(leg.period),
+    }));
+  });
   const loaded = await Promise.all(
     legs.map(async (leg) => {
       const plan = planMetricQuery(

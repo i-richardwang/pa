@@ -3,6 +3,7 @@
  * TypeScript types, and the MCP output schema are derived from the executable schemas below.
  */
 import { z } from "zod";
+import { basisPeriod, METRIC_VALUE_BASIS_INPUT } from "./metric_value_basis.js";
 
 export const COLUMN_FORMATS = ["number", "percent", "percentage_point"] as const;
 export const COLUMN_FORMAT_SCHEMA = z.enum(COLUMN_FORMATS);
@@ -122,9 +123,13 @@ const TOTAL_PERIOD_SCHEMA = z
     from: z.string().regex(MONTH),
     to: z.string().regex(MONTH),
     value: z.number().finite().nullable(),
-    coverage: z
-      .enum(["window", "endpoint"])
-      .describe("window 覆盖整个坐标期间；endpoint 是不可整窗合并的指标退到终点求值的真实覆盖"),
+    basis: METRIC_VALUE_BASIS_INPUT.describe(
+      "该指标值覆盖桶里哪一段；from/to 是它在本坐标上的展开",
+    ),
+    degraded: z
+      .literal(true)
+      .optional()
+      .describe("按月定义的指标在跨月坐标上没有合计，已退到终点当月求值"),
   })
   .strict();
 const TOTALS_BLOCK_SCHEMA = z
@@ -200,6 +205,13 @@ export const VIEW_BLOCK_SCHEMA = z
     column_roles: z
       .record(COLUMN_ROLE_SCHEMA)
       .describe("每个结果列的语义角色（指标/维度/时间），由服务端完整声明，呈现层不猜测"),
+    column_time_basis: z
+      .record(METRIC_VALUE_BASIS_INPUT)
+      .optional()
+      .describe(
+        "每个指标列的业务求值基准：这一列的数覆盖每个时间桶里的哪一段。" +
+          "与 time.buckets 合起来就是该列每格的真实期间，不需要按标题猜",
+      ),
     structure_shares: z
       .array(STRUCTURE_SHARE_SCHEMA)
       .min(1)
@@ -360,11 +372,16 @@ export const VIEW_BLOCK_SCHEMA = z
         }
         metric.periods.forEach((period, periodIndex) => {
           const coordinate = coordinates[periodIndex];
-          if (period.to !== coordinate.to || period.from < coordinate.from) {
+          // 声明的期间必须就是该指标的求值基准在这个坐标上展开出来的那一段，一个字节都不许差。
+          // 年初累计的起点会早于坐标起点（选七月看到的是一到七月），这是它的定义而不是越界。
+          const expected = period.degraded
+            ? { from: coordinate.to, to: coordinate.to }
+            : basisPeriod(period.basis, coordinate);
+          if (period.from !== expected.from || period.to !== expected.to) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
               path: ["totals", "metrics", index, "periods", periodIndex],
-              message: "整窗合计的期间必须落在对应坐标内并与其终点一致",
+              message: `整窗合计的期间必须与求值基准一致：${period.basis} 在 ${coordinate.from}~${coordinate.to} 上应为 ${expected.from}~${expected.to}`,
             });
           }
         });

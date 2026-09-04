@@ -7,7 +7,7 @@ import {
   metricTimeSelectionIssue,
   timeSelectionIssueMessage,
   type ResolvedTimeSelection,
-  type TimeCapabilities,
+  type MetricTime,
   type TimeSelectionIssue,
 } from "./time_contract.js";
 
@@ -29,7 +29,7 @@ type QueryFeasibilityMeasure = QueryFeasibilityMemberBase & {
   kind: "measure";
   query_capabilities: MeasureQueryCapabilities;
   report_calculations?: ReportCalculationKind[];
-  time_constraints?: TimeCapabilities;
+  time?: MetricTime;
 };
 
 type QueryFeasibilityDimension = QueryFeasibilityMemberBase & {
@@ -304,7 +304,7 @@ function comparisonIssue(
   return metricTimeComparisonIssue(
     measures.map((member) => ({
       title: member.title,
-      capabilities: member.time_constraints ?? {},
+      capabilities: member.time?.constraints ?? {},
     })),
     comparison,
   );
@@ -412,7 +412,7 @@ function queryFeasibilityIssues(
     return [...structural, ...capabilities, ...(time ? [time] : [])];
   }
   const timeRequirements = measures.map((member) => ({
-    capabilities: member.time_constraints ?? {},
+    capabilities: member.time?.constraints ?? {},
     title: member.title,
   }));
   const time = metricTimeSelectionIssue(timeRequirements, timeSelection);

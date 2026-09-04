@@ -105,7 +105,7 @@ test("Agent Catalog 从真实授权目录投影查询所需能力", async () => 
     numerator: "在职人数",
     denominator: "统计范围总人数",
   });
-  expect(agentPayload.measures.find(({ title }) => title === "月度指标")?.time_constraints).toEqual(
+  expect(agentPayload.measures.find(({ title }) => title === "月度指标")?.time.constraints).toEqual(
     { grain: "month" },
   );
 });

@@ -38,6 +38,7 @@ const catalog: CatalogPayload = {
       query_capabilities: {
         dimension_ids: ["dimension:organization_name", "dimension:department_name"],
       },
+      time: { value_basis: "bucket_end" as const },
     },
     {
       id: "measure:new_hire_count",
@@ -47,6 +48,7 @@ const catalog: CatalogPayload = {
       query_capabilities: {
         dimension_ids: ["dimension:organization_name", "dimension:department_name"],
       },
+      time: { value_basis: "whole_bucket" as const },
     },
   ],
   dimensions: [
@@ -363,7 +365,7 @@ describe("analysis draft 三层状态", () => {
       title: "月度入职率",
       description: "所选月份的入职率。",
       query_capabilities: { dimension_ids: [] },
-      time_constraints: { grain: "month" as const },
+      time: { value_basis: "whole_bucket" as const, constraints: { grain: "month" as const } },
     };
     const annual = beginAnalysisEdit(
       {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { CubeMember } from "../ports/cube_gateway.js";
-import { physicalEvaluation, resolveMetricTime } from "./metric_time.js";
+import { physicalForm, resolveMetricTime } from "./metric_time.js";
 
 function member(
   name: string,
@@ -22,8 +22,8 @@ function memberMap(...members: CubeMember[]): Map<string, CubeMember> {
   return new Map(members.map((candidate) => [candidate.name, candidate]));
 }
 
-describe("指标时间合同", () => {
-  test("sum、average 与 last 映射为最小物理求值形态", () => {
+describe("指标的业务求值基准", () => {
+  test("sum、average 覆盖整个桶，last 只覆盖桶末", () => {
     const sum = member("metrics.leavers", { aggregation: "sum", window: "selected" });
     const average = member("metrics.average_headcount", {
       aggregation: "average",
@@ -35,23 +35,23 @@ describe("指标时间合同", () => {
     });
     const members = memberMap(sum, average, last);
 
-    expect(resolveMetricTime(sum, members).evaluation).toBe("interval");
-    expect(resolveMetricTime(average, members).evaluation).toBe("interval");
-    expect(resolveMetricTime(last, members).evaluation).toBe("endpoint");
+    expect(resolveMetricTime(sum, members).basis).toBe("whole_bucket");
+    expect(resolveMetricTime(average, members).basis).toBe("whole_bucket");
+    expect(resolveMetricTime(last, members).basis).toBe("bucket_end");
   });
 
-  test("year_to_date 保留逻辑窗口，物理上在目标桶终点读取 rolling measure", () => {
+  test("年初累计保留业务窗口，物理上仍在桶终点读取 rolling measure", () => {
     const ytd = member("metrics.ytd_rate", {
       aggregation: "recompute",
       window: "year_to_date",
     });
     const resolved = resolveMetricTime(ytd, memberMap(ytd));
 
-    expect(resolved.evaluation).toBe("year_to_date");
-    expect(physicalEvaluation(resolved.evaluation)).toBe("endpoint");
+    expect(resolved.basis).toBe("year_start_to_bucket_end");
+    expect(physicalForm(resolved.basis)).toBe("endpoint");
   });
 
-  test("按月重算的比例不要求分子与分母具有相同的跨月形态", () => {
+  test("按月重算的比例不要求分子与分母具有相同的基准", () => {
     const leavers = member("metrics.leavers", { aggregation: "sum", window: "selected" });
     const active_employee_count = member("metrics.active_employee_count", {
       aggregation: "last",
@@ -63,12 +63,12 @@ describe("指标时间合同", () => {
       { numerator: "leavers", denominator: "active_employee_count" },
     );
 
-    expect(
-      resolveMetricTime(rate, memberMap(leavers, active_employee_count, rate)).evaluation,
-    ).toBe("interval");
+    expect(resolveMetricTime(rate, memberMap(leavers, active_employee_count, rate)).basis).toBe(
+      "whole_bucket",
+    );
   });
 
-  test("非月度重算比例继承两个组件的一致形态", () => {
+  test("非月度重算比例继承两个组件的一致基准", () => {
     const capacity = member("metrics.capacity", { aggregation: "last", window: "selected" });
     const active_employee_count = member("metrics.active_employee_count", {
       aggregation: "last",
@@ -81,12 +81,11 @@ describe("指标时间合同", () => {
     );
 
     expect(
-      resolveMetricTime(utilization, memberMap(capacity, active_employee_count, utilization))
-        .evaluation,
-    ).toBe("endpoint");
+      resolveMetricTime(utilization, memberMap(capacity, active_employee_count, utilization)).basis,
+    ).toBe("bucket_end");
   });
 
-  test("非月度重算比例混合区间与终点组件时 fail-closed", () => {
+  test("非月度重算比例混合期间值与时点值组件时 fail-closed", () => {
     const leavers = member("metrics.leavers", { aggregation: "sum", window: "selected" });
     const active_employee_count = member("metrics.active_employee_count", {
       aggregation: "last",
@@ -126,7 +125,7 @@ describe("指标时间合同", () => {
       window: "selected",
       grain: "month",
     });
-    expect(resolveMetricTime(ytd, memberMap(ytd)).evaluation).toBe("year_to_date");
+    expect(resolveMetricTime(ytd, memberMap(ytd)).basis).toBe("year_start_to_bucket_end");
     expect(resolveMetricTime(monthly, memberMap(monthly)).contract.grain).toBe("month");
   });
 });

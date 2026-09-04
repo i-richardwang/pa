@@ -123,7 +123,7 @@ function buildSourceSemantics(
         alias: calculation.id,
         kind: "measure",
         valueType: "number",
-        timeEvaluation: resolveMetricTime(measure, measures).evaluation,
+        timeBasis: resolveMetricTime(measure, measures).basis,
       });
       return;
     }
@@ -136,7 +136,7 @@ function buildSourceSemantics(
         alias: measure.aliasMember ?? measure.name,
         kind: "measure",
         valueType: measure.type,
-        timeEvaluation: metricTime.evaluation,
+        timeBasis: metricTime.basis,
       });
       return;
     }
@@ -498,6 +498,11 @@ async function executeView(
   const columnRoles = Object.fromEntries(
     [...sourceSemantics.columns].map(([column, semantics]) => [column, semantics.kind]),
   );
+  const columnTimeBasis = Object.fromEntries(
+    [...sourceSemantics.columns].flatMap(([column, semantics]) =>
+      semantics.timeBasis ? [[column, semantics.timeBasis] as const] : [],
+    ),
+  );
   const modelStructureShares = structureSharesOf(baseMemberKeys, columns, visibleMembers);
   const columnOfMember = new Map(memberKeys.map((key, index) => [key, columns[index]]));
   const resolvedDeliveryColumns = Object.fromEntries(
@@ -528,6 +533,7 @@ async function executeView(
     ...(Object.keys(columnFormats).length ? { column_formats: columnFormats } : {}),
     ...(Object.keys(columnDecimals).length ? { column_decimals: columnDecimals } : {}),
     column_roles: columnRoles,
+    ...(Object.keys(columnTimeBasis).length ? { column_time_basis: columnTimeBasis } : {}),
     ...(structureShares.length ? { structure_shares: structureShares } : {}),
     rows,
     ...(summaryRows?.length

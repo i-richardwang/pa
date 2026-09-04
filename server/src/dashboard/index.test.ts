@@ -129,6 +129,7 @@ describe("dashboard app routes and access control", () => {
                   description: "主要事件数除以月均基数。",
                   ai_context: "只供 Agent",
                   query_capabilities: { dimension_ids: [] },
+                  time: { value_basis: "year_start_to_bucket_end" as const },
                 },
               ],
               dimensions: [],

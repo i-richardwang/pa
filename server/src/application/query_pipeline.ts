@@ -105,6 +105,7 @@ function projectOutputBlock(
       : undefined;
   const columnFormats = projectRecord(block.column_formats);
   const columnDecimals = projectRecord(block.column_decimals);
+  const columnTimeBasis = projectRecord(block.column_time_basis);
   const columnRoles = Object.fromEntries(
     Object.entries(block.column_roles).map(([key, value]) => [
       requiredPublicColumnId(delivery, key, outputId),
@@ -155,6 +156,9 @@ function projectOutputBlock(
       ? { column_decimals: columnDecimals }
       : {}),
     column_roles: columnRoles,
+    ...(columnTimeBasis && Object.keys(columnTimeBasis).length
+      ? { column_time_basis: columnTimeBasis }
+      : {}),
     ...(structureShares?.length ? { structure_shares: structureShares } : {}),
     rows: block.rows,
     ...(block.summary ? { summary: block.summary } : {}),

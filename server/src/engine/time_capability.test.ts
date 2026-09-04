@@ -76,7 +76,13 @@ const semantic = toSemanticCatalog(document);
 const compiler = toCompilerCatalog(document);
 
 const cardOf = (id: string): TimeCapabilities =>
-  semantic.measures.find((member) => member.id === id)?.time_constraints ?? {};
+  semantic.measures.find((member) => member.id === id)?.time.constraints ?? {};
+
+const basisOf = (id: string) => {
+  const basis = semantic.measures.find((member) => member.id === id)?.time.value_basis;
+  if (!basis) throw new Error(`fixture 缺 ${id} 的求值基准`);
+  return basis;
+};
 
 function predictedIssue(time: TimeIntent, capabilities: TimeCapabilities) {
   const result = resolveTimeIntentSelection(time, LATEST);
@@ -220,21 +226,24 @@ test("时间自身冲突在预测与生产路径返回同一结构化 issue", ()
   });
 });
 
-test("年初归零由合计位的终点降级承担，不表现为显示档拒绝", () => {
+test("年初归零不表现为显示档拒绝，合计位由求值基准写实覆盖期间", () => {
   // 跨日历年按年/按月均合法；年初归零只影响合计位的覆盖期间。
   expect(rejection("measure:ytd_event_rate", at("跨年期间·按月"))).toBeUndefined();
   expect(rejection("measure:ytd_event_rate", at("跨年期间·按年"))).toBeUndefined();
-  // 它仍是一位真实能力：整窗合计据此退到终点所在年的年初至今，而不是硬合并跨年。
+  // 目录的两个字段各答各的：基准说数覆盖哪一段，限制位说用户能选什么。
+  expect(basisOf("measure:ytd_event_rate")).toBe("year_start_to_bucket_end");
+  expect(cardOf("measure:ytd_event_rate")).toEqual({ year_scoped: true });
   const crossYear = { from: "2024-01", to: "2026-07" };
-  expect(totalPeriodOf(cardOf("measure:ytd_event_rate"), crossYear)).toEqual({
+  expect(
+    totalPeriodOf(basisOf("measure:ytd_event_rate"), cardOf("measure:ytd_event_rate"), crossYear),
+  ).toEqual({
     from: "2026-01",
     to: "2026-07",
-    coverage: "endpoint",
+    basis: "year_start_to_bucket_end",
   });
-  expect(totalPeriodOf(cardOf("measure:turnover_count"), crossYear)).toEqual({
-    ...crossYear,
-    coverage: "window",
-  });
+  expect(
+    totalPeriodOf(basisOf("measure:turnover_count"), cardOf("measure:turnover_count"), crossYear),
+  ).toEqual({ ...crossYear, basis: "whole_bucket" });
 });
 
 test("年初归零的跨年总计在能力投影与生产路径返回同一结构化 issue", () => {

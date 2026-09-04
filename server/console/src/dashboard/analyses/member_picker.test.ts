@@ -11,6 +11,7 @@ const measure: CatalogMemberPayload = {
   title: "期末目标数",
   description: "期末配置的目标数量。",
   query_capabilities: { dimension_ids: [] },
+  time: { value_basis: "bucket_end" as const },
 };
 const dimension: CatalogMemberPayload = {
   id: "dimension:department_name",
@@ -79,6 +80,7 @@ describe("report editor member picker", () => {
       title,
       description: "",
       query_capabilities: { dimension_ids: [] },
+      time: { value_basis: "bucket_end" as const },
     });
     const domain = (id: string, title: string, measure_ids: string[]): MetricDomainPayload => ({
       id: id as MetricDomainPayload["id"],

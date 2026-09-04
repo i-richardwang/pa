@@ -32,6 +32,7 @@ const catalog: CatalogPayload = {
       title: "在职人数",
       description: "在职人数。",
       query_capabilities: { dimension_ids: ["dimension:organization_name"] },
+      time: { value_basis: "bucket_end" as const },
     },
   ],
   dimensions: [

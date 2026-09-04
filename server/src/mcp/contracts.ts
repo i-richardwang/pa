@@ -8,14 +8,14 @@ import {
   ANALYSIS_DEFINITION_INPUT,
   SEMANTIC_VIEW_INTENT_INPUT,
 } from "../semantic_core/semantic_analysis.js";
-import { TIME_CAPABILITIES_INPUT } from "../semantic_core/time_contract.js";
+import { METRIC_TIME_INPUT } from "../semantic_core/time_contract.js";
 import { BUSINESS_TERM_RESOLUTION_SCHEMA } from "../contracts/business_term_contract.js";
 import { EXPORT_TICKET_TTL_MINUTES } from "../contracts/export_contract.js";
 import { ACCESS_SCOPE_DEFINITION_SCHEMA } from "../contracts/access_scope.js";
 import { MEASURE_QUERY_CAPABILITIES_SCHEMA } from "../contracts/catalog_contract.js";
 
 export const SERVER_INSTRUCTIONS =
-  "PA 是权限裁剪的封闭查询面。成员只用 catalog 的语义 id，并遵守 query_capabilities、time_constraints 与 report_calculations；先用 catalog(terms) 解析术语，值不确定时用 values_of。" +
+  "PA 是权限裁剪的封闭查询面。成员只用 catalog 的语义 id，并遵守 query_capabilities、time.constraints 与 report_calculations；先用 catalog(terms) 解析术语，值不确定时用 values_of。" +
   "术语只供理解，不改写查询；歧义先确认。查询只声明指标、维度与 time，不用标题、物理字段或 SQL，也不补充未要求的范围或比较。" +
   "构成记录仅用于单结果格、单时间桶且 records_available 的分析，个体行只在受控 App 展示。";
 
@@ -104,8 +104,9 @@ const CATALOG_MEASURE_OUTPUT = CATALOG_MEMBER_OUTPUT.extend({
     .strict()
     .optional()
     .describe("指标的机器可读呈现关系；numerator_id 为分子指标的语义 id"),
-  time_constraints: TIME_CAPABILITIES_INPUT.optional().describe(
-    "时间能力卡：指标对序列粒度和日历期间的约束；省略表示没有额外限制",
+  time: METRIC_TIME_INPUT.describe(
+    "指标的时间面：value_basis 说这一列的数覆盖每个时间桶里的哪一段，" +
+      "constraints 说用户能选什么时间；省略 constraints 表示没有额外限制",
   ),
 });
 

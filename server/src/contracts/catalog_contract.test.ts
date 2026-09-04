@@ -14,6 +14,7 @@ const catalog = {
       title: "人数",
       description: "所选范围人数。",
       query_capabilities: { dimension_ids: ["dimension:organization"] },
+      time: { value_basis: "bucket_end" },
     },
   ],
   dimensions: [
@@ -40,6 +41,13 @@ describe("public catalog contract", () => {
       PUBLIC_CATALOG_DOCUMENT_SCHEMA.safeParse({
         ...catalog,
         dimensions: [{ ...catalog.dimensions[0], query_capabilities: { dimension_ids: [] } }],
+      }).success,
+    ).toBe(false);
+    // 求值基准是指标的必填面：缺了它，消费方就只能按标题猜这个数代表什么时间。
+    expect(
+      PUBLIC_CATALOG_DOCUMENT_SCHEMA.safeParse({
+        ...catalog,
+        measures: [{ ...catalog.measures[0], time: undefined }],
       }).success,
     ).toBe(false);
   });

@@ -1,5 +1,10 @@
 import { z } from "zod";
 import type { MetricTimeContract } from "./metric_time_contract.js";
+import {
+  basisPeriod,
+  METRIC_VALUE_BASIS_INPUT,
+  type MetricValueBasis,
+} from "./metric_value_basis.js";
 
 const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -630,8 +635,23 @@ export const TIME_CAPABILITIES_INPUT = z
 export type TimeCapabilities = z.infer<typeof TIME_CAPABILITIES_INPUT>;
 
 /**
- * 由指标合同推导能力卡。目录装配（下发给编辑器）与整窗合计求值共用这一份推导，
- * 卡因此永不手写，也不会各自解读合同字段。
+ * 指标的时间面：两个问题各占一个字段。value_basis 说这个数代表什么时间，constraints 说
+ * 用户能选什么时间。合成一个字段过一次，结果是快照指标的合计被声明成覆盖整个窗口。
+ */
+export const METRIC_TIME_INPUT = z
+  .object({
+    value_basis: METRIC_VALUE_BASIS_INPUT,
+    constraints: TIME_CAPABILITIES_INPUT.optional().describe(
+      "指标对时间选择的限制；省略表示没有额外限制",
+    ),
+  })
+  .strict();
+
+export type MetricTime = z.infer<typeof METRIC_TIME_INPUT>;
+
+/**
+ * 由指标合同推导能力卡。卡上只有查询限制位：能不能跨月合并、能不能跨日历年、能不能隐式对照。
+ * 「这个数覆盖哪一段」不在卡上，那是 MetricValueBasis 的事。
  */
 export function metricTimeCapabilities(contract: MetricTimeContract | undefined): TimeCapabilities {
   return {
@@ -712,26 +732,29 @@ export function metricTimeSelectionIssue(
   return undefined;
 }
 
-export type TotalCoverage = "window" | "endpoint";
-/** 整窗合计的求值期间：真实覆盖的业务月份区间，以及它是整窗还是终点降级。 */
-export type TotalPeriod = { from: string; to: string; coverage: TotalCoverage };
-
 /**
- * 指标在一个时间坐标上的合计求值期间。能整窗合并即 window，期间就是坐标本身；
- * 不能合并的两族退为 endpoint——按月定义只覆盖终点当月，年初归零覆盖终点所在日历年的
- * 年初至终点。序列兼容性与合计覆盖期间共用同一能力卡。
+ * 指标在一个时间坐标上的合计求值期间。期间出自指标的业务求值基准，不出自能力卡——
+ * 能力卡只回答「用户能选什么」，回答不了「这个数覆盖哪一段」。
+ *
+ * degraded 是另一件事：按月定义的指标在跨月坐标上没有合计可言，只能退到终点当月求值。
+ * 它由能力卡判定，必须显式写出来，不能让消费方拿 basis 和 from/to 去对比推断。
  */
+export type TotalPeriod = {
+  from: string;
+  to: string;
+  basis: MetricValueBasis;
+  degraded?: true;
+};
+
 export function totalPeriodOf(
+  basis: MetricValueBasis,
   capabilities: TimeCapabilities,
-  period: { from: string; to: string },
+  coordinate: { from: string; to: string },
 ): TotalPeriod {
-  if (capabilities.grain === "month" && period.from !== period.to) {
-    return { from: period.to, to: period.to, coverage: "endpoint" };
+  if (capabilities.grain === "month" && coordinate.from !== coordinate.to) {
+    return { from: coordinate.to, to: coordinate.to, basis, degraded: true };
   }
-  if (capabilities.year_scoped && period.from.slice(0, 4) !== period.to.slice(0, 4)) {
-    return { from: `${period.to.slice(0, 4)}-01`, to: period.to, coverage: "endpoint" };
-  }
-  return { from: period.from, to: period.to, coverage: "window" };
+  return { ...basisPeriod(basis, coordinate), basis };
 }
 
 /** 主期间的绝对起止；相对窗口按 latest 展开，截止月份形态起止同月。 */

@@ -22,6 +22,7 @@ test("公共 MCP 响应 schema 递归 strict，物理字段不能被静默剥离
         title: "在职人数",
         description: "月末在职人数。",
         query_capabilities: { dimension_ids: [] },
+        time: { value_basis: "bucket_end" },
       },
     ],
     dimensions: [],

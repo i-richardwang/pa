@@ -7,7 +7,7 @@ import {
   type EngineViewBlock,
   type SourceColumnSemantics,
 } from "./transform.js";
-import type { MetricTimeEvaluation } from "./metric_time.js";
+import type { MetricValueBasis } from "../semantic_core/metric_value_basis.js";
 import { timeBuckets, type TimeOutputGrain } from "../semantic_core/time_contract.js";
 import type { BusinessTimeResolution } from "./time_plan.js";
 
@@ -106,7 +106,7 @@ function sourceSemantics(
                   alias: `test_people_metrics.${column}`,
                   kind: "measure",
                   valueType: "number",
-                  timeEvaluation: "year_to_date" as MetricTimeEvaluation,
+                  timeBasis: "year_start_to_bucket_end" as MetricValueBasis,
                 };
           return [column, { ...base, ...(overrides[source]?.[column] ?? {}) }] as const;
         }),
@@ -621,13 +621,13 @@ describe("transformDerivedView", () => {
       v0: {
         ytd_primary_event_rate: {
           alias: "snapshot.active_employee_count",
-          timeEvaluation: "endpoint",
+          timeBasis: "bucket_end",
         },
       },
       v1: {
         ytd_primary_event_rate: {
           alias: "flow.new_hire_count",
-          timeEvaluation: "interval",
+          timeBasis: "whole_bucket",
         },
       },
     });
@@ -670,11 +670,11 @@ describe("transformDerivedView", () => {
       ],
     };
     expect(() => transformDerivedView(crossSemantics, sources, new Set(), semantics)).toThrow(
-      /混用了 endpoint 与 interval.*模型层/,
+      /混用了时点值与期间值.*模型层/,
     );
 
     const numericDimension = sourceSemantics(new Map([["v0", sources.get("v0")!]]), {
-      v0: { ytd_primary_event_rate: { kind: "dimension", timeEvaluation: undefined } },
+      v0: { ytd_primary_event_rate: { kind: "dimension", timeBasis: undefined } },
     });
     expect(() =>
       transformDerivedView(
@@ -712,8 +712,8 @@ describe("transformDerivedView", () => {
     ]);
 
     const point = sourceSemantics(sources, {
-      v0: { ytd_primary_event_rate: { timeEvaluation: "endpoint" } },
-      v1: { ytd_primary_event_rate: { timeEvaluation: "endpoint" } },
+      v0: { ytd_primary_event_rate: { timeBasis: "bucket_end" } },
+      v1: { ytd_primary_event_rate: { timeBasis: "bucket_end" } },
     });
     point.get("v0")!.time = atCutoffs("total", "2026-06");
     point.get("v1")!.time = atCutoffs("total", "2025-06");
@@ -722,13 +722,13 @@ describe("transformDerivedView", () => {
     const differentMeasures = sourceSemantics(sources, {
       v0: {
         ytd_primary_event_rate: {
-          timeEvaluation: "endpoint",
+          timeBasis: "bucket_end",
           alias: "test_people_metrics.active_employee_count",
         },
       },
       v1: {
         ytd_primary_event_rate: {
-          timeEvaluation: "endpoint",
+          timeBasis: "bucket_end",
           alias: "test_people_metrics.attrition_count",
         },
       },
@@ -740,8 +740,8 @@ describe("transformDerivedView", () => {
     );
 
     const flow = sourceSemantics(sources, {
-      v0: { ytd_primary_event_rate: { timeEvaluation: "interval" } },
-      v1: { ytd_primary_event_rate: { timeEvaluation: "interval" } },
+      v0: { ytd_primary_event_rate: { timeBasis: "whole_bucket" } },
+      v1: { ytd_primary_event_rate: { timeBasis: "whole_bucket" } },
     });
     flow.get("v0")!.time = overRanges("total", { from: "2026-01", to: "2026-06" });
     flow.get("v1")!.time = overRanges("total", { from: "2025-01", to: "2025-06" });

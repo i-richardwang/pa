@@ -32,7 +32,7 @@ const measure = (source: PublicCatalogMeasure) => ({
       }
     : {}),
   ...(source.relation ? { relation: source.relation } : {}),
-  ...(source.time_constraints ? { time_constraints: source.time_constraints } : {}),
+  time: source.time,
 });
 
 const dimension = (source: PublicCatalogDimension) => ({

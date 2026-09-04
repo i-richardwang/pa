@@ -73,6 +73,7 @@ function member(
   return {
     ...common,
     kind,
+    time: { value_basis: "whole_bucket" as const },
     metric_domain_id:
       id === CURRENT_MONTH_FULFILLMENT_RATE
         ? "metric_domain:headcount_plan"

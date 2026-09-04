@@ -1056,7 +1056,7 @@ function totalsCube(calls: CubeQuery[], cellOf: (query: CubeQuery, measure: stri
   } as unknown as CubeGateway;
 }
 
-test("不能整窗合并的指标退到期间终点求值，并写实其真实覆盖期间", async () => {
+test("合计位按各指标的求值基准写实覆盖期间，执行腿与声明同源", async () => {
   const calls: CubeQuery[] = [];
   const values: Record<string, number> = {
     "test_people_metrics.active_employee_count": 100,
@@ -1091,16 +1091,28 @@ test("不能整窗合并的指标退到期间终点求值，并写实其真实�
   expect(result.payload.view.totals).toEqual({
     metrics: [
       {
+        // 月末快照的合计就是终点当月的时点值，不覆盖 2025-06 起的十四个月。
         column: "active_employee_count",
-        periods: [{ from: "2025-06", to: "2026-07", value: 100, coverage: "window" }],
+        periods: [{ from: "2026-07", to: "2026-07", value: 100, basis: "bucket_end" }],
       },
       {
         column: "ytd_event_rate",
-        periods: [{ from: "2026-01", to: "2026-07", value: 0.05, coverage: "endpoint" }],
+        periods: [
+          { from: "2026-01", to: "2026-07", value: 0.05, basis: "year_start_to_bucket_end" },
+        ],
       },
       {
+        // 按月定义的率跨月没有合计，退到终点当月并显式标记降级。
         column: "monthly_turnover_rate",
-        periods: [{ from: "2026-07", to: "2026-07", value: 0.01, coverage: "endpoint" }],
+        periods: [
+          {
+            from: "2026-07",
+            to: "2026-07",
+            value: 0.01,
+            basis: "whole_bucket",
+            degraded: true,
+          },
+        ],
       },
     ],
   });
@@ -1108,6 +1120,15 @@ test("不能整窗合并的指标退到期间终点求值，并写实其真实�
   const totalLegs = calls.filter((query) => !query.dimensions?.length);
   expect(totalLegs.length).toBeGreaterThan(0);
   expect(totalLegs.every((query) => !query.timeDimensions?.[0]?.compareDateRange)).toBe(true);
+  // 三个指标都在终点当月上求值，物理窗口完全一样；它们覆盖的业务期间却各不相同（上面的
+  // 断言），差别全在求值基准上——这正是基准必须随结果发出去、不能让消费方从窗口反推的原因。
+  expect(
+    totalLegs.every(
+      (query) =>
+        JSON.stringify(query.timeDimensions?.[0]?.dateRange) ===
+        JSON.stringify(["2026-07-01", "2026-07-31"]),
+    ),
+  ).toBe(true);
 });
 
 test("带对照时每个指标逐期间给出合计", async () => {
@@ -1138,8 +1159,8 @@ test("带对照时每个指标逐期间给出合计", async () => {
       {
         column: "active_employee_count",
         periods: [
-          { from: "2026-07", to: "2026-07", value: 2026, coverage: "window" },
-          { from: "2025-07", to: "2025-07", value: 2025, coverage: "window" },
+          { from: "2026-07", to: "2026-07", value: 2026, basis: "bucket_end" },
+          { from: "2025-07", to: "2025-07", value: 2025, basis: "bucket_end" },
         ],
       },
     ],

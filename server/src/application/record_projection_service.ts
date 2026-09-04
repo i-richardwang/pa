@@ -71,7 +71,7 @@ function selectedTime(
 ) {
   const { from, to } = coordinate;
   if (from > to) throw new RecordProjectionRequestError("明细时间范围无效，请刷新报告后重试");
-  if (target.evaluation === "interval" && from !== to) {
+  if (target.basis === "whole_bucket" && from !== to) {
     return { range: { from, to }, grain: "total" as const };
   }
   return { cutoff: to };

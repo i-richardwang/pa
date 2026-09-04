@@ -261,8 +261,8 @@ function totalsPayload(): QueryPayload {
           {
             column: "hr.turnover_count",
             periods: [
-              { from: "2026-01", to: "2026-02", value: 22, coverage: "window" },
-              { from: "2025-01", to: "2025-02", value: 20, coverage: "window" },
+              { from: "2026-01", to: "2026-02", value: 22, basis: "whole_bucket" },
+              { from: "2025-01", to: "2025-02", value: 20, basis: "whole_bucket" },
             ],
           },
         ],
@@ -326,7 +326,7 @@ test("整窗读数随形态在场：同一份数据声明为表看不到期间�
         metrics: [
           {
             column: "hr.active_employee_count",
-            periods: [{ from: "2026-08", to: "2026-08", value: 19873, coverage: "window" }],
+            periods: [{ from: "2026-08", to: "2026-08", value: 19873, basis: "whole_bucket" }],
           },
         ],
       },

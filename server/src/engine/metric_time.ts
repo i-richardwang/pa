@@ -3,12 +3,11 @@ import {
   parseMetricTimeContract,
   type MetricTimeContract,
 } from "../semantic_core/metric_time_contract.js";
-
-export type MetricTimeEvaluation = "interval" | "endpoint" | "year_to_date";
+import type { MetricValueBasis } from "../semantic_core/metric_value_basis.js";
 
 export type ResolvedMetricTime = {
   contract: MetricTimeContract;
-  evaluation: MetricTimeEvaluation;
+  basis: MetricValueBasis;
 };
 
 function qualify(member: CubeMember, reference: string): string {
@@ -22,7 +21,10 @@ function componentNames(member: CubeMember): [string, string] | null {
     : null;
 }
 
-/** 从指标合同推导物理时间求值方式。 */
+/**
+ * 从指标合同解析业务求值基准。比率不自己声明基准，按组件推导——组件基准不一致即报错，
+ * 因为那样的比率没有单一的业务期间可言。
+ */
 export function resolveMetricTime(
   member: CubeMember,
   members: ReadonlyMap<string, CubeMember>,
@@ -30,11 +32,11 @@ export function resolveMetricTime(
 ): ResolvedMetricTime {
   const contract = parseMetricTimeContract(member.meta?.time_contract, member.title ?? member.name);
   if (contract.window === "year_to_date") {
-    return { contract, evaluation: "year_to_date" };
+    return { contract, basis: "year_start_to_bucket_end" };
   }
-  if (contract.aggregation === "last") return { contract, evaluation: "endpoint" };
-  if (contract.aggregation !== "recompute") return { contract, evaluation: "interval" };
-  if (contract.grain === "month") return { contract, evaluation: "interval" };
+  if (contract.aggregation === "last") return { contract, basis: "bucket_end" };
+  if (contract.aggregation !== "recompute") return { contract, basis: "whole_bucket" };
+  if (contract.grain === "month") return { contract, basis: "whole_bucket" };
 
   const components = componentNames(member);
   if (!components) {
@@ -45,27 +47,26 @@ export function resolveMetricTime(
   }
   resolving.add(member.name);
   try {
-    const evaluations = components.map((name) => {
+    const bases = components.map((name) => {
       const component = members.get(name);
       if (!component) {
         throw new Error(`指标「${member.title ?? member.name}」的时间聚合组件 ${name} 不存在`);
       }
-      return resolveMetricTime(component, members, resolving).evaluation;
+      return resolveMetricTime(component, members, resolving).basis;
     });
-    if (evaluations[0] !== evaluations[1]) {
+    if (bases[0] !== bases[1]) {
       throw new Error(
         `指标「${member.title ?? member.name}」混合了不同时间聚合组件；` +
           "非月度正式指标应由指标 DAG 拆分组件后重算",
       );
     }
-    return { contract, evaluation: evaluations[0] };
+    return { contract, basis: bases[0] };
   } finally {
     resolving.delete(member.name);
   }
 }
 
-export function physicalEvaluation(
-  evaluation: MetricTimeEvaluation,
-): Exclude<MetricTimeEvaluation, "year_to_date"> {
-  return evaluation === "year_to_date" ? "endpoint" : evaluation;
+/** 物理求值形态：年初累计与月末时点都落在同一条截止月份腿上。 */
+export function physicalForm(basis: MetricValueBasis): "interval" | "endpoint" {
+  return basis === "whole_bucket" ? "interval" : "endpoint";
 }

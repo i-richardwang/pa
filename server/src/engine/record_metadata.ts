@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CubeMember, CubeView } from "../ports/cube_gateway.js";
-import { resolveMetricTime, type MetricTimeEvaluation } from "./metric_time.js";
+import { resolveMetricTime } from "./metric_time.js";
+import type { MetricValueBasis } from "../semantic_core/metric_value_basis.js";
 
 const RECORD_FIELD_META = z
   .object({
@@ -60,7 +61,7 @@ export type RecordSetDefinition = {
 export type RecordProjectionTarget = {
   member: string;
   mode: "rows" | "entities";
-  evaluation: MetricTimeEvaluation;
+  basis: MetricValueBasis;
   title: string;
   recordSet: string;
   records: RecordSetDefinition;
@@ -205,15 +206,15 @@ export function recordProjectionTargetsOf(
   const resolve = (
     name: string,
     rootTitle: string,
-    rootEvaluation: RecordProjectionTarget["evaluation"],
+    rootBasis: RecordProjectionTarget["basis"],
     recordSet: string,
     resolving: Set<string>,
   ): Omit<RecordProjectionTarget, "title" | "recordSet" | "records"> => {
     const member = byName.get(name);
     if (!member) throw new Error(`指标「${rootTitle}」的底层记录目标不存在`);
     if (resolving.has(name)) throw new Error(`指标「${rootTitle}」的底层记录关系存在循环`);
-    const evaluation = resolveMetricTime(member, byName).evaluation;
-    if (evaluation !== rootEvaluation) {
+    const basis = resolveMetricTime(member, byName).basis;
+    if (basis !== rootBasis) {
       throw new Error(`指标「${rootTitle}」与其底层记录目标的时间口径不一致`);
     }
 
@@ -225,7 +226,7 @@ export function recordProjectionTargetsOf(
       return {
         member: name,
         mode: member.aggType === "count" ? "rows" : "entities",
-        evaluation: rootEvaluation,
+        basis: rootBasis,
       };
     }
     if (contract.record_set !== recordSet) {
@@ -240,7 +241,7 @@ export function recordProjectionTargetsOf(
       return {
         member: name,
         mode: member.aggType === "count" ? "rows" : "entities",
-        evaluation: rootEvaluation,
+        basis: rootBasis,
       };
     }
 
@@ -255,7 +256,7 @@ export function recordProjectionTargetsOf(
 
     resolving.add(name);
     try {
-      return resolve(qualify(view.name, next), rootTitle, rootEvaluation, recordSet, resolving);
+      return resolve(qualify(view.name, next), rootTitle, rootBasis, recordSet, resolving);
     } finally {
       resolving.delete(name);
     }
@@ -265,10 +266,10 @@ export function recordProjectionTargetsOf(
   for (const root of view.measures) {
     const contract = memberContract(root, root.title);
     if (!contract) continue;
-    const evaluation = resolveMetricTime(root, byName).evaluation;
+    const basis = resolveMetricTime(root, byName).basis;
     const records = recordSets.get(contract.record_set);
     if (!records) throw new Error(`指标「${root.title}」引用了不存在的底层记录集`);
-    const target = resolve(root.name, root.title, evaluation, contract.record_set, new Set());
+    const target = resolve(root.name, root.title, basis, contract.record_set, new Set());
     targets.set(root.name, {
       ...target,
       title: root.title,

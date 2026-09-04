@@ -9,7 +9,7 @@ import type {
   TimeContext,
 } from "../ports/cube_gateway.js";
 import { filterMembers } from "./query_contract.js";
-import { physicalEvaluation, resolveMetricTime } from "./metric_time.js";
+import { physicalForm, resolveMetricTime } from "./metric_time.js";
 import {
   metricTimeSelectionIssue,
   metricTimeCapabilities,
@@ -241,7 +241,7 @@ function measureContracts(query: CubeQuery, views: CubeView[]) {
       name,
       title: member.title ?? name,
       contract: resolved.contract,
-      evaluation: resolved.evaluation,
+      basis: resolved.basis,
     };
   });
 }
@@ -427,9 +427,7 @@ export function resolveTimePlanning(
   return {
     businessTime,
     view,
-    evalForms: new Map(
-      contracts.map((contract) => [contract.name, physicalEvaluation(contract.evaluation)]),
-    ),
+    evalForms: new Map(contracts.map((contract) => [contract.name, physicalForm(contract.basis)])),
   };
 }
 

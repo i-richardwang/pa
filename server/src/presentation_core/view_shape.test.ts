@@ -1036,7 +1036,7 @@ describe("整窗读数", () => {
         metrics: [
           {
             column: "turnover_count",
-            periods: [{ from: "2026-01", to: "2026-02", value: 22, coverage: "window" }],
+            periods: [{ from: "2026-01", to: "2026-02", value: 22, basis: "whole_bucket" }],
           },
         ],
       }),
@@ -1061,7 +1061,9 @@ describe("整窗读数", () => {
           metrics: [
             {
               column: "turnover_rate",
-              periods: [{ from: "2026-01", to: "2026-08", value: 0.08, coverage: "endpoint" }],
+              periods: [
+                { from: "2026-01", to: "2026-08", value: 0.08, basis: "year_start_to_bucket_end" },
+              ],
             },
           ],
         }),
@@ -1089,15 +1091,15 @@ describe("整窗读数", () => {
             {
               column: "turnover_count",
               periods: [
-                { from: "2026-01", to: "2026-02", value: 22, coverage: "window" },
-                { from: "2025-01", to: "2025-02", value: 20, coverage: "window" },
+                { from: "2026-01", to: "2026-02", value: 22, basis: "whole_bucket" },
+                { from: "2025-01", to: "2025-02", value: 20, basis: "whole_bucket" },
               ],
             },
             {
               column: "turnover_rate",
               periods: [
-                { from: "2026-01", to: "2026-02", value: 0.05, coverage: "window" },
-                { from: "2025-01", to: "2025-02", value: 0.03, coverage: "window" },
+                { from: "2026-01", to: "2026-02", value: 0.05, basis: "whole_bucket" },
+                { from: "2025-01", to: "2025-02", value: 0.03, basis: "whole_bucket" },
               ],
             },
           ],
@@ -1135,7 +1137,7 @@ describe("整窗读数", () => {
       metrics: [
         {
           column: "turnover_count",
-          periods: [{ from: "2026-01", to: "2026-02", value: 22, coverage: "window" }],
+          periods: [{ from: "2026-01", to: "2026-02", value: 22, basis: "whole_bucket" }],
         },
       ],
     });

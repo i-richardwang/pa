@@ -285,40 +285,50 @@ describe("business time intent", () => {
 describe("整窗合计的求值期间", () => {
   const window = { from: "2025-06", to: "2026-07" };
 
-  test("能整窗合并的指标覆盖整个坐标期间", () => {
-    expect(totalPeriodOf({}, window)).toEqual({ ...window, coverage: "window" });
-    expect(totalPeriodOf({}, { from: "2026-07", to: "2026-07" })).toEqual({
+  test("期间指标覆盖整个坐标，时点指标只覆盖终点当月", () => {
+    expect(totalPeriodOf("whole_bucket", {}, window)).toEqual({
+      ...window,
+      basis: "whole_bucket",
+    });
+    // 快照指标的合计是终点当月的时点值，不是四年的什么东西。
+    expect(totalPeriodOf("bucket_end", {}, window)).toEqual({
       from: "2026-07",
       to: "2026-07",
-      coverage: "window",
+      basis: "bucket_end",
     });
   });
 
-  test("按月定义的指标跨月即退到终点当月，单月窗口仍是整窗", () => {
-    const monthly = { grain: "month" } as const;
-    expect(totalPeriodOf(monthly, window)).toEqual({
-      from: "2026-07",
-      to: "2026-07",
-      coverage: "endpoint",
-    });
-    expect(totalPeriodOf(monthly, { from: "2026-07", to: "2026-07" })).toEqual({
-      from: "2026-07",
-      to: "2026-07",
-      coverage: "window",
-    });
-  });
-
-  test("年初归零的指标跨日历年即退到终点所在年的年初至今，同年内仍是整窗", () => {
-    const scoped = { year_scoped: true } as const;
-    expect(totalPeriodOf(scoped, window)).toEqual({
+  test("年初累计指标恒从终点所在年的一月起算，与坐标起点无关", () => {
+    expect(totalPeriodOf("year_start_to_bucket_end", { year_scoped: true }, window)).toEqual({
       from: "2026-01",
       to: "2026-07",
-      coverage: "endpoint",
+      basis: "year_start_to_bucket_end",
     });
-    expect(totalPeriodOf(scoped, { from: "2026-03", to: "2026-07" })).toEqual({
-      from: "2026-03",
+    // 同一日历年内也一样：值按年初归零，不因为坐标从三月起就少算两个月。
+    expect(
+      totalPeriodOf(
+        "year_start_to_bucket_end",
+        { year_scoped: true },
+        {
+          from: "2026-03",
+          to: "2026-07",
+        },
+      ),
+    ).toEqual({ from: "2026-01", to: "2026-07", basis: "year_start_to_bucket_end" });
+  });
+
+  test("按月定义的指标跨月即降级到终点当月，并显式标记；单月窗口不降级", () => {
+    const monthly = { grain: "month" } as const;
+    expect(totalPeriodOf("whole_bucket", monthly, window)).toEqual({
+      from: "2026-07",
       to: "2026-07",
-      coverage: "window",
+      basis: "whole_bucket",
+      degraded: true,
+    });
+    const single = { from: "2026-07", to: "2026-07" };
+    expect(totalPeriodOf("whole_bucket", monthly, single)).toEqual({
+      ...single,
+      basis: "whole_bucket",
     });
   });
 

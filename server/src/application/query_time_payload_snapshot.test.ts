@@ -48,6 +48,15 @@ const view: CubeView = {
       format: "percent",
       meta: { time_contract: { aggregation: "recompute", window: "year_to_date" } },
     },
+    {
+      name: `${VIEW}.monthly_event_rate`,
+      title: "月度事件率",
+      type: "number",
+      format: "percent",
+      meta: {
+        time_contract: { aggregation: "recompute", window: "selected", grain: "month" },
+      },
+    },
   ],
   dimensions: [{ name: `${VIEW}.organization_name`, title: "组织", type: "string" }],
 };
@@ -81,9 +90,10 @@ const service = createQueryExecutionService({
   exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
 });
 
-/** 指标组合覆盖三种时间语义与拆腿路径。 */
+/** 指标组合覆盖三种求值基准、按月定义的降级，以及拆腿路径。 */
 const MEASURE_SETS: Record<string, string[]> = {
   point: [`${VIEW}.active_employee_count`],
+  monthly: [`${VIEW}.monthly_event_rate`],
   flow: [`${VIEW}.turnover_count`],
   ptd: [`${VIEW}.ytd_event_rate`],
   "point+flow": [`${VIEW}.active_employee_count`, `${VIEW}.turnover_count`],
@@ -127,6 +137,12 @@ async function deliverTimeContract(measures: string[], time: TimeInput): Promise
     return JSON.stringify({
       columns: block.columns,
       column_roles: block.column_roles,
+      // 每个指标列覆盖桶里哪一段，以及合计位实际求值的期间：结果的时间口径不止于共享的时间轴。
+      column_time_basis: block.column_time_basis,
+      totals: block.totals?.metrics.map(({ column, periods }) => ({
+        column,
+        periods: periods.map(({ value: _value, ...period }) => period),
+      })),
       time: block.time,
     });
   } catch (error) {

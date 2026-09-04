@@ -466,7 +466,7 @@ export function timeCapabilitiesOf(
 ): TimeCapabilities {
   const measures = view.measures ?? [];
   const members = catalog.measures.filter((member) => measures.includes(member.id));
-  return mergeTimeCapabilities(members.map((member) => member.time_constraints ?? {}));
+  return mergeTimeCapabilities(members.map((member) => member.time.constraints ?? {}));
 }
 
 /** 时间栏写入收敛点查询视图，并由 setSemanticQueryView 统一归一呈现状态。 */

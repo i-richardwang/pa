@@ -25,7 +25,7 @@ import {
 import { memberShortName } from "../semantic_core/member_name.js";
 import { compareCells } from "../presentation_core/view_format.js";
 import type { BusinessTimeResolution } from "./time_plan.js";
-import type { MetricTimeEvaluation } from "./metric_time.js";
+import { basisLabel, type MetricValueBasis } from "../semantic_core/metric_value_basis.js";
 
 type Cell = string | number | null;
 type Row = Cell[];
@@ -42,7 +42,7 @@ export type SourceColumnSemantics = {
   kind: "measure" | "dimension" | "time";
   valueType: string;
   semanticId?: string;
-  timeEvaluation?: MetricTimeEvaluation;
+  timeBasis?: MetricValueBasis;
 };
 
 export type DerivedSourceSemantics = {
@@ -230,10 +230,10 @@ function intervalRanges(time: BusinessTimeResolution): { from: string; to: strin
 function exactMetricTime(
   left: DerivedSourceSemantics,
   right: DerivedSourceSemantics,
-  evaluation: MetricTimeEvaluation,
+  basis: MetricValueBasis,
 ): boolean {
   if (left.time.outputGrain !== right.time.outputGrain) return false;
-  if (evaluation === "interval") {
+  if (basis === "whole_bucket") {
     return JSON.stringify(intervalRanges(left.time)) === JSON.stringify(intervalRanges(right.time));
   }
   return JSON.stringify(bucketEndpoints(left.time)) === JSON.stringify(bucketEndpoints(right.time));
@@ -242,10 +242,10 @@ function exactMetricTime(
 function comparableMetricTime(
   left: DerivedSourceSemantics,
   right: DerivedSourceSemantics,
-  evaluation: MetricTimeEvaluation,
+  basis: MetricValueBasis,
 ): boolean {
   if (left.time.outputGrain !== right.time.outputGrain) return false;
-  if (evaluation === "endpoint") {
+  if (basis === "bucket_end") {
     const a = bucketEndpoints(left.time);
     const b = bucketEndpoints(right.time);
     if (a.length !== b.length || a.length === 0) return false;
@@ -253,7 +253,7 @@ function comparableMetricTime(
     const shifts = a.map((value, index) => monthNumber(value) - monthNumber(b[index]));
     return shifts.every((shift) => shift === shifts[0]);
   }
-  if (evaluation === "interval") {
+  if (basis === "whole_bucket") {
     const leftRanges = intervalRanges(left.time);
     const rightRanges = intervalRanges(right.time);
     return (
@@ -286,8 +286,8 @@ function zhMonth(value: string): string {
   return `${year}年${month}月`;
 }
 
-function businessTimeLabel(time: BusinessTimeResolution, evaluation: MetricTimeEvaluation): string {
-  if (evaluation === "endpoint") {
+function businessTimeLabel(time: BusinessTimeResolution, basis: MetricValueBasis): string {
+  if (basis === "bucket_end") {
     const points = bucketEndpoints(time);
     if (points.length === 1) return `${zhMonth(points[0])}月末时点`;
     if (time.outputGrain === "year") {
@@ -295,14 +295,14 @@ function businessTimeLabel(time: BusinessTimeResolution, evaluation: MetricTimeE
     }
     return `${zhMonth(points[0])}至${zhMonth(points.at(-1)!)}逐月月末时点`;
   }
-  if (evaluation === "interval") {
+  if (basis === "whole_bucket") {
     return intervalRanges(time)
       .map(({ from, to }) =>
         from === to ? `${zhMonth(from)}当月` : `${zhMonth(from)}至${zhMonth(to)}期间`,
       )
       .join("、");
   }
-  if (evaluation === "year_to_date") {
+  if (basis === "year_start_to_bucket_end") {
     return bucketEndpoints(time)
       .map((cutoff) => {
         const [year, month] = cutoff.split("-").map(Number);
@@ -324,7 +324,7 @@ function assertExpressionSemantics(
     source: assertSourceSemantics(operand.source, semantics, derivedTitle),
   }));
   for (const { operand, column } of operands) {
-    if (column.kind !== "measure" || !column.timeEvaluation) {
+    if (column.kind !== "measure" || !column.timeBasis) {
       throw new Error(
         `派生视图「${derivedTitle}」的算式操作数「${operand.col}」不是标准度量；` +
           "算式只能引用 measure 或数值 literal，数值维度不能参与指标算术",
@@ -336,11 +336,11 @@ function assertExpressionSemantics(
     for (let j = i + 1; j < operands.length; j++) {
       const left = operands[i];
       const right = operands[j];
-      const leftTime = left.column.timeEvaluation!;
-      const rightTime = right.column.timeEvaluation!;
+      const leftTime = left.column.timeBasis!;
+      const rightTime = right.column.timeBasis!;
       if (leftTime !== rightTime) {
         throw new Error(
-          `派生视图「${derivedTitle}」的算式混用了 ${leftTime} 与 ${rightTime} 时间求值方式；` +
+          `派生视图「${derivedTitle}」的算式混用了${basisLabel(leftTime)}与${basisLabel(rightTime)}；` +
             "期末值、期间值和年初窗口之间的新计算应在模型层定义",
         );
       }
@@ -558,13 +558,13 @@ function carriedTimeNote(
 ): string | undefined {
   if (spec.from.length !== 2) return undefined;
   const resolved = resolvedColumn(source, column, semantics, spec.view_title);
-  if (resolved.kind !== "measure" || !resolved.timeEvaluation) return undefined;
+  if (resolved.kind !== "measure" || !resolved.timeBasis) return undefined;
   const current = assertSourceSemantics(source, semantics, spec.view_title);
   const otherId = spec.from.find((candidate) => candidate !== source)!;
   const other = assertSourceSemantics(otherId, semantics, spec.view_title);
   if (JSON.stringify(current.time) === JSON.stringify(other.time)) return undefined;
   const label = sourceLabel(assertSource(source, sources, spec.view_title));
-  return `来源 ${label}；业务期间 ${businessTimeLabel(current.time, resolved.timeEvaluation)}`;
+  return `来源 ${label}；业务期间 ${businessTimeLabel(current.time, resolved.timeBasis)}`;
 }
 
 function uniqueNotes(notes: (QueryNote | undefined)[]): QueryNote[] {
@@ -754,6 +754,14 @@ export function transformDerivedView(
     ]),
   );
 
+  // 派生列的基准随血缘走：搬运列继承来源指标的基准，算式列的期间已由 provenance 表达。
+  const columnTimeBasis = Object.fromEntries(
+    spec.columns.flatMap((column) => {
+      if (!("col" in column)) return [];
+      const resolved = resolvedColumn(column.source, column.col, semantics, spec.view_title);
+      return resolved.timeBasis ? [[derivedColumnName(column), resolved.timeBasis] as const] : [];
+    }),
+  );
   const block: EngineViewBlock = {
     id: spec.id,
     view_title: spec.view_title,
@@ -762,6 +770,7 @@ export function transformDerivedView(
     ...(Object.keys(formats).length ? { column_formats: formats } : {}),
     ...(Object.keys(decimals).length ? { column_decimals: decimals } : {}),
     column_roles: columnRoles,
+    ...(Object.keys(columnTimeBasis).length ? { column_time_basis: columnTimeBasis } : {}),
     rows,
     row_count: rows.length,
     has_more: hasMore,

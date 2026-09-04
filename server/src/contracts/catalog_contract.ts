@@ -9,7 +9,7 @@ import {
   METRIC_DOMAIN_ID_PATTERN,
   type MetricDomainId,
 } from "../semantic_core/metric_domain_id.js";
-import { TIME_CAPABILITIES_INPUT, type TimeCapabilities } from "../semantic_core/time_contract.js";
+import { METRIC_TIME_INPUT, type MetricTime } from "../semantic_core/time_contract.js";
 import type { ReportCalculationKind } from "../semantic_core/report_calculation.js";
 import type { MeasureQueryCapabilities } from "../semantic_core/query_feasibility.js";
 
@@ -48,8 +48,8 @@ export type PublicCatalogMeasure = PublicCatalogMemberBase & {
   formula?: PublicCatalogFormula;
   /** 指标间的机器可读关系；不用标题或同名猜测。 */
   relation?: { kind: "structure_share"; numerator_id: string };
-  /** 时间能力卡：会约束用户选择的时间性格；不公开指标内部聚合合同。 */
-  time_constraints?: TimeCapabilities;
+  /** 指标的时间面：值代表什么时间（value_basis），以及用户能选什么时间（constraints）。 */
+  time: MetricTime;
 };
 
 export type PublicCatalogDimension = PublicCatalogMemberBase & {
@@ -158,7 +158,7 @@ const CATALOG_MEASURE_SCHEMA: z.ZodType<PublicCatalogMeasure> = CATALOG_MEMBER_B
     .object({ kind: z.literal("structure_share"), numerator_id: z.string() })
     .strict()
     .optional(),
-  time_constraints: TIME_CAPABILITIES_INPUT.optional(),
+  time: METRIC_TIME_INPUT,
 });
 
 const CATALOG_DIMENSION_SCHEMA: z.ZodType<PublicCatalogDimension> =

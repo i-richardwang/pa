@@ -30,7 +30,7 @@ const catalog = {
       kind: "measure",
       title: "受限人数",
       query_capabilities: { dimension_ids: [COMPANY] },
-      time_constraints: { comparison: "explicit_only" },
+      time: { value_basis: "whole_bucket", constraints: { comparison: "explicit_only" } },
     },
     {
       id: SHARE,

@@ -31,6 +31,7 @@ const catalog: CatalogPayload = {
       query_capabilities: {
         dimension_ids: ["dimension:organization_name"],
       },
+      time: { value_basis: "bucket_end" as const },
       report_calculations: ["percent_of_total"],
     },
     {
@@ -41,7 +42,7 @@ const catalog: CatalogPayload = {
       query_capabilities: {
         dimension_ids: ["dimension:organization_name"],
       },
-      time_constraints: { grain: "month" },
+      time: { value_basis: "whole_bucket" as const, constraints: { grain: "month" as const } },
     },
   ],
   dimensions: [

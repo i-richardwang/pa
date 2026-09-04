@@ -46,7 +46,13 @@ function member(
     return { ...common, ...dimensionOptions, kind };
   }
   if (!options.query_capabilities) throw new Error(`测试指标 ${id} 缺少查询能力`);
-  return { ...common, ...options, kind, query_capabilities: options.query_capabilities };
+  return {
+    ...common,
+    time: { value_basis: "whole_bucket" as const },
+    ...options,
+    kind,
+    query_capabilities: options.query_capabilities,
+  };
 }
 
 const ACTIVE_EMPLOYEE = "measure:active_employee_count";
@@ -344,7 +350,10 @@ describe("semantic query intent", () => {
           {
             metric_domain_id: "metric_domain:workforce_movement",
             query_capabilities: { dimension_ids: ["dimension:warehouse"] },
-            time_constraints: { comparison: "explicit_only" },
+            time: {
+              value_basis: "whole_bucket",
+              constraints: { comparison: "explicit_only" },
+            },
           },
         ),
       ],

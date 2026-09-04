@@ -151,7 +151,7 @@ test("非 HR 语义包走通注册、canonical model、比较策略、规划与�
   ]);
   expect(compiler.measures.find(({ id }) => id === "measure:counted_units")).toMatchObject({
     query_capabilities: { dimension_ids: ["dimension:region"] },
-    time_constraints: { comparison: "explicit_only" },
+    time: { value_basis: "bucket_end", constraints: { comparison: "explicit_only" } },
   });
 
   const blocked = planQueryIntent(

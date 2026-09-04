@@ -94,33 +94,63 @@ meta:
 | 编制达成率 | `last + selected` | 在桶末月分别聚合快照与编制事实，再重算比例；时间上不聚合月度率。 |
 | 月度离职率 | `recompute + selected + month` | 每个月用离职人数和按在职天数折算的平均人员规模重算，禁止把多个月合成一个率。 |
 
-`time_contract` 是计算引擎的内部元数据，不进入 Agent Catalog、MCP schema 或查询结果。用户只需理解
-指标业务口径和可用的时间选择，不需要选择求值形态。
+`time_contract` 是计算引擎的内部元数据，不进入 Agent Catalog、MCP schema 或查询结果。它在目录装配时
+被解析成两样对外的东西，各回答一个问题：
 
-目录把指标时间合同与其时间来源策略投影为**时间能力卡** `time_constraints`，只写会约束用户选择的
-时间性格：
+| 对外字段 | 回答的问题 | 由什么决定 |
+|---|---|---|
+| `time.value_basis` | 这个指标返回的数，覆盖时间桶里的哪一段？ | 指标合同；比率按其组件递归解析 |
+| `time.constraints` | 用户能选什么时间？ | 指标合同与时间来源的比较策略 |
+
+这两件事必须分开。合并成一张卡时，`aggregation: last` 这类没有任何查询限制的指标会投影成空卡，
+下游只好把「用户选的窗口」当成「这个数覆盖的期间」，于是月末快照的合计被声明成覆盖整个窗口。
+
+### 业务求值基准 `value_basis`
+
+| 基准 | 含义 | 由合同解析 |
+|---|---|---|
+| `bucket_end` | 取桶的最后一个月。 | `last + selected` |
+| `whole_bucket` | 统计整个桶。 | `sum` / `average` / `recompute` + `selected` |
+| `year_start_to_bucket_end` | 从桶末月所在日历年的一月到桶末月。 | 任何 `window: year_to_date` |
+
+`recompute` 的比率不自己声明基准，由组件递归解析；组件基准不一致即装配失败——那样的比率没有单一
+业务期间可言。基准在一个桶上展开出的期间由 `basisPeriod` 给出，**执行腿与结果声明共用这一份展开**，
+合计位的 schema 断言两者逐字节一致，因此不会出现「数值取终点、声明写整窗」。
+
+物理求值形态（`interval` / `endpoint`）由基准派生，仍是引擎私有，不出现在任何消费面：年初累计与
+月末时点都在桶终点上发查询，差别只在它们各自覆盖的业务期间。
+
+### 时间限制位 `constraints`
+
+只写会约束用户选择的时间性格：
 
 | 能力位 | 由合同推导 | 它决定什么 |
 |---|---|---|
-| `grain: "month"` | `grain: month` | 跨月期间要求按年即拒绝；合计位退到终点当月。 |
-| `year_scoped: true` | `window: year_to_date` | 业务桶跨日历年时没有单一合计；合计位退到终点所在年的年初至终点。 |
+| `grain: "month"` | `grain: month` | 跨月期间要求按年即拒绝；合计位降级到终点当月。 |
+| `year_scoped: true` | `window: year_to_date` | 业务桶跨日历年时没有单一合计。 |
 | `comparison: "explicit_only"` | 时间来源的 `comparison_policy: explicit_only` | 禁止上一期、去年同期等日历平移，只接受明确的自定义对照期间。 |
 
-`grain` 与 `year_scoped` 既约束序列粒度，也决定合计位怎么求值——不能整窗合并的指标不留空，而是退到期间终点
-求值并写实其真实覆盖期间（`totalPeriodOf`）。时间解析产出 `ResolvedTimeSelection` 或判别式
-`TimeSelectionIssue`；时间意图、坐标唯一性、输出桶唯一性、数据可用范围和指标能力冲突都沿这份
-结构化协议交付。编辑器解析一次当前时间，用同一结果评价指标、期间和粒度候选；Planner 在所选数据源
-的权威范围与合同上复验，用户可修正的冲突统一返回带稳定 code 的 `invalid_request`。能力卡永不手写，
-一致性由跨层用例逐组合双向断言把守。时间能力卡不由客户端或指标作者重复维护；求值形态本身
-（interval / endpoint / year_to_date）仍是引擎私有，
-不出现在任何消费面。
+按月定义的指标在跨月坐标上没有合计可言，只能退到终点当月求值。这是降级，与基准是两回事，因此
+合计位显式带 `degraded: true`，不让消费方拿基准和起止月份去对比推断。
 
-Agent 在取得语义 id 的同一次 Catalog 调用中读取 `time_constraints`。若请求与指标能力冲突，MCP
+时间解析产出 `ResolvedTimeSelection` 或判别式 `TimeSelectionIssue`；时间意图、坐标唯一性、输出桶
+唯一性、数据可用范围和指标能力冲突都沿这份结构化协议交付。编辑器解析一次当前时间，用同一结果评价
+指标、期间和粒度候选；Planner 在所选数据源的权威范围与合同上复验，用户可修正的冲突统一返回带稳定
+code 的 `invalid_request`。两个字段都永不手写，一致性由跨层用例逐组合双向断言把守。
+
+Agent 在取得语义 id 的同一次 Catalog 调用中读取 `time`。若请求与指标限制冲突，MCP
 `run_analysis` 返回 `isError: true`，并在错误 JSON 的 `error.details.issue` 保留同一
 `TimeSelectionIssue`；Agent 按 issue 修正选择或向用户确认。
 
-合计位的 `endpoint` 降级建立在已有序列签名上；若外部请求直接把年初归零指标的跨年窗口声明为
-`grain: total`，就没有可忠实表达的序列或整窗值，统一返回结构化时间问题，而不是把终点值冒充跨年总计。
+### 结果里的时间口径
+
+结果不止有共享的时间轴。`view.column_time_basis` 逐指标列声明基准，与 `time.buckets` 合起来就是
+该列每一格的真实期间；`view.totals` 的每个期间自带 `basis` 与可选的 `degraded`。同一张年度表里，
+在职人数是各年 12 月的时点值、YTD 率是各年全年累计——这件事由结果自己说清楚，不靠标题、也不靠
+Skill 里的经验规则。
+
+若外部请求直接把年初归零指标的跨年窗口声明为 `grain: total`，就没有可忠实表达的序列或整窗值，
+统一返回结构化时间问题，而不是把终点值冒充跨年总计。
 
 ### 包驱动的时间来源与比较策略
 

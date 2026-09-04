@@ -14,7 +14,7 @@ import type { ReportCalculationKind } from "./report_calculation.js";
 import type { TimeComparisonPolicy } from "./time_source.js";
 import type { AccessScopeDefinition } from "./access_scope_definition.js";
 import type { MeasureQueryCapabilities } from "./query_feasibility.js";
-import type { TimeCapabilities } from "./time_contract.js";
+import type { MetricTime } from "./time_contract.js";
 
 /** 率指标公式行的分子分母，已解析为中文标题（人读公式不读成员名）。 */
 export type CompilerCatalogFormula = {
@@ -48,8 +48,6 @@ type CompilerCatalogMemberBase = {
   dimension_group?: { id: string; title: string };
   /** 引擎私有的时间聚合合同；对外 Catalog 不暴露。 */
   time_contract?: MetricTimeContract;
-  /** 从时间合同推导的公共时间能力。 */
-  time_constraints?: TimeCapabilities;
   records_available?: true;
   /** 与当前成员不能同时分组的维度语义 id（已在目录装配阶段按声明视图上下文解析，绝无物理短名）。 */
   incompatible_dimensions?: string[];
@@ -65,6 +63,8 @@ export type CompilerCatalogMeasure = CompilerCatalogMemberBase & {
   kind: "measure";
   /** 从物理可用性与语义限制共同推导的公共查询能力。 */
   query_capabilities: MeasureQueryCapabilities;
+  /** 指标的公共时间面：值代表什么时间，用户能选什么时间。 */
+  time: MetricTime;
 };
 
 export type CompilerCatalogDimension = CompilerCatalogMemberBase & {

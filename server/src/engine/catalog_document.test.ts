@@ -339,6 +339,7 @@ describe("CatalogDocument", () => {
       "report_calculations",
       "time_contract",
       "title",
+      "value_basis",
     ]);
     expect(Object.keys(organizations[0]).sort()).toEqual([
       "available_in",
@@ -508,17 +509,21 @@ describe("CatalogDocument", () => {
       return cardOf(document);
     };
     // 年初累计合同 ⇒ 年度归零位；再叠加按月定义 ⇒ 两位并存，各自独立成立。
-    expect(withGrain()?.time_constraints).toEqual({ year_scoped: true });
-    expect(withGrain("month")?.time_constraints).toEqual({
-      grain: "month",
-      year_scoped: true,
+    expect(withGrain()?.time).toEqual({
+      value_basis: "year_start_to_bucket_end",
+      constraints: { year_scoped: true },
+    });
+    expect(withGrain("month")?.time).toEqual({
+      value_basis: "year_start_to_bucket_end",
+      constraints: { grain: "month", year_scoped: true },
     });
     expect(withGrain()).not.toHaveProperty("time_contract");
-    // 无约束指标不带卡：能力位只在真有约束时出现。
+    // 求值基准恒在场，限制位只在真有约束时出现——两个问题各答各的。
     const plain = toSemanticCatalog(buildCatalogDocument(views)).measures.find(
       (member) => member.title.includes("在职人数") && !member.title.includes("YTD"),
     );
-    expect(plain).not.toHaveProperty("time_constraints");
+    expect(plain?.time).toEqual({ value_basis: "bucket_end" });
+    expect(plain).not.toHaveProperty("time_contract");
   });
 
   test("明细入口只认指标显式声明的记录选择，未声明指标保持关闭", () => {
@@ -699,7 +704,10 @@ describe("CatalogDocument", () => {
     const card = toSemanticCatalog(
       buildCatalogDocument(withRateWindow("year_to_date")),
     ).measures.find((member) => member.title === "YTD事件率");
-    expect(card?.time_constraints).toEqual({ year_scoped: true });
+    expect(card?.time).toEqual({
+      value_basis: "year_start_to_bucket_end",
+      constraints: { year_scoped: true },
+    });
   });
 
   test("公式行两端都译成中文，译不出就整行不发——绝不拿物理名顶替", () => {
