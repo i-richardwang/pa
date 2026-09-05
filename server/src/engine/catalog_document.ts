@@ -31,13 +31,11 @@ import {
   type SemanticTaxonomy,
 } from "../semantic_core/semantic_taxonomy.js";
 import {
-  parseMetricTimeContract,
   sameMetricTimeContract,
-  type MetricTimeContract,
+  type MetricTimeResolution,
 } from "../semantic_core/metric_time_contract.js";
 import { metricTimeCapabilities } from "../semantic_core/time_contract.js";
 import { resolveMetricTime } from "./metric_time.js";
-import type { MetricValueBasis } from "../semantic_core/metric_value_basis.js";
 import type { ReportCalculationKind } from "../semantic_core/report_calculation.js";
 import type { AccessScopeDefinition } from "../contracts/access_scope.js";
 import type { MeasureQueryCapabilities } from "../semantic_core/query_feasibility.js";
@@ -60,9 +58,8 @@ export type CatalogMember = {
   sensitivity?: string;
   dimension_kind?: DimensionKind;
   dimension_group?: { id: string; title: string };
-  time_contract?: MetricTimeContract;
-  /** 指标值覆盖桶里哪一段；由指标合同与其组件解析，不手写。 */
-  value_basis?: MetricValueBasis;
+  /** 指标的时间面：合同与由它解析出的求值基准；只有指标有，不手写。 */
+  time?: MetricTimeResolution;
   calculation_role?: string;
   components?: CatalogComponents;
   incompatible_dimensions?: string[];
@@ -168,7 +165,7 @@ function memberDocument(
   member: CubeMember,
   kind: "measure" | "dimension",
   taxonomy: SemanticTaxonomy,
-  valueBases: ReadonlyMap<string, MetricValueBasis>,
+  metricTimes: ReadonlyMap<string, MetricTimeResolution>,
 ): CatalogMember {
   const rawDimensionGroup = member.meta?.dimension_group;
   const dimensionGroup =
@@ -218,12 +215,7 @@ function memberDocument(
     ...(dimensionGroup
       ? { dimension_group: { id: dimensionGroup.name, title: dimensionGroup.title } }
       : {}),
-    ...(kind === "measure"
-      ? {
-          time_contract: parseMetricTimeContract(member.meta?.time_contract, member.title),
-          value_basis: requiredValueBasis(valueBases, member),
-        }
-      : {}),
+    ...(kind === "measure" ? { time: requiredMetricTime(metricTimes, member) } : {}),
     ...(member.meta?.incompatible_dimensions === undefined
       ? {}
       : {
@@ -242,17 +234,21 @@ function memberDocument(
   };
 }
 
-/** 一次遍历解出全部指标的业务求值基准；顺带守住「声明的 window 与解析结果不得背离」。 */
-function resolveMetricValueBases(views: CubeView[]): ReadonlyMap<string, MetricValueBasis> {
+/** 一次遍历解出全部指标的时间面；顺带守住「声明的 window 与解析结果不得背离」。 */
+function resolveMetricTimes(views: CubeView[]): ReadonlyMap<string, MetricTimeResolution> {
   const members = new Map<string, CubeMember>();
   for (const view of views) {
     for (const member of [...view.measures, ...(view.internalMeasures ?? [])]) {
       members.set(member.name, member);
     }
   }
-  const bases = new Map<string, MetricValueBasis>();
-  for (const member of members.values()) {
-    if (member.meta?.time_contract === undefined) continue;
+  // 公开指标必须有合同；内部零件只在自己声明了合同时受同一守卫，否则只作为组件被引用。
+  const contracted = views.flatMap((view) => [
+    ...view.measures,
+    ...(view.internalMeasures ?? []).filter((member) => member.meta?.time_contract !== undefined),
+  ]);
+  const times = new Map<string, MetricTimeResolution>();
+  for (const member of contracted) {
     const resolved = resolveMetricTime(member, members);
     if (
       resolved.basis === "year_start_to_bucket_end" &&
@@ -264,18 +260,18 @@ function resolveMetricValueBases(views: CubeView[]): ReadonlyMap<string, MetricV
           "请显式声明 window: year_to_date",
       );
     }
-    bases.set(member.name, resolved.basis);
+    times.set(member.name, resolved);
   }
-  return bases;
+  return times;
 }
 
-function requiredValueBasis(
-  bases: ReadonlyMap<string, MetricValueBasis>,
+function requiredMetricTime(
+  times: ReadonlyMap<string, MetricTimeResolution>,
   member: CubeMember,
-): MetricValueBasis {
-  const basis = bases.get(member.name);
-  if (!basis) throw new Error(`指标「${member.title}」缺少已解析的业务求值基准`);
-  return basis;
+): MetricTimeResolution {
+  const time = times.get(member.name);
+  if (!time) throw new Error(`指标「${member.title}」缺少已解析的时间面`);
+  return time;
 }
 
 /** 输入是已完成权限裁剪的 Cube meta；本函数不重复裁剪权限。 */
@@ -285,7 +281,7 @@ export function buildCatalogDocument(
   timeSources: TimeSourceRegistry,
   accessScope: AccessScopeDefinition,
 ): CatalogDocument {
-  const valueBases = resolveMetricValueBases(views);
+  const metricTimes = resolveMetricTimes(views);
   const modelViews: CatalogViewDocument[] = [...views]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((view) => {
@@ -309,10 +305,10 @@ export function buildCatalogDocument(
         time_source_title: timeSourceContract.title,
         comparison_policy: timeSourceContract.comparison_policy,
         measures: view.measures.map((member) =>
-          memberDocument(views, member, "measure", taxonomy, valueBases),
+          memberDocument(views, member, "measure", taxonomy, metricTimes),
         ),
         dimensions: view.dimensions.map((member) =>
-          memberDocument(views, member, "dimension", taxonomy, valueBases),
+          memberDocument(views, member, "dimension", taxonomy, metricTimes),
         ),
         hierarchies: (view.hierarchies ?? []).map((hierarchy) => hierarchy.levels),
         record_projection_members: [...projectionTargets.keys()],
@@ -439,10 +435,11 @@ export function canonicalCatalog(document: CatalogDocument): CanonicalCatalog {
             (declared.format ?? "") !== (member.format ?? "") ||
             (declared.ai_context ?? "") !== (member.ai_context ?? "") ||
             (declared.sensitivity ?? "") !== (member.sensitivity ?? "") ||
-            (declared.time_contract === undefined) !== (member.time_contract === undefined) ||
-            (declared.time_contract !== undefined &&
-              member.time_contract !== undefined &&
-              !sameMetricTimeContract(declared.time_contract, member.time_contract)) ||
+            (declared.time === undefined) !== (member.time === undefined) ||
+            (declared.time !== undefined &&
+              member.time !== undefined &&
+              (!sameMetricTimeContract(declared.time.contract, member.time.contract) ||
+                declared.time.basis !== member.time.basis)) ||
             (declared.dimension_kind ?? "") !== (member.dimension_kind ?? "") ||
             JSON.stringify(declared.dimension_group ?? null) !==
               JSON.stringify(member.dimension_group ?? null) ||
@@ -569,9 +566,9 @@ function projectionMaps(document: CatalogDocument, catalog: CanonicalCatalog): P
   return { titles, ids, shortIds, recordProjectionBindings };
 }
 
-/** 装配中途的成员：查询能力与时间面都还没算出来，业务求值基准已随文档带上。 */
+/** 装配中途的成员：公共查询能力与时间面还没算出来，引擎侧的时间解析已随文档带上。 */
 type CompilerCatalogSeedMember = Omit<CompilerCatalogMember, "query_capabilities" | "time"> & {
-  value_basis?: MetricValueBasis;
+  time?: MetricTimeResolution;
 };
 
 function compilerMember(
@@ -621,8 +618,7 @@ function compilerMember(
     ...(member.sensitivity ? { sensitivity: member.sensitivity } : {}),
     ...(member.dimension_kind ? { dimension_kind: member.dimension_kind } : {}),
     ...(member.dimension_group ? { dimension_group: member.dimension_group } : {}),
-    ...(member.time_contract ? { time_contract: member.time_contract } : {}),
-    ...(member.value_basis ? { value_basis: member.value_basis } : {}),
+    ...(member.time ? { time: member.time } : {}),
     ...(member.available_in.some(({ member: physical }) => recordProjectionBindings.has(physical))
       ? { records_available: true as const }
       : {}),
@@ -787,20 +783,21 @@ export function toCompilerCatalog(document: CatalogDocument): CompilerCatalog {
     dimensions: catalog.dimensions.map((member) => compilerMember(member, maps)),
   };
   const measures: CompilerCatalogMeasure[] = compiler.measures.map((member) => {
-    if (member.kind !== "measure") throw new Error(`指标目录成员 ${member.id} 的类型无效`);
+    if (member.kind !== "measure" || !member.time) {
+      throw new Error(`指标目录成员 ${member.id} 的类型无效`);
+    }
     const constraints = {
-      ...metricTimeCapabilities(member.time_contract),
+      ...metricTimeCapabilities(member.time.contract),
       ...(requiresExplicitComparison(member, compiler.views)
         ? { comparison: "explicit_only" as const }
         : {}),
     };
-    if (!member.value_basis) throw new Error(`指标 ${member.id} 缺少业务求值基准`);
     return {
       ...member,
       kind: "measure",
       query_capabilities: measureQueryCapabilities(member, compiler),
       time: {
-        value_basis: member.value_basis,
+        value_basis: member.time.basis,
         ...(Object.keys(constraints).length ? { constraints } : {}),
       },
     };

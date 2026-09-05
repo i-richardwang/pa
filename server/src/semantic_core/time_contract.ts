@@ -646,10 +646,10 @@ export const METRIC_TIME_INPUT = z
 export type MetricTime = z.infer<typeof METRIC_TIME_INPUT>;
 
 /** 由指标合同推导能力卡：能不能跨月合并、能不能跨日历年、能不能隐式对照。 */
-export function metricTimeCapabilities(contract: MetricTimeContract | undefined): TimeCapabilities {
+export function metricTimeCapabilities(contract: MetricTimeContract): TimeCapabilities {
   return {
-    ...(contract?.grain === "month" ? { grain: "month" as const } : {}),
-    ...(contract?.window === "year_to_date" ? { year_scoped: true as const } : {}),
+    ...(contract.grain === "month" ? { grain: "month" as const } : {}),
+    ...(contract.window === "year_to_date" ? { year_scoped: true as const } : {}),
   };
 }
 

@@ -9,7 +9,6 @@
  */
 
 import type { MetricDomainId } from "./metric_domain_id.js";
-import type { MetricTimeContract } from "./metric_time_contract.js";
 import type { ReportCalculationKind } from "./report_calculation.js";
 import type { TimeComparisonPolicy } from "./time_source.js";
 import type { AccessScopeDefinition } from "./access_scope_definition.js";
@@ -46,8 +45,6 @@ type CompilerCatalogMemberBase = {
   sensitivity?: string;
   dimension_kind?: "categorical" | "overlapping";
   dimension_group?: { id: string; title: string };
-  /** 引擎私有的时间聚合合同；对外 Catalog 不暴露。 */
-  time_contract?: MetricTimeContract;
   records_available?: true;
   /** 与当前成员不能同时分组的维度语义 id（已在目录装配阶段按声明视图上下文解析，绝无物理短名）。 */
   incompatible_dimensions?: string[];

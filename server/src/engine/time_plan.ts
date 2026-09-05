@@ -227,7 +227,7 @@ function assertNoRawTimeMembers(query: CubeQuery): void {
   }
 }
 
-function measureContracts(query: CubeQuery, views: CubeView[]) {
+function measureTimes(query: CubeQuery, views: CubeView[]) {
   const measures = new Map(
     views
       .flatMap((view) => [...view.measures, ...(view.internalMeasures ?? [])])
@@ -236,24 +236,18 @@ function measureContracts(query: CubeQuery, views: CubeView[]) {
   return (query.measures ?? []).map((name) => {
     const member = measures.get(name);
     if (!member) throw new Error("查询包含当前身份不可用的指标，请刷新指标列表后重试");
-    const resolved = resolveMetricTime(member, measures);
-    return {
-      name,
-      title: member.title ?? name,
-      contract: resolved.contract,
-      basis: resolved.basis,
-    };
+    return { name, title: member.title ?? name, time: resolveMetricTime(member, measures) };
   });
 }
 
 function assertMetricTimeSelection(
-  contracts: ReturnType<typeof measureContracts>,
+  measures: ReturnType<typeof measureTimes>,
   selection: ResolvedTimeSelection,
 ): void {
   const issue = metricTimeSelectionIssue(
-    contracts.map((contract) => ({
-      title: contract.title,
-      capabilities: metricTimeCapabilities(contract.contract),
+    measures.map((measure) => ({
+      title: measure.title,
+      capabilities: metricTimeCapabilities(measure.time.contract),
     })),
     selection,
   );
@@ -409,14 +403,14 @@ export function resolveTimePlanning(
   if (!time) throw new Error("查询必须提供业务时间；使用截止月份或连续期间");
   assertNoRawTimeMembers(query);
   const view = queryTimeView(query, preferredView);
-  const contracts = measureContracts(query, views);
+  const measures = measureTimes(query, views);
   const bounds = timeBounds(query, context, views);
   const result = resolveTimeSelection(time, bounds.defaultThrough);
   if (result.status === "invalid") throw new TimeSelectionError(result.issue);
   const { selection } = result;
   const unavailable = timeAvailabilityIssue(selection, bounds.availableThrough);
   if (unavailable) throw new TimeSelectionError(unavailable);
-  assertMetricTimeSelection(contracts, selection);
+  assertMetricTimeSelection(measures, selection);
   const enumerated = enumerateCoordinates(selection.coordinates, selection.outputGrain);
   const businessTime = {
     outputGrain: selection.outputGrain,
@@ -425,7 +419,7 @@ export function resolveTimePlanning(
   return {
     businessTime,
     view,
-    evalForms: new Map(contracts.map((contract) => [contract.name, physicalForm(contract.basis)])),
+    evalForms: new Map(measures.map((measure) => [measure.name, physicalForm(measure.time.basis)])),
   };
 }
 

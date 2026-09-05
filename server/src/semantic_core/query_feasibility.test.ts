@@ -24,6 +24,7 @@ const catalog = {
         hierarchies: [[COMPANY, DEPARTMENT]],
       },
       report_calculations: ["percent_of_total"],
+      time: { value_basis: "bucket_end" },
     },
     {
       id: RESTRICTED,
@@ -40,6 +41,7 @@ const catalog = {
         dimension_ids: [COMPANY, DEPARTMENT, CATEGORY],
         grouping: { minimum_varying_dimensions: 1 },
       },
+      time: { value_basis: "bucket_end" },
     },
   ],
   dimensions: [

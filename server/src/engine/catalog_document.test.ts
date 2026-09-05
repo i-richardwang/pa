@@ -337,9 +337,8 @@ describe("CatalogDocument", () => {
       "metric_domain_id",
       "name",
       "report_calculations",
-      "time_contract",
+      "time",
       "title",
-      "value_basis",
     ]);
     expect(Object.keys(organizations[0]).sort()).toEqual([
       "available_in",
@@ -504,8 +503,11 @@ describe("CatalogDocument", () => {
       const metric = document.views
         .flatMap((view) => view.measures)
         .find((member) => member.display_title === "YTD主要事件率");
-      if (!metric?.time_contract) throw new Error("fixture 缺时间合同");
-      metric.time_contract = { ...metric.time_contract, ...(grain ? { grain } : {}) };
+      if (!metric?.time) throw new Error("fixture 缺时间面");
+      metric.time = {
+        ...metric.time,
+        contract: { ...metric.time.contract, ...(grain ? { grain } : {}) },
+      };
       return cardOf(document);
     };
     // 年初累计合同 ⇒ 年度归零位；再叠加按月定义 ⇒ 两位并存，各自独立成立。

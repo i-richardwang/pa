@@ -246,40 +246,41 @@ function comparableMetricTime(
   basis: MetricValueBasis,
 ): boolean {
   if (left.time.outputGrain !== right.time.outputGrain) return false;
-  if (basis === "bucket_end") {
-    const a = bucketEndpoints(left.time);
-    const b = bucketEndpoints(right.time);
-    if (a.length !== b.length || a.length === 0) return false;
-    if (left.time.outputGrain === "total") return a.length === 1;
-    const shifts = a.map((value, index) => monthNumber(value) - monthNumber(b[index]));
-    return shifts.every((shift) => shift === shifts[0]);
+  switch (basis) {
+    case "bucket_end": {
+      const a = bucketEndpoints(left.time);
+      const b = bucketEndpoints(right.time);
+      if (a.length !== b.length || a.length === 0) return false;
+      if (left.time.outputGrain === "total") return a.length === 1;
+      const shifts = a.map((value, index) => monthNumber(value) - monthNumber(b[index]));
+      return shifts.every((shift) => shift === shifts[0]);
+    }
+    case "whole_bucket": {
+      const leftRanges = intervalRanges(left.time);
+      const rightRanges = intervalRanges(right.time);
+      return (
+        leftRanges.length === rightRanges.length &&
+        leftRanges.every(
+          (range, index) =>
+            rangeMonths(range.from, range.to) ===
+            rangeMonths(rightRanges[index].from, rightRanges[index].to),
+        )
+      );
+    }
+    case "year_start_to_bucket_end": {
+      const leftCutoffs = bucketEndpoints(left.time);
+      const rightCutoffs = bucketEndpoints(right.time);
+      if (leftCutoffs.length !== rightCutoffs.length || !leftCutoffs.length) return false;
+      return leftCutoffs.every((leftCutoff, index) => {
+        const [leftYear, leftMonth] = leftCutoff.split("-").map(Number);
+        const [rightYear, rightMonth] = rightCutoffs[index].split("-").map(Number);
+        return (
+          (leftYear === rightYear && leftMonth !== rightMonth) ||
+          (leftYear !== rightYear && leftMonth === rightMonth)
+        );
+      });
+    }
   }
-  if (basis === "whole_bucket") {
-    const leftRanges = intervalRanges(left.time);
-    const rightRanges = intervalRanges(right.time);
-    return (
-      leftRanges.length === rightRanges.length &&
-      leftRanges.every(
-        (range, index) =>
-          rangeMonths(range.from, range.to) ===
-          rangeMonths(rightRanges[index].from, rightRanges[index].to),
-      )
-    );
-  }
-  const leftCutoffs = bucketEndpoints(left.time);
-  const rightCutoffs = bucketEndpoints(right.time);
-  if (leftCutoffs.length !== rightCutoffs.length || !leftCutoffs.length) {
-    return false;
-  }
-  return leftCutoffs.every((leftCutoff, index) => {
-    const rightCutoff = rightCutoffs[index];
-    const [leftYear, leftMonth] = leftCutoff.split("-").map(Number);
-    const [rightYear, rightMonth] = rightCutoff.split("-").map(Number);
-    return (
-      (leftYear === rightYear && leftMonth !== rightMonth) ||
-      (leftYear !== rightYear && leftMonth === rightMonth)
-    );
-  });
 }
 
 function zhMonth(value: string): string {
@@ -338,24 +339,23 @@ function assertExpressionSemantics(
     for (let j = i + 1; j < operands.length; j++) {
       const left = operands[i];
       const right = operands[j];
-      const leftTime = left.basis;
-      const rightTime = right.basis;
-      if (leftTime !== rightTime) {
+      if (left.basis !== right.basis) {
         throw new Error(
-          `派生视图「${derivedTitle}」的算式混用了${basisLabel(leftTime)}与${basisLabel(rightTime)}；` +
+          `派生视图「${derivedTitle}」的算式混用了${basisLabel(left.basis)}与${basisLabel(right.basis)}；` +
             "不同求值基准之间的新计算应在模型层定义",
         );
       }
-      if (exactMetricTime(left.source, right.source, leftTime)) continue;
+      const basis = left.basis;
+      if (exactMetricTime(left.source, right.source, basis)) continue;
       if (left.column.alias !== right.column.alias) {
         throw new Error(
           `派生视图「${derivedTitle}」的跨期算式混用了不同标准度量 ${left.column.alias} 与 ${right.column.alias}；` +
             "跨期算术只允许同一标准度量，不同指标之间的新计算应在模型层定义",
         );
       }
-      if (comparableMetricTime(left.source, right.source, leftTime)) {
+      if (comparableMetricTime(left.source, right.source, basis)) {
         comparisons.push(
-          `${businessTimeLabel(left.source.time, leftTime)} 对比 ${businessTimeLabel(right.source.time, rightTime)}`,
+          `${businessTimeLabel(left.source.time, basis)} 对比 ${businessTimeLabel(right.source.time, basis)}`,
         );
         continue;
       }

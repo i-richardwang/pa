@@ -107,7 +107,7 @@ const DOCUMENT: CatalogDocument = {
           alias: "hc_col",
           value_type: "number",
           description: "月末在职",
-          value_basis: "bucket_end",
+          time: { contract: { aggregation: "last", window: "selected" }, basis: "bucket_end" },
           // 模型按物理短名声明互斥维度；投影必须归一为语义 id。
           incompatible_dimensions: ["organization_name"],
         },

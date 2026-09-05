@@ -29,7 +29,7 @@ type QueryFeasibilityMeasure = QueryFeasibilityMemberBase & {
   kind: "measure";
   query_capabilities: MeasureQueryCapabilities;
   report_calculations?: ReportCalculationKind[];
-  time?: MetricTime;
+  time: MetricTime;
 };
 
 type QueryFeasibilityDimension = QueryFeasibilityMemberBase & {
@@ -305,7 +305,7 @@ function comparisonIssue(
   return metricTimeComparisonIssue(
     measures.map((member) => ({
       title: member.title,
-      capabilities: member.time?.constraints ?? {},
+      capabilities: member.time.constraints ?? {},
     })),
     comparison,
   );
@@ -413,7 +413,7 @@ function queryFeasibilityIssues(
     return [...structural, ...capabilities, ...(time ? [time] : [])];
   }
   const timeRequirements = measures.map((member) => ({
-    capabilities: member.time?.constraints ?? {},
+    capabilities: member.time.constraints ?? {},
     title: member.title,
   }));
   const time = metricTimeSelectionIssue(timeRequirements, timeSelection);
