@@ -29,6 +29,7 @@ import { basisLabel, type MetricValueBasis } from "../semantic_core/metric_value
 import { physicalForm } from "./metric_time.js";
 
 type Cell = string | number | null;
+type ExpressionColumn = Extract<DerivedViewSpec["columns"][number], { expr: ExprNode }>;
 type Row = Cell[];
 type RowContext = Map<string, Row | null>;
 
@@ -620,14 +621,9 @@ export function transformDerivedView(
   standardMeasureTitles: ReadonlySet<string>,
   semantics: ReadonlyMap<string, DerivedSourceSemantics>,
 ): EngineViewBlock {
-  spec.from.forEach((source, index) => {
-    const view = assertSource(source, sources, spec.view_title);
-    if (!view.view_title?.trim()) {
-      throw new Error(`派生结果「${spec.view_title}」的第 ${index + 1} 个来源查询缺少业务标题`);
-    }
-  });
   for (const source of spec.from) {
     const view = assertSource(source, sources, spec.view_title);
+    sourceLabel(view);
     assertSourceSemantics(source, semantics, spec.view_title);
     if (view.has_more) {
       throw new Error(
@@ -700,52 +696,39 @@ export function transformDerivedView(
   const hasMore = spec.limit !== undefined && rows.length > spec.limit;
   if (spec.limit !== undefined) rows = rows.slice(0, spec.limit);
 
-  const queryNotes = uniqueNotes([
-    ...spec.columns.map((column) => {
-      if ("col" in column) {
-        const output = derivedColumnName(column);
-        return appendColumnNote(
-          carriedNote(column.source, column.col, output, sources, "query_notes"),
-          output,
-          output,
-          carriedTimeNote(spec, column.source, column.col, sources, semantics),
-        );
-      }
-      const comparisons = expressionComparisons.get(column.as) ?? [];
-      return {
-        member: column.as,
-        title: column.as,
-        text:
-          renderExpressionFormula(column.expr, sources) +
-          (comparisons.length ? `（跨期比较：${comparisons.join("；")}）` : ""),
-      };
-    }),
-    nullJoinNote(spec, sources),
-    ...inheritedPolicyNotes(spec, sources, "query_notes"),
-  ]);
-  const displayNotes = uniqueNotes([
-    ...spec.columns.map((column) => {
-      if ("col" in column) {
-        const output = derivedColumnName(column);
-        return appendColumnNote(
-          carriedNote(column.source, column.col, output, sources, "display_notes"),
-          output,
-          output,
-          carriedTimeNote(spec, column.source, column.col, sources, semantics),
-        );
-      }
-      const comparisons = expressionComparisons.get(column.as) ?? [];
-      return comparisons.length
-        ? {
-            member: column.as,
-            title: column.as,
-            text: `跨期比较：${comparisons.join("；")}。`,
-          }
-        : undefined;
-    }),
-    nullJoinNote(spec, sources),
-    ...inheritedPolicyNotes(spec, sources, "display_notes"),
-  ]);
+  // 两类说明只在算式列上措辞不同：查询说明带公式，展示说明只讲跨期比较。搬运列与来源随行的说明一致。
+  const notesOf = (
+    kind: "query_notes" | "display_notes",
+    expressionNote: (column: ExpressionColumn, comparisons: string[]) => QueryNote | undefined,
+  ) =>
+    uniqueNotes([
+      ...spec.columns.map((column) => {
+        if ("col" in column) {
+          const output = derivedColumnName(column);
+          return appendColumnNote(
+            carriedNote(column.source, column.col, output, sources, kind),
+            output,
+            output,
+            carriedTimeNote(spec, column.source, column.col, sources, semantics),
+          );
+        }
+        return expressionNote(column, expressionComparisons.get(column.as) ?? []);
+      }),
+      nullJoinNote(spec, sources),
+      ...inheritedPolicyNotes(spec, sources, kind),
+    ]);
+  const queryNotes = notesOf("query_notes", (column, comparisons) => ({
+    member: column.as,
+    title: column.as,
+    text:
+      renderExpressionFormula(column.expr, sources) +
+      (comparisons.length ? `（跨期比较：${comparisons.join("；")}）` : ""),
+  }));
+  const displayNotes = notesOf("display_notes", (column, comparisons) =>
+    comparisons.length
+      ? { member: column.as, title: column.as, text: `跨期比较：${comparisons.join("；")}。` }
+      : undefined,
+  );
   // 列角色随血缘走：搬运列继承来源成员的角色，算式列一律是结果级指标。
   const columnRoles = Object.fromEntries(
     spec.columns.map((column) => [

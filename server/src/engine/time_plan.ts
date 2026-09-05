@@ -447,16 +447,15 @@ export function planResolvedTimeQuery(
   assertNoRawTimeMembers(query);
   const { view } = planning;
   const axis = `${view}.period_month`;
-  const physical = emission;
-  const ranges = physical.windows.map((window) => [window.from, window.to] as [string, string]);
+  const ranges = emission.windows.map((window) => [window.from, window.to] as [string, string]);
   const timeDimension = {
     dimension: axis,
-    ...(physical.granularity ? { granularity: physical.granularity } : {}),
+    ...(emission.granularity ? { granularity: emission.granularity } : {}),
     ...(ranges.length === 1 ? { dateRange: ranges[0] } : { compareDateRange: ranges }),
   };
   return {
-    query: withTime(query, view, yearsOf(physical.windows), timeDimension),
-    time: { view, windows: physical.windows },
+    query: withTime(query, view, yearsOf(emission.windows), timeDimension),
+    time: { view, windows: emission.windows },
   };
 }
 
