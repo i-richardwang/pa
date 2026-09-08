@@ -57,7 +57,7 @@ export type PaletteItem =
 
 type PaletteGroup = { value: string; items: PaletteItem[] };
 
-/** 指标字典页读后即清，见 catalog_page 的 keyword 初始化。 */
+/** 字典页读后即清，见 catalog/prefill.ts。 */
 export const CATALOG_PREFILL_KEY = "pa.catalog.q";
 
 function itemText(item: PaletteItem): string {
@@ -288,14 +288,18 @@ export function CommandPalette({
       case "analysis":
         navigateTo(analysisHash(item.id));
         break;
+      // 落在成员自己那张清单上：维度不落到指标页，术语不落到成员页。
       case "member":
+        sessionStorage.setItem(CATALOG_PREFILL_KEY, item.title);
+        navigate(item.memberKind === "dimension" ? "dimensions" : "metrics");
+        break;
       case "metric_domain":
         sessionStorage.setItem(CATALOG_PREFILL_KEY, item.title);
-        navigate("catalog");
+        navigate("metrics");
         break;
       case "business_term":
         sessionStorage.setItem(CATALOG_PREFILL_KEY, item.canonicalTerm);
-        navigate("catalog");
+        navigate("terms");
         break;
     }
   }

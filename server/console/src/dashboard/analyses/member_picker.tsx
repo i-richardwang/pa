@@ -89,7 +89,7 @@ export function pickableMembers(
 
 /**
  * 指标 id → 指标域标题。从属关系只由域那一头说（目录契约），一个指标出现在多个域时取先出现的域；
- * 组序即目录里域的次序，与指标字典页同一套导航次序。
+ * 组序即目录里域的次序，与指标页同一套导航次序。
  */
 export function metricDomainTitles(domains: readonly MetricDomainPayload[]): Map<string, string> {
   const titles = new Map<string, string>();

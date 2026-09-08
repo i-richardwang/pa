@@ -1,0 +1,233 @@
+/**
+ * 业务术语页：全员可查的黑话词典，管理员在这里维护。
+ * 新建入口只属于这一页——标题栏动作随页面走，不跟着分面串到别的清单上。
+ */
+import { CircleAlertIcon, InboxIcon, PlusIcon } from "lucide-react";
+import type { PublicBusinessTerm } from "@contracts/business_term_contract";
+import { LoadingMark } from "pa-result-view";
+import { useState } from "react";
+import { Alert, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { MenuItem } from "@/components/ui/menu";
+import { PopupSection } from "@/components/ui/surface";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { errorText } from "../api";
+import {
+  useAdminBusinessTerms,
+  useBusinessTerms,
+  useCatalogQuery,
+  useDeleteBusinessTerm,
+  useMe,
+  useRestoreBusinessTerm,
+} from "../dashboard_queries";
+import { BusinessTermEditorDialog } from "./business_term_editor";
+import { filterTerms } from "./catalog_filters";
+import { toastWithUndo } from "../kit/undo";
+import {
+  ListCategoryPill,
+  ListControlBar,
+  ListControlSearch,
+  ListPageBody,
+  ListScrollBody,
+  useSetTitlebarActions,
+} from "../layout/layout_chrome";
+import { HeaderTextAction } from "../layout/view_chrome";
+import { RowMenu } from "../kit/table_kit";
+import { usePrefilledKeyword } from "./prefill";
+
+type TermRow = PublicBusinessTerm;
+
+export function BusinessTermsPage() {
+  const isAdmin = useMe().data?.is_admin ?? false;
+  const catalogQuery = useCatalogQuery();
+  const termsQuery = useBusinessTerms();
+  const adminTermsQuery = useAdminBusinessTerms(isAdmin);
+  const error = errorText(termsQuery.error) ?? errorText(adminTermsQuery.error);
+  const loading = isAdmin ? adminTermsQuery.isLoading : termsQuery.isLoading;
+  const [keyword, setKeyword] = usePrefilledKeyword();
+  const [editing, setEditing] = useState<PublicBusinessTerm | "new" | null>(null);
+  const removeTerm = useDeleteBusinessTerm();
+  const restoreTerm = useRestoreBusinessTerm();
+
+  const terms: TermRow[] = isAdmin
+    ? (adminTermsQuery.data?.rows ?? [])
+    : (termsQuery.data?.rows ?? []);
+  const found = filterTerms(terms, keyword);
+
+  function deleteTerm(term: PublicBusinessTerm) {
+    removeTerm.mutate(term.id, {
+      onSuccess: () =>
+        toastWithUndo({
+          title: `已删除「${term.canonical_term}」`,
+          undo: () => restoreTerm.mutateAsync(term.id),
+        }),
+    });
+  }
+
+  useSetTitlebarActions(
+    () =>
+      isAdmin ? (
+        <HeaderTextAction onClick={() => setEditing("new")}>
+          <PlusIcon aria-hidden="true" />
+          新建术语
+        </HeaderTextAction>
+      ) : null,
+    [isAdmin],
+  );
+
+  return (
+    <>
+      <ListPageBody>
+        <ListControlBar
+          right={
+            <ListControlSearch
+              aria-label="搜索业务术语"
+              placeholder="搜索"
+              value={keyword}
+              onValueChange={setKeyword}
+            />
+          }
+        />
+        <ListScrollBody>
+          <div className="mt-5">
+            {error && (
+              <Alert variant="error">
+                <CircleAlertIcon />
+                <AlertTitle>{error}</AlertTitle>
+              </Alert>
+            )}
+            {loading && <LoadingMark className="py-16" />}
+            {!loading && (
+              <TermSection
+                terms={found}
+                filtered={Boolean(keyword.trim())}
+                onEdit={isAdmin ? setEditing : undefined}
+                onDelete={isAdmin ? deleteTerm : undefined}
+              />
+            )}
+          </div>
+        </ListScrollBody>
+      </ListPageBody>
+      <BusinessTermEditorDialog
+        members={[...(catalogQuery.data?.measures ?? []), ...(catalogQuery.data?.dimensions ?? [])]}
+        onClose={() => setEditing(null)}
+        target={editing}
+      />
+    </>
+  );
+}
+
+/** 定义优先的业务术语：定义保存即生效，关联成员不是必填项。 */
+function TermSection({
+  terms,
+  filtered,
+  onEdit,
+  onDelete,
+}: {
+  terms: TermRow[];
+  filtered: boolean;
+  onEdit?: (row: PublicBusinessTerm) => void;
+  onDelete?: (row: PublicBusinessTerm) => void;
+}) {
+  if (terms.length === 0) {
+    return filtered ? (
+      <Empty>
+        <EmptyHeader>
+          <EmptyTitle>没有匹配的业务术语</EmptyTitle>
+          <EmptyDescription>清空搜索框可查看全部。</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    ) : (
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <InboxIcon />
+          </EmptyMedia>
+          <EmptyTitle>暂无业务术语</EmptyTitle>
+          <EmptyDescription>可从一句准确、可独立理解的定义开始。</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-[24%]">规范术语</TableHead>
+          <TableHead className="w-[46%]">定义</TableHead>
+          <TableHead className="w-[25%]">关联</TableHead>
+          {onEdit && <TableHead className="w-[5%]" />}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {terms.map((term) => (
+          <TableRow key={term.id}>
+            <TableCell>
+              <div className="flex min-w-0 flex-col gap-1">
+                <span className="text-sm font-medium">{term.canonical_term}</span>
+                <div className="flex flex-wrap items-center gap-1">
+                  {term.aliases.length ? (
+                    <span className="truncate text-xs text-pa-muted">
+                      也叫：{term.aliases.join("、")}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </TableCell>
+            <TableCell className="whitespace-normal text-sm leading-5 text-pa-fg">
+              {term.definition}
+              {term.context ? (
+                <p className="mt-1 text-xs text-pa-muted">语境：{term.context}</p>
+              ) : null}
+            </TableCell>
+            <TableCell className="px-1.5 py-3">
+              <div className="flex flex-wrap gap-1">
+                {term.related_members.length ? (
+                  term.related_members.map((member) =>
+                    member.status === "available" ? (
+                      <ListCategoryPill key={member.id} type="button">
+                        {member.title}
+                      </ListCategoryPill>
+                    ) : (
+                      <Badge key={member.id} variant="warning">
+                        绑定已下线
+                      </Badge>
+                    ),
+                  )
+                ) : (
+                  <span className="text-pa-muted">无需绑定</span>
+                )}
+              </div>
+            </TableCell>
+            {onEdit && (
+              <TableCell className="px-1.5">
+                <RowMenu label={`术语操作：${term.canonical_term}`}>
+                  <MenuItem onClick={() => onEdit(term)}>编辑</MenuItem>
+                  {onDelete ? (
+                    <PopupSection>
+                      <MenuItem onClick={() => onDelete(term)}>删除</MenuItem>
+                    </PopupSection>
+                  ) : null}
+                </RowMenu>
+              </TableCell>
+            )}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}

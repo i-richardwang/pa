@@ -9,11 +9,13 @@ import {
   ChartBarIcon,
   LayoutDashboardIcon,
   MessageSquareIcon,
+  ShapesIcon,
+  SpellCheckIcon,
   WaypointsIcon,
 } from "lucide-react";
 import type { MePayload } from "@contracts/session_contract";
 import { AppSidebar } from "@/components/app-sidebar";
-import type { NavMainGroup } from "@/components/nav-main";
+import type { NavMainGroup, NavMainItem } from "@/components/nav-main";
 import {
   Dialog,
   DialogHeader,
@@ -51,15 +53,24 @@ import { escapeClaimsAside, isEditableTarget } from "@/lib/keyboard";
 /** 主区白面的两种底：清单与工作台坐白卡，看板坐画布灰。 */
 type MainSurface = "card" | "canvas";
 
-type NavItem = NavEntry & { adminOnly: boolean };
+/** 侧栏分组标签；空串是无标签的首组。同一 `group` 的条目必须相邻声明，组序即声明序。 */
+type NavItem = NavEntry & { group: string; adminOnly: boolean };
 
 const NAV: readonly NavItem[] = [
-  { key: "reports", label: "我的报告", icon: <ChartBarIcon />, adminOnly: false },
-  { key: "boards", label: "我的看板", icon: <LayoutDashboardIcon />, adminOnly: false },
-  { key: "catalog", label: "指标字典", icon: <BookOpenIcon />, adminOnly: false },
-  { key: "model", label: "数据能力地图", icon: <WaypointsIcon />, adminOnly: true },
-  { key: "usage", label: "使用日志", icon: <ActivityIcon />, adminOnly: true },
-  { key: "feedback", label: "反馈审核", icon: <MessageSquareIcon />, adminOnly: true },
+  { key: "reports", label: "我的报告", icon: <ChartBarIcon />, group: "", adminOnly: false },
+  { key: "boards", label: "我的看板", icon: <LayoutDashboardIcon />, group: "", adminOnly: false },
+  { key: "metrics", label: "指标", icon: <BookOpenIcon />, group: "字典", adminOnly: false },
+  { key: "dimensions", label: "维度", icon: <ShapesIcon />, group: "字典", adminOnly: false },
+  { key: "terms", label: "业务术语", icon: <SpellCheckIcon />, group: "字典", adminOnly: false },
+  { key: "model", label: "数据能力地图", icon: <WaypointsIcon />, group: "管理", adminOnly: true },
+  { key: "usage", label: "使用日志", icon: <ActivityIcon />, group: "管理", adminOnly: true },
+  {
+    key: "feedback",
+    label: "反馈审核",
+    icon: <MessageSquareIcon />,
+    group: "管理",
+    adminOnly: true,
+  },
 ];
 
 const NAV_OPEN_KEY = "pa.nav-open";
@@ -68,22 +79,16 @@ function visibleNav(isAdmin: boolean): NavItem[] {
   return NAV.filter((n) => !n.adminOnly || isAdmin);
 }
 
+/** 相邻同 `group` 的条目并成一组；组序与组内序都随 `NAV` 的声明序。 */
 function navGroups(isAdmin: boolean): NavMainGroup[] {
-  const visible = visibleNav(isAdmin);
-  return [
-    {
-      label: "",
-      items: visible
-        .filter((n) => !n.adminOnly)
-        .map((n) => ({ key: n.key, title: n.label, icon: n.icon })),
-    },
-    {
-      label: "管理",
-      items: visible
-        .filter((n) => n.adminOnly)
-        .map((n) => ({ key: n.key, title: n.label, icon: n.icon })),
-    },
-  ].filter((g) => g.items.length > 0);
+  const groups: { label: string; items: NavMainItem[] }[] = [];
+  for (const item of visibleNav(isAdmin)) {
+    const last = groups.at(-1);
+    const entry: NavMainItem = { key: item.key, title: item.label, icon: item.icon };
+    if (last && last.label === item.group) last.items.push(entry);
+    else groups.push({ label: item.group, items: [entry] });
+  }
+  return groups;
 }
 
 /** 主区顶栏短名：与侧栏条目同文案。 */

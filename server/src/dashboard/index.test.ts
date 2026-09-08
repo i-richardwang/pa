@@ -92,7 +92,7 @@ describe("dashboard app routes and access control", () => {
     });
   });
 
-  test("指标字典：PA 用户按同一 Principal 读取公共投影，真实值按需透传行权限", async () => {
+  test("业务目录：PA 用户按同一 Principal 读取公共投影，真实值按需透传行权限", async () => {
     const contexts: unknown[] = [];
     const app = dashboardApp(
       {
@@ -188,7 +188,7 @@ describe("dashboard app routes and access control", () => {
     ]);
   });
 
-  test("指标字典：未登录 401、无数据角色 403、输入错误 400", async () => {
+  test("业务目录：未登录 401、无数据角色 403、输入错误 400", async () => {
     expect((await buildApp(null).request("/api/catalog")).status).toBe(401);
 
     const wired = (role: string) =>

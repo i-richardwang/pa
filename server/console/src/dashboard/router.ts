@@ -7,14 +7,22 @@ import { useEffect, useRef, useState } from "react";
 import { TIME_INTENT_INPUT, type TimeIntent } from "@time";
 
 /** 侧栏导航项，也是各清单页的 hash 首段。 */
-export type RouteKey = "boards" | "reports" | "catalog" | "model" | "usage" | "feedback";
+export type RouteKey =
+  | "boards"
+  | "reports"
+  | "metrics"
+  | "dimensions"
+  | "terms"
+  | "model"
+  | "usage"
+  | "feedback";
 
 export type ReportsFacet = "reports" | "history" | "archived";
 export type SettingsTab = "account" | "api" | "users";
 export type UsageFacet = "titles" | "stats" | "unanswered";
 
 export type Route =
-  | { page: "boards" | "catalog" | "model" | "feedback" }
+  | { page: "boards" | "metrics" | "dimensions" | "terms" | "model" | "feedback" }
   | { page: "reports"; facet: ReportsFacet }
   | { page: "usage"; facet: UsageFacet }
   | { page: "settings"; tab: SettingsTab }
@@ -24,12 +32,9 @@ export type Route =
   | { page: "analysis_new" }
   | { page: "analysis"; id: string };
 
-const PLAIN_PAGES: ReadonlyArray<"boards" | "catalog" | "model" | "feedback"> = [
-  "boards",
-  "catalog",
-  "model",
-  "feedback",
-];
+const PLAIN_PAGES: ReadonlyArray<
+  "boards" | "metrics" | "dimensions" | "terms" | "model" | "feedback"
+> = ["boards", "metrics", "dimensions", "terms", "model", "feedback"];
 
 /** 形似看板 id 即进看板页；id 有效性由服务端裁决。 */
 const BOARD_HASH = /^board\/([^/]+)$/;

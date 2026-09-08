@@ -29,6 +29,14 @@ test("看板 ?t= 带回板级时间覆盖；坏掉的参数当没有", () => {
   expect(parseRoute(boardHash("b1"))).toEqual({ page: "board", id: "b1" });
 });
 
+test("字典三页各占一个 hash 段", () => {
+  expect(parseRoute("#/metrics")).toEqual({ page: "metrics" });
+  expect(parseRoute("#/dimensions")).toEqual({ page: "dimensions" });
+  expect(parseRoute("#/terms")).toEqual({ page: "terms" });
+  // 合并前的老深链没有归宿，落默认页而不是猜一张字典。
+  expect(parseRoute("#/catalog")).toEqual({ page: "reports", facet: "reports" });
+});
+
 test("空串与未知段归报告列表", () => {
   expect(parseRoute("")).toEqual({ page: "reports", facet: "reports" });
   expect(parseRoute("#/")).toEqual({ page: "reports", facet: "reports" });

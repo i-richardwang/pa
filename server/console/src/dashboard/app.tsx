@@ -6,7 +6,9 @@ import { errorText } from "./api";
 import { useMe } from "./dashboard_queries";
 import { BoardPage } from "./boards/board_page";
 import { BoardReportEditPage } from "./boards/board_report_edit_page";
-import { CatalogPage } from "./catalog/catalog_page";
+import { MetricsPage } from "./catalog/metrics_page";
+import { DimensionsPage } from "./catalog/dimensions_page";
+import { BusinessTermsPage } from "./catalog/terms_page";
 import { BoardsPage } from "./boards/boards_page";
 import { MyReportsPage } from "./reports/my_reports_page";
 import { AnalysisNewPage } from "./analyses/analysis_new_page";
@@ -111,8 +113,12 @@ export function DashboardApp() {
         <BoardsPage me={me} />
       ) : page.page === "reports" ? (
         <MyReportsPage facet={page.facet} />
-      ) : page.page === "catalog" ? (
-        <CatalogPage />
+      ) : page.page === "metrics" ? (
+        <MetricsPage />
+      ) : page.page === "dimensions" ? (
+        <DimensionsPage />
+      ) : page.page === "terms" ? (
+        <BusinessTermsPage />
       ) : page.page === "model" ? (
         <DataCapabilityMapPage />
       ) : page.page === "usage" ? (
