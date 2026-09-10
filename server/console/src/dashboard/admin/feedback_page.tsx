@@ -2,7 +2,7 @@
  * 接受只表示认可该缺口值得补；指标、口径与数据范围仍以模型 YAML 的 Git 变更为准。
  */
 import { useEffect, useState } from "react";
-import { CheckIcon, CircleAlertIcon, InboxIcon, XIcon } from "lucide-react";
+import { CheckIcon, CircleAlertIcon, XIcon } from "lucide-react";
 import { FEEDBACK_LIMITS, type FeedbackGroup } from "@contracts/feedback_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
@@ -17,7 +17,6 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldLabel } from "@/components/ui/field";
 import {
   Table,
@@ -28,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { EmptyPanel } from "../kit/empty_panel";
 import { errorText, formatAt } from "../api";
 import { useFeedbackPage, useResolveFeedback } from "../dashboard_queries";
 import { ListPageBody, ListScrollBody } from "../layout/layout_chrome";
@@ -60,26 +60,17 @@ export function FeedbackPage() {
       <ListPageBody>
         <ListScrollBody>
           {error && (
-            <Alert className="mt-5" variant="error">
+            <Alert variant="error">
               <CircleAlertIcon />
               <AlertTitle>{error}</AlertTitle>
             </Alert>
           )}
           {loading && !data ? (
-            <div className="mt-5">
-              <LoadingMark className="py-16" />
-            </div>
+            <LoadingMark className="py-16" />
           ) : (
-            <div className={loading ? "mt-5 opacity-60" : "mt-5"}>
+            <div className={loading ? "opacity-60" : undefined}>
               {!data?.rows.length ? (
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <InboxIcon />
-                    </EmptyMedia>
-                    <EmptyTitle>暂无反馈</EmptyTitle>
-                  </EmptyHeader>
-                </Empty>
+                <EmptyPanel text="暂无反馈" />
               ) : (
                 <Table>
                   <TableHeader>

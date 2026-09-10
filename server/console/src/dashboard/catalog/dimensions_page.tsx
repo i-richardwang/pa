@@ -76,29 +76,27 @@ export function DimensionsPage() {
           }
         />
         <ListScrollBody>
-          <div className="mt-5">
-            {error && (
-              <Alert variant="error">
-                <CircleAlertIcon />
-                <AlertTitle>{error}</AlertTitle>
-              </Alert>
-            )}
-            {catalogQuery.isLoading && <LoadingMark className="py-16" />}
-            {data &&
-              (dimensions.length > 0 ? (
-                <DimensionTable
-                  dimensions={dimensions}
-                  onOpen={(member) => profile.open({ kind: "member", member })}
-                />
-              ) : (
-                <EmptyPanel
-                  description={
-                    keyword ? "换一个名称或业务口径后重试。" : "目录仅显示当前账号获准使用的维度。"
-                  }
-                  text={keyword ? `没有匹配「${keyword}」的维度` : "当前目录暂无可见维度"}
-                />
-              ))}
-          </div>
+          {error && (
+            <Alert variant="error">
+              <CircleAlertIcon />
+              <AlertTitle>{error}</AlertTitle>
+            </Alert>
+          )}
+          {catalogQuery.isLoading && <LoadingMark className="py-16" />}
+          {data &&
+            (dimensions.length > 0 ? (
+              <DimensionTable
+                dimensions={dimensions}
+                onOpen={(member) => profile.open({ kind: "member", member })}
+              />
+            ) : (
+              <EmptyPanel
+                description={
+                  keyword ? "换一个名称或业务口径后重试。" : "目录仅显示当前账号获准使用的维度。"
+                }
+                text={keyword ? `没有匹配「${keyword}」的维度` : "当前目录暂无可见维度"}
+              />
+            ))}
         </ListScrollBody>
       </ListPageBody>
       {profile.dialog}

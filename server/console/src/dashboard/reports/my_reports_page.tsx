@@ -103,9 +103,7 @@ export function MyReportsPage({ facet }: { facet: ReportsFacet }) {
       />
       <ListScrollBody>
         {facet === "history" ? (
-          <div className="mt-5">
-            <QueryHistoryTab days={days} offset={offset} onOffset={setOffset} />
-          </div>
+          <QueryHistoryTab days={days} offset={offset} onOffset={setOffset} />
         ) : (
           <ReportsList archived={facet === "archived"} query={query} />
         )}
@@ -154,111 +152,99 @@ function ReportsList({ archived, query }: { archived: boolean; query: string }) 
 
   if (error) {
     return (
-      <Alert className="mt-5" variant="error">
+      <Alert variant="error">
         <CircleAlertIcon />
         <AlertTitle>{error}</AlertTitle>
       </Alert>
     );
   }
   if (!data) {
-    return (
-      <div className="mt-5">
-        <LoadingMark className="py-16" />
-      </div>
-    );
+    return <LoadingMark className="py-16" />;
   }
   if (data.rows.length === 0) {
     return (
-      <div className="mt-5">
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <ChartBarIcon />
-            </EmptyMedia>
-            <EmptyTitle>{archived ? "没有归档的报告" : "还没有保存的报告"}</EmptyTitle>
-            <EmptyDescription>
-              {archived
-                ? "归档的报告会留在这里，随时可以恢复。"
-                : "在「查询记录」里把分析保存为报告后，会显示在这里。"}
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      </div>
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <ChartBarIcon />
+          </EmptyMedia>
+          <EmptyTitle>{archived ? "没有归档的报告" : "还没有保存的报告"}</EmptyTitle>
+          <EmptyDescription>
+            {archived
+              ? "归档的报告会留在这里，随时可以恢复。"
+              : "在「查询记录」里把分析保存为报告后，会显示在这里。"}
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
   if (rows.length === 0) {
     return (
-      <div className="mt-5">
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>没有匹配的报告</EmptyTitle>
-            <EmptyDescription>换个关键词试试。</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      </div>
+      <Empty>
+        <EmptyHeader>
+          <EmptyTitle>没有匹配的报告</EmptyTitle>
+          <EmptyDescription>换个关键词试试。</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
   return (
-    <div className="mt-5">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <SortableHead label="名称" k="name" sort={sort} onToggle={toggle} />
-            <SortableHead
-              label="图型"
-              k="type"
-              sort={sort}
-              onToggle={toggle}
-              className="min-w-[120px]"
-            />
-            <SortableHead
-              label="更新时间"
-              k="updated"
-              sort={sort}
-              onToggle={toggle}
-              className="min-w-[120px]"
-            />
-            <TableHead className="min-w-[30px]" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.id}>
-              <TableCell>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <SortableHead label="名称" k="name" sort={sort} onToggle={toggle} />
+          <SortableHead
+            label="图型"
+            k="type"
+            sort={sort}
+            onToggle={toggle}
+            className="min-w-[120px]"
+          />
+          <SortableHead
+            label="更新时间"
+            k="updated"
+            sort={sort}
+            onToggle={toggle}
+            className="min-w-[120px]"
+          />
+          <TableHead className="min-w-[30px]" />
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow key={row.id}>
+            <TableCell>
+              {archived ? (
+                <span className="text-pa-muted">{row.name}</span>
+              ) : (
+                <ResourceName href={reportHash(row.id)}>{row.name}</ResourceName>
+              )}
+            </TableCell>
+            <TableCell>
+              <ListCategoryPill className="pointer-events-none cursor-default">
+                {PRESENTATION_TYPE_LABELS[row.presentation_type]}
+              </ListCategoryPill>
+            </TableCell>
+            <TableCell className="text-pa-muted tabular-nums">{formatAt(row.updated_at)}</TableCell>
+            <TableCell className="relative p-2 text-right">
+              <RowMenu label="报告操作">
                 {archived ? (
-                  <span className="text-pa-muted">{row.name}</span>
+                  <MenuItem onClick={() => restore(row)}>
+                    <ArchiveRestoreIcon aria-hidden="true" />
+                    恢复
+                  </MenuItem>
                 ) : (
-                  <ResourceName href={reportHash(row.id)}>{row.name}</ResourceName>
+                  <MenuItem onClick={() => archive(row)}>
+                    <ArchiveIcon aria-hidden="true" />
+                    归档
+                  </MenuItem>
                 )}
-              </TableCell>
-              <TableCell>
-                <ListCategoryPill className="pointer-events-none cursor-default">
-                  {PRESENTATION_TYPE_LABELS[row.presentation_type]}
-                </ListCategoryPill>
-              </TableCell>
-              <TableCell className="text-pa-muted tabular-nums">
-                {formatAt(row.updated_at)}
-              </TableCell>
-              <TableCell className="relative p-2 text-right">
-                <RowMenu label="报告操作">
-                  {archived ? (
-                    <MenuItem onClick={() => restore(row)}>
-                      <ArchiveRestoreIcon aria-hidden="true" />
-                      恢复
-                    </MenuItem>
-                  ) : (
-                    <MenuItem onClick={() => archive(row)}>
-                      <ArchiveIcon aria-hidden="true" />
-                      归档
-                    </MenuItem>
-                  )}
-                </RowMenu>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+              </RowMenu>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

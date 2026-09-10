@@ -170,7 +170,10 @@ export function ListScrollBody({
   className?: string;
 }): React.ReactElement {
   return (
-    <div className={cn("min-h-0 flex-1 overflow-y-auto", className)} data-slot="list-scroll-body">
+    <div
+      className={cn("min-h-0 flex-1 overflow-y-auto pt-5", className)}
+      data-slot="list-scroll-body"
+    >
       {children}
     </div>
   );

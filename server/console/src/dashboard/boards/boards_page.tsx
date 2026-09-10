@@ -120,106 +120,96 @@ export function BoardsPage({ me }: { me: MePayload }) {
 
       <ListScrollBody>
         {error && (
-          <Alert className="mt-5" variant="error">
+          <Alert variant="error">
             <CircleAlertIcon />
             <AlertTitle>{error}</AlertTitle>
           </Alert>
         )}
 
         {!data ? (
-          <div className="mt-5">
-            <LoadingMark className="py-16" />
-          </div>
+          <LoadingMark className="py-16" />
         ) : data.rows.length === 0 ? (
-          <div className="mt-5">
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <PackageIcon />
-                </EmptyMedia>
-                <EmptyTitle>还没有看板</EmptyTitle>
-                <EmptyDescription>
-                  新建一个空看板，再去「我的报告」把保存的报告装进来。
-                </EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button variant="filled" onClick={() => setShowCreate(true)}>
-                  <PlusIcon />
-                  新建看板
-                </Button>
-              </EmptyContent>
-            </Empty>
-          </div>
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <PackageIcon />
+              </EmptyMedia>
+              <EmptyTitle>还没有看板</EmptyTitle>
+              <EmptyDescription>
+                新建一个空看板，再去「我的报告」把保存的报告装进来。
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button variant="filled" onClick={() => setShowCreate(true)}>
+                <PlusIcon />
+                新建看板
+              </Button>
+            </EmptyContent>
+          </Empty>
         ) : rows.length === 0 ? (
-          <div className="mt-5">
-            <Empty>
-              <EmptyHeader>
-                <EmptyTitle>没有匹配的看板</EmptyTitle>
-                <EmptyDescription>换个关键词试试。</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          </div>
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>没有匹配的看板</EmptyTitle>
+              <EmptyDescription>换个关键词试试。</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
-          <div className="mt-5">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortableHead label="名称" k="name" sort={sort} onToggle={toggle} />
-                  <SortableHead
-                    label="创建者"
-                    k="creator"
-                    sort={sort}
-                    onToggle={toggle}
-                    className="min-w-[120px]"
-                  />
-                  <SortableHead
-                    label="更新时间"
-                    k="updated"
-                    sort={sort}
-                    onToggle={toggle}
-                    className="min-w-[120px]"
-                  />
-                  <SortableHead
-                    label="报告数"
-                    k="count"
-                    sort={sort}
-                    onToggle={toggle}
-                    className="min-w-[120px]"
-                  />
-                  <TableHead className="min-w-[30px]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => {
-                  const mine = row.created_by === me.email;
-                  return (
-                    <TableRow key={row.id}>
-                      <TableCell>
-                        <ResourceName href={boardHash(row.id)}>{row.name}</ResourceName>
-                      </TableCell>
-                      <TableCell className="text-pa-muted">
-                        {mine ? "我" : row.created_by}
-                      </TableCell>
-                      <TableCell className="text-pa-muted tabular-nums">
-                        {formatAt(row.updated_at)}
-                      </TableCell>
-                      <TableCell className="text-pa-muted tabular-nums">{row.count}</TableCell>
-                      <TableCell className="relative p-2 text-right">
-                        {mine && (
-                          <RowMenu label="看板操作">
-                            <MenuItem onClick={() => removeBoard(row)}>
-                              <Trash2Icon aria-hidden="true" />
-                              删除看板
-                            </MenuItem>
-                          </RowMenu>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortableHead label="名称" k="name" sort={sort} onToggle={toggle} />
+                <SortableHead
+                  label="创建者"
+                  k="creator"
+                  sort={sort}
+                  onToggle={toggle}
+                  className="min-w-[120px]"
+                />
+                <SortableHead
+                  label="更新时间"
+                  k="updated"
+                  sort={sort}
+                  onToggle={toggle}
+                  className="min-w-[120px]"
+                />
+                <SortableHead
+                  label="报告数"
+                  k="count"
+                  sort={sort}
+                  onToggle={toggle}
+                  className="min-w-[120px]"
+                />
+                <TableHead className="min-w-[30px]" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => {
+                const mine = row.created_by === me.email;
+                return (
+                  <TableRow key={row.id}>
+                    <TableCell>
+                      <ResourceName href={boardHash(row.id)}>{row.name}</ResourceName>
+                    </TableCell>
+                    <TableCell className="text-pa-muted">{mine ? "我" : row.created_by}</TableCell>
+                    <TableCell className="text-pa-muted tabular-nums">
+                      {formatAt(row.updated_at)}
+                    </TableCell>
+                    <TableCell className="text-pa-muted tabular-nums">{row.count}</TableCell>
+                    <TableCell className="relative p-2 text-right">
+                      {mine && (
+                        <RowMenu label="看板操作">
+                          <MenuItem onClick={() => removeBoard(row)}>
+                            <Trash2Icon aria-hidden="true" />
+                            删除看板
+                          </MenuItem>
+                        </RowMenu>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         )}
       </ListScrollBody>
 

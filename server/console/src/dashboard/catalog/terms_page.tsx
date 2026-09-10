@@ -1,19 +1,12 @@
 /**
  * 业务术语页：全员可查的黑话词典，管理员在这里维护。
  */
-import { CircleAlertIcon, InboxIcon, PlusIcon } from "lucide-react";
+import { CircleAlertIcon, PlusIcon } from "lucide-react";
 import type { PublicBusinessTerm } from "@contracts/business_term_contract";
 import { LoadingMark } from "pa-result-view";
 import { useState } from "react";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { MenuItem } from "@/components/ui/menu";
 import { PopupSection } from "@/components/ui/surface";
 import {
@@ -45,6 +38,7 @@ import {
   useSetTitlebarActions,
 } from "../layout/layout_chrome";
 import { HeaderTextAction } from "../layout/view_chrome";
+import { EmptyPanel } from "../kit/empty_panel";
 import { RowMenu } from "../kit/table_kit";
 import { usePrefilledKeyword } from "./prefill";
 
@@ -100,23 +94,21 @@ export function BusinessTermsPage() {
           }
         />
         <ListScrollBody>
-          <div className="mt-5">
-            {error && (
-              <Alert variant="error">
-                <CircleAlertIcon />
-                <AlertTitle>{error}</AlertTitle>
-              </Alert>
-            )}
-            {loading && <LoadingMark className="py-16" />}
-            {!loading && (
-              <TermSection
-                terms={found}
-                filtered={Boolean(keyword.trim())}
-                onEdit={isAdmin ? setEditing : undefined}
-                onDelete={isAdmin ? deleteTerm : undefined}
-              />
-            )}
-          </div>
+          {error && (
+            <Alert variant="error">
+              <CircleAlertIcon />
+              <AlertTitle>{error}</AlertTitle>
+            </Alert>
+          )}
+          {loading && <LoadingMark className="py-16" />}
+          {!loading && (
+            <TermSection
+              terms={found}
+              filtered={Boolean(keyword.trim())}
+              onEdit={isAdmin ? setEditing : undefined}
+              onDelete={isAdmin ? deleteTerm : undefined}
+            />
+          )}
         </ListScrollBody>
       </ListPageBody>
       <BusinessTermEditorDialog
@@ -142,22 +134,9 @@ function TermSection({
 }) {
   if (terms.length === 0) {
     return filtered ? (
-      <Empty>
-        <EmptyHeader>
-          <EmptyTitle>没有匹配的业务术语</EmptyTitle>
-          <EmptyDescription>清空搜索框可查看全部。</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <EmptyPanel description="清空搜索框可查看全部。" text="没有匹配的业务术语" />
     ) : (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <InboxIcon />
-          </EmptyMedia>
-          <EmptyTitle>暂无业务术语</EmptyTitle>
-          <EmptyDescription>可从一句准确、可独立理解的定义开始。</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <EmptyPanel description="可从一句准确、可独立理解的定义开始。" text="暂无业务术语" />
     );
   }
   return (

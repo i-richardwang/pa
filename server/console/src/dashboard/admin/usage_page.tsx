@@ -72,7 +72,7 @@ export function UsagePage({ facet }: { facet: UsageFacet }) {
         }
       />
       <ListScrollBody>
-        <div className="mt-5 space-y-6">
+        <div className="space-y-6">
           {error && (
             <Alert variant="error">
               <CircleAlertIcon />
