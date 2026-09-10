@@ -1,6 +1,5 @@
 /**
  * 业务术语页：全员可查的黑话词典，管理员在这里维护。
- * 新建入口只属于这一页——标题栏动作随页面走，不跟着分面串到别的清单上。
  */
 import { CircleAlertIcon, InboxIcon, PlusIcon } from "lucide-react";
 import type { PublicBusinessTerm } from "@contracts/business_term_contract";
@@ -49,8 +48,6 @@ import { HeaderTextAction } from "../layout/view_chrome";
 import { RowMenu } from "../kit/table_kit";
 import { usePrefilledKeyword } from "./prefill";
 
-type TermRow = PublicBusinessTerm;
-
 export function BusinessTermsPage() {
   const isAdmin = useMe().data?.is_admin ?? false;
   const catalogQuery = useCatalogQuery();
@@ -63,7 +60,7 @@ export function BusinessTermsPage() {
   const removeTerm = useDeleteBusinessTerm();
   const restoreTerm = useRestoreBusinessTerm();
 
-  const terms: TermRow[] = isAdmin
+  const terms: PublicBusinessTerm[] = isAdmin
     ? (adminTermsQuery.data?.rows ?? [])
     : (termsQuery.data?.rows ?? []);
   const found = filterTerms(terms, keyword);
@@ -138,7 +135,7 @@ function TermSection({
   onEdit,
   onDelete,
 }: {
-  terms: TermRow[];
+  terms: PublicBusinessTerm[];
   filtered: boolean;
   onEdit?: (row: PublicBusinessTerm) => void;
   onDelete?: (row: PublicBusinessTerm) => void;
@@ -179,13 +176,11 @@ function TermSection({
             <TableCell>
               <div className="flex min-w-0 flex-col gap-1">
                 <span className="text-sm font-medium">{term.canonical_term}</span>
-                <div className="flex flex-wrap items-center gap-1">
-                  {term.aliases.length ? (
-                    <span className="truncate text-xs text-pa-muted">
-                      也叫：{term.aliases.join("、")}
-                    </span>
-                  ) : null}
-                </div>
+                {term.aliases.length ? (
+                  <span className="truncate text-xs text-pa-muted">
+                    也叫：{term.aliases.join("、")}
+                  </span>
+                ) : null}
               </div>
             </TableCell>
             <TableCell className="whitespace-normal text-sm leading-5 text-pa-fg">
@@ -199,9 +194,7 @@ function TermSection({
                 {term.related_members.length ? (
                   term.related_members.map((member) =>
                     member.status === "available" ? (
-                      <ListCategoryPill key={member.id} type="button">
-                        {member.title}
-                      </ListCategoryPill>
+                      <ListCategoryPill key={member.id}>{member.title}</ListCategoryPill>
                     ) : (
                       <Badge key={member.id} variant="warning">
                         绑定已下线

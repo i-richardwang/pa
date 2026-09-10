@@ -1,13 +1,10 @@
 /**
  * 维度页：目录里可用来切分的业务属性清单。
- * 属性组是维度的归属，与指标页的指标域同一形态：筛选器 + 行上的归属芯片。
+ * 属性组是维度的归属：它在这里是控制条上的筛选器与行上的归属芯片。
  */
 import { useMemo, useState } from "react";
 import { CircleAlertIcon } from "lucide-react";
-import type {
-  PublicCatalogDimension as CatalogDimensionPayload,
-  PublicCatalogMember as CatalogMemberPayload,
-} from "@contracts/catalog_contract";
+import type { PublicCatalogDimension as CatalogDimensionPayload } from "@contracts/catalog_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import {
@@ -21,7 +18,7 @@ import {
 import { errorText } from "../api";
 import { useBusinessTerms, useCatalogQuery } from "../dashboard_queries";
 import { MemberTitleCell, useCatalogProfile } from "./catalog_profile";
-import { ALL, dimensionGroupTitle as groupTitle, filterDimensions } from "./catalog_filters";
+import { ALL, filterDimensions } from "./catalog_filters";
 import {
   ListCategoryPill,
   ListControlBar,
@@ -39,24 +36,23 @@ export function DimensionsPage() {
   const data = catalogQuery.data ?? null;
   const error = errorText(catalogQuery.error) ?? errorText(termsQuery.error);
   const [keyword, setKeyword] = usePrefilledKeyword();
-  const [group, setGroup] = useState(ALL);
+  const [groupId, setGroupId] = useState(ALL);
   const profile = useCatalogProfile(data, termsQuery.data?.rows ?? []);
 
-  // 组序随目录给的成员次序，前端不另排；说不出业务名的组不进筛选器。
+  // 组序随目录给的成员次序，前端不另排。
   const groupOptions = useMemo(() => {
-    const titles: string[] = [];
+    const groups: { value: string; label: string }[] = [];
     for (const dimension of data?.dimensions ?? []) {
-      const title = groupTitle(dimension);
-      if (title && !titles.includes(title)) titles.push(title);
+      const group = dimension.dimension_group;
+      if (group && !groups.some((option) => option.value === group.id)) {
+        groups.push({ value: group.id, label: group.title });
+      }
     }
-    return [
-      { value: ALL, label: "全部属性组" },
-      ...titles.map((title) => ({ value: title, label: title })),
-    ];
+    return [{ value: ALL, label: "全部属性组" }, ...groups];
   }, [data]);
   const dimensions = useMemo(
-    () => filterDimensions(data?.dimensions ?? [], group, keyword),
-    [data, group, keyword],
+    () => filterDimensions(data?.dimensions ?? [], groupId, keyword),
+    [data, groupId, keyword],
   );
 
   return (
@@ -67,8 +63,8 @@ export function DimensionsPage() {
             <ListControlCategory
               aria-label="属性组"
               options={groupOptions}
-              value={group}
-              onValueChange={setGroup}
+              value={groupId}
+              onValueChange={setGroupId}
             />
           }
           right={
@@ -116,7 +112,7 @@ function DimensionTable({
   onOpen,
 }: {
   dimensions: CatalogDimensionPayload[];
-  onOpen: (member: CatalogMemberPayload) => void;
+  onOpen: (dimension: CatalogDimensionPayload) => void;
 }) {
   return (
     <Table>
@@ -129,10 +125,10 @@ function DimensionTable({
       <TableBody>
         {dimensions.map((dimension) => (
           <TableRow className="cursor-pointer" key={dimension.id} onClick={() => onOpen(dimension)}>
-            <MemberTitleCell description="暂无维度说明" member={dimension} />
+            <MemberTitleCell fallback="暂无维度说明" member={dimension} />
             <TableCell className="px-1.5 py-3">
-              {groupTitle(dimension) ? (
-                <ListCategoryPill>{groupTitle(dimension)}</ListCategoryPill>
+              {dimension.dimension_group ? (
+                <ListCategoryPill>{dimension.dimension_group.title}</ListCategoryPill>
               ) : (
                 <span className="text-pa-muted">—</span>
               )}

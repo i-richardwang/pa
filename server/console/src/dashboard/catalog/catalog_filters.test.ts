@@ -70,7 +70,7 @@ const TERMS: PublicBusinessTerm[] = [
   } as unknown as PublicBusinessTerm,
 ];
 
-test("指标搜到所属域的别名：域分面撤掉后这条发现路径改由指标页承担", () => {
+test("指标能被所属域的别名搜到", () => {
   const bySynonym = filterMeasures(CATALOG, ALL, "Turnover").map((m) => m.id);
   expect(bySynonym).toEqual(["measure:exit_count"]);
   // 别名只把它自己那个域的指标带出来，不是全表放行。
@@ -90,7 +90,7 @@ test("维度页只搜维度：属性组既是筛选器也是命中字段", () =>
   expect(filterDimensions(dimensions, ALL, "雇佣信息").map((d) => d.id)).toEqual([
     "dimension:work_location",
   ]);
-  expect(filterDimensions(dimensions, "员工基本信息", "").map((d) => d.id)).toEqual([
+  expect(filterDimensions(dimensions, "group:person", "").map((d) => d.id)).toEqual([
     "dimension:gender",
   ]);
   // 指标名不在维度页里出现。

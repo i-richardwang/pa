@@ -1,11 +1,11 @@
 /**
  * 指标页：目录里可查询的指标清单。
- * 指标域是指标的归属而不是并列对象——它在这里是筛选器与行上的归属芯片，芯片点开域档案。
+ * 指标域是指标的归属：它在这里是控制条上的筛选器与行上的归属芯片，芯片点开域档案。
  */
 import { useMemo, useState } from "react";
 import { CircleAlertIcon } from "lucide-react";
 import type {
-  PublicCatalogMember as CatalogMemberPayload,
+  PublicCatalogMeasure as CatalogMeasurePayload,
   PublicCatalogDocument as CatalogPayload,
   PublicMetricDomain as MetricDomainPayload,
 } from "@contracts/catalog_contract";
@@ -143,9 +143,9 @@ function MeasureTable({
   onOpen,
   onOpenDomain,
 }: {
-  catalog: CatalogPayload | null;
-  measures: CatalogMemberPayload[];
-  onOpen: (member: CatalogMemberPayload) => void;
+  catalog: CatalogPayload;
+  measures: CatalogMeasurePayload[];
+  onOpen: (measure: CatalogMeasurePayload) => void;
   onOpenDomain: (topic: MetricDomainPayload) => void;
 }) {
   return (
@@ -159,7 +159,7 @@ function MeasureTable({
       <TableBody>
         {measures.map((measure) => (
           <TableRow className="cursor-pointer" key={measure.id} onClick={() => onOpen(measure)}>
-            <MemberTitleCell description="暂无指标说明" member={measure} />
+            <MemberTitleCell fallback="暂无指标说明" member={measure} />
             <MetricDomainCell domain={domainOf(catalog, measure)} onOpenDomain={onOpenDomain} />
           </TableRow>
         ))}

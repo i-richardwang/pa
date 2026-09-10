@@ -26,7 +26,7 @@ export type Detail =
   | { kind: "member"; member: CatalogMemberPayload }
   | { kind: "metric_domain"; topic: MetricDomainPayload };
 
-export function sensitivityLabel(sensitivity: string): string {
+function sensitivityLabel(sensitivity: string): string {
   return sensitivity === "restricted" ? "受限" : sensitivity;
 }
 
@@ -43,10 +43,7 @@ export type DimensionGroupRow = { group: string; titles: string[] };
  * 维度语义 id 清单 → 按业务属性组归拢的业务名。查不到名字的直接丢掉，
  * 宁可少一项也不退回 id 顶替。组序与组内序都随模型给的次序，前端不另排。
  */
-export function dimensionGroups(
-  catalog: CatalogPayload | null,
-  ids: string[],
-): DimensionGroupRow[] {
+function dimensionGroups(catalog: CatalogPayload | null, ids: string[]): DimensionGroupRow[] {
   const wanted = new Set(ids);
   const rows: DimensionGroupRow[] = [];
   const byGroup = new Map<string, DimensionGroupRow>();
@@ -67,11 +64,11 @@ export function dimensionGroups(
 /** 名字 + 受限锁；指标与维度两张表共用同一枚身份格。 */
 export function MemberTitleCell({
   member,
-  description,
+  fallback,
 }: {
   member: CatalogMemberPayload;
-  /** 缺省说明句；不传则整格只印名字。 */
-  description?: string;
+  /** 成员自己没写说明时印的句子。 */
+  fallback: string;
 }) {
   return (
     <TableCell className="whitespace-normal">
@@ -84,9 +81,7 @@ export function MemberTitleCell({
             </LockIcon>
           )}
         </div>
-        {description === undefined ? null : (
-          <p className="line-clamp-2 text-sm text-pa-muted">{member.description || description}</p>
-        )}
+        <p className="line-clamp-2 text-sm text-pa-muted">{member.description || fallback}</p>
       </div>
     </TableCell>
   );
@@ -134,7 +129,7 @@ export function useCatalogProfile(catalog: CatalogPayload | null, terms: PublicB
   );
 
   return {
-    open: setDetail,
+    open: (next: Detail) => setDetail(next),
     dialog: <CatalogValuesDialog target={valuesTarget} onClose={() => setValuesTarget(null)} />,
   };
 }

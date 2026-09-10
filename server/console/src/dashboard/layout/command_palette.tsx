@@ -34,6 +34,7 @@ import {
   useReportsList,
 } from "../dashboard_queries";
 import { DiamondFilled, DiamondOutline } from "../analyses/member_picker";
+import { prefillCatalogSearch } from "../catalog/prefill";
 import {
   analysisHash,
   analysisNewHash,
@@ -56,9 +57,6 @@ export type PaletteItem =
   | { kind: "business_term"; id: string; canonicalTerm: string; definition: string };
 
 type PaletteGroup = { value: string; items: PaletteItem[] };
-
-/** 字典页读后即清，见 catalog/prefill.ts。 */
-export const CATALOG_PREFILL_KEY = "pa.catalog.q";
 
 function itemText(item: PaletteItem): string {
   switch (item.kind) {
@@ -288,17 +286,17 @@ export function CommandPalette({
       case "analysis":
         navigateTo(analysisHash(item.id));
         break;
-      // 落在成员自己那张清单上：维度不落到指标页，术语不落到成员页。
+      // 每类成员落在自己那张清单上，搜索词随行。
       case "member":
-        sessionStorage.setItem(CATALOG_PREFILL_KEY, item.title);
+        prefillCatalogSearch(item.title);
         navigate(item.memberKind === "dimension" ? "dimensions" : "metrics");
         break;
       case "metric_domain":
-        sessionStorage.setItem(CATALOG_PREFILL_KEY, item.title);
+        prefillCatalogSearch(item.title);
         navigate("metrics");
         break;
       case "business_term":
-        sessionStorage.setItem(CATALOG_PREFILL_KEY, item.canonicalTerm);
+        prefillCatalogSearch(item.canonicalTerm);
         navigate("terms");
         break;
     }
