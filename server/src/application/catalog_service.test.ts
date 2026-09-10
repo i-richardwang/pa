@@ -48,7 +48,7 @@ const views: CubeView[] = [
         title: "组织",
         description: "员工所属组织。",
         type: "string",
-        meta: {},
+        meta: { dimension_group: "organization" },
       },
     ],
   },
@@ -61,7 +61,14 @@ const views: CubeView[] = [
       time_source: "workforce",
     },
     measures: [],
-    dimensions: [{ name: "employee_attributes_fixture.age", title: "年龄", type: "number" }],
+    dimensions: [
+      {
+        name: "employee_attributes_fixture.age",
+        title: "年龄",
+        type: "number",
+        meta: { dimension_group: "employee_basic_info" },
+      },
+    ],
   },
 ];
 const canonical = canonicalModelFixture(views, TEST_SEMANTIC_TAXONOMY);

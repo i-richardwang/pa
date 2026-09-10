@@ -42,9 +42,8 @@ export function DimensionsPage() {
   // 组序随目录给的成员次序，前端不另排。
   const groupOptions = useMemo(() => {
     const groups: { value: string; label: string }[] = [];
-    for (const dimension of data?.dimensions ?? []) {
-      const group = dimension.dimension_group;
-      if (group && !groups.some((option) => option.value === group.id)) {
+    for (const { dimension_group: group } of data?.dimensions ?? []) {
+      if (!groups.some((option) => option.value === group.id)) {
         groups.push({ value: group.id, label: group.title });
       }
     }
@@ -127,11 +126,7 @@ function DimensionTable({
           <TableRow className="cursor-pointer" key={dimension.id} onClick={() => onOpen(dimension)}>
             <MemberTitleCell fallback="暂无维度说明" member={dimension} />
             <TableCell className="px-1.5 py-3">
-              {dimension.dimension_group ? (
-                <ListCategoryPill>{dimension.dimension_group.title}</ListCategoryPill>
-              ) : (
-                <span className="text-pa-muted">—</span>
-              )}
+              <ListCategoryPill>{dimension.dimension_group.title}</ListCategoryPill>
             </TableCell>
           </TableRow>
         ))}

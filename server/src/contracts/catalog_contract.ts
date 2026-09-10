@@ -55,8 +55,8 @@ export type PublicCatalogMeasure = PublicCatalogMemberBase & {
 export type PublicCatalogDimension = PublicCatalogMemberBase & {
   kind: "dimension";
   dimension_kind?: CatalogDimensionKind;
-  /** 维度在当前语义包中的导航分组；不参与物理选路。 */
-  dimension_group?: { id: string; title: string };
+  /** 维度在当前语义包中的业务属性组归属；每个公开维度必属一组，不参与物理选路。 */
+  dimension_group: { id: string; title: string };
 };
 
 export type PublicCatalogMember = PublicCatalogMeasure | PublicCatalogDimension;
@@ -165,7 +165,7 @@ const CATALOG_DIMENSION_SCHEMA: z.ZodType<PublicCatalogDimension> =
   CATALOG_MEMBER_BASE_SCHEMA.extend({
     kind: z.literal("dimension"),
     dimension_kind: z.enum(["categorical", "overlapping"]).optional(),
-    dimension_group: z.object({ id: z.string(), title: z.string() }).strict().optional(),
+    dimension_group: z.object({ id: z.string(), title: z.string() }).strict(),
   });
 
 const METRIC_DOMAIN_SCHEMA: z.ZodType<PublicMetricDomain> = z

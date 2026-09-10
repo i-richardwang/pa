@@ -24,6 +24,7 @@ const catalog = {
       title: "组织",
       description: "人员所属组织。",
       dimension_kind: "categorical",
+      dimension_group: { id: "organization", title: "组织与部门" },
     },
   ],
 };
@@ -41,6 +42,13 @@ describe("public catalog contract", () => {
       PUBLIC_CATALOG_DOCUMENT_SCHEMA.safeParse({
         ...catalog,
         dimensions: [{ ...catalog.dimensions[0], query_capabilities: { dimension_ids: [] } }],
+      }).success,
+    ).toBe(false);
+    // 属性组是维度的必填归属：客户端按它归拢与筛选，不自行造桶。
+    expect(
+      PUBLIC_CATALOG_DOCUMENT_SCHEMA.safeParse({
+        ...catalog,
+        dimensions: [{ ...catalog.dimensions[0], dimension_group: undefined }],
       }).success,
     ).toBe(false);
     // 求值基准是指标的必填面：缺了它，消费方就只能按标题猜这个数代表什么时间。

@@ -54,11 +54,18 @@ export type PaletteItem =
   | { kind: "analysis"; id: string; title: string }
   | { kind: "member"; name: string; title: string; memberKind: "measure" | "dimension" }
   | { kind: "metric_domain"; id: string; title: string; synonyms: string[] }
-  | { kind: "business_term"; id: string; canonicalTerm: string; definition: string };
+  | {
+      kind: "business_term";
+      id: string;
+      canonicalTerm: string;
+      aliases: string[];
+      definition: string;
+    };
 
 type PaletteGroup = { value: string; items: PaletteItem[] };
 
-function itemText(item: PaletteItem): string {
+/** 面板的可搜文本：黑话（域别名、术语别名）与语义 id 都算数，标签只印业务名。 */
+export function itemText(item: PaletteItem): string {
   switch (item.kind) {
     case "action":
       return item.label;
@@ -77,11 +84,10 @@ function itemText(item: PaletteItem): string {
     case "metric_domain":
       return `${item.title} ${item.synonyms.join(" ")}`;
     case "business_term":
-      return `${item.canonicalTerm} ${item.definition}`;
+      return `${item.canonicalTerm} ${item.aliases.join(" ")} ${item.definition}`;
   }
 }
 
-/** 搜索匹配语义 id，标签只印业务名称。 */
 function itemLabel(item: PaletteItem): string {
   if (item.kind === "member" || item.kind === "metric_domain") return item.title;
   if (item.kind === "business_term") return item.canonicalTerm;
@@ -235,6 +241,7 @@ export function CommandPalette({
               kind: "business_term",
               id: term.id,
               canonicalTerm: term.canonical_term,
+              aliases: term.aliases,
               definition: term.definition,
             }),
           ) ?? null),

@@ -51,6 +51,7 @@ const catalog: CatalogPayload = {
       kind: "dimension",
       title: "组织",
       description: "组织。",
+      dimension_group: { id: "organization", title: "组织与部门" },
     },
   ],
 };

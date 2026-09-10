@@ -264,7 +264,7 @@ function TitlesCard({
 
 function ZeroHitsCard({ unanswered }: { unanswered: UnansweredPayload }) {
   return (
-    <TableSection title="零命中检索" description="catalog 搜了但目录里没有——目录缺口信号">
+    <TableSection title="零命中检索" description="搜过但目录里没有的词——目录缺口信号">
       {unanswered.zero_hits.length === 0 ? (
         <EmptyPanel text="窗口内无零命中检索" />
       ) : (

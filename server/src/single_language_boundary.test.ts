@@ -122,6 +122,7 @@ const DOCUMENT: CatalogDocument = {
           value_type: "string",
           description: "组织名",
           dimension_kind: "categorical",
+          dimension_group: { id: "organization", title: "组织与部门" },
         },
       ],
     },
@@ -268,7 +269,7 @@ const orgDim = (view: string): CubeView["dimensions"][number] => ({
   description: "组织。",
   type: "string",
   aliasMember: `${view}_fact.organization_name`,
-  meta: {},
+  meta: { dimension_group: "organization" },
 });
 const deptDim = (
   view: string,
@@ -281,7 +282,7 @@ const deptDim = (
   description: `${title}。`,
   type: "string",
   aliasMember: `${view}_fact.${member}`,
-  meta: {},
+  meta: { dimension_group: "organization" },
 });
 const planMeasure = (
   view: string,
@@ -349,7 +350,7 @@ describe("互斥维度按共享语义身份解析（fail-closed，无名称关�
           description: "部门。",
           type: "string",
           aliasMember: "hc_fact.dept_alpha",
-          meta: {},
+          meta: { dimension_group: "organization" },
         },
         {
           name: "hc.dept_beta",
@@ -358,7 +359,7 @@ describe("互斥维度按共享语义身份解析（fail-closed，无名称关�
           description: "部门。",
           type: "string",
           aliasMember: "hc_fact.department_name",
-          meta: {},
+          meta: { dimension_group: "organization" },
         },
       ],
       measures: [planMeasure("hc", [{ member: "department_name", reason: "x" }])],

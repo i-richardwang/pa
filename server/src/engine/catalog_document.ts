@@ -675,11 +675,14 @@ function stripMeasure(member: CompilerCatalogMeasure): PublicCatalogMeasure {
 }
 
 function stripDimension(member: CompilerCatalogDimension): PublicCatalogDimension {
+  if (!member.dimension_group) {
+    throw new Error(`维度「${member.title}」缺少业务属性组归属，不能上线`);
+  }
   return {
     ...publicMemberBase(member),
     kind: "dimension",
     ...(member.dimension_kind ? { dimension_kind: member.dimension_kind } : {}),
-    ...(member.dimension_group ? { dimension_group: member.dimension_group } : {}),
+    dimension_group: member.dimension_group,
   };
 }
 

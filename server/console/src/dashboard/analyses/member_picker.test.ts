@@ -35,27 +35,35 @@ describe("report editor member picker", () => {
   // 分节靠服务端当前语义包投影的业务属性组驱动，身份使用公共语义 id：
   // JSON 形状或归组口径一旦漂移，这条必须炸，而不是静默退回一个「其他」大桶。
   test("维度按业务属性组分节，事实属性组优先于所属 cube 兜底", () => {
-    const dimension = (id: string, title: string): CatalogMemberPayload => ({
+    const dimension = (
+      id: string,
+      title: string,
+      group: { id: string; title: string },
+    ): CatalogMemberPayload => ({
       id,
       kind: "dimension",
       title,
       description: "",
-      ...(id === "dimension:job_level_band"
-        ? { dimension_group: { id: "job_and_level", title: "岗位与职级" } }
-        : id === "dimension:gender"
-          ? { dimension_group: { id: "employee_basic_info", title: "员工基本信息" } }
-          : id === "dimension:organization_name"
-            ? { dimension_group: { id: "organization", title: "组织与部门" } }
-            : id === "dimension:leave_type"
-              ? { dimension_group: { id: "termination_event", title: "离职记录属性" } }
-              : {}),
+      dimension_group: group,
     });
     const grouped = groupMembers(
       pickableMembers([
-        dimension("dimension:job_level_band", "职级段"),
-        dimension("dimension:gender", "性别"),
-        dimension("dimension:organization_name", "组织"),
-        dimension("dimension:leave_type", "离职性质"),
+        dimension("dimension:job_level_band", "职级段", {
+          id: "job_and_level",
+          title: "岗位与职级",
+        }),
+        dimension("dimension:gender", "性别", {
+          id: "employee_basic_info",
+          title: "员工基本信息",
+        }),
+        dimension("dimension:organization_name", "组织", {
+          id: "organization",
+          title: "组织与部门",
+        }),
+        dimension("dimension:leave_type", "离职性质", {
+          id: "termination_event",
+          title: "离职记录属性",
+        }),
         measure,
       ]),
     );
@@ -67,10 +75,6 @@ describe("report editor member picker", () => {
       "其他",
     ]);
     expect(grouped[0].items.map((item) => item.id)).toEqual(["dimension:job_level_band"]);
-    // 归不进任何组的维度才落末位兜底桶——模型归组是 fail-closed 的，真成员不该走到这里。
-    expect(groupMembers(pickableMembers([dimension("dimension:nowhere", "无归属")]))).toEqual([
-      { label: "其他", items: expect.any(Array) },
-    ]);
   });
 
   test("指标按指标域分节只为找得到：组序取目录里域的次序，一指标多域取先出现的域", () => {

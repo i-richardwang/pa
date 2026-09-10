@@ -100,6 +100,7 @@ const metaViews: CubeView[] = [
     dimensions: [
       {
         name: "test_people_metrics.organization_name",
+        meta: { dimension_group: "organization" },
         title: "人员总览 组织",
         shortTitle: "组织",
         description: "员工所属组织。",
@@ -112,10 +113,11 @@ const metaViews: CubeView[] = [
         description: "员工姓名。",
         type: "string",
         aliasMember: "test_people_metrics.employee_name",
-        meta: {},
+        meta: { dimension_group: "employee_basic_info" },
       },
       {
         name: "test_people_metrics.department_name",
+        meta: { dimension_group: "organization" },
         title: "部门",
         shortTitle: "部门",
         description: "员工末级部门。",
@@ -175,6 +177,7 @@ const metaViews: CubeView[] = [
     dimensions: [
       {
         name: "employee_attributes_fixture.organization_name",
+        meta: { dimension_group: "organization" },
         title: "员工信息 组织",
         shortTitle: "组织",
         description: "员工所属组织。",
@@ -183,6 +186,7 @@ const metaViews: CubeView[] = [
       },
       {
         name: "employee_attributes_fixture.classification_source",
+        meta: { dimension_group: "job_and_level" },
         title: "员工信息 分类来源",
         shortTitle: "分类来源",
         description: "记录所属分类的来源。",
@@ -197,6 +201,7 @@ const metaViews: CubeView[] = [
         type: "string",
         aliasMember: "employee_attributes_fixture.category_band",
         meta: {
+          dimension_group: "job_and_level",
           ai_context:
             "Level A+ 至 Level D+ 按等级及以上理解，例如 Level C+ 选择 Level C 和 Level D。",
         },
@@ -239,6 +244,7 @@ const metaViews: CubeView[] = [
     dimensions: [
       {
         name: "employee_detail_fixture.organization_name",
+        meta: { dimension_group: "organization" },
         title: "人员明细 组织",
         shortTitle: "组织",
         description: "员工所属组织。",
@@ -251,7 +257,7 @@ const metaViews: CubeView[] = [
         description: "员工姓名。",
         type: "string",
         aliasMember: "employee_detail_fixture.employee_name",
-        meta: {},
+        meta: { dimension_group: "employee_basic_info" },
       },
     ],
     internalDimensions: [
@@ -343,6 +349,7 @@ describe("CatalogDocument", () => {
     expect(Object.keys(organizations[0]).sort()).toEqual([
       "available_in",
       "description",
+      "dimension_group",
       "dimension_kind",
       "id",
       "kind",
@@ -361,6 +368,14 @@ describe("CatalogDocument", () => {
         member: "employee_attributes_fixture.classification_source",
       },
     ]);
+  });
+
+  test("上线的维度必带业务属性组：缺归属的维度让整份目录出不去", () => {
+    const ungrouped = views.map((view) => ({
+      ...view,
+      dimensions: view.dimensions.map((dimension) => ({ ...dimension, meta: {} })),
+    }));
+    expect(() => toSemanticCatalog(buildCatalogDocument(ungrouped))).toThrow(/缺少业务属性组归属/);
   });
 
   test("人的投影：去重指标、折叠分母零件、公式行翻成中文，且只含白名单", () => {

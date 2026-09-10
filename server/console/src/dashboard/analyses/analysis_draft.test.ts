@@ -57,12 +57,14 @@ const catalog: CatalogPayload = {
       kind: "dimension",
       title: "组织",
       description: "人员所属组织。",
+      dimension_group: { id: "organization", title: "组织与部门" },
     },
     {
       id: "dimension:department_name",
       kind: "dimension",
       title: "部门",
       description: "人员所属部门。",
+      dimension_group: { id: "organization", title: "组织与部门" },
     },
   ],
 };

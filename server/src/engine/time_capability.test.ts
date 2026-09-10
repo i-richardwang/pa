@@ -49,7 +49,14 @@ const views: CubeView[] = [
     name: "flow",
     title: "人员流动",
     meta: { time_source: "workforce", observation_scope: "统计范围：测试" },
-    dimensions: [{ name: "flow.organization_name", title: "组织", type: "string" }],
+    dimensions: [
+      {
+        name: "flow.organization_name",
+        title: "组织",
+        type: "string",
+        meta: { dimension_group: "organization" },
+      },
+    ],
     measures: [
       measure("active_employee_count", "在职人数", {
         time_contract: { aggregation: "last", window: "selected" },

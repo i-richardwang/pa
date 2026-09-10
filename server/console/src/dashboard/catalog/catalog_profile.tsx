@@ -49,7 +49,7 @@ function dimensionGroups(catalog: CatalogPayload | null, ids: string[]): Dimensi
   const byGroup = new Map<string, DimensionGroupRow>();
   for (const member of catalog?.dimensions ?? []) {
     if (!wanted.has(member.id)) continue;
-    const group = member.dimension_group?.title ?? "其他";
+    const group = member.dimension_group.title;
     let row = byGroup.get(group);
     if (!row) {
       row = { group, titles: [] };

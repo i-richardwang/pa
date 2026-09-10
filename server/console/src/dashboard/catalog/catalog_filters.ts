@@ -48,13 +48,13 @@ export function filterDimensions(
 ): PublicCatalogDimension[] {
   const term = keyword.trim().toLowerCase();
   return dimensions.filter((dimension) => {
-    if (groupId !== ALL && dimension.dimension_group?.id !== groupId) return false;
+    if (groupId !== ALL && dimension.dimension_group.id !== groupId) return false;
     if (!term) return true;
     return contains(term, [
       dimension.title,
       dimension.description,
       dimension.ai_context,
-      dimension.dimension_group?.title,
+      dimension.dimension_group.title,
     ]);
   });
 }

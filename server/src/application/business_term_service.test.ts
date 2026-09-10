@@ -13,12 +13,14 @@ const members: PublicCatalogDimension[] = [
     kind: "dimension",
     title: "分类层级",
     description: "虚构分类层级。",
+    dimension_group: { id: "job_and_level", title: "岗位与职级" },
   },
   {
     id: "dimension:organization_name",
     kind: "dimension",
     title: "组织",
     description: "虚构组织。",
+    dimension_group: { id: "organization", title: "组织与部门" },
   },
 ];
 const usage = { log: async () => {} };
