@@ -373,9 +373,23 @@ describe("CatalogDocument", () => {
   test("上线的维度必带业务属性组：缺归属的维度让整份目录出不去", () => {
     const ungrouped = views.map((view) => ({
       ...view,
-      dimensions: view.dimensions.map((dimension) => ({ ...dimension, meta: {} })),
+      dimensions: view.dimensions.map(({ meta, ...dimension }) => ({
+        ...dimension,
+        meta: { ...meta, dimension_group: undefined },
+      })),
     }));
     expect(() => toSemanticCatalog(buildCatalogDocument(ungrouped))).toThrow(/缺少业务属性组归属/);
+  });
+
+  test("敏感度只认「受限」一个词：模型写别的词，目录出不去", () => {
+    const mislabeled = views.map((view) => ({
+      ...view,
+      dimensions: view.dimensions.map((dimension) => ({
+        ...dimension,
+        meta: { ...dimension.meta, sensitivity: "confidential" },
+      })),
+    }));
+    expect(() => buildCatalogDocument(mislabeled)).toThrow(/sensitivity 声明无效/);
   });
 
   test("人的投影：去重指标、折叠分母零件、公式行翻成中文，且只含白名单", () => {

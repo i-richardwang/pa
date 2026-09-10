@@ -34,7 +34,8 @@ type PublicCatalogMemberBase = {
   format?: string;
   /** 模型给 Agent 的选材与避坑规则（meta.ai_context），亮出供人核对 AI 的查询行为。 */
   ai_context?: string;
-  sensitivity?: string;
+  /** 受限成员按数据权限可见；模型只声明这一种敏感度。 */
+  sensitivity?: "restricted";
 };
 
 export type PublicCatalogMeasure = PublicCatalogMemberBase & {
@@ -136,7 +137,7 @@ const CATALOG_MEMBER_BASE_SCHEMA = z
     description: z.string(),
     format: z.string().optional(),
     ai_context: z.string().optional(),
-    sensitivity: z.string().optional(),
+    sensitivity: z.literal("restricted").optional(),
   })
   .strict();
 

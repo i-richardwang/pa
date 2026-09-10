@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { itemText, type PaletteItem } from "./command_palette";
+import { itemText, type PaletteItem } from "./palette_item";
 
 test("黑话进面板的可搜文本：术语别名与指标域别名都能命中", () => {
   const term: PaletteItem = {

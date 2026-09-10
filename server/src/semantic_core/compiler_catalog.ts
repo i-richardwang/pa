@@ -42,7 +42,8 @@ type CompilerCatalogMemberBase = {
   description: string;
   format?: string;
   ai_context?: string;
-  sensitivity?: string;
+  /** 受限成员按数据权限可见；模型只声明这一种敏感度。 */
+  sensitivity?: "restricted";
   dimension_kind?: "categorical" | "overlapping";
   dimension_group?: { id: string; title: string };
   records_available?: true;

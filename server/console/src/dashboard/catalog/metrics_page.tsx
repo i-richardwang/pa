@@ -6,7 +6,6 @@ import { useMemo, useState } from "react";
 import { CircleAlertIcon } from "lucide-react";
 import type {
   PublicCatalogMeasure as CatalogMeasurePayload,
-  PublicCatalogDocument as CatalogPayload,
   PublicMetricDomain as MetricDomainPayload,
 } from "@contracts/catalog_contract";
 import { LoadingMark } from "pa-result-view";
@@ -50,8 +49,13 @@ export function MetricsPage() {
     ],
     [data],
   );
-  const measures = useMemo(
-    () => filterMeasures(data, domainId, keyword),
+  // 归属在这里解析一次，表格只管印。
+  const rows = useMemo(
+    () =>
+      filterMeasures(data, domainId, keyword).map((measure) => ({
+        measure,
+        domain: domainOf(data, measure),
+      })),
     [data, domainId, keyword],
   );
 
@@ -86,10 +90,9 @@ export function MetricsPage() {
             )}
             {catalogQuery.isLoading && <LoadingMark className="py-16" />}
             {data &&
-              (measures.length > 0 ? (
+              (rows.length > 0 ? (
                 <MeasureTable
-                  catalog={data}
-                  measures={measures}
+                  rows={rows}
                   onOpen={(member) => profile.open({ kind: "member", member })}
                   onOpenDomain={(topic) => profile.open({ kind: "metric_domain", topic })}
                 />
@@ -110,6 +113,8 @@ export function MetricsPage() {
     </>
   );
 }
+
+type MeasureRow = { measure: CatalogMeasurePayload; domain: MetricDomainPayload | undefined };
 
 /** 第二列印归属：芯片点开域档案，行的其余部分点开指标档案。 */
 function MetricDomainCell({
@@ -138,13 +143,11 @@ function MetricDomainCell({
 }
 
 function MeasureTable({
-  catalog,
-  measures,
+  rows,
   onOpen,
   onOpenDomain,
 }: {
-  catalog: CatalogPayload;
-  measures: CatalogMeasurePayload[];
+  rows: MeasureRow[];
   onOpen: (measure: CatalogMeasurePayload) => void;
   onOpenDomain: (topic: MetricDomainPayload) => void;
 }) {
@@ -157,10 +160,10 @@ function MeasureTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {measures.map((measure) => (
+        {rows.map(({ measure, domain }) => (
           <TableRow className="cursor-pointer" key={measure.id} onClick={() => onOpen(measure)}>
             <MemberTitleCell fallback="暂无指标说明" member={measure} />
-            <MetricDomainCell domain={domainOf(catalog, measure)} onOpenDomain={onOpenDomain} />
+            <MetricDomainCell domain={domain} onOpenDomain={onOpenDomain} />
           </TableRow>
         ))}
       </TableBody>

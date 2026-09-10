@@ -55,7 +55,8 @@ export type CatalogMember = {
   description: string;
   format?: string;
   ai_context?: string;
-  sensitivity?: string;
+  /** 受限成员按数据权限可见；模型只声明这一种敏感度。 */
+  sensitivity?: "restricted";
   dimension_kind?: DimensionKind;
   dimension_group?: { id: string; title: string };
   /** 指标的时间面：合同与由它解析出的求值基准；只有指标有，不手写。 */
@@ -183,6 +184,10 @@ function memberDocument(
     typeof name === "string" ? (name.includes(".") ? name : `${view}.${name}`) : undefined;
   const numerator = qualify(rawComponents?.numerator);
   const denominator = qualify(rawComponents?.denominator);
+  const sensitivity = member.meta?.sensitivity;
+  if (sensitivity !== undefined && sensitivity !== "restricted") {
+    throw new Error(`成员 ${member.title} 的 sensitivity 声明无效`);
+  }
   const reportCalculations = member.meta?.report_calculations;
   if (
     reportCalculations !== undefined &&
@@ -210,7 +215,7 @@ function memberDocument(
     description: member.description ?? "",
     ...(member.format ? { format: member.format } : {}),
     ...(typeof member.meta?.ai_context === "string" ? { ai_context: member.meta.ai_context } : {}),
-    ...(member.meta?.sensitivity ? { sensitivity: String(member.meta.sensitivity) } : {}),
+    ...(sensitivity ? { sensitivity } : {}),
     ...(dimensionKind(member) ? { dimension_kind: dimensionKind(member) } : {}),
     ...(dimensionGroup
       ? { dimension_group: { id: dimensionGroup.name, title: dimensionGroup.title } }

@@ -26,10 +26,6 @@ export type Detail =
   | { kind: "member"; member: CatalogMemberPayload }
   | { kind: "metric_domain"; topic: MetricDomainPayload };
 
-function sensitivityLabel(sensitivity: string): string {
-  return sensitivity === "restricted" ? "受限" : sensitivity;
-}
-
 function formatLabel(format: string | undefined): string | null {
   if (!format) return null;
   if (format === "percent") return "百分比";
@@ -75,7 +71,7 @@ export function MemberTitleCell({
       <div className="flex min-w-0 flex-col gap-0.5">
         <div className="flex min-w-0 items-center gap-1 text-sm font-medium">
           <span className="truncate">{member.title}</span>
-          {member.sensitivity === "restricted" && (
+          {member.sensitivity && (
             <LockIcon aria-label="受限" className="size-3.5 shrink-0 text-pa-muted" role="img">
               <title>受限：按数据权限可见</title>
             </LockIcon>
@@ -268,9 +264,7 @@ function MemberProfileBody({
               <InspectorRow label="数据时间">{domain.time_context_title}</InspectorRow>
             ) : null}
             {format ? <InspectorRow label="格式">{format}</InspectorRow> : null}
-            {member.sensitivity ? (
-              <InspectorRow label="敏感度">{sensitivityLabel(member.sensitivity)}</InspectorRow>
-            ) : null}
+            {member.sensitivity ? <InspectorRow label="敏感度">受限</InspectorRow> : null}
             {dimensionKind ? <InspectorRow label="维度种类">{dimensionKind}</InspectorRow> : null}
           </>
         ) : null}
@@ -298,7 +292,7 @@ function MetricDomainProfileBody({
   dimensions: DimensionGroupRow[];
 }) {
   return (
-    <InspectorProfileCard description={topic.query_contract ?? ""} title={topic.title}>
+    <InspectorProfileCard description={topic.query_contract} title={topic.title}>
       <DimensionsRow groups={dimensions} />
       {topic.time_context_title ? (
         <InspectorRow label="数据时间">{topic.time_context_title}</InspectorRow>

@@ -80,7 +80,7 @@ const CATALOG_MEMBER_OUTPUT = z
       .optional()
       .describe("呈现格式；percent 与 percentage_point 的原始值均为 0–1"),
     ai_context: z.string().optional().describe("仅供 Agent 的成员选择、查询方式与避坑规则"),
-    sensitivity: z.string().optional(),
+    sensitivity: z.literal("restricted").optional(),
   })
   .strict();
 

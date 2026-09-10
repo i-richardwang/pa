@@ -2,16 +2,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { LoadingMark } from "pa-result-view";
 import {
-  ArrowRightIcon,
-  BookOpenIcon,
-  ChartBarIcon,
-  HistoryIcon,
-  LayoutDashboardIcon,
-  MessageSquareQuoteIcon,
-  PlusIcon,
-  SettingsIcon,
-} from "lucide-react";
-import {
   Command,
   CommandCollection,
   CommandDialog,
@@ -33,7 +23,6 @@ import {
   useMyAnalyses,
   useReportsList,
 } from "../dashboard_queries";
-import { DiamondFilled, DiamondOutline } from "../analyses/member_picker";
 import { prefillCatalogSearch } from "../catalog/prefill";
 import {
   analysisHash,
@@ -43,124 +32,10 @@ import {
   reportHash,
   type RouteKey,
 } from "../router";
+import { itemHint, itemIcon, itemKey, itemLabel, itemText, type PaletteItem } from "./palette_item";
 import type { NavEntry } from "./navigation";
 
-export type PaletteItem =
-  | { kind: "action"; label: string; hash: string }
-  | { kind: "nav"; key: RouteKey; label: string }
-  | { kind: "settings" }
-  | { kind: "board"; id: string; name: string }
-  | { kind: "report"; id: string; name: string }
-  | { kind: "analysis"; id: string; title: string }
-  | { kind: "member"; name: string; title: string; memberKind: "measure" | "dimension" }
-  | { kind: "metric_domain"; id: string; title: string; synonyms: string[] }
-  | {
-      kind: "business_term";
-      id: string;
-      canonicalTerm: string;
-      aliases: string[];
-      definition: string;
-    };
-
 type PaletteGroup = { value: string; items: PaletteItem[] };
-
-/** 面板的可搜文本：黑话（域别名、术语别名）与语义 id 都算数，标签只印业务名。 */
-export function itemText(item: PaletteItem): string {
-  switch (item.kind) {
-    case "action":
-      return item.label;
-    case "nav":
-      return item.label;
-    case "settings":
-      return "设置";
-    case "board":
-      return item.name;
-    case "report":
-      return item.name;
-    case "analysis":
-      return item.title;
-    case "member":
-      return `${item.title} ${item.name}`;
-    case "metric_domain":
-      return `${item.title} ${item.synonyms.join(" ")}`;
-    case "business_term":
-      return `${item.canonicalTerm} ${item.aliases.join(" ")} ${item.definition}`;
-  }
-}
-
-function itemLabel(item: PaletteItem): string {
-  if (item.kind === "member" || item.kind === "metric_domain") return item.title;
-  if (item.kind === "business_term") return item.canonicalTerm;
-  return itemText(item);
-}
-
-function itemKey(item: PaletteItem): string {
-  switch (item.kind) {
-    case "action":
-      return `action:${item.hash}`;
-    case "nav":
-      return `nav:${item.key}`;
-    case "settings":
-      return "settings";
-    case "board":
-      return `board:${item.id}`;
-    case "report":
-      return `report:${item.id}`;
-    case "analysis":
-      return `analysis:${item.id}`;
-    case "member":
-      return `member:${item.name}`;
-    case "metric_domain":
-      return item.id;
-    case "business_term":
-      return `business_term:${item.id}`;
-  }
-}
-
-function itemIcon(item: PaletteItem): React.ReactElement {
-  switch (item.kind) {
-    case "action":
-      return <PlusIcon />;
-    case "nav":
-      return <ArrowRightIcon />;
-    case "settings":
-      return <SettingsIcon />;
-    case "board":
-      return <LayoutDashboardIcon />;
-    case "report":
-      return <ChartBarIcon />;
-    case "analysis":
-      return <HistoryIcon />;
-    case "member":
-      return item.memberKind === "measure" ? <DiamondFilled /> : <DiamondOutline />;
-    case "metric_domain":
-      return <BookOpenIcon />;
-    case "business_term":
-      return <MessageSquareQuoteIcon />;
-  }
-}
-
-function itemHint(item: PaletteItem): string {
-  switch (item.kind) {
-    case "action":
-      return "新建";
-    case "nav":
-    case "settings":
-      return "页面";
-    case "board":
-      return "看板";
-    case "report":
-      return "报告";
-    case "analysis":
-      return "查询记录";
-    case "member":
-      return item.memberKind === "measure" ? "指标" : "维度";
-    case "metric_domain":
-      return "指标域";
-    case "business_term":
-      return "业务术语";
-  }
-}
 
 export function CommandPalette({
   open,
