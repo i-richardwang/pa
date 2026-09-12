@@ -3,7 +3,7 @@
  * 截断上限由服务端裁决并随 truncated 文案透出。
  */
 import { useEffect, useState } from "react";
-import { CircleAlertIcon, InboxIcon, SearchIcon } from "lucide-react";
+import { InboxIcon, SearchIcon } from "lucide-react";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import {
@@ -74,7 +74,6 @@ function ValuesBody({ member }: { member: string }) {
       </InputGroup>
       {error ? (
         <Alert variant="error">
-          <CircleAlertIcon />
           <AlertTitle>{error}</AlertTitle>
         </Alert>
       ) : !data ? (

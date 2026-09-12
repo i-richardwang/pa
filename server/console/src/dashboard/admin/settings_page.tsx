@@ -1,7 +1,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
   CheckIcon,
-  CircleAlertIcon,
   CopyIcon,
   KeyRoundIcon,
   PlusIcon,
@@ -314,7 +313,6 @@ function KeysPage() {
 
       {error && (
         <Alert className="mb-6" variant="error">
-          <CircleAlertIcon />
           <AlertTitle>{error}</AlertTitle>
         </Alert>
       )}
@@ -541,8 +539,7 @@ function IssuedKeyStep({
         <DialogTitle>Key 已创建</DialogTitle>
       </DialogHeader>
       <DialogPanel className="grid gap-5">
-        <Alert variant="info">
-          <CircleAlertIcon />
+        <Alert variant="warning">
           <AlertTitle>只显示这一次</AlertTitle>
           <AlertDescription>关闭这个窗口之后，这串明文就再也取不回来了。</AlertDescription>
         </Alert>

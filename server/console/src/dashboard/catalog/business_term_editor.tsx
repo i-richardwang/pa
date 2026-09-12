@@ -3,7 +3,6 @@
  * 关联数据成员只帮 Agent 从解释导航到目录，不参与查询改写。
  */
 import { useEffect, useState } from "react";
-import { CircleAlertIcon } from "lucide-react";
 import type { PublicCatalogMember as CatalogMemberPayload } from "@contracts/catalog_contract";
 import { BUSINESS_TERM_LIMITS, type PublicBusinessTerm } from "@contracts/business_term_contract";
 import { Alert, AlertTitle } from "@/components/ui/alert";
@@ -110,7 +109,6 @@ export function BusinessTermEditorDialog({
         <DialogPanel className="grid gap-6">
           {error && (
             <Alert variant="error">
-              <CircleAlertIcon />
               <AlertTitle>{error}</AlertTitle>
             </Alert>
           )}

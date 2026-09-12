@@ -550,9 +550,8 @@ test("trigger-less command popups say where focus goes back to", async () => {
 });
 
 const SPIN_USE = /\banimate-spin\b/g;
-const SPIN_ESCORTS = ["components/ui/toast.tsx"];
 
-test("the spin is an escort to words, never a second waiting mark", async () => {
+test("a wait is marked by LoadingMark; nothing spins on its own", async () => {
   expect(
     [...'className="size-4 animate-spin"'.matchAll(SPIN_USE)],
     "matcher is stale",
@@ -561,18 +560,34 @@ test("the spin is an escort to words, never a second waiting mark", async () => 
 
   const sources = await readSources(CONSOLE_SRC);
   for (const { name, text } of sources) {
-    if (SPIN_ESCORTS.some((escort) => name.endsWith(escort))) continue;
     expect(
       [...text.matchAll(SPIN_USE)],
       `console/src/${name} spins on its own; a wait is marked by LoadingMark`,
     ).toEqual([]);
   }
+});
 
-  for (const escort of SPIN_ESCORTS) {
-    const source = sources.find(({ name }) => name.endsWith(escort));
-    expect(source?.text, `${escort} no longer spins; this exemption has lost its subject`).toMatch(
-      SPIN_USE,
-    );
+/** 提示条自带级别图标，调用点只给字。 */
+const ALERT_WITH_ICON = /<Alert\b[^>]*>\s*<[A-Z][A-Za-z]*Icon\b/g;
+
+test("an alert brings its own level icon; call sites only bring words", async () => {
+  expect(
+    [...'<Alert variant="error">\n  <CircleAlertIcon />'.matchAll(ALERT_WITH_ICON)],
+    "matcher is stale",
+  ).toHaveLength(1);
+  expect(
+    [...'<Alert variant="error">\n  <AlertTitle>{error}</AlertTitle>'.matchAll(ALERT_WITH_ICON)],
+    "matcher over-matches",
+  ).toEqual([]);
+
+  const sources = await readSources(CONSOLE_SRC);
+  const hosts = sources.filter(({ text }) => /<Alert[\s>]/.test(text));
+  expect(hosts.length, "提示条改了写法，这条规则已经落空").toBeGreaterThan(0);
+  for (const { name, text } of hosts) {
+    expect(
+      [...text.matchAll(ALERT_WITH_ICON)],
+      `console/src/${name} hands an alert its icon; the level already decides it`,
+    ).toEqual([]);
   }
 });
 

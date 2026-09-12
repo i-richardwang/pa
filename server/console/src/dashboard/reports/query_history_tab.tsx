@@ -3,7 +3,7 @@
  * 带 view_id 的记录可重放，也可升格为独立报告；审计日志本身不承载资产恢复职责。
  */
 import { useState } from "react";
-import { CircleAlertIcon, HistoryIcon, SaveIcon } from "lucide-react";
+import { HistoryIcon, SaveIcon } from "lucide-react";
 import { DASHBOARD_PAGE_SIZE } from "@contracts/pagination_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
@@ -45,7 +45,6 @@ export function QueryHistoryTab({
     <div className="space-y-4">
       {error && (
         <Alert variant="error">
-          <CircleAlertIcon />
           <AlertTitle>{error}</AlertTitle>
         </Alert>
       )}

@@ -5,7 +5,6 @@ import { type UseQueryOptions, useQuery } from "@tanstack/react-query";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
-  CircleAlertIcon,
   CopyPlusIcon,
   EllipsisIcon,
   ExternalLinkIcon,
@@ -33,7 +32,6 @@ export function TileError({ message }: { message: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-center">
       <Alert variant="error">
-        <CircleAlertIcon />
         <AlertTitle>报告无法加载</AlertTitle>
         <AlertDescription>{message}</AlertDescription>
       </Alert>

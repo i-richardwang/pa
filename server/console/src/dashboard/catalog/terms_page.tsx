@@ -1,7 +1,7 @@
 /**
  * 业务术语页：全员可查的黑话词典，管理员在这里维护。
  */
-import { CircleAlertIcon, PlusIcon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 import type { PublicBusinessTerm } from "@contracts/business_term_contract";
 import { LoadingMark } from "pa-result-view";
 import { useState } from "react";
@@ -96,7 +96,6 @@ export function BusinessTermsPage() {
         <ListScrollBody>
           {error && (
             <Alert variant="error">
-              <CircleAlertIcon />
               <AlertTitle>{error}</AlertTitle>
             </Alert>
           )}

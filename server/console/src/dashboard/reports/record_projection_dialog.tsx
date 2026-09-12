@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CircleAlertIcon, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
 import {
   RECORD_PROJECTION_PAYLOAD_SCHEMA,
   type RecordProjectionPayload,
@@ -176,7 +176,6 @@ export function RecordProjectionDialog({
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-auto px-6 pb-8">
               {data?.data_changed && (
                 <Alert className="mb-3" variant="warning">
-                  <CircleAlertIcon />
                   <AlertDescription>
                     数据已从结果显示时的截至点更新，以下记录按当前数据重新计算。
                   </AlertDescription>
@@ -184,7 +183,6 @@ export function RecordProjectionDialog({
               )}
               {data?.limit_reached && (
                 <Alert className="mb-3" variant="warning">
-                  <CircleAlertIcon />
                   <AlertDescription>
                     记录数量超过交互查看上限；请回到报告添加筛选条件，缩小范围后再查看。
                   </AlertDescription>
@@ -192,7 +190,6 @@ export function RecordProjectionDialog({
               )}
               {error ? (
                 <Alert variant="error">
-                  <CircleAlertIcon />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               ) : loading && !data ? (

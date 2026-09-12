@@ -2,7 +2,7 @@
  * 接受只表示认可该缺口值得补；指标、口径与数据范围仍以模型 YAML 的 Git 变更为准。
  */
 import { useEffect, useState } from "react";
-import { CheckIcon, CircleAlertIcon, XIcon } from "lucide-react";
+import { CheckIcon, XIcon } from "lucide-react";
 import { FEEDBACK_LIMITS, type FeedbackGroup } from "@contracts/feedback_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
@@ -61,7 +61,6 @@ export function FeedbackPage() {
         <ListScrollBody>
           {error && (
             <Alert variant="error">
-              <CircleAlertIcon />
               <AlertTitle>{error}</AlertTitle>
             </Alert>
           )}
@@ -167,7 +166,6 @@ function ReviewDialog({ row, onClose }: { row: FeedbackGroup | null; onClose: ()
           <DialogPanel className="grid gap-6">
             {error && (
               <Alert variant="error">
-                <CircleAlertIcon />
                 <AlertTitle>{error}</AlertTitle>
               </Alert>
             )}

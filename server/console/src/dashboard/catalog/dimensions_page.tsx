@@ -3,7 +3,6 @@
  * 属性组是维度的归属：它在这里是控制条上的筛选器与行上的归属芯片。
  */
 import { useMemo, useState } from "react";
-import { CircleAlertIcon } from "lucide-react";
 import type { PublicCatalogDimension as CatalogDimensionPayload } from "@contracts/catalog_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
@@ -78,7 +77,6 @@ export function DimensionsPage() {
         <ListScrollBody>
           {error && (
             <Alert variant="error">
-              <CircleAlertIcon />
               <AlertTitle>{error}</AlertTitle>
             </Alert>
           )}

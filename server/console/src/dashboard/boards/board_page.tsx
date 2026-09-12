@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleAlertIcon, PackageIcon } from "lucide-react";
+import { PackageIcon } from "lucide-react";
 import {
   type Layout,
   Responsive,
@@ -355,7 +355,6 @@ export function BoardPage({
           <div ref={canvasRef}>
             {error && (
               <Alert className="mb-8" variant="error">
-                <CircleAlertIcon />
                 <AlertTitle>{error}</AlertTitle>
               </Alert>
             )}

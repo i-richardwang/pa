@@ -1,23 +1,9 @@
 import { Toast } from "@base-ui/react/toast";
-import {
-  CircleAlertIcon,
-  CircleCheckIcon,
-  InfoIcon,
-  LoaderCircleIcon,
-  TriangleAlertIcon,
-  XIcon,
-} from "lucide-react";
+import { XIcon } from "lucide-react";
 import type React from "react";
 import { Button } from "@/components/ui/button";
+import { STATUS_ICONS, type StatusLevel } from "@/components/ui/status";
 import { cn } from "@/lib/utils";
-
-const TOAST_ICONS = {
-  error: CircleAlertIcon,
-  info: InfoIcon,
-  loading: LoaderCircleIcon,
-  success: CircleCheckIcon,
-  warning: TriangleAlertIcon,
-} as const;
 
 function upsertReplayClassName(toast: { type?: string; updateKey?: number }): string | undefined {
   const k = toast.updateKey ?? 0;
@@ -39,7 +25,7 @@ function Toasts(): React.ReactElement {
         data-slot="toast-viewport"
       >
         {toasts.map((toast) => {
-          const Icon = toast.type ? TOAST_ICONS[toast.type as keyof typeof TOAST_ICONS] : null;
+          const Icon = toast.type ? STATUS_ICONS[toast.type as StatusLevel] : null;
 
           return (
             <Toast.Root
@@ -75,7 +61,7 @@ function Toasts(): React.ReactElement {
                       className="[&>svg]:h-lh [&>svg]:w-4 [&_svg]:pointer-events-none [&_svg]:shrink-0"
                       data-slot="toast-icon"
                     >
-                      <Icon className="in-data-[type=loading]:animate-spin in-data-[type=error]:text-pa-danger-fg in-data-[type=info]:text-pa-info-fg in-data-[type=success]:text-pa-success-fg in-data-[type=warning]:text-pa-warning-fg in-data-[type=loading]:opacity-80" />
+                      <Icon className="in-data-[type=error]:text-pa-danger-fg in-data-[type=info]:text-pa-info-fg in-data-[type=success]:text-pa-success-fg in-data-[type=warning]:text-pa-warning-fg" />
                     </div>
                   )}
                   <div className="flex min-w-0 flex-col gap-0.5">

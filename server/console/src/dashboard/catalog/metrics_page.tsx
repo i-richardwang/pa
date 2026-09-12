@@ -3,7 +3,6 @@
  * 指标域是指标的归属：它在这里是控制条上的筛选器与行上的归属芯片，芯片点开域档案。
  */
 import { useMemo, useState } from "react";
-import { CircleAlertIcon } from "lucide-react";
 import type {
   PublicCatalogMeasure as CatalogMeasurePayload,
   PublicMetricDomain as MetricDomainPayload,
@@ -83,7 +82,6 @@ export function MetricsPage() {
         <ListScrollBody>
           {error && (
             <Alert variant="error">
-              <CircleAlertIcon />
               <AlertTitle>{error}</AlertTitle>
             </Alert>
           )}

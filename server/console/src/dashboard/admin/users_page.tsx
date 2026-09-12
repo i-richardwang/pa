@@ -3,7 +3,7 @@
  * 权限边界始终是服务端守卫，隐藏 UI 不构成授权。
  */
 import { useEffect, useMemo, useState } from "react";
-import { CircleAlertIcon, KeyRoundIcon, PlusIcon, ShieldIcon } from "lucide-react";
+import { KeyRoundIcon, PlusIcon, ShieldIcon } from "lucide-react";
 import type { AccessScope } from "@contracts/access_scope";
 import type { MePayload } from "@contracts/session_contract";
 import {
@@ -143,7 +143,6 @@ export function UsersPage({ me }: { me: MePayload }) {
     <>
       {error && (
         <Alert className="mb-6" variant="error">
-          <CircleAlertIcon />
           <AlertTitle>{error}</AlertTitle>
         </Alert>
       )}

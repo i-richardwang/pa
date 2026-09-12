@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { CircleAlertIcon, PanelRightIcon, TableIcon } from "lucide-react";
+import { PanelRightIcon, TableIcon } from "lucide-react";
 import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
 import { LoadingMark, PageFooterBand, ViewPageFooter, ViewRenderer } from "pa-result-view";
 import { BROWSER_CARD_ACTIONS } from "../kit/browser_actions";
@@ -211,7 +211,6 @@ export function AnalysisWorkbench({
         >
           {note && (
             <Alert className="mx-4 mt-3 mb-0 w-auto shrink-0" variant="warning">
-              <CircleAlertIcon />
               <AlertDescription>{PRESENTATION_NOTE_COPY[note.kind] ?? note.note}</AlertDescription>
             </Alert>
           )}

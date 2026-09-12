@@ -1,6 +1,5 @@
 /** 管理员日志页与 scripts/usage_report.py 消费同一 usage_log。 */
 import { type ReactNode, useState } from "react";
-import { CircleAlertIcon } from "lucide-react";
 import type {
   UnansweredPayload,
   UsageOverviewPayload,
@@ -75,7 +74,6 @@ export function UsagePage({ facet }: { facet: UsageFacet }) {
         <div className="space-y-6">
           {error && (
             <Alert variant="error">
-              <CircleAlertIcon />
               <AlertTitle>{error}</AlertTitle>
             </Alert>
           )}

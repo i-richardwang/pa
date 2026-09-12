@@ -1,11 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  ArchiveIcon,
-  ArchiveRestoreIcon,
-  ChartBarIcon,
-  CircleAlertIcon,
-  PlusIcon,
-} from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, ChartBarIcon, PlusIcon } from "lucide-react";
 import type { ReportRow } from "@contracts/report_contract";
 import { LoadingMark } from "pa-result-view";
 import { Alert, AlertTitle } from "@/components/ui/alert";
@@ -153,7 +147,6 @@ function ReportsList({ archived, query }: { archived: boolean; query: string }) 
   if (error) {
     return (
       <Alert variant="error">
-        <CircleAlertIcon />
         <AlertTitle>{error}</AlertTitle>
       </Alert>
     );

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CircleAlertIcon, HistoryIcon } from "lucide-react";
+import { HistoryIcon } from "lucide-react";
 import type { ReportDetail } from "@contracts/report_contract";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { EmptyPanel } from "../kit/empty_panel";
@@ -70,7 +70,6 @@ export function ReportHistoryDialog({
         <DialogPanel className="space-y-2">
           {error && (
             <Alert variant="error">
-              <CircleAlertIcon />
               <AlertTitle>{error}</AlertTitle>
             </Alert>
           )}

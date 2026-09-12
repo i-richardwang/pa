@@ -1,5 +1,5 @@
 import type * as React from "react";
-import { CircleAlertIcon, EllipsisIcon, PanelRightIcon } from "lucide-react";
+import { EllipsisIcon, PanelRightIcon } from "lucide-react";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Menu, MenuPopup, MenuTrigger } from "@/components/ui/menu";
@@ -73,7 +73,6 @@ export function ViewPageError({ message }: { message: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-center p-4">
       <Alert variant="error">
-        <CircleAlertIcon />
         <AlertTitle>{message}</AlertTitle>
       </Alert>
     </div>

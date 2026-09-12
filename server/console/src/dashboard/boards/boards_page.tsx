@@ -1,6 +1,6 @@
 /** 删除只对创建者开放；看板码仅在详情页展示。 */
 import { useMemo, useState } from "react";
-import { CircleAlertIcon, PackageIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { PackageIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import type { BoardRow } from "@contracts/board_contract";
 import type { MePayload } from "@contracts/session_contract";
 import { LoadingMark } from "pa-result-view";
@@ -121,7 +121,6 @@ export function BoardsPage({ me }: { me: MePayload }) {
       <ListScrollBody>
         {error && (
           <Alert variant="error">
-            <CircleAlertIcon />
             <AlertTitle>{error}</AlertTitle>
           </Alert>
         )}
