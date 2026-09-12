@@ -617,7 +617,10 @@ test("region loading renders LoadingMark, never a line of waiting words", async 
     "探测器把标记念给读屏的名字算成了界面上的字",
   ).toEqual([]);
   expect(waitingWords("// 载入中显示的名字\nconst a = 1;"), "探测器把注释也算了进来").toEqual([]);
-  expect(waitingWords("<Alert>加载失败</Alert>"), "探测器把别的加载话术也算了进来").toEqual([]);
+  expect(
+    waitingWords('<Alert variant="error">加载失败</Alert>'),
+    "探测器把别的加载话术也算了进来",
+  ).toEqual([]);
 
   const sources = await readSources(CONSOLE_SRC);
   expect(
