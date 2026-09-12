@@ -567,7 +567,6 @@ test("a wait is marked by LoadingMark; nothing spins on its own", async () => {
   }
 });
 
-/** 提示条自带级别图标，调用点只给字。 */
 const ALERT_WITH_ICON = /<Alert\b[^>]*>\s*<[A-Z][A-Za-z]*Icon\b/g;
 
 test("an alert brings its own level icon; call sites only bring words", async () => {

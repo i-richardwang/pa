@@ -25,7 +25,10 @@ function Toasts(): React.ReactElement {
         data-slot="toast-viewport"
       >
         {toasts.map((toast) => {
-          const Icon = toast.type ? STATUS_ICONS[toast.type as StatusLevel] : null;
+          const Icon =
+            toast.type && toast.type in STATUS_ICONS
+              ? STATUS_ICONS[toast.type as StatusLevel]
+              : null;
 
           return (
             <Toast.Root

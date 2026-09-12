@@ -210,7 +210,7 @@ export function AnalysisWorkbench({
           data-testid="analysis-workbench-stage"
         >
           {note && (
-            <Alert className="mx-4 mt-3 mb-0 w-auto shrink-0" variant="warning">
+            <Alert className="mx-4 mt-3 w-auto shrink-0" variant="warning">
               <AlertDescription>{PRESENTATION_NOTE_COPY[note.kind] ?? note.note}</AlertDescription>
             </Alert>
           )}
