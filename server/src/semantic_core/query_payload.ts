@@ -1,14 +1,9 @@
-/**
- * Query tool result contract shared by the service and both browser surfaces. Runtime parsing,
- * TypeScript types, and the MCP output schema are derived from the executable schemas below.
- */
 import { z } from "zod";
 import { basisPeriod, METRIC_VALUE_BASIS_INPUT } from "./metric_value_basis.js";
 
 export const COLUMN_FORMATS = ["number", "percent", "percentage_point"] as const;
 export const COLUMN_FORMAT_SCHEMA = z.enum(COLUMN_FORMATS);
 export type ColumnFormat = z.infer<typeof COLUMN_FORMAT_SCHEMA>;
-/** 列的小数位（模型成员 meta.decimals 声明）；缺省交由呈现层按格式取默认位数。 */
 export const COLUMN_DECIMALS_SCHEMA = z.number().int().min(0).max(4);
 
 export const COLUMN_ROLE_SCHEMA = z.enum(["measure", "dimension", "time"]);
@@ -29,10 +24,7 @@ const STRUCTURE_SHARE_SCHEMA = z
   })
   .strict();
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
-/**
- * 结果桶：一个业务时间桶及其在结果行上的投影键。key 为 null 表示本结果无时间列
- * （截止月份或合计），此时结果只有一个桶。消费方按 key 定位行。
- */
+/** key 为 null 表示结果没有时间列。 */
 const RESULT_TIME_BUCKET_SCHEMA = z
   .object({
     key: z
@@ -112,12 +104,7 @@ const SUMMARY_BLOCK_SCHEMA = z
     rows: z.array(ROW_SCHEMA).min(1),
   })
   .strict();
-/**
- * 整窗合计：每个指标在每个时间坐标上的单值，与明细行、总体行都正交——总体行是「去掉
- * 业务分组重算」，合计位是「把整段时间合成一个数」。值恒由查询编译点独立求得，消费方
- * 不得从时间序列自行加总或取末（率不可加，行也可能被截断）。
- * 口径为筛选后总体：不含业务分组，也不含 Top-N 的分组选择。
- */
+/** 整窗合计由查询独立求值，不得从可能截断的明细序列重算。 */
 const TOTAL_PERIOD_SCHEMA = z
   .object({
     from: z
@@ -149,10 +136,7 @@ const TOTALS_BLOCK_SCHEMA = z
       .min(1),
   })
   .strict();
-/**
- * 公共时间上下文是有序展示数组，不是按标题键控的 Record——标题只是数组项 label，重复标题不覆盖数据。
- * 内部时间源 key 已在服务端去重并投影为业务标签，绝不上线。
- */
+/** 公共时间上下文按序交付；重复的展示标题不得覆盖数据。 */
 const PUBLIC_TIME_SOURCE_SCHEMA = z
   .object({
     title: z.string(),
@@ -169,7 +153,6 @@ const EXPORT_LINK_SCHEMA = z
   })
   .strict();
 
-/** 单个交付结果（output）的能力声明；缺省即无该能力，入口随之隐藏。 */
 const OUTPUT_CAPABILITIES_SCHEMA = z
   .object({
     export: EXPORT_LINK_SCHEMA.optional().describe("该结果可导出完整 CSV 时的限时链接"),
@@ -336,7 +319,6 @@ export const VIEW_BLOCK_SCHEMA = z
         if (view.summary) validateRows(view.summary.rows, "summary");
       }
     }
-    // 求值基准只在指标列上声明一次；合计位的期间由它展开，两边因此不存在「互相矛盾」这种状态。
     const measureColumns = view.columns.filter((column) => view.column_roles[column] === "measure");
     const declaredBasis = view.column_time_basis ?? {};
     for (const column of Object.keys(declaredBasis)) {
@@ -395,12 +377,9 @@ export const VIEW_BLOCK_SCHEMA = z
           return;
         }
         const basis = declaredBasis[metric.column];
-        // 基准缺失已由上面的完整性规则报出，这里不重复报。
         if (!basis) return;
         metric.periods.forEach((period, periodIndex) => {
           const coordinate = coordinates[periodIndex];
-          // 声明的期间必须就是该列的求值基准在这个坐标上展开出来的那一段，一个字节都不许差。
-          // 年初累计的起点会早于坐标起点（选七月看到的是一到七月），这是它的定义而不是越界。
           const expected = basisPeriod(basis, coordinate, period.degraded === true);
           if (period.from !== expected.from || period.to !== expected.to) {
             ctx.addIssue({

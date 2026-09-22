@@ -1,12 +1,4 @@
-/**
- * 编译器私有目录（CompilerCatalog）：唯一保留 Cube view/member 物理绑定与选路信息的目录投影。
- *
- * 只在服务端编译边界内流转——planQueryIntent / compileAnalysisView /
- * record projection planner 消费此结构，
- * 把语义成员 id 解析成精确的执行视图与限定成员名。绝不上线（MCP、Web、Analysis/View 身份、报告、ReplayPayload
- * 只见语义投影 PublicCatalogDocument）。对外投影由 catalog_document.toSemanticCatalog 从同一份
- * CatalogDocument 派生，两者共享一个权威事实源，不复制维护。
- */
+/** 含物理绑定的编译器私有目录，不得进入对外契约或持久化身份。 */
 
 import type { MetricDomainId } from "./metric_domain_id.js";
 import type { ReportCalculationKind } from "./report_calculation.js";

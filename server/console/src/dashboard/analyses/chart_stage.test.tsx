@@ -1,11 +1,3 @@
-/**
- * 舞台几何归属：
- *
- * 1. 结果区恒在，且不画自己的框——框只圈绘图区，由图自己画（见 ui_spec「图表画布」节）。
- * 2. 本件是主列骨架：不出题条、不渲染右栏。
- *
- * headless 直渲（renderToStaticMarkup），不需 DOM/testing-library。
- */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChartStage } from "./chart_stage";

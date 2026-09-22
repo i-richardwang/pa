@@ -1,6 +1,3 @@
-/**
- * 命令面板的条目词表：一种条目一行，各自交代可搜文本、标签、身份、图标与类型提示。
- */
 import {
   ArrowRightIcon,
   BookOpenIcon,
@@ -31,7 +28,6 @@ export type PaletteItem =
       definition: string;
     };
 
-/** 可搜文本：黑话（域别名、术语别名）与语义 id 都算数，标签只印业务名。 */
 export function itemText(item: PaletteItem): string {
   switch (item.kind) {
     case "action":

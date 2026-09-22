@@ -1,6 +1,3 @@
-/**
- * 指针落格 → 读数行：行只出自图例单元，占比与差值只做一步呈现算术。
- */
 import { expect, test } from "bun:test";
 import { legendShares, readoutModel } from "./readout.js";
 import type {

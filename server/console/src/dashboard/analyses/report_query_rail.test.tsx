@@ -1,9 +1,3 @@
-/**
- * 查询栏在**无结果**语境（空白新建的首次预览之前）下的不变式：
- * 空查询是合法中间态但不可执行，出口由「运行预览」的禁用把住；
- * 成员名仍恒经目录翻成中文标题上屏（docs/ui_spec.md 同源纪律），不因缺结果而回落限定名。
- * headless 直渲（renderToStaticMarkup），不需 DOM/testing-library。
- */
 import { expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";

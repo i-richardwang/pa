@@ -17,7 +17,7 @@ PA 是人员分析语义服务。公开仓库以产品核心为主线，默认�
 
 - 服务与前端：TypeScript；Bun 管理依赖和开发工具，生产运行时以 Node 为基线。
 - 数据脚本：Python + PEP 723 inline 依赖，通过 `uv run` 执行，不创建仓库内 venv。
-- 文件、目录、模型成员和代码标识符使用 ASCII snake_case。界面标题、说明和文档正文可以使用中文。
+- 语义模型成员、数据字段及领域源码路径使用 ASCII snake_case；TypeScript/Python 标识符遵循各自语言惯例，React 组件使用 PascalCase。生态工具要求的固定文件名、插件 id 与沿用上游的 UI primitive 文件名可保留其约定形式。界面标题、说明和文档正文可以使用中文。
 
 ## 内容边界
 

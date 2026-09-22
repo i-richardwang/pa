@@ -1,7 +1,3 @@
-/**
- * TableModel → DOM：表头 rowSpan/colSpan 与组边框只在最终结构上看得出。
- * renderToStaticMarkup 直渲，不引 DOM：本文件断言的都是一次渲染的产物，不涉及交互。
- */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DataTable, INLINE_ROWS, resolveTableSort } from "./data_table.js";
@@ -31,7 +27,6 @@ const flat: TableModel = {
   ],
 };
 
-/** 两层表头：无组的列（分类列）跨两行，带组的值列按指标名并带、组内是时间点。 */
 const grouped: TableModel = {
   columns: [
     column("组织", "hr.organization_name", false),
@@ -49,7 +44,6 @@ const render = (model: TableModel, options: { allRows?: boolean; scene?: ViewSce
   );
 
 const count = (html: string, needle: string) => html.split(needle).length - 1;
-/** 数标签用正则：朴素 indexOf 数 "<th" 会把 "<thead" 也算进去。 */
 const countTag = (html: string, tag: string) =>
   (html.match(new RegExp(`<${tag}[ >]`, "g")) ?? []).length;
 
@@ -59,9 +53,7 @@ test("单层表头：每列一个 th，数值列头与体都右对齐", () => {
   expect(countTag(html, "th")).toBe(2);
   expect(html).toContain("组织");
   expect(html).toContain("在职人数");
-  // 数值列右对齐：表体每行一处 + 数值列头一处；分类列不加
   expect(count(html, "text-right")).toBe(flat.rows.length + 1);
-  // 右对齐列的排序 Chevron 反位到文字左侧：仅数值列头
   expect(count(html, "flex-row-reverse")).toBe(1);
 });
 
@@ -90,13 +82,11 @@ test("表体语言：明细常规字重、空值出破折号、文本列带截�
     ],
   };
   const html = render(withNull);
-  // 明细恒为 400；数据网格靠 tabular-nums 与行距立密度，不靠把所有值加粗。
   expect(count(html, "font-normal")).toBeGreaterThanOrEqual(4);
   expect(html).not.toContain("font-bold");
   expect(html).not.toContain("font-semibold");
   expect(count(html, "—")).toBe(2);
   expect(html).toContain('class="text-pa-faint">—');
-  // 文本列内容包在截断包装里，数值列裸渲染；空格没有内容可截，不进包装
   expect(count(html, 'class="truncate" style="max-width:')).toBe(1);
 });
 
@@ -104,9 +94,7 @@ test("两层表头：分组行 colSpan 覆盖组宽，独立列 rowSpan 跨两�
   const html = render(grouped);
   expect(html).toContain('colSpan="2"');
   expect(html).toContain('rowSpan="2"');
-  // 上行 3 个 th（独立列 + 两个指标组），下行 4 个（组内列，独立列已跨行）
   expect(countTag(html, "th")).toBe(3 + 4);
-  // 独立列只出现一次，确保表头与表体列数一致。
   expect(count(html, ">组织<")).toBe(1);
 });
 
@@ -161,7 +149,6 @@ test("独立组含多列（组织维度带父级列）：每列各自跨两行�
     rows: [["Aurora Labs", "Product", 0.5, 0.4, 3, 4]],
   };
   const html = render(twoLabelCols);
-  // 上行 4 个 th（两个独立列各自跨两行 + 两个指标组），下行 4 个（组内年份列）
   expect(countTag(html, "th")).toBe(4 + 4);
   expect(count(html, 'rowSpan="2"')).toBe(2);
   expect(count(html, ">组织<")).toBe(1);
@@ -172,14 +159,11 @@ test("组首列的左分隔线贯穿表体：组边界由 formatKey 变化推出
   const html = render(grouped);
   const bands = new Set(grouped.columns.filter((c) => c.numeric).map((c) => c.headerPath[0]?.key));
   expect(bands.size).toBe(2);
-  // 每个组首画三处：分组标签 th、组内首列 th、表体每行首格——三段连起来才是贯穿的组边界线
   expect(count(html, "border-l-pa-line")).toBe(bands.size * (2 + grouped.rows.length));
-  // 单层表没有「组」可分，逐列画就成了网格
   expect(render(flat)).not.toContain("border-l");
 });
 
 test("组标签偶然同名不并带：组边界认 formatKey，不认标签相等", () => {
-  // 两个不同指标恰好同标题（模型标题撞车）：结构上仍是两组，各画各的分隔线
   const collide: TableModel = {
     columns: [
       column("组织", "hr.organization_name", false),
@@ -223,16 +207,13 @@ test("记录格按 sourceRows 回指原始结果行；无来源的空格不出�
       }}
     />,
   );
-  // 3 个表头排序钮 + 3 个有来源的值格记录入口；(市场, 2025) 无来源不问也不出钮
   expect(countTag(html, "button")).toBe(3 + 3);
-  // 可点性只在悬停/聚焦时现形
   const recordCells = html.match(/<button aria-label="查看明细[^>]*/g) ?? [];
   expect(recordCells).toHaveLength(3);
   for (const cell of recordCells) {
     expect(cell).toContain("hover:text-pa-accent");
     expect(cell.replace(/(hover|focus-visible):\S+/g, "")).not.toContain("text-pa-accent");
   }
-  // 排序钮是 chrome：静息透明
   const sortHeads = html.match(/<button type="button" title="[^>]*/g) ?? [];
   expect(sortHeads).toHaveLength(3);
   for (const head of sortHeads) {
@@ -265,15 +246,12 @@ test("可点性由列决定：零值照样出记录入口，空格没有数字�
       model={withZero}
       scene="card"
       allRows
-      // 平均周期无记录明细绑定；事件数有——判据只看列，不看格里的数
       canOpenCell={(_row, column) => column === 1}
     />,
   );
   const recordCells = html.match(/<button aria-label="查看明细[^>]*/g) ?? [];
-  // 事件数两格全可点（0 也可点：空记录是对零值的诚实回答）；平均周期整列不可点
   expect(recordCells).toHaveLength(2);
   expect(recordCells[0]).toContain("事件数 0");
-  // 空值格连数字都没有，钮无从谈起
   expect(html).not.toContain("平均周期 ");
 });
 
@@ -319,14 +297,11 @@ test("总体成带吸在表头下沿，不计入明细行数与记录投影", ()
   );
   const band = html.match(/<tbody aria-label="总体"[\s\S]*?<\/tbody>/)?.[0] ?? "";
   expect(band).not.toBe("");
-  // 总体带在明细之前：吸顶偏移只有排在表头之后、明细之前才成立
   expect(html.indexOf(band)).toBeLessThan(html.indexOf("研发"));
   expect(band).toContain("border-b-pa-line");
   expect(band).not.toContain("border-b-2");
   expect(html.slice(html.indexOf(band) + band.length)).toContain("border-pa-line border-b");
-  // 总体格只用单边工具类：两个 border-color 落在同一元素上时胜者由样式表顺序决定
   expect(band).toContain("border-b-pa-line");
-  // 总体是 chrome 不是明细：带内既不排序也不提供记录入口，一个钮都不该有
   expect(html).toContain("<button");
   expect(band).not.toContain("<button");
   expect(html).toContain("总体");
@@ -339,10 +314,8 @@ test("字色分两档：维度格取 muted，数值格与总体行取本色", ()
   );
   const cellOf = (text: string) =>
     html.match(new RegExp(`<td[^>]*>(?:(?!</td>).)*?${text}`))?.[0] ?? "";
-  // 维度取值是坐标
   expect(cellOf("研发")).toContain("text-pa-muted");
   expect(cellOf("120")).not.toContain("text-pa-muted");
-  // 总体行的标签标的是口径不是维度取值，跟着数走
   expect(cellOf("总体")).not.toContain("text-pa-muted");
 });
 
@@ -358,10 +331,8 @@ test("总体带不吸顶时不占位：非 fill 表格无 sticky 与偏移", () 
     <DataTable model={{ ...flat, summaryRows: [["总体", 165]] }} scene="card" allRows />,
   );
   const band = html.match(/<tbody aria-label="总体"[\s\S]*?<\/tbody>/)?.[0] ?? "";
-  // 吸顶与否只看带本身：格里的 sticky 是冻结的坐标列，与纵向无关
   expect(html.match(/<tbody aria-label="总体"[^>]*>/)?.[0]).not.toContain("sticky");
   expect(band).not.toContain("top:");
-  // 合计与明细的分别只由字重交代：格底取卡面色，不给它专属色片
   const valueCell = band.match(/<td class="([^"]*)"[^>]*>165/)?.[1] ?? "";
   expect(valueCell, "总体值格没匹配到——选择器过期").not.toBe("");
   expect(valueCell).toContain("font-medium");
@@ -378,7 +349,6 @@ test("非全屏截断到 INLINE_ROWS，全屏渲染全部行", () => {
 });
 
 test("fill 时表格自带内滚且表头吸顶；非 fill 时都不挂", () => {
-  // 吸顶挂在 thead 上；格里的 sticky 是横向冻结的坐标列，两档都有，不参与这条判定
   const head = (html: string) => html.match(/<thead class="[^"]*"/)?.[0] ?? "";
   const filled = render(flat, { scene: "page" });
   expect(filled).toContain("overflow-auto");
@@ -390,7 +360,6 @@ test("fill 时表格自带内滚且表头吸顶；非 fill 时都不挂", () => 
 });
 
 test("右缘渐隐只在可横向滚动时显示", () => {
-  // 恒亮的遮罩会被当成表格自己的一道浅边；服务端渲染时容器尺寸未知，此时一律不出
   expect(render(flat, { scene: "page" })).not.toContain("bg-linear-to-r");
   expect(render(flat, { scene: "card" })).not.toContain("bg-linear-to-r");
 });
@@ -398,9 +367,7 @@ test("右缘渐隐只在可横向滚动时显示", () => {
 test("坐标列横向冻结：首列是维度才冻，数值打头的表不冻", () => {
   const html = render(flat, { scene: "page" });
   const cells = [...html.matchAll(/<t[dh] class="([^"]*)"/g)].map((match) => match[1]);
-  // 表头、明细两处的首列都冻，其余列一个不冻
   expect(cells.filter((cls) => cls.includes("sticky left-0")).length).toBe(1 + flat.rows.length);
-  // 冻结格必须实底，且行 hover 在它上面换成实色 wash，否则染色的行里会留白斑
   const frozen = cells.find((cls) => cls.includes("sticky left-0")) ?? "";
   expect(frozen).toContain("bg-pa-bg");
   expect(frozen).toContain("group-hover:bg-pa-wash-solid");
@@ -418,9 +385,7 @@ test("坐标列横向冻结：首列是维度才冻，数值打头的表不冻",
   expect(numericFirst).not.toContain("sticky left-0");
 });
 
-/** 内衬与行高类：密度档只许动这些。 */
 const SPACING_CLASS = /^(?:p|px|py|pt|pb|pl|pr|h|min-h|max-h)-/;
-/** 一条 className 里非间距的部分——字级、线色、底色都落在这里。 */
 const nonSpacing = (className: string) =>
   className
     .split(/\s+/)
@@ -464,7 +429,6 @@ test("吸顶的带铺实体底：表头与总体格都取卡面/带底色，不�
     const html = renderDensity(scene);
     expect(classOf(html, /<th class="([^"]*)"/), `${scene} 表头透明会让明细透出来`) //
       .toContain("bg-pa-bg");
-    // tbody 与每个 td 都铺卡面色：滚动内容不得从任一处透出
     expect(html).toContain('aria-label="总体" class="sticky z-10 bg-pa-bg"');
     expect(classOf(html, /aria-label="总体"[\s\S]*?<td class="([^"]*)"/)).toContain("bg-pa-bg");
   }

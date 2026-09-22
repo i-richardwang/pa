@@ -54,6 +54,18 @@ const qualify = (view: string, member: string) =>
   member.includes(".") ? member : `${view}.${member}`;
 const ENTITY_DETAIL_MAX_ROWS = 10_000;
 
+type ProjectionContext = {
+  revision: number;
+  definition: AnalysisDefinition;
+  intent: SemanticViewIntent;
+  preferences: ViewPreferences;
+};
+
+type ProjectionRequest = Omit<RecordProjectionRequestBody, "time_coordinate" | "data_as_of"> & {
+  time_coordinate?: RecordProjectionRequestBody["time_coordinate"];
+  data_as_of?: string;
+};
+
 function uniqueMembers(members: string[]): string[] {
   return [...new Set(members)];
 }
@@ -205,6 +217,104 @@ async function executeRecordProjection(input: {
   return { displayFields, resolved, page, moreRowsExist };
 }
 
+function validateProjectionBinding(
+  input: ProjectionRequest,
+  planned: AuthorizedAnalysisPlan,
+): void {
+  const binding = planned.record_projection_bindings.views.find(
+    (view) => view.result_view_id === input.result_view_id,
+  );
+  const allowedMetrics = new Set(
+    Object.values(binding?.metrics ?? {}).map((metric) => metric.metric_id),
+  );
+  if (!allowedMetrics.has(input.metric_id)) {
+    throw new RecordProjectionRequestError("当前指标不提供构成记录");
+  }
+  const allowedDimensions = new Set(
+    Object.values(binding?.dimensions ?? {}).map((dimension) => dimension.dimension_id),
+  );
+  const coordinateIds = input.coordinates.map((coordinate) => coordinate.dimension_id);
+  if (
+    coordinateIds.length !== allowedDimensions.size ||
+    new Set(coordinateIds).size !== coordinateIds.length ||
+    coordinateIds.some((id) => !allowedDimensions.has(id))
+  ) {
+    throw new RecordProjectionRequestError("明细坐标与当前报告不一致，请刷新后重试");
+  }
+}
+
+function coordinateFiltersOf(
+  catalog: AuthorizedAnalysisPlan["access"]["compiler"],
+  sourceView: string,
+  coordinates: ProjectionRequest["coordinates"],
+): CubeFilter[] {
+  return coordinates.map((coordinate) => {
+    const dimension = catalogMember(catalog, coordinate.dimension_id, "dimension");
+    const member = dimension?.available_in.find((item) => item.view === sourceView)?.member;
+    if (!member) {
+      throw new RecordProjectionRequestError(
+        `分组「${dimension?.title ?? "未知字段"}」无法用于该明细`,
+      );
+    }
+    return coordinate.value === null
+      ? { member, operator: "notSet" }
+      : { member, operator: "equals", values: [String(coordinate.value)] };
+  });
+}
+
+function buildRecordProjectionPayload(input: {
+  request: ProjectionRequest;
+  metricTitle: string;
+  sourceView: string;
+  target: RecordProjectionTarget;
+  views: CubeView[];
+  context: TimeContext;
+  displayFields: RecordField[];
+  resolved: ResolvedLoad;
+  page: Record<string, unknown>[];
+  moreRowsExist: boolean;
+}): RecordProjectionPayload {
+  const {
+    request,
+    metricTitle,
+    sourceView,
+    target,
+    views,
+    context,
+    displayFields,
+    resolved,
+    page,
+    moreRowsExist,
+  } = input;
+  const limitReached = request.offset + page.length >= RECORD_PROJECTION_MAX_ROWS && moreRowsExist;
+  const qualifiedFields = displayFields.map((field) => qualify(sourceView, field.member));
+  return {
+    metric_id: request.metric_id,
+    metric_title: metricTitle,
+    record_set_title: target.records.title,
+    record_set_description: target.records.description,
+    columns: qualifiedFields.map(
+      (member, index) =>
+        displayFields[index]?.title ??
+        memberDisplayTitle(
+          views,
+          member,
+          resolved.annotation.dimensions[member]?.title ?? memberShortName(member),
+        ),
+    ),
+    column_keys: displayFields.map((field) => field.member),
+    rows: page.map((row) =>
+      qualifiedFields.map((member) => (row[member] ?? null) as string | number | null),
+    ),
+    offset: request.offset,
+    page_size: request.limit,
+    has_more: moreRowsExist && !limitReached,
+    ...(limitReached ? { limit_reached: true as const } : {}),
+    data_as_of: context.dataAsOf,
+    data_changed: request.data_as_of ? context.dataAsOf !== request.data_as_of : false,
+  };
+}
+
 export function createRecordProjectionService(deps: {
   reports: Pick<ReportService, "get" | "resolveOwned">;
   boards: Pick<BoardService, "get">;
@@ -213,17 +323,6 @@ export function createRecordProjectionService(deps: {
   cube: CubeGateway;
   audit: RecordProjectionAudit;
 }) {
-  type ProjectionContext = {
-    revision: number;
-    definition: AnalysisDefinition;
-    intent: SemanticViewIntent;
-    preferences: ViewPreferences;
-  };
-  type ProjectionRequest = Omit<RecordProjectionRequestBody, "time_coordinate" | "data_as_of"> & {
-    time_coordinate?: RecordProjectionRequestBody["time_coordinate"];
-    data_as_of?: string;
-  };
-
   function reportContext(report: ReportDocument): ProjectionContext {
     return {
       revision: report.revision,
@@ -372,26 +471,7 @@ export function createRecordProjectionService(deps: {
           access.intent,
           access.preferences,
         ));
-      const binding = planned.record_projection_bindings.views.find(
-        (view) => view.result_view_id === input.result_view_id,
-      );
-      const allowedMetrics = new Set(
-        Object.values(binding?.metrics ?? {}).map((metric) => metric.metric_id),
-      );
-      const allowedDimensions = new Set(
-        Object.values(binding?.dimensions ?? {}).map((dimension) => dimension.dimension_id),
-      );
-      if (!allowedMetrics.has(input.metric_id)) {
-        throw new RecordProjectionRequestError("当前指标不提供构成记录");
-      }
-      const coordinateIds = input.coordinates.map((coordinate) => coordinate.dimension_id);
-      if (
-        coordinateIds.length !== allowedDimensions.size ||
-        new Set(coordinateIds).size !== coordinateIds.length ||
-        coordinateIds.some((id) => !allowedDimensions.has(id))
-      ) {
-        throw new RecordProjectionRequestError("明细坐标与当前报告不一致，请刷新后重试");
-      }
+      validateProjectionBinding(input, planned);
 
       const compilerCatalog = planned.access.compiler;
       const source = planMetricRecordProjection(compilerCatalog, semanticView, input.metric_id);
@@ -407,22 +487,11 @@ export function createRecordProjectionService(deps: {
       if (!sourceView) throw new RecordProjectionRequestError("当前身份无权查看该指标的明细");
       const target = resolveRecordProjectionTarget(sourceView, metricBinding.member);
       if (!target) throw new Error("当前指标的构成记录契约不可用");
-      const coordinateFilters: CubeFilter[] = input.coordinates.map((coordinate) => {
-        const dimension = catalogMember(compilerCatalog, coordinate.dimension_id, "dimension");
-        const physical = dimension?.available_in.find((item) => item.view === source.view)?.member;
-        if (!physical) {
-          throw new RecordProjectionRequestError(
-            `分组「${dimension?.title ?? "未知字段"}」无法用于该明细`,
-          );
-        }
-        return coordinate.value === null
-          ? { member: physical, operator: "notSet" }
-          : {
-              member: physical,
-              operator: "equals",
-              values: [String(coordinate.value)],
-            };
-      });
+      const coordinateFilters = coordinateFiltersOf(
+        compilerCatalog,
+        source.view,
+        input.coordinates,
+      );
       const timeCoordinate =
         input.time_coordinate ??
         directTimeCoordinate({
@@ -452,35 +521,18 @@ export function createRecordProjectionService(deps: {
         offset: input.offset,
         pageSize,
       });
-      const limitReached =
-        input.offset + page.length >= RECORD_PROJECTION_MAX_ROWS && moreRowsExist;
-      const qualifiedFields = displayFields.map((field) => qualify(source.view, field.member));
-      const columns = qualifiedFields.map(
-        (member, index) =>
-          displayFields[index]?.title ??
-          memberDisplayTitle(
-            authViews,
-            member,
-            resolved.annotation.dimensions[member]?.title ?? memberShortName(member),
-          ),
-      );
-      const payload: RecordProjectionPayload = {
-        metric_id: input.metric_id,
-        metric_title: metric.title,
-        record_set_title: target.records.title,
-        record_set_description: target.records.description,
-        columns,
-        column_keys: displayFields.map((field) => field.member),
-        rows: page.map((row) =>
-          qualifiedFields.map((member) => (row[member] ?? null) as string | number | null),
-        ),
-        offset: input.offset,
-        page_size: input.limit,
-        has_more: moreRowsExist && !limitReached,
-        ...(limitReached ? { limit_reached: true as const } : {}),
-        data_as_of: context.dataAsOf,
-        data_changed: input.data_as_of ? context.dataAsOf !== input.data_as_of : false,
-      };
+      const payload = buildRecordProjectionPayload({
+        request: input,
+        metricTitle: metric.title,
+        sourceView: source.view,
+        target,
+        views: authViews,
+        context,
+        displayFields,
+        resolved,
+        page,
+        moreRowsExist,
+      });
       await deps.audit.log({
         ...auditBase,
         row_count: payload.rows.length,

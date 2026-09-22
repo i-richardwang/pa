@@ -1,7 +1,3 @@
-/**
- * 渲染期派生经 `renderOption` 一个入口验；留白与框的断言取自 PLOT_PADDING / PLOT_FRAME，
- * 不重写数字。
- */
 import { expect, test } from "bun:test";
 import {
   PLOT_FRAME,

@@ -5,21 +5,16 @@ import { Dialog, DialogPopup } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { formatYearMonth, isYearMonth, parseYearMonth, yearMonthOrdinal } from "@time";
 
 const MONTH_LABELS = Array.from({ length: 12 }, (_, index) => `${index + 1}月`);
-const YEAR_MONTH = /^(\d{4})-(0[1-9]|1[0-2])$/;
 
 export type MonthRange = { from: string; to: string };
 
-const parseMonth = (value: string | undefined) => {
-  const match = value?.match(YEAR_MONTH);
-  return match ? { year: Number(match[1]), month: Number(match[2]) } : undefined;
-};
 const monthIndex = (value: string) => {
-  const parsed = parseMonth(value);
-  return parsed ? parsed.year * 12 + parsed.month - 1 : Number.NaN;
+  const parsed = parseYearMonth(value);
+  return parsed ? yearMonthOrdinal(parsed) : Number.NaN;
 };
-const formatMonth = (year: number, month: number) => `${year}-${String(month).padStart(2, "0")}`;
 
 function MonthCell({
   label,
@@ -126,13 +121,13 @@ function MonthInput({
   useEffect(() => setDraft(value), [value]);
   const commit = (next: string) => {
     setDraft(next);
-    if (YEAR_MONTH.test(next)) onValueChange(next);
+    if (isYearMonth(next)) onValueChange(next);
   };
   return (
     <Field>
       <FieldLabel>{label}</FieldLabel>
       <Input
-        aria-invalid={draft.length > 0 && !YEAR_MONTH.test(draft) ? true : undefined}
+        aria-invalid={draft.length > 0 && !isYearMonth(draft) ? true : undefined}
         inputMode="numeric"
         onBlur={() => setDraft(value)}
         onChange={(event) => commit(event.target.value)}
@@ -178,12 +173,12 @@ export function MonthPickerDialog({
   onValueChange: (value: string) => void;
   current?: string;
 }): React.ReactElement {
-  const selected = parseMonth(value);
+  const selected = parseYearMonth(value);
   const [year, setYear] = useState(selected?.year ?? new Date().getFullYear());
   useEffect(() => {
     if (open && selected) setYear(selected.year);
   }, [open, selected?.year]);
-  const currentMonth = parseMonth(current);
+  const currentMonth = parseYearMonth(current);
   return (
     <PickerDialog label={label} onOpenChange={onOpenChange} open={open}>
       <div className="mb-8">
@@ -199,7 +194,7 @@ export function MonthPickerDialog({
             current: currentMonth?.year === year && currentMonth.month === month,
           })}
           onSelect={(month) => {
-            onValueChange(formatMonth(year, month));
+            onValueChange(formatYearMonth({ year, month }));
             onOpenChange(false);
           }}
           onYearChange={setYear}
@@ -230,21 +225,21 @@ export function MonthRangePickerDialog({
   current?: string;
 }): React.ReactElement {
   const [anchor, setAnchor] = useState<string>();
-  const [year, setYear] = useState(parseMonth(value.to)?.year ?? new Date().getFullYear());
+  const [year, setYear] = useState(parseYearMonth(value.to)?.year ?? new Date().getFullYear());
   useEffect(() => {
     if (!open) return;
     setAnchor(undefined);
-    setYear(parseMonth(value.to)?.year ?? new Date().getFullYear());
+    setYear(parseYearMonth(value.to)?.year ?? new Date().getFullYear());
   }, [open]);
 
   const from = anchor ?? value.from;
   const to = anchor ? undefined : value.to;
   const fromIndex = monthIndex(from);
   const toIndex = to ? monthIndex(to) : Number.NaN;
-  const currentMonth = parseMonth(current);
+  const currentMonth = parseYearMonth(current);
 
   const pick = (month: number) => {
-    const picked = formatMonth(year, month);
+    const picked = formatYearMonth({ year, month });
     if (!anchor) {
       setAnchor(picked);
       return;

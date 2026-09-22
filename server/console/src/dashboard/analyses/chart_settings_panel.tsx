@@ -176,39 +176,29 @@ export function ChartTypeBar({ draft, replay, onChange, catalog }: PanelProps) {
   );
 }
 
-export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelProps) {
-  const [expandedSeries, setExpandedSeries] = useState<string | null>(null);
-  const fieldId = useId();
+function TableOptionsPanel({ draft, replay, onChange, catalog }: PanelProps) {
+  if (draft.view.type !== "table") return null;
 
   const resultView = replay.payload.view;
-  const resultTitleOf = makeTitleOf(resultView);
   const context = semanticViewContext(semanticResultView(draft.analysis), catalog);
+  const measures = context?.measures ?? [];
+  const dimensions = context?.dimensions ?? [];
+  const resultTitleOf = makeTitleOf(resultView);
   const titleOf = (member: string) =>
     [...catalog.measures, ...catalog.dimensions].find((item) => item.id === member)?.title ??
     resultTitleOf(member);
-  const chart = draft.view;
-  const measures = context?.measures ?? [];
-  const dimensions = context?.dimensions ?? [];
-  const canSummarize = measures.length > 0 && dimensions.length > 0;
   const summaryEnabled = semanticSummaryEnabled(draft);
-  // 表格布局与服务端同一条规则：轴的归属出自 resolveTableLayout，面板只排版、只写回列轴声明。
   const tableSpec: ChartSpecContext = { measures, dimensions };
   const resultShape = analyzeResultShape(resultView);
-  const temporal = resultShape.temporal;
-  const tableLayout =
-    chart.type === "table"
-      ? resolveTableLayout(
-          resultView,
-          resultShape.detected,
-          normalizeTableColumns(chart.columns, tableSpec),
-        )
-      : { rows: [] as TableAxis[], columns: [] as TableAxis[] };
-  /** 列轴声明里的轴名：指标 / 时间 / 维度成员 id。 */
+  const tableLayout = resolveTableLayout(
+    resultView,
+    resultShape.detected,
+    normalizeTableColumns(draft.view.columns, tableSpec),
+  );
   const tableAxisName = (axis: TableAxis): string =>
     axis.kind === "field"
       ? (dimensions.find((member) => memberShortName(member) === axis.column) ?? axis.column)
       : axis.kind;
-  /** 轴名即表头名：层级出自解析后的布局，与渲染出的表头同一套说法。 */
   const tableLayoutAxisLabel = (axis: TableAxis): string => {
     if (axis.kind === "metrics") return "指标";
     if (axis.kind === "field") return titleOf(tableAxisName(axis));
@@ -226,16 +216,198 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   const tableColumns = tableLayout.columns.map(tableAxisName);
   const tableAxisCandidates = [
     ...(measures.length ? ["metrics"] : []),
-    ...(temporal ? ["time"] : []),
+    ...(resultShape.temporal ? ["time"] : []),
     ...(!summaryEnabled ? dimensions : []),
   ];
-  const tableColumnSummary = tableLayout.columns.map(tableLayoutAxisLabel).join(" · ") || "选择";
-  const tableRowSummary = tableLayout.rows.map(tableLayoutAxisLabel).join(" · ") || "无";
   const remainingTableAxes = tableAxisCandidates.filter((axis) => !tableColumns.includes(axis));
+  const tableShading = draft.view_preferences.table_shading;
+  const shadingStyle = !tableShading ? "none" : tableShading.values === false ? "colors" : "values";
+  const update = (columns: string[]) =>
+    onChange(
+      setSemanticViewIntent(
+        draft,
+        { type: "table", ...(columns.length ? { columns } : {}) },
+        catalog,
+      ),
+    );
+  const setTableShading = (table_shading: TableShadingPreferences | null) =>
+    onChange(
+      setViewPreferences(draft, {
+        ...draft.view_preferences,
+        table_shading: table_shading ?? undefined,
+      }),
+    );
+  const setShading = (patch: Partial<TableShadingPreferences>) =>
+    setTableShading({ palette: SERIES_COLORS[0], ...tableShading, ...patch });
+  const moveColumn = (axis: string, delta: -1 | 1) => {
+    const index = tableColumns.indexOf(axis);
+    const nextIndex = index + delta;
+    if (index < 0 || nextIndex < 0 || nextIndex >= tableColumns.length) return;
+    const next = [...tableColumns];
+    const [item] = next.splice(index, 1);
+    next.splice(nextIndex, 0, item);
+    update(next);
+  };
+  const removeColumn = (axis: string) => {
+    if (axis !== "metrics") update(tableColumns.filter((item) => item !== axis));
+  };
+  const addColumn = (axis: string) => {
+    if (tableColumns.includes(axis)) return;
+    const metricsIndex = tableColumns.indexOf("metrics");
+    if (metricsIndex < 0) return update([...tableColumns, axis]);
+    const next = [...tableColumns];
+    next.splice(axis === "time" ? metricsIndex + 1 : metricsIndex, 0, axis);
+    update(next);
+  };
+  const summarySwitch =
+    measures.length && dimensions.length ? (
+      <SwitchField
+        checked={summaryEnabled}
+        indent
+        label="显示总体"
+        tooltip={SUMMARY_TOOLTIP}
+        onCheckedChange={(checked) => onChange(setSemanticSummary(draft, checked, catalog))}
+      />
+    ) : null;
+
+  return (
+    <>
+      <InspectorSection contentClassName={ROWS_CONTENT_CLASS} icon={<TableIcon />} title="表格布局">
+        <InspectorRow indent label="行轴">
+          {tableLayout.rows.map(tableLayoutAxisLabel).join(" · ") || "无"}
+        </InspectorRow>
+        <InspectorRow indent label="列轴">
+          <Popover>
+            <PopoverTrigger
+              render={
+                <SelectButton
+                  aria-label="列轴"
+                  className={GHOST_SELECT_TRIGGER}
+                  size="sm"
+                  variant="ghost"
+                >
+                  {tableLayout.columns.map(tableLayoutAxisLabel).join(" · ") || "选择"}
+                </SelectButton>
+              }
+            />
+            <PopoverPopup align="end" className="p-1.5" width="settings">
+              <Hint className="px-2 py-1.5">从外到内决定交叉表列层次；未列入的维度留在行轴。</Hint>
+              <div className="space-y-0.5">
+                {tableColumns.map((axis, index) => (
+                  <InspectorRow
+                    actions={
+                      <>
+                        <Button
+                          aria-label={`上移${tableAxisLabel(axis)}`}
+                          className="text-pa-muted"
+                          disabled={index === 0}
+                          onClick={() => moveColumn(axis, -1)}
+                          size="icon-xs"
+                          variant="subtle"
+                        >
+                          <ChevronUpIcon />
+                        </Button>
+                        <Button
+                          aria-label={`下移${tableAxisLabel(axis)}`}
+                          className="text-pa-muted"
+                          disabled={index === tableColumns.length - 1}
+                          onClick={() => moveColumn(axis, 1)}
+                          size="icon-xs"
+                          variant="subtle"
+                        >
+                          <ChevronDownIcon />
+                        </Button>
+                        {axis === "metrics" ? (
+                          <span aria-hidden="true" className="size-6 shrink-0" />
+                        ) : (
+                          <Button
+                            aria-label={`将${tableAxisLabel(axis)}移到行轴`}
+                            className="text-pa-muted"
+                            onClick={() => removeColumn(axis)}
+                            size="icon-xs"
+                            variant="subtle"
+                          >
+                            <XIcon />
+                          </Button>
+                        )}
+                      </>
+                    }
+                    key={axis}
+                    label={tableAxisLabel(axis)}
+                  />
+                ))}
+              </div>
+              {remainingTableAxes.length ? (
+                <PopupSection label="加入列轴">
+                  {remainingTableAxes.map((axis) => (
+                    <InspectorRow
+                      key={axis}
+                      label={tableAxisLabel(axis)}
+                      onClick={() => addColumn(axis)}
+                    />
+                  ))}
+                </PopupSection>
+              ) : summaryEnabled && dimensions.length ? (
+                <Hint className="px-2 py-1.5">显示总体时，业务维度只能在行轴。</Hint>
+              ) : null}
+            </PopoverPopup>
+          </Popover>
+        </InspectorRow>
+      </InspectorSection>
+      <InspectorSection
+        collapsible
+        contentClassName={ROWS_CONTENT_CLASS}
+        icon={<EyeIcon />}
+        title="显示"
+      >
+        {summarySwitch}
+        <SelectRow
+          items={SHADING_STYLE_ITEMS}
+          label="着色"
+          onValueChange={(value) => {
+            if (value === "none") setTableShading(null);
+            else setShading({ values: value === "values" ? undefined : false });
+          }}
+          value={shadingStyle}
+        />
+        {tableShading ? (
+          <InspectorRow indent label="配色">
+            <TableShadingSettings
+              defaults={tableShadingDefaults(resultView)}
+              onChange={setShading}
+              shading={tableShading}
+            />
+          </InspectorRow>
+        ) : null}
+      </InspectorSection>
+    </>
+  );
+}
+
+export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelProps) {
+  const [expandedSeries, setExpandedSeries] = useState<string | null>(null);
+  const fieldId = useId();
+
+  const resultView = replay.payload.view;
+  const resultTitleOf = makeTitleOf(resultView);
+  const context = semanticViewContext(semanticResultView(draft.analysis), catalog);
+  const titleOf = (member: string) =>
+    [...catalog.measures, ...catalog.dimensions].find((item) => item.id === member)?.title ??
+    resultTitleOf(member);
+  const chart = draft.view;
+  if (chart.type === "table") {
+    return (
+      <TableOptionsPanel catalog={catalog} draft={draft} onChange={onChange} replay={replay} />
+    );
+  }
+  const measures = context?.measures ?? [];
+  const dimensions = context?.dimensions ?? [];
+  const canSummarize = measures.length > 0 && dimensions.length > 0;
+  const summaryEnabled = semanticSummaryEnabled(draft);
   const secondarySeries =
     chart.type === "line" || chart.type === "bar" ? (chart.secondary_series ?? []) : [];
   const y =
-    chart.type === "table" || chart.type === "kpi"
+    chart.type === "kpi"
       ? []
       : (chart.series ?? measures.filter((member) => !secondarySeries.includes(member)));
   const annotations = chart.type === "bar" ? (chart.annotations ?? []) : [];
@@ -292,49 +464,6 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   const updateStyle = (next: AnalysisEditState["view_preferences"]) =>
     onChange(setViewPreferences(draft, next));
 
-  const tableShading = chart.type === "table" ? draft.view_preferences.table_shading : undefined;
-  const shadingStyle = !tableShading ? "none" : tableShading.values === false ? "colors" : "values";
-  const setTableColumns = (columns: string[]) => {
-    update({
-      type: "table",
-      ...(columns?.length ? { columns } : {}),
-    });
-  };
-  const setTableShading = (table_shading: TableShadingPreferences | null) =>
-    updateStyle({
-      ...draft.view_preferences,
-      table_shading: table_shading ?? undefined,
-    });
-  const setShading = (patch: Partial<TableShadingPreferences>) =>
-    setTableShading({ palette: SERIES_COLORS[0], ...tableShading, ...patch });
-
-  function moveTableColumn(axis: string, delta: -1 | 1) {
-    const index = tableColumns.indexOf(axis);
-    const nextIndex = index + delta;
-    if (index < 0 || nextIndex < 0 || nextIndex >= tableColumns.length) return;
-    const next = [...tableColumns];
-    const [item] = next.splice(index, 1);
-    next.splice(nextIndex, 0, item);
-    setTableColumns(next);
-  }
-
-  function removeTableColumn(axis: string) {
-    if (axis === "metrics") return;
-    setTableColumns(tableColumns.filter((item) => item !== axis));
-  }
-
-  function addTableColumn(axis: string) {
-    if (tableColumns.includes(axis)) return;
-    const metricsIndex = tableColumns.indexOf("metrics");
-    if (metricsIndex >= 0) {
-      const next = [...tableColumns];
-      next.splice(axis === "time" ? metricsIndex + 1 : metricsIndex, 0, axis);
-      setTableColumns(next);
-      return;
-    }
-    setTableColumns([...tableColumns, axis]);
-  }
-
   /** 写回两把尺子上的系列；副轴清空即不再声明，让分侧回到量纲缺省。 */
   function setScales(nextY: string[], nextY2: string[]) {
     if (chart.type !== "line" && chart.type !== "bar") return;
@@ -354,7 +483,7 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   }
 
   function setY(member: string) {
-    if (chart.type === "table" || chart.type === "kpi") return;
+    if (chart.type === "kpi") return;
     if (chart.type === "pie") return update({ ...chart, series: [member] });
     if (secondarySeries.includes(member)) {
       return setScales(
@@ -391,128 +520,6 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
       onCheckedChange={(checked) => onChange(setSemanticSummary(draft, checked, catalog))}
     />
   ) : null;
-
-  if (chart.type === "table") {
-    return (
-      <>
-        <InspectorSection
-          contentClassName={ROWS_CONTENT_CLASS}
-          icon={<TableIcon />}
-          title="表格布局"
-        >
-          {/* 列轴是 PA 的交叉表契约——有序多层轴，不是单维列；行轴是它的余数，只回显。 */}
-          <InspectorRow indent label="行轴">
-            {tableRowSummary}
-          </InspectorRow>
-          <InspectorRow indent label="列轴">
-            <Popover>
-              <PopoverTrigger
-                render={
-                  <SelectButton
-                    aria-label="列轴"
-                    className={GHOST_SELECT_TRIGGER}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    {tableColumnSummary}
-                  </SelectButton>
-                }
-              />
-              <PopoverPopup align="end" className="p-1.5" width="settings">
-                <Hint className="px-2 py-1.5">
-                  从外到内决定交叉表列层次；未列入的维度留在行轴。
-                </Hint>
-                <div className="space-y-0.5">
-                  {tableColumns.map((axis, index) => (
-                    <InspectorRow
-                      actions={
-                        <>
-                          <Button
-                            aria-label={`上移${tableAxisLabel(axis)}`}
-                            className="text-pa-muted"
-                            disabled={index === 0}
-                            onClick={() => moveTableColumn(axis, -1)}
-                            size="icon-xs"
-                            variant="subtle"
-                          >
-                            <ChevronUpIcon />
-                          </Button>
-                          <Button
-                            aria-label={`下移${tableAxisLabel(axis)}`}
-                            className="text-pa-muted"
-                            disabled={index === tableColumns.length - 1}
-                            onClick={() => moveTableColumn(axis, 1)}
-                            size="icon-xs"
-                            variant="subtle"
-                          >
-                            <ChevronDownIcon />
-                          </Button>
-                          {axis === "metrics" ? (
-                            <span aria-hidden="true" className="size-6 shrink-0" />
-                          ) : (
-                            <Button
-                              aria-label={`将${tableAxisLabel(axis)}移到行轴`}
-                              className="text-pa-muted"
-                              onClick={() => removeTableColumn(axis)}
-                              size="icon-xs"
-                              variant="subtle"
-                            >
-                              <XIcon />
-                            </Button>
-                          )}
-                        </>
-                      }
-                      key={axis}
-                      label={tableAxisLabel(axis)}
-                    />
-                  ))}
-                </div>
-                {remainingTableAxes.length > 0 ? (
-                  <PopupSection label="加入列轴">
-                    {remainingTableAxes.map((axis) => (
-                      <InspectorRow
-                        key={axis}
-                        label={tableAxisLabel(axis)}
-                        onClick={() => addTableColumn(axis)}
-                      />
-                    ))}
-                  </PopupSection>
-                ) : summaryEnabled && dimensions.length > 0 ? (
-                  <Hint className="px-2 py-1.5">显示总体时，业务维度只能在行轴。</Hint>
-                ) : null}
-              </PopoverPopup>
-            </Popover>
-          </InspectorRow>
-        </InspectorSection>
-        <InspectorSection
-          collapsible
-          contentClassName={ROWS_CONTENT_CLASS}
-          icon={<EyeIcon />}
-          title="显示"
-        >
-          {summarySwitch}
-          <SelectRow
-            items={SHADING_STYLE_ITEMS}
-            label="着色"
-            onValueChange={(value) => {
-              if (value === "none") setTableShading(null);
-              else setShading({ values: value === "values" ? undefined : false });
-            }}
-            value={shadingStyle}
-          />
-          {tableShading ? (
-            <InspectorRow indent label="配色">
-              <TableShadingSettings
-                defaults={tableShadingDefaults(resultView)}
-                onChange={setShading}
-                shading={tableShading}
-              />
-            </InspectorRow>
-          ) : null}
-        </InspectorSection>
-      </>
-    );
-  }
 
   if (chart.type === "kpi") {
     return (

@@ -1,10 +1,3 @@
-/**
- * 声明式呈现编译：服务端产出可序列化的完整呈现块，浏览器只布局和渲染。
- * 图表交付 `option`（绘图指令）与 `model`（渲染端唯一读数源）。
- * 系列在编译前一次解析成 {形态, 色, 轴位}；样式不进数据格（`series.data` 恒为裸数值）。
- * 序列化 option 恒为亮色原值；格式化函数与四缘留白由渲染端按 `model` 注入。
- * 本文件只做数据编排与样式声明，零度量算术（engine_boundary 守护）。
- */
 import {
   analyzeResultShape,
   canCompileKpi,
@@ -40,58 +33,40 @@ const MOTION = {
 /** tool result `_meta` 中完整呈现块的键名（带命名空间前缀，MCP _meta 键名规范） */
 export const PRESENTATION_META_KEY = "ai.pa/presentation";
 
-/** 值轴的格式声明：渲染端据此注入刻度格式化函数（0–1 标度 → 百分比/百分点） */
 export type AxisFormats = {
   x?: (ColumnFormat | null)[];
   y?: (ColumnFormat | null)[];
 };
 
-/** 值轴刻度的小数位，与 AxisFormats 按轴索引对位；null = 呈现层默认位数 */
 export type AxisDecimals = {
   x?: (number | null)[];
   y?: (number | null)[];
 };
 
-/**
- * 图例单元：笛卡尔图一系列一项、饼图一切片一项。
- * 取值按类目序对位（饼图只有 `values[0]`）。
- */
 export type ChartLegendItem = {
   name: string;
   color: string;
   format: ColumnFormat;
-  /** 模型声明的小数位；未声明缺席，走呈现层默认 */
   decimals?: number;
   values: (number | null)[];
-  /** 落在哪把尺子上：0 主轴、1 副轴；面板按它回显归属，不读声明缺省。 */
   axis: 0 | 1;
-  /** 服务端已计算的逐分类对照变化值。 */
   comparison?: {
     values: (number | null)[];
     format: ColumnFormat;
     decimals?: number;
   };
-  /** 构成图切片占比；仅逐项指针图使用。 */
   share?: number | null;
 };
 
-/** 与 `option` 并列交付、供渲染端读的那份数据；渲染端不从 option 反解任何数。 */
 export type ChartModel = {
-  /** 类目名：笛卡尔图是类目轴的顺序，饼图是度量名那一个「桶」 */
   categories: string[];
   legend: ChartLegendItem[];
   axes: AxisFormats;
-  /** 值轴刻度小数位；只在有单元声明过位数时下发 */
   axis_decimals?: AxisDecimals;
-  /** 结构占比注释：按类目序对位；读数卡随附一行占比说明 */
   share?: { title: string; values: (number | null)[] };
-  /** 构成图总计；仅逐项指针图使用。 */
   total?: { value: number; format: ColumnFormat; decimals?: number };
-  /** 每个单元都有值的最后一个时间桶，凑不齐则缺席；只随时间趋势下发。 */
   latest?: { index: number; label: string };
-  /** 读数索引由谁报：整列指针（类目轴）或逐项进出（饼图无类目轴） */
   pointer: "axis" | "item";
-  /** legendIndex × categoryIndex → 原始结果格；只在浏览器交互通道消费 */
   records?: { points: ({ row: number; column: string } | null)[][] };
 };
 
@@ -99,16 +74,10 @@ export type ViewChartForm = "line" | "bar" | "pie";
 
 type ViewChartShape<Form extends ViewChartForm> = {
   form: Form;
-  /** 建议渲染高度（px）：条形随分类数伸缩，布局由服务端一次算定 */
   height: number;
-
-  /** 框外栏（px）：留给框外轴标签的那一栏（横排条的左侧类目栏），场地框缩进让位 */
   plot_gutter?: { left?: number };
-  /** 框内余量（px）：值标签占的那道，grid 缩进而场地框不动 */
   plot_inset?: { top?: number; right?: number };
-
   layout?: "rank";
-  /** echarts 绘图指令；排行版式不落 echarts，此处为空对象 */
   option: Record<string, unknown>;
   model: ChartModel;
 };
@@ -119,11 +88,9 @@ export type ViewChart<Form extends ViewChartForm = ViewChartForm> = Form extends
 
 type PresentationBase = {
   table: TableModel;
-  /** 结构式标题（`structureTitle`）：度量 · 按分类 · 趋势粒度；派生不出任何一段时缺席。 */
   structure_title?: string;
 };
 
-/** 服务端确定性编译产物；形态决定唯一合法载荷。 */
 export type PresentationBlock =
   | (PresentationBase & { type: "table" })
   | (PresentationBase & { type: "kpi"; totals: TotalBand })
@@ -190,7 +157,6 @@ const POINTER_BAND = CHART_CHROME.pointerBand.light;
 const POINTER_LINE = CHART_CHROME.pointerLine.light;
 const BLURRED = CHART_CHROME.blurred.light;
 
-/** 渲染端补全（读数卡、饼图环心总计）需要与序列化 option 同源的 chrome 色与字体栈 */
 export { CHART_CHROME, FONT_FAMILY } from "./design_tokens.js";
 export { DIVERGING_PALETTES, shadingStops } from "./table_shading.js";
 
@@ -254,7 +220,6 @@ export const RANK_ROW = {
   shareColumn: 56,
 } as const;
 
-/** 系列色按序取用（palette 循环）；空心圆点与图例标记需要显式色，不能依赖 echarts 隐式分配 */
 function seriesColorAt(index: number): string {
   return SERIES_COLORS[index % SERIES_COLORS.length];
 }
@@ -325,7 +290,6 @@ export function focusPatch(
   };
 }
 
-/** 焦点在时只印焦点那条（含档位未选中的）；焦点不在时按编译期的 `show` 档位印。 */
 function valueLabelShown(
   label: { show?: boolean },
   index: number,
@@ -423,8 +387,6 @@ function pointerOption(hasBar: boolean) {
   };
 }
 
-/** 系列 key → 序号：对照关系在编排期按 key 立，图例与 series 数组按序号对位。 */
-/** 渲染栈唯一的场景词汇：场地留白、画不画框、chrome 取舍（`VIEW_SCENES`）都按它查表。 */
 export type ViewScene = "card" | "tile" | "page";
 
 export const PLOT_PADDING: Record<
@@ -457,17 +419,12 @@ export function sceneInsetClass(scene: ViewScene): "px-0" | "px-4" {
 }
 
 export function legendRowClass(scene: ViewScene, withLatest = false): string {
-  // 触屏（`pointer-coarse`）带值时铺两列读数格：每项要放得下名字与值两行。
   const touch = withLatest
     ? " pointer-coarse:grid pointer-coarse:grid-cols-2 pointer-coarse:items-stretch pointer-coarse:gap-x-4 pointer-coarse:gap-y-3"
     : "";
   return `flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 pt-3 pb-2${touch} ${sceneInsetClass(scene)}`;
 }
 
-/**
- * 系列色点：读数条与读数卡逐行共用这一颗；`lead` 是读数卡单读数那一档（值印到 18px）。
- * 下移用位移不用外边距：点对的是视线，不进行高。
- */
 export function chartMarkerClass(variant: "row" | "lead" = "row"): string {
   const drop =
     variant === "lead"
@@ -484,7 +441,6 @@ function cellNumber(value: string | number | null | undefined): number | null {
 
 type Mark = "line" | "bar";
 
-/** 一条系列画出来要知道的全部：形态出自尺子、色出自色板，都可被显式声明覆盖——但只解析这一次。 */
 type ResolvedSeries = SeriesDef & {
   mark: Mark;
   color: string;
@@ -492,13 +448,11 @@ type ResolvedSeries = SeriesDef & {
   comparisonValues?: (number | null)[];
 };
 
-/** 两把尺子都在用时主轴画柱、副轴画线；只有一把尺子时照形态缺省。 */
 const markOf = (series: SeriesDef[], single: Mark) => {
   const dual = series.some((s) => s.axis === 1);
   return (s: SeriesDef): Mark => (dual ? (s.axis === 1 ? "line" : "bar") : single);
 };
 
-/** 解析在建 option 之前完成一次；同一条系列的色只有这一个来源。 */
 function resolveSeries(
   series: SeriesDef[],
   rows: ChartRow[],
@@ -522,7 +476,6 @@ function resolveSeries(
   });
 }
 
-/** 值轴按系列落在哪根轴上算出来：轴的格式取落在它上面的第一条，位数取最长的那档。 */
 function valueAxes(series: ResolvedSeries[]) {
   const count = Math.max(1, ...series.map((s) => s.axis + 1));
   const axes = Array.from({ length: count }, (_, axis) => {
@@ -672,7 +625,6 @@ function seriesOption(s: ResolvedSeries, index: number, ctx: SeriesContext) {
   };
 }
 
-/** 真系列在前、垫层在后：序号约定见 `lineHalo`。 */
 function seriesWithHalo(series: ResolvedSeries[], ctx: SeriesContext) {
   return [
     ...series.map((s, i) => seriesOption(s, i, ctx)),
@@ -680,7 +632,6 @@ function seriesWithHalo(series: ResolvedSeries[], ctx: SeriesContext) {
   ];
 }
 
-/** 值标签要的框内余量：只按印得出数的系列算，框不随悬停移动。 */
 function valueLabelInset(series: ResolvedSeries[], ctx: SeriesContext) {
   if (ctx.valueLabels === undefined || ctx.stacked) return {};
   return ctx.orientation === "horizontal"
@@ -767,13 +718,11 @@ function lastIndexWhere(length: number, test: (index: number) => boolean): numbe
   return -1;
 }
 
-/** 图表的视觉覆盖：只有折线与柱状声明这两个通道，饼图两者都没有。 */
 type ChartStyle = {
   display?: Record<string, SeriesDisplay>;
   valueLabels?: "main" | "all";
 };
 
-/** 时间趋势：时间恒占 x 轴。 */
 function trendOption(spec: TrendSpec, style: ChartStyle): ViewChart {
   const categories = spec.rows.map((r) => String(r.t ?? ""));
   const series = resolveSeries(spec.series, spec.rows, style.display, markOf(spec.series, "line"));
@@ -794,10 +743,6 @@ function trendOption(spec: TrendSpec, style: ChartStyle): ViewChart {
   });
 }
 
-/**
- * 分类对比：一把尺子时横排条形（容纳中文长标签），多系列并列、双分类构成堆叠；
- * 两把尺子时改纵向笛卡尔，分类占 x 轴，两根 y 轴各自成尺。占比注释随读数卡。
- */
 function barOption(spec: BarSpec, style: ChartStyle): ViewChart {
   const categories = spec.rows.map((r) => String(r.label ?? ""));
   const series = resolveSeries(spec.series, spec.rows, style.display, markOf(spec.series, "bar"));
@@ -876,7 +821,6 @@ function barOption(spec: BarSpec, style: ChartStyle): ViewChart {
         type: "category",
         data: categories,
         inverse: true,
-        // 放不下即截断，全名在读数卡里
         axisLabel: {
           ...axisLabelStyle,
           width: gutter.left - LABEL_COLUMN.gap,
@@ -892,10 +836,6 @@ function barOption(spec: BarSpec, style: ChartStyle): ViewChart {
   };
 }
 
-/**
- * 饼图（声明路径专属）：占比与环心总计由渲染端注入。
- * 切片色走调色板（`option.color` 按切片序对位），数据格只有名与值。
- */
 function pieOption(spec: PieSpec): ViewChart {
   const legend: ChartLegendItem[] = spec.rows.map((r, i) => ({
     name: r.label,
@@ -947,7 +887,6 @@ function pieOption(spec: PieSpec): ViewChart {
   };
 }
 
-/** 按显式声明编译图表配置；不声明图表的 table/kpi 直接返回 null。 */
 export function buildViewChart(
   view: ViewBlock,
   decl: ChartDecl,

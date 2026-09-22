@@ -1,9 +1,3 @@
-/**
- * 图表画布单测：守读数条（HTML 图例）的版式判据。
- *
- * 画布本体（echarts 实例、尺寸观察、悬停联动）全在 effect 里，静态渲染一概不触发；
- * 渲染期唯一伸手向宿主要的是一次主题问询，故本文件给一对最小存根，其余不引 DOM。
- */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { applyPin, readoutPosition, subscribeReadout, ViewChartCanvas } from "./echart.js";
@@ -51,7 +45,6 @@ Object.assign(globalThis, {
   window: { matchMedia: () => ({ matches: false }) },
 });
 
-/** 两个系列的柱图：单系列不出读数条，得有两条才验得到版式。 */
 const CHART_VIEW = {
   id: "result",
   columns: ["hr.organization_name", "hr.active_employee_count", "hr.new_hire_count"],
@@ -102,7 +95,6 @@ test("渲染器忠实呈现声明的图或表", () => {
   expect(table).not.toContain(chartMarkerClass());
 });
 
-/** 场地是场景的取舍，不是形态的：同一场景里图与表落在同一块场地上、同框或同不框。 */
 test("结果面的场地按场景定，图与表同框", () => {
   const surfaceOf = (html: string) =>
     html.match(/<div[^>]*data-slot="plot-surface"[^>]*>/)?.[0] ?? "";
@@ -120,7 +112,6 @@ test("结果面的场地按场景定，图与表同框", () => {
       expect(slab, scene).toContain("border-pa-line");
       expect(slab, scene).toContain(`border-radius:${PLOT_RADIUS}px`);
     }
-    // 框里的表格再内缩一圈：分隔线与末列的数不贴框缘；框上下留呼吸，不压题名与行数条
     expect(table).toContain("p-4");
     expect(table).toContain("my-3");
   }
@@ -140,7 +131,6 @@ test("热力着色随 table 声明：指标格铺色片、字色随底色、仅�
     <ViewRenderer actions={{}} payload={PAYLOAD} presentation={shaded} scene="page" />,
   );
   const chips = html.match(/<div[^>]*data-slot="shade-chip"[^>]*>/g) ?? [];
-  // 两行 × 两个指标列 = 四片；维度列不着色
   expect(chips).toHaveLength(4);
   const darkest = chips.find((chip) => chip.includes("1.000"));
   const lightest = chips.find((chip) => chip.includes("0.050"));
@@ -170,20 +160,17 @@ test("热力着色随 table 声明：指标格铺色片、字色随底色、仅�
   expect(plain).not.toContain("shade-chip");
 });
 
-/** 元素上的横向衬垫类——比的是「贴哪条左轴」，不是整串类名。 */
 const padX = (className: string) =>
   className
     .split(/\s+/)
     .filter((name) => /^(?:px|pl|pr)-/.test(name))
     .sort();
 
-/** 读数条那一行的类名（`flex shrink-0 flex-wrap` 是它的版式签名） */
 function legendClass(scene: "card" | "tile" | "page"): string {
   const html = renderToStaticMarkup(<ViewChartCanvas chart={CHART!} scene={scene} />);
   return html.match(/<div class="(flex shrink-0 flex-wrap[^"]*)"/)?.[1] ?? "";
 }
 
-/** Tailwind 间距记号还原成 px：`px-4` = 4 档 × 4px */
 function padPx(token: string): number {
   const step = Number(token.replace("px-", ""));
   expect(Number.isFinite(step), `衬垫记号 ${token} 认不出来，断言失去着力点`).toBe(true);
@@ -193,7 +180,6 @@ function padPx(token: string): number {
 test("读数条、题名与 plot 框左缘同轴", () => {
   expect(CHART, "柱图没编译出来，下面全部落空").not.toBeNull();
 
-  // 答数态：画布出血铺到内容区边缘，故读数条自带题名那一圈衬垫
   const cardTitleBox =
     renderToStaticMarkup(
       <ViewRenderer
@@ -206,11 +192,9 @@ test("读数条、题名与 plot 框左缘同轴", () => {
   expect(cardTitleBox, "答数态题名块没找到，断言失去着力点").not.toBe("");
   expect(padX(legendClass("card"))).toEqual(padX(cardTitleBox));
 
-  // 另两档无出血可还（判据同上），读数条因此不叠第二道
   expect(padX(legendClass("page")), "整页档的读数条叠了第二道横向衬垫").toEqual(["px-0"]);
   expect(padX(legendClass("tile")), "瓦片档的读数条叠了第二道横向衬垫").toEqual(["px-0"]);
 
-  // 三档逐一对表：读数条的衬垫就是画布到 plot 框的横向留白，框缘因此钉在题名那条轴上
   for (const scene of ["card", "tile", "page"] as const) {
     const [token, ...extra] = padX(legendClass(scene));
     expect(extra, `${scene} 档的读数条给了不止一个横向衬垫`).toEqual([]);
@@ -225,7 +209,6 @@ test("读数条、题名与 plot 框左缘同轴", () => {
   expect(PLOT_PADDING.tile.left).toBe(0);
 });
 
-/** 两个系列的时间趋势：末桶读数只属于时间轴，非时间图没有「最后一桶」这回事。 */
 const TREND_VIEW = {
   id: "result",
   columns: ["year", "month", "hr.active_employee_count", "hr.new_hire_count"],
@@ -252,10 +235,8 @@ test("触屏上图例兼作读数位：末桶的值与桶名随图例交付，�
   );
   const html = renderToStaticMarkup(<ViewChartCanvas chart={trend} scene="page" />);
 
-  // 值取自铺开的最后一行本身：140/11 就是画面最右那两个点，不是另算的合计
   expect(html).toContain("140");
   expect(html).toContain("2026-02");
-  // 触屏才现形：桌面上这两处恒 hidden，既有版式一格不动
   for (const marker of ["140", "2026-02"]) {
     const at = html.indexOf(marker);
     expect(html.slice(Math.max(0, at - 220), at)).toContain("pointer-coarse:block");
@@ -285,12 +266,10 @@ test("焦点只改色不换态：落选换成失焦色，暗色下走与首帧�
       .map((s) => (s.itemStyle as { color: string }).color);
   expect(colors({ focused: 0 })).toEqual([SERIES_COLORS[0], CHART_CHROME.blurred.light]);
   expect(colors({ focused: null })).toEqual([SERIES_COLORS[0], SERIES_COLORS[1]]);
-  // 暗色：色出自同一张对照表，交互期不另立一套灰
   expect(colors({ focused: 0, dark: true })).toEqual([
     CHART_DARK_COLORS[SERIES_COLORS[0].toLowerCase()],
     CHART_CHROME.blurred.dark,
   ]);
-  // 编译期的 option 里没有第二套交互态：置灰全由取色式算出，绘图区内的悬停改不动谁的色
   const compiled = CHART!.option.series as { emphasis?: Record<string, unknown> }[];
   expect(compiled[0].emphasis).not.toHaveProperty("focus");
   expect(compiled[0]).not.toHaveProperty("blur");
@@ -299,14 +278,10 @@ test("焦点只改色不换态：落选换成失焦色，暗色下走与首帧�
 test("读数卡落在光标左侧 24，左边放不下才翻到右侧，且恒夹在场地内留一道边", () => {
   const card = { width: 200, height: 100 };
   const bounds = { width: 800, height: 400 };
-  // 左置：卡的右缘离光标 24
   expect(readoutPosition({ x: 500, y: 200 }, card, bounds)).toEqual({ left: 276, top: 150 });
-  // 左边放不下就翻到右侧，同样是 24
   expect(readoutPosition({ x: 100, y: 200 }, card, bounds).left).toBe(124);
-  // 纵向随光标居中，但不许越出场地上下缘——越出去的那半张卡等于没印
   expect(readoutPosition({ x: 500, y: 10 }, card, bounds).top).toBe(10);
   expect(readoutPosition({ x: 500, y: 390 }, card, bounds).top).toBe(290);
-  // 场地比卡还窄时贴着那道边，不给出负的落点
   expect(readoutPosition({ x: 60, y: 10 }, card, { width: 150, height: 400 }).left).toBe(10);
 });
 
@@ -314,7 +289,6 @@ test("钉住期间指针停在被钉的那一格，撤钉即交还给鼠标", ()
   const calls: unknown[] = [];
   const stub = { dispatchAction: (action: unknown) => void calls.push(action) };
 
-  // option 那一半在派生里：钉住即交出 triggerOn；指针落点由这里点名
   expect(
     (renderOption(CHART!, state({ pinned: 3 })).tooltip as { triggerOn: string }).triggerOn,
   ).toBe("none");
@@ -328,7 +302,6 @@ test("钉住期间指针停在被钉的那一格，撤钉即交还给鼠标", ()
   applyPin(stub, CHART!, null);
   expect(calls).toEqual([{ type: "hideTip" }]);
 
-  // 饼图没有指针可冻：那一路的索引出自逐项事件，钉住只冻卡片自己
   calls.length = 0;
   applyPin(stub, { model: { ...CHART!.model, pointer: "item" } }, 3);
   expect(calls).toEqual([]);
@@ -343,16 +316,11 @@ test("绘图区那块场地是圆角的，且瓦片档不画框", () => {
   const card = slabOf("card");
   expect(card, "结果卡没铺出绘图场地").not.toBe("");
   expect(card).toContain("border-pa-line");
-  // 场地不铺底色：它就是承载面本身，判据见 ui_spec「图表画布」节
   expect(card).not.toContain("bg-pa-");
-  // 圆角是这块场地的形本身——canvas 画不出它，正是框落到 DOM 的理由
   expect(card).toContain(`border-radius:${PLOT_RADIUS}px`);
-  // 位置读的是同一道算式，不是另写的数字
   expect(card).toContain(`inset-inline-start:${plotRect(CHART!, "card").left}px`);
-  // 这张是横排条形：类目那一栏叠进来了，场地不是纯场景留白
   expect(plotRect(CHART!, "card").left).toBeGreaterThan(PLOT_PADDING.card.left);
 
-  // 瓦片壳自己就是边界，场地在但不画框
   const tile = slabOf("tile");
   expect(tile).not.toContain("border-pa-line");
   expect(tile).not.toContain("border-radius");
@@ -387,19 +355,15 @@ test("排行版式逐行陈述：条长按本屏最大值归一，且不落 echa
   expect(rank?.layout, "单系列横排条形没走排行版式").toBe("rank");
 
   const html = renderToStaticMarkup(<ViewChartCanvas chart={rank!} scene="card" />);
-  // 类目名与值都是文字，不是画出来的
   for (const text of ["研发", "市场", "120", "30"]) expect(html).toContain(text);
-  // 条长之比 = 值之比（30/120 = 25%），最长那条铺满
   expect(html).toContain("width:100%");
   expect(html).toContain("width:25%");
-  // 排行版式没有画布：框仍在（同一块场地），但不该有给 echarts 的那个空盒
   expect(html).toContain('data-slot="plot-surface"');
   expect(html.match(/<div/g)?.length ?? 0).toBeLessThan(20);
 
   expect(CHART!.layout, "多系列被误判成排行版式").toBeUndefined();
 });
 
-/** 折线：值轴在纵向——与上面那张横排条形（值轴在横向）恰好互为对照。 */
 const LINE_CHART = chartOf(
   compilePresentationBlock(TREND_VIEW, {
     type: "line",
@@ -412,14 +376,12 @@ test("值轴档数随绘图区尺度走，不是编译期那个定数", () => {
   const axes = (chart: typeof CHART, width: number, height: number) =>
     renderOption(chart!, state({ viewport: { width, height } })) as unknown as Axes;
 
-  // 值轴在纵向的折线：整页那么高刻得细，卡片那么矮刻得粗——同一张图，档数不同
   const tall = axes(LINE_CHART, 900, 700).yAxis[0]?.splitNumber ?? 0;
   const short = axes(LINE_CHART, 900, 200).yAxis[0]?.splitNumber ?? 0;
   expect(tall).toBeGreaterThan(short);
   expect(short).toBeGreaterThanOrEqual(2);
   expect(tall).toBeLessThanOrEqual(10);
   expect(axes(LINE_CHART, 900, 10).yAxis[0]?.splitNumber).toBeGreaterThanOrEqual(2);
-  // 类目轴没有档数可言
   expect(axes(LINE_CHART, 900, 700).xAxis.splitNumber).toBeUndefined();
   const wide = axes(CHART, 900, 300).xAxis.splitNumber ?? 0;
   const narrow = axes(CHART, 260, 300).xAxis.splitNumber ?? 0;

@@ -35,7 +35,6 @@ export type AnalysisEditState = {
   view: SemanticViewIntent;
   view_preferences: ViewPreferences;
   baseline_name: string;
-  /** 进入编辑时的落定基线：脏判定与离开拦截以此为准。 */
   baseline_analysis: AnalysisDefinition;
   baseline_view: SemanticViewIntent;
   baseline_view_preferences: ViewPreferences;
@@ -48,10 +47,6 @@ const clone = <T>(value: T): T => structuredClone(value);
 const sameJson = (left: unknown, right: unknown): boolean =>
   canonicalJson(left) === canonicalJson(right);
 
-/**
- * 各种窗口的默认取值：空白分析、换窗口种类、看板时间覆盖都从这里取。
- * 相对窗口不带端点，随数据滚动；序列粒度是窗口的一部分，回看几年就按年、几个月就按月。
- */
 export const DEFAULT_TIME_WINDOW = {
   current_month: { kind: "current_month" },
   trailing_months: { kind: "trailing", count: 12, unit: "month", grain: "month" },
@@ -123,10 +118,7 @@ export function analysisReadiness(
   return { issues, time };
 }
 
-/**
- * 进入编辑：报告当前 Analysis 就是不可变基线。运行期降级不改写它；
- * 用户真的修改规格后，必须经预览创建新 Analysis 才能保存。
- */
+/** 运行期降级不得改写编辑基线；用户改动须重新预览后保存。 */
 export function beginAnalysisEdit(
   seed: {
     name: string;
@@ -134,7 +126,6 @@ export function beginAnalysisEdit(
     view: SemanticViewIntent;
     view_preferences?: ViewPreferences;
   },
-  /** 传的是判定不是结果字节：报告页规格先到、结果后到。 */
   hasSavedResult: boolean,
 ): AnalysisEditState {
   const analysis = clone(seed.analysis);
@@ -174,7 +165,6 @@ export function isPreviewCurrent(draft: AnalysisEditState): boolean {
   );
 }
 
-/** 保存成功：当前草稿就地成为新的落定基线，脏判定从此以它为准。 */
 export function settleSaved(draft: AnalysisEditState): AnalysisEditState {
   return {
     ...draft,
@@ -185,7 +175,6 @@ export function settleSaved(draft: AnalysisEditState): AnalysisEditState {
   };
 }
 
-/** 预览返回的 canonical Analysis、View 与作者偏好成为可保存真相。 */
 export function settlePreview(draft: AnalysisEditState, replay: ReplayPayload): AnalysisEditState {
   const analysis = clone(replay.analysis);
   const view = clone(replay.view);
@@ -285,7 +274,6 @@ function shareAnnotations(
   });
 }
 
-/** 按图型只挂它声明过的通道：哪个通道属于哪个图型出自意图联合，这里不另立一套。 */
 function chartIntent(
   type: PlottedIntentType,
   channels: {
@@ -309,7 +297,6 @@ function chartIntent(
     ...category,
     ...groupBy,
     ...(channels.annotations?.length ? { annotations: channels.annotations } : {}),
-    // 堆叠是拆分通道的读法：没拆出系列就没有可堆叠的段。
     ...(channels.groupBy && channels.stack !== undefined ? { stack: channels.stack } : {}),
   };
 }
@@ -342,7 +329,6 @@ function normalizeViewIntent(
   const selectedSeries = retainedSeries.length ? retainedSeries : measures;
   const annotations = shareAnnotations(chart.type, view, catalog, selectedSeries);
   const auxiliary = new Set(annotations);
-  // 通道装箱是唯一判据：已有绑定装得下就沿用，装不下按容量重排，一个维度都装不下即无此形态。
   const assignment = assignChannels(
     chart.type,
     {
@@ -368,7 +354,6 @@ function normalizeViewIntent(
   });
 }
 
-/** 量纲键即目录声明的显示格式；未声明按普通数值——与结果侧 `column_formats` 的缺省同义。 */
 function measureScales(catalog: CatalogPayload): Record<string, string> {
   return Object.fromEntries(
     catalog.measures.map((member) => [member.id, member.format ?? "number"]),
@@ -470,7 +455,6 @@ export function timeCapabilitiesOf(
   return mergeTimeCapabilities(members.map((member) => member.time.constraints ?? {}));
 }
 
-/** 时间栏写入收敛点查询视图，并由 setSemanticQueryView 统一归一呈现状态。 */
 export function setDraftTime(
   draft: AnalysisEditState,
   time: TimeIntent,

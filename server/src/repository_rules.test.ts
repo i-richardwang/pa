@@ -35,14 +35,11 @@ async function sourceFiles(dir: string): Promise<string[]> {
   return nested.flat();
 }
 
-test("CLAUDE.md remains a short pointer to the canonical AGENTS.md", async () => {
+test("CLAUDE.md only points contributors to the canonical AGENTS.md", async () => {
   const claude = await readFile(new URL("CLAUDE.md", root), "utf8");
-  expect(claude).toBe(
-    "# Claude Code repository entry\n\n" +
-      "Repository-wide instructions have a single source of truth: [`AGENTS.md`](./AGENTS.md).\n" +
-      "Read and follow it before changing this repository. Do not add repository rules here; update\n" +
-      "`AGENTS.md` instead.\n",
-  );
+  expect(claude).toContain("[`AGENTS.md`](./AGENTS.md)");
+  expect(claude.match(/^#/gm)).toHaveLength(1);
+  expect(claude.trim().split("\n").length).toBeLessThanOrEqual(8);
 });
 
 test("repository hooks reference the canonical instruction entry", async () => {

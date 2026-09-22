@@ -1,7 +1,3 @@
-/**
- * 业务术语编辑器：管理员维护黑话词典的提交面。
- * 关联数据成员只帮 Agent 从解释导航到目录，不参与查询改写。
- */
 import { useEffect, useState } from "react";
 import type { PublicCatalogMember as CatalogMemberPayload } from "@contracts/catalog_contract";
 import { BUSINESS_TERM_LIMITS, type PublicBusinessTerm } from "@contracts/business_term_contract";

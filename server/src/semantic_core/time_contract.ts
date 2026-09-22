@@ -1,28 +1,39 @@
 import { z } from "zod";
 import type { MetricTimeContract, MetricTimeResolution } from "./metric_time_contract.js";
 import { basisPeriod, METRIC_VALUE_BASIS_INPUT } from "./metric_value_basis.js";
+import {
+  formatYearMonth,
+  isYearMonth,
+  parseYearMonth,
+  YEAR_MONTH_REGEX,
+  yearMonthFromOrdinal,
+  yearMonthOrdinal,
+} from "./year_month.js";
 
-const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+export {
+  formatYearMonth,
+  isYearMonth,
+  parseYearMonth,
+  shiftYearMonth,
+  yearMonthOrdinal,
+} from "./year_month.js";
 
 export const TIME_GRAINS = ["total", "year", "month"] as const;
 export type TimeOutputGrain = (typeof TIME_GRAINS)[number];
 
-/**
- * 期间窗口的序列粒度，是窗口自身的一部分。整段合计由结果自带的合计位承担（见 view.totals），
- * 不是一档粒度。内部 grain 的 total 档只给单月窗口、合计腿与记录投影，不对外开放。
- */
+/** `total` 是内部合计粒度，不进入期间窗口的公开选择。 */
 export const SERIES_GRAINS = ["year", "month"] as const;
 export type SeriesGrain = (typeof SERIES_GRAINS)[number];
 
 export const TIME_RANGE_INPUT = z
   .object({
-    from: z.string().regex(YEAR_MONTH),
-    to: z.string().regex(YEAR_MONTH),
+    from: z.string().regex(YEAR_MONTH_REGEX),
+    to: z.string().regex(YEAR_MONTH_REGEX),
   })
   .strict();
 
 export const TIME_COMPARE_INPUT = z.union([
-  z.object({ cutoff: z.string().regex(YEAR_MONTH) }).strict(),
+  z.object({ cutoff: z.string().regex(YEAR_MONTH_REGEX) }).strict(),
   z.object({ range: TIME_RANGE_INPUT }).strict(),
   z.object({ previous_period: z.literal(true) }).strict(),
   z
@@ -33,11 +44,6 @@ export const TIME_COMPARE_INPUT = z.union([
     .strict(),
 ]);
 
-/**
- * 相对窗口：以锚点（主 cutoff，省略即数据 actual_through）为终点，回看近 N 个自然月
- * 或近 N 个日历年。唯一编译点按锚点展开为绝对 range，随数据推进自动滚动；与绝对 range
- * 互斥（两者都是窗口），与 cutoff 组合正是「锚点 × 窗口」。
- */
 export const TIME_LAST_INPUT = z.union([
   z.object({ months: z.number().int().min(1).max(60) }).strict(),
   z.object({ years: z.number().int().min(1).max(8) }).strict(),
@@ -45,7 +51,7 @@ export const TIME_LAST_INPUT = z.union([
 
 const CUTOFF_FIELD = z
   .string()
-  .regex(YEAR_MONTH)
+  .regex(YEAR_MONTH_REGEX)
   .optional()
   .describe("业务截止月份 YYYY-MM；省略时使用数据源 actual_through");
 const OUTPUT_GRAIN_FIELD = z.enum(TIME_GRAINS).describe("结果按总计、年或月呈现");
@@ -59,7 +65,6 @@ const COMPARE_FIELD = z
       "相对形态 {years_ago:n} 表示主坐标整体回移 n 个日历年，随主时间与数据推进自动滚动",
   );
 
-/** Planner 私有时间坐标：时点可省略粒度，期间与内部合计必须显式声明结果粒度。 */
 export const TIME_INPUT = z
   .union([
     z
@@ -111,19 +116,13 @@ const SERIES_GRAIN_FIELD = z
   .enum(SERIES_GRAINS)
   .describe("期间按年还是按月成序列；整段合计恒由结果的合计位给出，不在这里表达");
 
-/**
- * Agent 与产品界面共用的业务时间意图；取值与冻结性见 docs/time_contract.md §1。
- * 单月窗口是一个时点、只有一个结果；期间窗口必带序列粒度，服务端不推导。
- * 冻结由窗口种类本身承载，不靠额外的截止字段。指标跨桶求和、平均、取期末或重算仍由
- * 模型 time_contract 决定。物理 Planner 只消费 compileTimeIntent 的内部坐标产物。
- */
 export const TIME_WINDOW_INPUT = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("current_month"),
       month: z
         .string()
-        .regex(YEAR_MONTH)
+        .regex(YEAR_MONTH_REGEX)
         .optional()
         .describe("固定观察月份；省略时使用所选数据源共同具备的最新月份"),
     })
@@ -140,8 +139,8 @@ export const TIME_WINDOW_INPUT = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("range"),
-      from: z.string().regex(YEAR_MONTH),
-      to: z.string().regex(YEAR_MONTH),
+      from: z.string().regex(YEAR_MONTH_REGEX),
+      to: z.string().regex(YEAR_MONTH_REGEX),
       grain: SERIES_GRAIN_FIELD,
     })
     .strict(),
@@ -151,14 +150,14 @@ const CUSTOM_COMPARISON_WINDOW = z.union([
   z
     .object({
       kind: z.literal("current_month"),
-      month: z.string().regex(YEAR_MONTH),
+      month: z.string().regex(YEAR_MONTH_REGEX),
     })
     .strict(),
   z
     .object({
       kind: z.literal("range"),
-      from: z.string().regex(YEAR_MONTH),
-      to: z.string().regex(YEAR_MONTH),
+      from: z.string().regex(YEAR_MONTH_REGEX),
+      to: z.string().regex(YEAR_MONTH_REGEX),
     })
     .strict()
     .refine((window) => window.from <= window.to, {
@@ -382,25 +381,19 @@ export class TimeSelectionError extends Error {
 }
 
 const monthIndex = (value: string) => {
-  const [year, month] = value.split("-").map(Number);
-  return year * 12 + month - 1;
+  const parsed = parseYearMonth(value);
+  if (!parsed) throw new Error(`月份「${value}」无效，请使用 YYYY-MM`);
+  return yearMonthOrdinal(parsed);
 };
 
-const monthAt = (index: number) => {
-  const year = Math.floor(index / 12);
-  return `${year}-${String((index % 12) + 1).padStart(2, "0")}`;
-};
+const monthAt = (index: number) => formatYearMonth(yearMonthFromOrdinal(index));
 
 const shiftYears = (month: string, delta: number) => {
-  const [year, monthPart] = month.split("-");
-  return `${Number(year) + delta}-${monthPart}`;
+  const parsed = parseYearMonth(month);
+  if (!parsed) throw new Error(`月份「${month}」无效，请使用 YYYY-MM`);
+  return formatYearMonth({ ...parsed, year: parsed.year + delta });
 };
 
-/**
- * 把相对对照归一为绝对坐标：years_ago 将主坐标整体回移 n 年，previous_period 使用
- * 紧邻主坐标且长度相同的前一段时间。无锚点时保留相对形态，解析入口负责拒绝未完成的坐标；
- * 绝对对照原样保留。
- */
 export function expandTimeCompare(time: TimeInput, defaultCutoff?: string): TimeInput {
   if (
     !time.compare?.some(
@@ -446,12 +439,6 @@ export function expandTimeCompare(time: TimeInput, defaultCutoff?: string): Time
   return { ...time, compare };
 }
 
-/**
- * 把相对窗口 {last} 展开为绝对 range：锚点＝主 cutoff，省略时用 defaultCutoff（服务端
- * actual_through）。months 回看 N 个自然月至锚点，years 回看至 (锚点年-(N-1)) 年 1 月。
- * 无锚点时保留相对形态，解析入口负责拒绝。展开顺序恒为窗口先于对照，相对对照因此直接
- * 作用在展开后的 range 上。
- */
 export function expandTimeWindow(time: TimeInput, defaultCutoff?: string): TimeInput {
   if (!("last" in time)) return time;
   const anchor = time.cutoff ?? defaultCutoff;
@@ -517,7 +504,7 @@ const coordinateLabel = (coordinate: TimeSelectionCoordinate) =>
 
 /** 公开意图与 Planner 共用的时间坐标和结果粒度解析。 */
 export function resolveTimeSelection(time: TimeInput, defaultCutoff: string): TimeSelectionResult {
-  if (!YEAR_MONTH.test(defaultCutoff)) {
+  if (!isYearMonth(defaultCutoff)) {
     return { status: "invalid", issue: { code: "time_anchor_unavailable" } };
   }
   const windowed = expandTimeWindow(time, defaultCutoff);
@@ -613,10 +600,7 @@ export function timeAvailabilityIssue(
   };
 }
 
-/**
- * 指标的时间能力卡：编译器时间守卫的事前投影。每一位镜像一处服务端 fail-closed，
- * 由模型 `time_contract` 在目录装配时推导生成，永不手写——卡与守卫因此不会分叉。
- */
+/** 时间能力由模型合同推导，不接受手写值。 */
 export const TIME_CAPABILITIES_INPUT = z
   .object({
     grain: z.literal("month").optional().describe("指标只在单月桶上有定义；跨月窗口只能按月呈现"),
@@ -630,10 +614,6 @@ export const TIME_CAPABILITIES_INPUT = z
 
 export type TimeCapabilities = z.infer<typeof TIME_CAPABILITIES_INPUT>;
 
-/**
- * 指标的时间面：两个问题各占一个字段，互不替代。value_basis 说这个数代表什么时间，
- * constraints 说用户能选什么时间。
- */
 export const METRIC_TIME_INPUT = z
   .object({
     value_basis: METRIC_VALUE_BASIS_INPUT,
@@ -645,7 +625,6 @@ export const METRIC_TIME_INPUT = z
 
 export type MetricTime = z.infer<typeof METRIC_TIME_INPUT>;
 
-/** 由指标合同推导能力卡：能不能跨月合并、能不能跨日历年、能不能隐式对照。 */
 export function metricTimeCapabilities(contract: MetricTimeContract): TimeCapabilities {
   return {
     ...(contract.grain === "month" ? { grain: "month" as const } : {}),
@@ -689,7 +668,6 @@ export function metricTimeComparisonIssue(
     : undefined;
 }
 
-/** 指标能力只消费已解析时间，不重新解释用户意图。 */
 export function metricTimeSelectionIssue(
   requirements: readonly MetricTimeRequirement[],
   selection: ResolvedTimeSelection,
@@ -725,19 +703,13 @@ export function metricTimeSelectionIssue(
   return undefined;
 }
 
-/**
- * 指标在一个时间坐标上的合计求值期间。
- *
- * degraded 与基准正交：按月定义的指标在跨月坐标上没有合计可言，只能退到终点当月求值。
- * 它显式写出，消费方不必拿基准和起止月份去对比推断。
- */
+/** 月粒度指标跨月求值时降级到终点月，并显式标记 degraded。 */
 export type TotalPeriod = {
   from: string;
   to: string;
   degraded?: true;
 };
 
-/** 期间只出自指标自己的时间解析——能力卡回答的是「用户能选什么」，与这里无关。 */
 export function totalPeriodOf(
   time: MetricTimeResolution,
   coordinate: { from: string; to: string },
@@ -746,7 +718,6 @@ export function totalPeriodOf(
   return { ...basisPeriod(time.basis, coordinate, degraded), ...(degraded ? { degraded } : {}) };
 }
 
-/** 主期间的绝对起止；相对窗口按 latest 展开，截止月份形态起止同月。 */
 export function primaryTimeRange(time: TimeIntent, latest: string): { from: string; to: string } {
   const expanded = expandTimeWindow(compileTimeIntent(time), latest);
   const range = timeRange(expanded);
@@ -755,16 +726,9 @@ export function primaryTimeRange(time: TimeIntent, latest: string): { from: stri
   return { from: cutoff, to: cutoff };
 }
 
-/** 业务时间桶：月份原子构成的闭区间，终点恒为 to。 */
 export type TimeBucket = { from: string; to: string };
 
-/**
- * 时间层唯一的枚举规则：业务坐标 × 结果粒度 → 桶列表。截止月份是单月桶；按月逐月成桶；
- * 按年每个日历年一桶，期间不足整年时即部分年桶（2024-06 起的期间，2024 桶就是 6–12 月）；
- * 合计是整段一个大桶。桶只回答「切成哪几段」，不回答「怎么求值」——指标的 time_contract
- * 决定每个桶求和、求平均、取期末还是读取年初窗口。物理窗口编译与业务时间签名
- * 共用此规则，不得各自枚举。
- */
+/** 年桶按日历年切分，首尾允许是不完整自然年。 */
 export function timeBuckets(
   coordinate: { kind: "cutoff"; cutoff: string } | { kind: "range"; from: string; to: string },
   grain: TimeOutputGrain,

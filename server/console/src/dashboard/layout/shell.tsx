@@ -50,10 +50,8 @@ import { SettingsDialog } from "../admin/settings_page";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { escapeClaimsAside, isEditableTarget } from "@/lib/keyboard";
 
-/** 主区白面的两种底：清单与工作台坐白卡，看板坐画布灰。 */
 type MainSurface = "card" | "canvas";
 
-/** 侧栏分组：组序与组内序都出自声明，首组不带标签。 */
 type NavGroup = { label: string; adminOnly: boolean; items: readonly NavEntry[] };
 
 const NAV: readonly NavGroup[] = [
@@ -102,7 +100,6 @@ function navGroups(isAdmin: boolean): NavMainGroup[] {
   }));
 }
 
-/** 主区顶栏短名：与侧栏条目同文案。 */
 function routeTitle(route: RouteKey, items: readonly NavEntry[]): string {
   return items.find((n) => n.key === route)?.label ?? "我的报告";
 }
@@ -409,8 +406,6 @@ function ShellTitlebar({
             </span>
           </nav>
         ) : listChrome ? (
-          // 页名只在题条出现一次，故它是本页 h1。
-
           <h1 className="min-w-0 truncate">{title}</h1>
         ) : (
           title

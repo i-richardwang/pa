@@ -1,6 +1,3 @@
-/**
- * 业务术语页：全员可查的黑话词典，管理员在这里维护。
- */
 import { PlusIcon } from "lucide-react";
 import type { PublicBusinessTerm } from "@contracts/business_term_contract";
 import { LoadingMark } from "pa-result-view";
@@ -119,7 +116,6 @@ export function BusinessTermsPage() {
   );
 }
 
-/** 定义优先的业务术语：定义保存即生效，关联成员不是必填项。 */
 function TermSection({
   terms,
   filtered,

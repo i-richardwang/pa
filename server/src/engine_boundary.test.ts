@@ -101,8 +101,11 @@ describe("度量计算边界", () => {
       sources.find(({ file }) => file === "application/query_pipeline.ts")?.text ?? "";
     const execution =
       sources.find(({ file }) => file === "application/query_execution_service.ts")?.text ?? "";
-    expect(execution).toContain("metricTimeMembers(queryPlan)");
-    expect(execution).toContain("resolvedDeliveryColumns");
+    const resultBlock =
+      sources.find(({ file }) => file === "application/query_result_block.ts")?.text ?? "";
+    expect(execution).toContain("encodeQueryResult(");
+    expect(resultBlock).toContain("metricTimeMembers(queryPlan)");
+    expect(resultBlock).toContain("resolvedDeliveryColumns");
     expect(pipeline).toContain("deliveredResult.resolvedDeliveryColumns");
   });
 

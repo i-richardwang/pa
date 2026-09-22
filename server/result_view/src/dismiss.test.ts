@@ -1,6 +1,3 @@
-/**
- * 从 `watchDismiss` 这道生产入口验：判据与订阅两半都要覆盖。
- */
 import { expect, test } from "bun:test";
 import { watchDismiss, type DismissEvent, type DismissHost } from "./dismiss.js";
 

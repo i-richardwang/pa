@@ -239,7 +239,6 @@ function memberDocument(
   };
 }
 
-/** 一次遍历解出全部指标的时间面；顺带守住「声明的 window 与解析结果不得背离」。 */
 function resolveMetricTimes(views: CubeView[]): ReadonlyMap<string, MetricTimeResolution> {
   const members = new Map<string, CubeMember>();
   for (const view of views) {
@@ -279,7 +278,6 @@ function requiredMetricTime(
   return time;
 }
 
-/** 输入是已完成权限裁剪的 Cube meta；本函数不重复裁剪权限。 */
 export function buildCatalogDocument(
   views: CubeView[],
   taxonomy: SemanticTaxonomy,
@@ -413,7 +411,6 @@ function resolveIncompatibleInView(
   return ids;
 }
 
-/** 按规范短名归并成员，并 fail-closed 校验跨来源公开契约。 */
 export function canonicalCatalog(document: CatalogDocument): CanonicalCatalog {
   const resolvers = viewDimensionResolvers(document);
   const analysisViews = new Set(document.views.filter(isMetricSource).map((view) => view.name));
@@ -571,7 +568,6 @@ function projectionMaps(document: CatalogDocument, catalog: CanonicalCatalog): P
   return { titles, ids, shortIds, recordProjectionBindings };
 }
 
-/** 装配中途的成员：公共查询能力与时间面还没算出来，引擎侧的时间解析已随文档带上。 */
 type CompilerCatalogSeedMember = Omit<CompilerCatalogMember, "query_capabilities" | "time"> & {
   time?: MetricTimeResolution;
 };
@@ -752,7 +748,6 @@ function requiresExplicitComparison(
   );
 }
 
-/** 编译器目录保留物理绑定，仅供服务端规划与记录投影使用。 */
 export function toCompilerCatalog(document: CatalogDocument): CompilerCatalog {
   const catalog = canonicalCatalog(document);
   const maps = projectionMaps(document, catalog);
@@ -821,7 +816,6 @@ export function toCompilerCatalog(document: CatalogDocument): CompilerCatalog {
   };
 }
 
-/** 对外目录只暴露语义身份；查询选路与兼容性由服务端编译。 */
 export function toSemanticCatalog(
   document: CatalogDocument,
   time: Pick<PublicCatalogDocument, "data_as_of" | "time_context"> = {
@@ -899,7 +893,6 @@ function domainHaystack(domain: CatalogMetricDomainDocument): string[] {
   return [domain.title, domain.description, ...domain.synonyms].map((value) => value.toLowerCase());
 }
 
-/** MCP 搜索投影：返回语义成员并隐藏物理绑定。 */
 export function searchCatalogDocument(
   document: CatalogDocument,
   terms: string[],

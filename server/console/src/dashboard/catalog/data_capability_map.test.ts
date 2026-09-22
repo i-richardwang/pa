@@ -1,7 +1,3 @@
-/**
- * 数据能力地图纯逻辑自检：全局维度与事实分列、指标域居中的布局、语义投影与物理承载血缘。
- * 同时对真实内嵌数据跑完整布局，确保统一语义目录投影与画布逻辑一致。
- */
 import { expect, test } from "bun:test";
 import type { DataCapabilityMapData } from "@data-capability-map";
 import embedded from "./data_capability_map_data.json";

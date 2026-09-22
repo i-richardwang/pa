@@ -414,9 +414,7 @@ export const SEMANTIC_VIEW_INTENT_INPUT = z
     }
   });
 
-/** 呈现意图按图型判别：哪些通道属于哪个图型出自这一份形状，下游不再复述适用性。 */
 export type SemanticViewIntent = z.infer<typeof SEMANTIC_VIEW_INTENT_INPUT>;
-/** 落在绘图区的呈现意图图型；table 与 kpi 不在其中。 */
 export type PlottedIntentType = Extract<SemanticViewIntent["type"], "line" | "bar" | "pie">;
 
 /**
@@ -472,7 +470,6 @@ function semanticOperands(column: SemanticDerivedColumn): SemanticColumnOperand[
 /** 派生结果在执行层的视图身份；来源视图身份即来源角色本身。 */
 export const SEMANTIC_DERIVED_VIEW_ID = "result";
 
-/** 结果节点由形状决定：声明 derived 时它就是结果，否则唯一的查询就是结果。 */
 export function semanticResultView(definition: AnalysisDefinition): SemanticAnalysisView {
   return definition.derived ?? definition.query;
 }
@@ -481,7 +478,6 @@ export function semanticResultViewId(definition: AnalysisDefinition): string {
   return definition.derived ? SEMANTIC_DERIVED_VIEW_ID : "query";
 }
 
-/** 来源查询按角色展开；角色名即执行层视图 id，调用方不再发明也不再引用自造 id。 */
 export function semanticSourceViews(
   definition: AnalysisDefinition,
 ): { role: SemanticSourceRole; query: SemanticQueryView }[] {

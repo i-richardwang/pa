@@ -1,9 +1,3 @@
-/**
- * 工作台的时间栏不变式：它是舞台 chrome，**四个内容态（结果 / 预览等待 / 空态 / 错误）
- * 都必须在场**，且恒在结果区内——时间不因「还没有结果」而不可编辑。
- * 载入中这一态没有时间意图可编辑，故不摆控件，但底栏与配置栏两副壳照样在场。
- * headless 直渲（renderToStaticMarkup）：效果钩子不执行，壳 titlebar 槽位不在断言范围。
- */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";

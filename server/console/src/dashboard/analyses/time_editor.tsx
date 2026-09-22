@@ -12,9 +12,11 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   metricTimeSelectionIssue,
+  isYearMonth,
   parseTimeIntent,
   primaryTimeRange,
   resolveTimeIntentSelection,
+  shiftYearMonth,
   timeSelectionIssueMessage,
   type SeriesGrain,
   type TimeCapabilities,
@@ -33,36 +35,25 @@ type WindowChoice =
   | "trailing_years"
   | "range";
 type ComparisonChoice = "none" | "previous_period" | "previous_year" | "custom";
-/** 落一次改动，返回它是否真的落下了——被校验闸拦下时调用方不该再往下走。 */
 type ApplyTimeChange = (time: TimeIntent, adjustment?: string) => boolean;
 type CustomComparisonWindow = Extract<
   NonNullable<TimeIntent["comparison"]>,
   { kind: "custom" }
 >["window"];
 
-/** 常备档只留最常用的几个，其余长度走「自定义范围」。 */
 const MONTH_CHOICES = [12, 24] as const;
 const YEAR_CHOICES = [2, 3, 5] as const;
-const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+const validMonth = (value: string | undefined): value is string => isYearMonth(value);
 
-const monthIndex = (month: string) => {
-  const [year, part] = month.split("-").map(Number);
-  return year * 12 + part - 1;
-};
-const monthAt = (index: number) => {
-  const year = Math.floor(index / 12);
-  return `${year}-${String((index % 12) + 1).padStart(2, "0")}`;
-};
-const validMonth = (value: string | undefined): value is string =>
-  !!value && YEAR_MONTH.test(value);
+function shiftedMonth(value: string, delta: number): string {
+  const shifted = shiftYearMonth(value, delta);
+  if (!shifted) throw new Error(`月份「${value}」无效，请使用 YYYY-MM`);
+  return shifted;
+}
 
-/** 当前取值不在常备档里时排到最前，触发件与行列表才对得上。 */
 export const withCurrent = (choices: readonly number[], current: number): number[] =>
   choices.includes(current) ? [...choices] : [current, ...choices];
 
-/**
- * 观察窗口一句话，也是题名副行的全部内容：只出窗口，不出粒度与对比。
- */
 export function windowSummary(time: TimeIntent): string {
   const { window } = time;
   if (window.kind === "current_month") {
@@ -105,7 +96,6 @@ function fixedWindow(time: TimeIntent): boolean {
   );
 }
 
-/** 单月窗口的观察月：省略即随数据推进取最新月。 */
 function withFixedMonth(time: TimeIntent, month?: string): TimeIntent {
   if (time.window.kind !== "current_month") return time;
   return { ...time, window: { kind: "current_month", ...(month ? { month } : {}) } };
@@ -135,7 +125,6 @@ export function adjustTimeWindow(
   };
 }
 
-/** 对比只换对比，窗口与粒度不动。 */
 export function setTimeComparison(
   time: TimeIntent,
   comparison?: TimeIntent["comparison"],
@@ -157,15 +146,15 @@ function presetWindow(
   if (choice === "trailing_months") return DEFAULT_TIME_WINDOW.trailing_months;
   if (choice === "trailing_years") return DEFAULT_TIME_WINDOW.trailing_years;
   const to = fixedEndpoint ?? latest;
+  const from = shiftedMonth(to, -(DEFAULT_TIME_WINDOW.trailing_months.count - 1));
   return {
     kind: "range",
-    from: monthAt(monthIndex(to) - (DEFAULT_TIME_WINDOW.trailing_months.count - 1)),
+    from,
     to,
     grain: "month",
   };
 }
 
-/** 期间窗口的序列粒度；单月窗口是一个时点，没有粒度。 */
 export function seriesGrainOf(window: TimeIntent["window"]): SeriesGrain | undefined {
   return window.kind === "current_month" ? undefined : window.grain;
 }
@@ -195,7 +184,6 @@ export function summarizeResolvedTime(time: TimeIntent, latest: string): string 
   return `主期 ${rangeLabel(primary)} · ${displayText}${comparison} · ${rolling ? "随数据更新" : "固定时间"}`;
 }
 
-/** 落草稿前的唯一校验闸。 */
 export function timeChangeIssue(
   time: TimeIntent,
   latest: string,
@@ -206,10 +194,6 @@ export function timeChangeIssue(
   return metricTimeSelectionIssue([{ capabilities }], result.selection);
 }
 
-/**
- * 期间浮层：相对窗口的 N 摊成行，不在浮层里再套 Select；
- * 需要具体月份的档把选择交给月份弹层。
- */
 export function WindowPopup({
   time,
   latest,
@@ -237,7 +221,6 @@ export function WindowPopup({
         : undefined;
   const trailing = (unit: "month" | "year", count: number) =>
     window.kind === "trailing" && window.unit === unit && window.count === count;
-  /** 这一档落到实处的起止月：两种回看口径的差别在这里。 */
   const detail = (candidate: TimeIntent["window"]) => {
     const { from, to } = primaryTimeRange({ window: candidate }, latest);
     return `${from} – ${to}`;
@@ -320,7 +303,6 @@ export function WindowPopup({
           );
         })}
       </PopupSection>
-      {/* 被校验闸拦下的窗口不开选择弹层：为一个落不下的窗口挑月份是空跑一趟 */}
       <PopupSection>
         {row(
           "range",
@@ -335,7 +317,6 @@ export function WindowPopup({
           window.kind === "range" ? window : undefined,
         )}
       </PopupSection>
-      {/* 单月窗口的观察月是窗口自身的表达；相对窗口没有可选端点，恒随数据滚动。 */}
       {window.kind === "current_month" ? (
         <PopupSection label="观察月份">
           <PopoverListRow
@@ -366,10 +347,6 @@ const GRAIN_CHOICES: { value: SeriesGrain; label: string }[] = [
   { value: "year", label: "按年" },
 ];
 
-/**
- * 每档对落值闸 `timeChangeIssue` 预跑一遍，点击前就灰；
- * toast 只留给这张表也算不出的情形。
- */
 function grainChoiceIssues(
   time: TimeIntent,
   latest: string,
@@ -439,13 +416,13 @@ export function defaultCustomComparisonWindow(
   if (time.window.kind === "current_month") {
     return {
       kind: "current_month" as const,
-      month: monthAt(monthIndex(range.to) - 12),
+      month: shiftedMonth(range.to, -12),
     };
   }
   return {
     kind: "range" as const,
-    from: monthAt(monthIndex(range.from) - 12),
-    to: monthAt(monthIndex(range.to) - 12),
+    from: shiftedMonth(range.from, -12),
+    to: shiftedMonth(range.to, -12),
   };
 }
 
@@ -527,17 +504,14 @@ export function ComparisonPopup({
   );
 }
 
-/** 已选对照期间在行上直接读出。 */
 function customComparisonSummary(window: CustomComparisonWindow): string {
   return window.kind === "current_month"
     ? monthLabel(window.month)
     : monthRangeLabel(window.from, window.to);
 }
 
-/** 哪一处在等月份选择：三处各自的默认值与落值口径不同，不能共用一个开关。 */
 type PickerKind = "window_range" | "window_month" | "comparison";
 
-/** 月份弹层：期间、观察月与对照期间共用这一处出口，落值仍走同一道校验闸。 */
 function TimeMonthPickers({
   kind,
   onClose,

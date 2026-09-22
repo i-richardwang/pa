@@ -1,7 +1,3 @@
-/**
- * 指标页：目录里可查询的指标清单。
- * 指标域是指标的归属：它在这里是控制条上的筛选器与行上的归属芯片，芯片点开域档案。
- */
 import { useMemo, useState } from "react";
 import type {
   PublicCatalogMeasure as CatalogMeasurePayload,
@@ -48,7 +44,6 @@ export function MetricsPage() {
     ],
     [data],
   );
-  // 归属在这里解析一次，表格只管印。
   const rows = useMemo(
     () =>
       filterMeasures(data, domainId, keyword).map((measure) => ({
@@ -112,7 +107,6 @@ export function MetricsPage() {
 
 type MeasureRow = { measure: CatalogMeasurePayload; domain: MetricDomainPayload | undefined };
 
-/** 第二列印归属：芯片点开域档案，行的其余部分点开指标档案。 */
 function MetricDomainCell({
   domain,
   onOpenDomain,

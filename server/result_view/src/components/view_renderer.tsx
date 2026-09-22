@@ -1,9 +1,3 @@
-/**
- * 一份载荷 → 完整呈现，三个宿主共用。形态判定在服务端，本组件只摆放；
- * 外壳与取数归容器。
- *
- * 配色只认 pa-* 语义令牌：宿主专有令牌会让类名在而 CSS 规则不在。
- */
 import { CircleAlertIcon } from "lucide-react";
 import { QueryNotesDetails } from "./query_notes.js";
 import { Badge } from "./badge.js";
@@ -25,18 +19,11 @@ import {
 
 export type ViewRendererProps = {
   payload: QueryPayload;
-  /** 唯一结果的服务端确定性呈现产物；判型权在服务端。 */
   presentation: PresentationBlock;
   actions: CardActions;
-  /** 宿主场景；chrome 取舍见 VIEW_SCENES。 */
   scene: ViewScene;
-  /**
-   * 表格全量渲染，运行态：MCP 结果卡在宿主全屏时放开。缺省跟场景默认档。
-   */
   allRows?: boolean;
-  /** 浏览器报告页注入的格子明细能力；MCP Widget 不注入，因而没有明细请求入口。 */
   records?: {
-    /** 能否查看构成记录由指标的记录集绑定决定，与具体值无关——零值同样开放，空集也是诚实答案。 */
     canOpen: (viewId: string, column: string) => boolean;
     /**
      * `time` 是被点击读数的真实覆盖期间：指标卡的大数覆盖整窗（或降级后的终点期），
@@ -54,22 +41,14 @@ export type ViewRendererProps = {
 
 const FALLBACK_TITLE = "查询结果";
 
-/**
- * 调用方声明的业务问题优先：它带着措辞与时间窗限定，结果列反推不出来。
- */
 function cardTitle(payload: QueryPayload, presentation: PresentationBlock): string {
   return payload.title ?? presentation.structure_title ?? FALLBACK_TITLE;
 }
 
-/** 标题为调用方声明时，结构式退到副标题作口径锚点。 */
 function headerSubtitle(payload: QueryPayload, presentation: PresentationBlock): string | null {
   return payload.title ? (presentation.structure_title ?? null) : null;
 }
 
-/**
- * 行数陈述（KPI 与空结果不陈述）。
- * 常规容器由表格行数条承载，查看面由页脚带承载——同一份措辞，两个归宿。
- */
 function countStatement(view: ViewBlock, presentation: PresentationBlock): string | null {
   if (!view.rows.length || presentation.type === "kpi") return null;
   return `共 ${presentation.table.rows.length} 行`;
@@ -196,10 +175,6 @@ export function PageFooterBand({
   );
 }
 
-/**
- * 不陈述数据截至：整页的常驻时间栏已经写着期间，底栏再报一次会被读成本次结果的时间。
- * 边界收在时间栏药丸的 Tooltip 里。
- */
 export function ViewPageFooter({
   payload,
   presentation,
@@ -215,7 +190,6 @@ export function ViewPageFooter({
   const count = countStatement(view, presentation);
   return (
     <PageFooterBand leading={leading}>
-      {/* 右段取内容宽，避免挤掉左槽 */}
       <div className="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 text-pa-muted text-xs">
         {view.provenance && <Badge>派生</Badge>}
         {count && <span className="font-medium">{count}</span>}

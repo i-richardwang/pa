@@ -23,6 +23,13 @@ import {
   type TimeOutputGrain,
   type TimeSelectionCoordinate,
 } from "../semantic_core/time_contract.js";
+import {
+  parseYearMonth,
+  YEAR_MONTH_REGEX,
+  type YearMonth,
+  yearMonthFromOrdinal,
+  yearMonthOrdinal,
+} from "../semantic_core/year_month.js";
 
 export type TimeWindow = { from: string; to: string };
 
@@ -84,7 +91,6 @@ export type PlannedQueryLeg = { query: CubeQuery; time: PhysicalTimeResolution }
 export type PlannedQuery = PlannedQueryLeg & { businessTime: BusinessTimeResolution };
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const DATE_RANGE = z.tuple([z.string().regex(DATE), z.string().regex(DATE)]);
 const FILTER_CONDITION = z
   .object({
@@ -128,7 +134,7 @@ const CUBE_QUERY: z.ZodType<CubeQuery> = z
   .strict();
 
 const TIME_BUCKET = z
-  .object({ from: z.string().regex(MONTH), to: z.string().regex(MONTH) })
+  .object({ from: z.string().regex(YEAR_MONTH_REGEX), to: z.string().regex(YEAR_MONTH_REGEX) })
   .strict();
 
 export const BUSINESS_TIME_SCHEMA = z
@@ -139,8 +145,8 @@ export const BUSINESS_TIME_SCHEMA = z
         z
           .object({
             kind: z.enum(["cutoff", "range"]),
-            from: z.string().regex(MONTH),
-            to: z.string().regex(MONTH),
+            from: z.string().regex(YEAR_MONTH_REGEX),
+            to: z.string().regex(YEAR_MONTH_REGEX),
             buckets: z.array(TIME_BUCKET).min(1),
           })
           .strict(),
@@ -163,31 +169,23 @@ export const PLANNED_QUERY_LEG_SCHEMA = z
   })
   .strict() satisfies z.ZodType<PlannedQueryLeg>;
 
-type Month = { year: number; month: number };
 const pad2 = (value: number) => String(value).padStart(2, "0");
 const yearMonthOf = (date: string) => date.slice(0, 7);
 const endOfMonth = (year: number, month: number) =>
   `${year}-${pad2(month)}-${pad2(new Date(year, month, 0).getDate())}`;
 
-function parseMonth(value: string): Month {
-  const [year, month] = value.split("-").map(Number);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
-    throw new Error(`月份「${value}」无效，请使用 YYYY-MM`);
-  }
-  return { year, month };
+function requiredMonth(value: string): YearMonth {
+  const parsed = parseYearMonth(value);
+  if (!parsed) throw new Error(`月份「${value}」无效，请使用 YYYY-MM`);
+  return parsed;
 }
 
-function monthIndex(value: Month): number {
-  return value.year * 12 + value.month;
-}
-
-function monthsBetween(from: string, to: string): Month[] {
-  const first = parseMonth(from);
-  const last = parseMonth(to);
-  const values: Month[] = [];
-  for (let index = monthIndex(first); index <= monthIndex(last); index += 1) {
-    const year = Math.floor((index - 1) / 12);
-    values.push({ year, month: index - year * 12 });
+function monthsBetween(from: string, to: string): YearMonth[] {
+  const first = yearMonthOrdinal(requiredMonth(from));
+  const last = yearMonthOrdinal(requiredMonth(to));
+  const values: YearMonth[] = [];
+  for (let index = first; index <= last; index += 1) {
+    values.push(yearMonthFromOrdinal(index));
   }
   return values;
 }
@@ -284,7 +282,7 @@ export type TimeEmission = { windows: TimeWindow[]; granularity?: "month" | "yea
 type EnumeratedCoordinate = { coordinate: TimeSelectionCoordinate; buckets: TimeBucket[] };
 
 function monthWindow(month: string): TimeWindow {
-  const at = parseMonth(month);
+  const at = requiredMonth(month);
   return { from: `${month}-01`, to: endOfMonth(at.year, at.month) };
 }
 

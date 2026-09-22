@@ -1,7 +1,3 @@
-/**
- * 字典三页（指标、维度、业务术语）共用的档案面与目录派生。
- * 档案面是右栏，三页各自只管自己的清单；被点开的成员是谁，由页面传进来。
- */
 import { useCallback, useState } from "react";
 import type {
   PublicCatalogMeasure as CatalogMeasurePayload,
@@ -57,13 +53,11 @@ function dimensionGroups(catalog: CatalogPayload | null, ids: string[]): Dimensi
   return rows;
 }
 
-/** 名字 + 受限锁；指标与维度两张表共用同一枚身份格。 */
 export function MemberTitleCell({
   member,
   fallback,
 }: {
   member: CatalogMemberPayload;
-  /** 成员自己没写说明时印的句子。 */
   fallback: string;
 }) {
   return (
@@ -83,10 +77,6 @@ export function MemberTitleCell({
   );
 }
 
-/**
- * 字典页的档案面接线：右栏开合、成员跳转与取值弹层是同一件事的三个出口。
- * 返回的 `dialog` 必须渲染，取值弹层才有承载。
- */
 export function useCatalogProfile(catalog: CatalogPayload | null, terms: PublicBusinessTerm[]) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [valuesTarget, setValuesTarget] = useState<ValuesTarget | null>(null);
@@ -189,9 +179,6 @@ function DimensionsRow({ groups }: { groups: DimensionGroupRow[] }) {
   );
 }
 
-/**
- * 分子分母是本目录成员，做成可点芯片；内部计算件无公开身份，只出静态芯片。
- */
 function FormulaRow({
   formula,
   onOpenMember,
@@ -223,9 +210,7 @@ function MemberProfileBody({
   onValues,
 }: {
   member: CatalogMemberPayload;
-  /** 该指标可拆的维度，按业务属性组归拢；维度成员为空。 */
   dimensions: DimensionGroupRow[];
-  /** 该指标归属的指标域；维度不属于任何域。 */
   domain?: MetricDomainPayload;
   terms: PublicBusinessTerm[];
   onOpenMember: (id: string) => void;
@@ -247,7 +232,6 @@ function MemberProfileBody({
       查看取值
     </Button>
   ) : undefined;
-  // 元信息一张网格，缺项少一行、一行不剩整块不出；「类型」不入网格。
   const facts =
     (domain ? 1 : 0) +
     (dimensions.length ? 1 : 0) +

@@ -1,7 +1,3 @@
-/**
- * 表格布局面板与服务端同一条默认规则：未声明列轴时，面板印出的行列归属就是编译器会生成的布局。
- * headless 直渲（renderToStaticMarkup），浮层内容不在断言范围。
- */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { detectRoles, resolveTableLayout } from "@shape";

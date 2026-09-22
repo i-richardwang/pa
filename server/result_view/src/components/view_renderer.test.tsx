@@ -1,7 +1,3 @@
-/**
- * 三个宿主场景（card / tile / page）的呈现一致性：容器身份只改 chrome，不改数据。
- * renderToStaticMarkup 直渲、不引 DOM：出图、排序、悬浮层不在此处覆盖。
- */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import {

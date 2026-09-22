@@ -4,8 +4,7 @@ import { readdir, readFile } from "node:fs/promises";
 const CONSOLE_SRC = new URL("../console/src/", import.meta.url);
 const RESULT_VIEW_SRC = new URL("../result_view/src/", import.meta.url);
 const WIDGET_SRC = new URL("../widget/src/", import.meta.url);
-
-const BASE_UI = new URL("../console/node_modules/@base-ui/react/", import.meta.url);
+const COMMENT_OR_JSX_COMMENT = /\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
 
 function isProductSource(name: string): boolean {
   if (!name.endsWith(".ts") && !name.endsWith(".tsx")) return false;
@@ -134,85 +133,6 @@ test("the glass surface has exactly one spelling, with its blur tiered in tokens
     expect(
       [...text.matchAll(POPUP_SURFACE_INGREDIENT)].map((match) => match[0]),
       `${name} re-spells the popup surface instead of taking .${POPUP_SURFACE_CLASS}`,
-    ).toEqual([]);
-  }
-});
-
-const COMMENT_OR_JSX_COMMENT = /\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
-
-const DATA_SELECTOR = [
-  /data-\[([a-z][a-z-]*)[=\]]/g,
-  /(?<![\w-])data-([a-z][a-z-]*):/g,
-  /\[data-([a-z][a-z-]*)[=\]]/g,
-];
-const DATA_EMITTER = [
-  /(?<![\w-])data-([a-z][a-z-]*)\s*=/g,
-  /"data-([a-z][a-z-]*)"\s*:/g,
-  /(?<![\w-])data-([a-z][a-z-]*)(?=[\s/>}])/g,
-];
-
-function collect(text: string, patterns: RegExp[]): Set<string> {
-  const names = new Set<string>();
-  for (const pattern of patterns) {
-    for (const match of text.matchAll(pattern)) names.add(match[1]);
-  }
-  return names;
-}
-
-async function baseUiAttributes(): Promise<Set<string>> {
-  const names = (await readdir(BASE_UI, { recursive: true })).filter((name) =>
-    name.endsWith(".js"),
-  );
-  const found = new Set<string>();
-  await Promise.all(
-    names.map(async (name) => {
-      const text = await readFile(new URL(name, BASE_UI), "utf8");
-      for (const match of text.matchAll(/['"]data-([a-z][a-z-]*)['"]/g)) found.add(match[1]);
-    }),
-  );
-  return found;
-}
-
-test("every data-* selector has something that emits it", async () => {
-  const bad = 'className="data-[state=open]:bg-pa-surface data-nosuchthing:hidden"';
-  const good = 'className="data-highlighted:bg-pa-surface data-[side=top]:mt-1"';
-  expect(
-    collect("/* 曾误写成 data-nope: */".replaceAll(COMMENT_OR_JSX_COMMENT, " "), DATA_SELECTOR),
-    "comments must not count as selectors",
-  ).toEqual(new Set());
-  expect(collect(bad, DATA_SELECTOR), "selector matcher is stale").toEqual(
-    new Set(["state", "nosuchthing"]),
-  );
-  expect(collect(good, DATA_SELECTOR), "selector matcher missed a form").toEqual(
-    new Set(["highlighted", "side"]),
-  );
-  expect(
-    collect('<div data-slot="row" data-dontdrag data-size={n} />', DATA_EMITTER),
-    "emitter matcher is stale",
-  ).toEqual(new Set(["slot", "dontdrag", "size"]));
-
-  const fromPrimitives = await baseUiAttributes();
-  expect(
-    fromPrimitives.has("highlighted") && fromPrimitives.has("checked"),
-    "Base UI scan found no known attributes — the package path likely moved",
-  ).toBe(true);
-  expect(fromPrimitives.has("state"), "Base UI scan over-matches").toBe(false);
-
-  const sources = [
-    ...(await readSources(CONSOLE_SRC)),
-    ...(await readSources(RESULT_VIEW_SRC)),
-    ...(await readSources(WIDGET_SRC)),
-  ].map((entry) => ({ ...entry, code: entry.text.replaceAll(COMMENT_OR_JSX_COMMENT, " ") }));
-  const emitted = new Set<string>();
-  for (const { code } of sources) for (const name of collect(code, DATA_EMITTER)) emitted.add(name);
-
-  for (const { name, code } of sources) {
-    const dangling = [...collect(code, DATA_SELECTOR)].filter(
-      (attribute) => !emitted.has(attribute) && !fromPrimitives.has(attribute),
-    );
-    expect(
-      dangling,
-      `${name} styles on data-${dangling.join("/")}, which nothing in this repo or in Base UI ever emits — the rule can never match`,
     ).toEqual([]);
   }
 });

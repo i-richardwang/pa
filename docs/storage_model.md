@@ -1,97 +1,48 @@
-# PA 存储模型：Analysis、View 与 Report
+# PA 存储模型
 
-PA 自有持久层保存分析定义、呈现视图、报告身份、看板、导出票据、业务词典与观察记录。
-查询结果、`RenderBundle`、CSV、构成记录和只读 parquet 不进入 SQLite。
+PA 持久化分析定义、呈现视图、报告、看板、导出票据、业务术语和最小化使用记录。查询结果、
+`RenderBundle`、CSV、构成记录和只读 parquet 不进入 SQLite。
 
-## 1. 值与身份
+## 身份边界
 
-```text
-analysis
-  id + owner + definition + created_at
-          │
-          └── analysis_view
-                id + analysis_id + intent + preferences + created_at
-                            ▲
-                            │ view_id
-report ─────────────────────┘
-  id + owner + name + revision + archived_at + render_shape
-          │
-          └── report_revision
-                report_id + revision + name + view_id
+- Analysis 是不可变的数据问题，只保存指标、维度、筛选、时间和受控计算。
+- View 是不可变的呈现选择，通过 `analysis_id` 引用 Analysis；图型与数据通道、作者视觉偏好分别保存。
+- 一个 Analysis 可以有多个 View。创建 View 不复制 Analysis，也不保存查询结果。
+- Report 是可变的业务身份，指向当前 `view_id`；ReportRevision 保存历史名称和历史 View。
+- Board 只引用 Report。报告改名、恢复或替换 View 不改变看板引用。
+- UsageLog 可以记录一次运行使用的 Analysis 与 View，但不是定义、结果或重放入口。
 
-board.tiles ── report_id
-usage_log  ── analysis_id + view_id
-```
+协议中的 `view_id` 指持久化 View；AnalysisDefinition 内结果节点的 `result_view_id` 是查询内部身份，
+二者不得互换。领域值只在 Analysis 定义、View 意图和 View 偏好中各保存一次，其他对象只保存引用。
 
-- Analysis 是不可变的数据问题，`definition` 只包含指标、维度、筛选、时间和受控计算。
-- View 是不可变的呈现选择，`intent` 保存图型与数据通道，`preferences` 保存人类作者视觉偏好。
-- 一个 Analysis 可以拥有多个 View。创建 View 不复制 Analysis，也不保存查询结果。
-- Report 是可变业务身份，只引用当前 `view_id`；ReportRevision 保存历史名称与历史 `view_id`。
-- Board 只引用 `report_id`。Report 改名、恢复或替换 View 后，瓦片仍指向同一个 Report。
-- UsageLog 同时记录本次 Run 使用的 `analysis_id` 与 `view_id`，但不是定义或结果的事实源。
+## 写入、重放与授权
 
-协议中的 `view_id` 始终指 AnalysisView 的持久身份；AnalysisDefinition 内唯一结果节点及其绑定使用
-`result_view_id`，两者不能互换。
+新的数据问题必须先成功编译并执行，再原子创建 Analysis 和首个 View。修改查询定义会产生新的
+Analysis；只修改呈现意图或视觉偏好会产生新的 View，不重新执行查询。MCP 重跑既有 Analysis 时按
+当前数据执行并创建新 View，不修改原 Analysis。
 
-全库只有 `analysis.definition`、`analysis_view.intent` 和 `analysis_view.preferences` 三处物化对应领域值。
-Report、ReportRevision 与 UsageLog 都不复制这些 JSON。
+保存 Report 只建立命名指针。改名、替换 View、归档和恢复都使用 revision CAS；修改前保存历史版本，
+保留最近 20 版。Report 和 Board 的应用服务负责属主、引用与使用记录校验，传输层只映射协议。
 
-## 2. 写入语义
+View、Report 与 Board 每次重放都读取当前数据、按当前查看者重新授权并编译执行。展示、导出和记录
+投影使用 `view_id` 定位完整定义；客户端提交的成员、过滤条件或格点坐标不能替代服务端重放与校验。
 
-- 新数据问题先通过编译与执行，再原子创建 Analysis 及首个 View；失败的 Run 不留下身份。
-- 修改指标、维度、筛选、时间或计算会执行新的 Run，并创建新的 Analysis 与首个 View。
-- Web 仅修改 ViewIntent 或 ViewPreferences 时，只编译并创建新的 View，不执行查询。
-- MCP `rerun_analysis` 按当前数据重执行既有 Analysis，并创建新的 View；它不修改或复制 Analysis。
-- 保存 Report 只校验 View 属主并创建命名指针，不重新编译、不执行、不复制领域值。
-- Report 改名只更新名称；替换呈现原子切换 `view_id`；归档只更新生命周期状态。
-- 每次 Report 修改先把更新前的名称与 `view_id` 写入 ReportRevision，再递增 revision；最多保留最近 20 版。
-- Board Application Service 负责创建者校验、Report 归属、重复加入、瓦片摘要与使用记录；HTTP 路由只做协议映射，repository 只承担 JSON 存储解码与 revision CAS。
+`RenderBundle` 只属于一次响应，没有持久身份。Report 可以保存最近一次 owner 重放得到的布局提示，
+但它不属于 View、不参与 revision，也不承诺未来数据仍具有同一形态；切换 View 时必须失效。
 
-CAS 冲突直接拒绝。保存、替换、恢复、Report 重放与 Board 重放都不复制 Analysis 或 View。
+## 生命周期
 
-## 3. 读取与执行
+- View 依附于 Analysis；被当前或历史 Report 引用的 View 必须保护其 Analysis。
+- Analysis 的保留期是 180 天，只清理过期且没有受保护 View 的记录。
+- UsageLog 只保留最小化观察字段，90 天后清理，不保存原始工具入参或查询结果。
+- ExportTicket 只保存查询计划、所有者和 15 分钟时效；读取时按当前权限重新执行。
+- Report 归档不是删除，看板引用和版本历史继续有效。
 
-- 直接访问 Analysis 或 View 时校验 Analysis owner。
-- 按 Report 访问时先校验 Report owner；按 Board 访问时校验看板包含该 Report，再以当前查看者身份执行。
-- Record Projection 通过 Analysis、Report 与 Board Application Service 取得由各聚合完成鉴权和装配的上下文。
-- View、Report 与 Board 重放都读取当前数据、重新鉴权、重新编译和执行，不持久化 Run 产物。
-- 即席 View、Report 与 Board 共用 Record Projection Service。即席记录投影只接受无分组、单业务时间桶的聚合结果；Report 与 Board 格点入口校验服务端签发的指标、维度和时间坐标。
-- 展示、受控记录投影与导出都使用 `view_id` 定位完整定义；`analysis_id` 只标识可被多个 View 复用的数据问题。
+数据库结构以 `app_database.ts` 的最终 DDL 为唯一事实源。空库建立当前结构；非空库结构印记不一致时
+fail-closed，由部署环境重建，不在文档中维护第二份表结构。
 
-## 4. 瞬态 Run 与呈现提示
+## 业务术语
 
-`RenderBundle` 只随一次 Web 响应存在，由完整聚合 `ViewBlock` 与公共渲染声明组成。它不拥有持久身份，
-也不进入 Report、UsageLog 或 AnalysisView。
-
-`report.render_shape` 是最近一次 owner 重放得到的布局提示，用于看板预选尺寸。它不属于 View，
-也不承诺未来数据仍保持同一形态。Report 切换到不同 `view_id` 时清空；异步回写必须同时匹配
-`report.id` 与 `view_id`。它不参与 revision。
-
-## 5. 生命周期与引用完整性
-
-- `analysis_view.analysis_id` 外键引用 Analysis，删除 Analysis 时级联删除其未受保护 View。
-- `report.view_id` 与 `report_revision.view_id` 以 RESTRICT 引用 AnalysisView。
-- Analysis 的 180 天保留期只清理超过期限且没有任何 View 被当前 Report 或保留历史引用的值。
-- 被当前 Report 或 ReportRevision 引用的 View 会保护其 Analysis；历史版本被裁剪后，未被引用的 Analysis 才可在后续清理中删除。
-- UsageLog 可以保留已经清理的身份作为历史坐标，但不提供重放入口。
-- UsageLog 只保留最小化观察字段，90 天后清理；不保存原始工具入参或查询结果。
-- ExportTicket 只保存查询计划、所有者与 15 分钟时效，不保存权限快照；读取时必须重新认证所有者并按当前权限执行。
-- Report 归档不等于删除，Board 引用与版本历史继续有效。
-
-`app_database.ts` 的最终 DDL 是应用库唯一结构基线；空库直接建立当前结构，非空库的结构印记不一致时
-fail-closed，由部署环境重建数据库。
-
-## 6. 业务术语
-
-业务术语与模型目录分开持久化：
-
-```text
-business_term
-  id + canonical_term + definition + context + aliases[] + related_member_ids[]
-```
-
-- 术语保存规范叫法、自含定义、可选适用语境、其他叫法和公开语义成员 id。
-- 规范叫法和其他叫法统一归一后参与匹配与重复校验，但保留原文展示。
-- 成员关联只用于 Catalog 导航，不保存物理字段、数据值、过滤器或查询配方。
-- Catalog 查询时现读全部术语，不把术语写入编译器目录。
-- HTTP 只传入当前 Principal 与术语动作；Application Service 完成管理员授权并从该 Principal 的公共目录取得可见成员，Registry 才执行校验、匹配与投影。
+业务术语独立于模型目录持久化，保存规范叫法、自含定义、可选语境、其他叫法和公开语义成员 id。
+规范叫法与别名统一归一后参与匹配和重复校验，但保留原文展示。成员关联只用于 Catalog 导航，不保存
+物理字段、数据值、过滤器或查询配方；应用服务负责管理员授权与成员可见性校验。

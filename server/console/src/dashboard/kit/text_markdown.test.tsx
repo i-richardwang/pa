@@ -1,7 +1,3 @@
-/**
- * 文本瓦片渲染的核心不变式：raw HTML 绝不落地为可执行元素（存储型 XSS 防线），gfm 基本语法正确渲染。
- * headless 直渲（renderToStaticMarkup），不需 DOM/testing-library。
- */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TextMarkdown } from "./text_markdown.js";

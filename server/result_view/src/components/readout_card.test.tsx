@@ -1,7 +1,3 @@
-/**
- * 读数卡版式：壳取令牌源、单读数与多系列两种版式、行多了横向分栏；
- * 钉住档出关闭钮且行可点，未钉住时整张不可命中。
- */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ReadoutCard } from "./readout_card.js";

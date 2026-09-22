@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-/** 指标值的业务求值基准：给定一个业务时间桶，这个数实际覆盖桶里的哪一段。 */
 const METRIC_VALUE_BASES = ["bucket_end", "whole_bucket", "year_start_to_bucket_end"] as const;
 
 export const METRIC_VALUE_BASIS_INPUT = z
@@ -33,7 +32,6 @@ export function basisPeriod(
   }
 }
 
-/** 三种基准的业务短称与一句话口径；面向用户和 Agent 的措辞只有这一份。 */
 const BASIS_WORDING: Record<MetricValueBasis, { label: string; detail: string }> = {
   bucket_end: { label: "时点值", detail: "每个时间桶只取桶末那个月的值，不跨月累计" },
   whole_bucket: { label: "期间值", detail: "按本指标自己的口径在整个时间桶上求值" },
@@ -47,7 +45,6 @@ export function basisLabel(basis: MetricValueBasis): string {
   return BASIS_WORDING[basis].label;
 }
 
-/** 随指标列的说明一同交付，不读 Skill 的调用方也能知道这一列的数代表哪一段时间。 */
 export function basisNote(basis: MetricValueBasis): string {
   const { label, detail } = BASIS_WORDING[basis];
   return `${label}：${detail}`;

@@ -20,7 +20,6 @@ import type { MetricTimeResolution } from "../semantic_core/metric_time_contract
 import type { TotalPeriodValue } from "../semantic_core/query_payload.js";
 import { totalPeriodOf, type TimeInput, type TotalPeriod } from "../semantic_core/time_contract.js";
 
-/** 一个指标在全部时间坐标上的合计；periods 与 businessTime.coordinates 等长同序。 */
 export type MetricTotals = { member: string; periods: TotalPeriodValue[] };
 
 /**
@@ -67,7 +66,6 @@ export async function computeMetricTotals(input: {
     return resolveMetricTime(member, members);
   };
 
-  // 每个（坐标 × 指标）格先各自定下求值期间与物理腿；后面的分腿、取值、交付都读同一份格子。
   const cells = businessTime.coordinates.map((coordinate) =>
     measures.map((member) => {
       const time = timeOf(member);
@@ -76,7 +74,6 @@ export async function computeMetricTotals(input: {
     }),
   );
 
-  /** 求值期间与物理形态都相同的指标合成一条腿。 */
   const legs = cells.flatMap((row) => {
     const grouped = new Map<string, typeof row>();
     for (const cell of row) {
@@ -107,7 +104,6 @@ export async function computeMetricTotals(input: {
     }),
   );
 
-  // 基准不随合计位交付：它在结果里由指标列声明一次，这里只交出它展开出的期间与值。
   return measures.map((member, index) => ({
     member,
     periods: cells.map((row) => ({ ...row[index].period, value: row[index].value })),

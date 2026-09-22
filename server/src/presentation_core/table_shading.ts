@@ -1,33 +1,19 @@
-/**
- * 表格热力着色：按格里的值给数值格铺一层底色，深浅或冷暖对应值的大小。
- *
- * 色阶两族：**单色**给一个系列色，值越大越浓；**双向**给一条三停色带，值从下限经中点到上限
- * 在三停之间线性插值。两族都可翻转。刻度按指标（列的 formatKey）各立一把——同一张表里人数与
- * 比率不共用深浅；缺省域是该指标在本表全部数值格上的极值，声明可逐项覆盖（契约见
- * `docs/presentation_contract.md`）。总体带是表格 chrome，不参与刻度也不着色。
- *
- * 字色按底色与承载面合成后的对比度选墨色或反白，与外部参照的可读性判据一致（WCAG 相对亮度）。
- * 本模块只算颜色，不改数值，也不产生任何要印出来的数。
- */
 import { CHART_SERIES, TABLE_SHADING_TOKENS } from "./design_tokens.js";
 import type { ShadingPaletteName, TableShadingPreferences } from "./view_preferences.js";
 import { toNumber } from "./view_format.js";
 
 export type ShadingScale = { min: number; mid: number; max: number };
 
-/** 编译后随表格模型下发：刻度已定，渲染端只做值→色。 */
 export type TableShading = {
   palette: string;
   flipped: boolean;
   values: boolean;
-  /** 按列 formatKey 立的刻度；不在表内的键即不着色 */
   scales: Record<string, ShadingScale>;
 };
 
 type Stop = { light: string; dark: string };
 type DivergingPalette = { label: string; stops: readonly [Stop, Stop, Stop] };
 
-/** 双向色阶三停（下限、中点、上限），明暗各一份；键即声明面的色阶名。 */
 export const DIVERGING_PALETTES: Record<ShadingPaletteName, DivergingPalette> = {
   ...TABLE_SHADING_TOKENS.palettes,
 };
@@ -45,7 +31,6 @@ type Extent = { min: number; max: number };
 type ShadedColumns = { formatKey: string }[];
 type ShadedRows = (string | number | null)[][];
 
-/** 每个要着色的列键在全部数值格上的极值；一个键没有任何数值时不出现。 */
 function dataExtents(
   columns: ShadedColumns,
   rows: ShadedRows,
@@ -79,10 +64,6 @@ function scaleOf(extent: Extent, thresholds: TableShadingPreferences["thresholds
   return { min, mid: thresholds?.mid ?? (min + max) / 2, max };
 }
 
-/**
- * 刻度是色的几何不是对指标的聚合：本层不对值求和求均。
- * 一个键没有任何数值时不立刻度（渲染端遂不着色）。
- */
 export function compileTableShading(
   decl: TableShadingPreferences,
   columns: ShadedColumns,
@@ -101,10 +82,6 @@ export function compileTableShading(
   };
 }
 
-/**
- * 多把刻度的并集（最小下限、最大上限、两端中点），供设置面印读数与占位；
- * 一格数值都没有时为 null。
- */
 export function shadingDataScale(
   columns: ShadedColumns,
   rows: ShadedRows,
@@ -130,7 +107,6 @@ function clamp01(value: number): number {
   return value < 0 ? 0 : value > 1 ? 1 : value;
 }
 
-/** [a,b] 上的线性位置；域退化（a===b）时恒为 0。 */
 function position(value: number, a: number, b: number): number {
   return b === a ? 0 : clamp01((value - a) / (b - a));
 }
@@ -152,7 +128,6 @@ function luminance(color: Rgb): number {
   return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b);
 }
 
-/** 承载面（表格所在的 pa-bg）：底色带透明度时先与它合成再判字色。 */
 const SURFACE: Record<"light" | "dark", Rgb> = {
   light: hexToRgb(TABLE_SHADING_TOKENS.surface.light),
   dark: hexToRgb(TABLE_SHADING_TOKENS.surface.dark),
@@ -166,10 +141,6 @@ function monoBase(palette: string, dark: boolean): Rgb {
   return hexToRgb(dark && pair ? pair.dark : palette);
 }
 
-/**
- * 色阶取样停点（CSS 颜色），给编辑器画色带样片用。
- * 与 `shadeCell` 同一份取值，样片不另调色。
- */
 export function shadingStops(palette: string, flipped: boolean, dark: boolean): string[] {
   const diverging = divergingPalette(palette);
   let stops: string[];
@@ -186,15 +157,10 @@ export function shadingStops(palette: string, flipped: boolean, dark: boolean): 
 }
 
 export type CellShade = {
-  /** 直接可写进 style.backgroundColor */
   background: string;
-  /** 字色档：墨色（pa-ink）或反白（pa-ink-fg） */
   foreground: "ink" | "inverse";
 };
 
-/**
- * 一格的底色与字色。值不是数、或该键没有刻度时不着色（返回 undefined）。
- */
 export function shadeCell(
   value: number | string | null,
   formatKey: string,

@@ -1,7 +1,3 @@
-/**
- * 结果结构分析与声明式呈现编译：时间表格按时间协议重排，业务交叉表与图表只编译显式声明。
- * 本层可以回答“数据是否支持这份声明”，不能替调用方决定采用什么图型。
- */
 import {
   cellLabel,
   columnDecimals,
@@ -62,19 +58,12 @@ type Cell = string | number | null;
 export type SeriesDef = {
   key: string;
   name: string;
-  /**
-   * 度量来源列（载荷列短名）；分类值派生的系列（分组折线、堆叠段）无此字段。
-   * 按字段绑定的消费方只认本字段，name 只作展示。
-   */
+  /** 度量来源列；分类值派生的系列无此字段。 */
   column?: string;
   format: ColumnFormat;
-  /** 模型为该列声明的小数位；未声明则缺席，呈现层按格式取默认位数。 */
   decimals?: number;
-  /** 落在哪把尺子上：0 主轴、1 副轴；出自声明或按量纲的缺省分侧。 */
   axis: 0 | 1;
-  /** 条形图专用：本系列对应的结构占比值在 ChartRow 中的键。 */
   shareKey?: string;
-  /** 服务端已计算的对照变化值；渲染端只按声明格式展示。 */
   comparison?: { key: string; format: ColumnFormat; decimals?: number };
 };
 export type ChartRow = Record<string, Cell>;
@@ -85,7 +74,6 @@ export type ChartSourceRow = {
 
 export type TrendSpec = {
   kind: "line";
-  /** { t: 时间标签, s0: 值, … } 按时间升序 */
   rows: ChartRow[];
   sourceRows: ChartSourceRow[];
   series: SeriesDef[];
@@ -93,30 +81,21 @@ export type TrendSpec = {
 
 export type BarSpec = {
   kind: "bar";
-  /** { label: 分类值, s0: 值, …[, share: 该分类占比] } 保持查询返回顺序（排行由查询 order 决定） */
   rows: ChartRow[];
   sourceRows: ChartSourceRow[];
   series: SeriesDef[];
-  /** 主轴系列共用的确切显示单位。 */
   format: ColumnFormat;
-  /** 双分类构成呈现：系列堆叠在同一条上（仅计数度量） */
   stacked: boolean;
-  /** rows 带结构占比值时读数卡随附占比 */
   hasShare: boolean;
 };
 
-/** 饼图（仅声明路径产出）：部分-整体构成，只接受可加计数度量（率不构成整体） */
 export type PieSpec = {
   kind: "pie";
-  /** { label: 切片分类值, value: 度量值 } 保持查询返回顺序 */
   rows: { label: string; value: number | null; share: number | null }[];
   total: number;
   sourceRows: ChartSourceRow[];
-  /** 度量来源列（载荷列短名）；字段绑定消费方（报告呈现编译）只认本字段 */
   column: string;
-  /** 切片分类来源列（载荷列短名） */
   categoryColumn: string;
-  /** 度量展示名（读数条与读数卡的系列名） */
   seriesName: string;
   format: ColumnFormat;
   decimals?: number;
@@ -130,14 +109,10 @@ export type TableHeaderPart = {
 
 export type TableColumn = {
   label: string;
-  /** 单元格格式化所依据的原始成员列名（交叉表值列共用度量列的语义） */
   formatKey: string;
-  /** 显式呈现格式；percent 与 percentage_point 的底层值均为 0–1。 */
   format?: ColumnFormat;
-  /** 模型声明的小数位；缺席按格式取默认。 */
   decimals?: number;
   numeric: boolean;
-  /** 从外到内的完整表头路径；渲染层只从这里推导任意层级分带。 */
   headerPath: TableHeaderPart[];
 };
 export type TableModel = {
@@ -145,12 +120,8 @@ export type TableModel = {
   rows: Cell[][];
   /** 与明细彻底分离的模型重算总体；不参与排序、截断与记录投影。 */
   summaryRows?: Cell[][];
-  /**
-   * 每格回指原始结果行下标（null=该格无来源行）；缺省即长表的恒等映射。
-   * 交叉表重排行列后必须携带，与图表规格的 sourceRows 同一语义。
-   */
+  /** 每格回指原始结果行；null 表示无可下钻来源。 */
   sourceRows?: (number | null)[][];
-  /** 热力着色（只随 table 声明下发）：刻度按指标列键各立一把，见 `table_shading.ts`。 */
   shading?: TableShading;
 };
 
@@ -166,7 +137,6 @@ export type TableLayoutStatus =
       message: string;
     };
 
-/** 解析后的交叉表轴：列轴出自声明或缺省，行轴恒为余数。 */
 export type TableLayout = { rows: TableAxis[]; columns: TableAxis[] };
 
 export type TableCompilation = {
@@ -177,16 +147,11 @@ export type TableCompilation = {
 export type ChartSpec = TrendSpec | BarSpec | PieSpec;
 
 export type Roles = {
-  /** year/month 列（无论取值是否变化） */
   timeIdx: number[];
-  /** 数值度量列 */
   measureIdx: number[];
-  /** 取值 ≥2 的分类列 */
   catIdx: number[];
-  /** 每行的时间键与标签；时间点 <2 时视为无时间轴 */
   timeOfRow: { key: number; label: string }[];
   timePoints: { key: number; label: string }[];
-  /** 分类列取值（首现序） */
   valuesOf: Map<number, string[]>;
 };
 
@@ -212,12 +177,7 @@ function timeLabel(year: Cell, month: Cell): { label: string; key: number } {
   return { label: `${m}月`, key: m ?? 0 };
 }
 
-/**
- * 列角色只消费服务端声明的 column_roles；数值列的基础身份不因指标关系而改变。
- * structure_shares 只补充指标关系，是否作为辅助通道由 primaryMeasureIndices 决定，
- * 显式绑定始终可引用它。分类轴要求取值 ≥2（取值唯一的维度列是过滤回显）；
- * 声明为 time 但改了名的列（派生视图搬运）当作分类标签轴。
- */
+/** 角色只认 column_roles；取值唯一的维度是过滤回显，不进入分类轴。 */
 export function detectRoles(view: ViewBlock): Roles {
   const timeIdx: number[] = [];
   const measureIdx: number[] = [];
@@ -254,7 +214,6 @@ export function detectRoles(view: ViewBlock): Roles {
   return { timeIdx, measureIdx, catIdx, timeOfRow, timePoints, valuesOf };
 }
 
-/** 长表：查询结果原样铺开（度量天然成列，单分类 × 多度量本身就是二维表） */
 function flatTable(view: ViewBlock, titleOf: (c: string) => string): TableModel {
   const columns = view.columns.map((c) => ({
     label: titleOf(c),
@@ -264,7 +223,6 @@ function flatTable(view: ViewBlock, titleOf: (c: string) => string): TableModel 
     numeric: view.column_roles[c] === "measure",
     headerPath: [{ key: `field:${c}`, label: titleOf(c) }],
   }));
-  // 标签占首个 dimension 列；无该列时仍交付数字。
   const labelIdx = view.columns.findIndex((column) => view.column_roles[column] === "dimension");
   const summaryRows = view.summary?.rows.map((row) =>
     labelIdx >= 0
@@ -278,7 +236,6 @@ function flatTable(view: ViewBlock, titleOf: (c: string) => string): TableModel 
   };
 }
 
-/** 纯时间序列折线：度量各成一系列；同一时点出现多行说明数据不成序列，返回 null */
 function timeSeriesLine(
   view: ViewBlock,
   roles: Roles,
@@ -316,7 +273,6 @@ function timeSeriesLine(
 type ResultTime = NonNullable<ViewBlock["time"]>;
 type CoordinatePeriod = ResultTime["coordinates"][number] & { buckets: ResultTime["buckets"] };
 
-/** 桶在结果行上的时间键；与 timeLabel 同一编码，故可直接与 roles.timeOfRow 对照。 */
 const bucketKey = (bucket: ResultTime["buckets"][number]): number | null =>
   bucket.key ? bucket.key.year * 100 + (bucket.key.month ?? 0) : null;
 
@@ -334,10 +290,7 @@ function coordinatePeriods(time: ResultTime | undefined): CoordinatePeriod[] | n
   return periods;
 }
 
-/**
- * 期间叠加是否成立：多个期间、每段桶数相同且不止一个，且各对照段相对主段整体回移**整年**
- * （起止的月份部分相同、年份不同）。相邻周期与异长窗口都落在此判定之外。
- */
+/** 仅将等长、同月界且相隔整年的窗口叠加为期间系列。 */
 function overlayPeriods(time: ResultTime | undefined): CoordinatePeriod[] | null {
   const periods = coordinatePeriods(time);
   if (!periods || periods.length < 2) return null;
@@ -351,7 +304,6 @@ function overlayPeriods(time: ResultTime | undefined): CoordinatePeriod[] | null
   return comparisons.every(alignedYearsApart) ? periods : null;
 }
 
-/** 期间图例名：整年落在同一日历年时用年份，跨年窗口用完整起止。 */
 function periodLabel(period: { from: string; to: string }): string {
   const year = (month: string) => Number(month.slice(0, 4));
   return year(period.from) === year(period.to)
@@ -378,7 +330,6 @@ function comparisonLine(
 ): TrendSpec | null {
   if (periods.length > MAX_LINE_SERIES) return null;
   const format = columnFormat(view.columns[valIdx], view.column_formats);
-  // periods[0] 是主期（桶序也由它铺开），其余各期都对照它读差值
   const rate = isRateFormat(format);
   const series = periods.map((period, index) => ({
     key: `s${index}`,
@@ -409,7 +360,6 @@ function comparisonLine(
     const slot = at.get(roles.timeOfRow[r]?.key);
     if (!slot) return null;
     const cellId = `${slot.position}|${slot.seriesKey}`;
-    // 同一期间位置出现多行说明结果不是纯时间序列（如仍带分组维度），不叠加。
     if (cells.has(cellId)) return null;
     cells.set(cellId, { value: toNumber(view.rows[r][valIdx]), source: r });
   }
@@ -433,7 +383,6 @@ function comparisonLine(
   return withScales(rows, sourceRows, series);
 }
 
-/** 分组趋势折线：单分类 × 单度量，分类值各成一系列 */
 function groupedLine(
   view: ViewBlock,
   roles: Roles,
@@ -479,10 +428,7 @@ function groupedLine(
   return withScales(rows, sourceRows, series);
 }
 
-/**
- * 两把尺子的可读性裁决：每侧只容一种显示单位（百分比与百分点不能共轴）；
- * 开了副轴时主轴画柱，并排柱超过感知极限即不可读。
- */
+/** 每侧只容一种显示单位；启用副轴时主轴柱数受并排上限约束。 */
 function scalesReadable(series: SeriesDef[]): boolean {
   for (const axis of [0, 1] as const) {
     const formats = new Set(series.filter((s) => s.axis === axis).map((s) => s.format));
@@ -516,7 +462,6 @@ function shareIdxForNumerator(view: ViewBlock, numeratorIdx: number): number {
   return sharePairs(view).find((pair) => pair.numeratorIdx === numeratorIdx)?.measureIdx ?? -1;
 }
 
-/** 模型声明的小数位（载荷 column_decimals）：只在声明过时才落到呈现件上。 */
 function declaredDecimals(view: ViewBlock, colIdx: number): { decimals?: number } {
   const decimals = view.column_decimals?.[view.columns[colIdx]];
   return decimals === undefined ? {} : { decimals };
@@ -531,7 +476,7 @@ function declaredShareIdx(
   return annotations === undefined || annotations.has(shareIdx) ? shareIdx : -1;
 }
 
-/** 关系推断优先画分子、把同查结构占比作为标签或读数卡上的注释；只查占比时它仍是一等度量。 */
+/** 同查分子时结构占比是辅助标注；单独查询时仍是主度量。 */
 export function primaryMeasureIndices(view: ViewBlock, measureIdx: number[]): number[] {
   const selected = new Set(measureIdx);
   const auxiliary = new Set(
@@ -540,11 +485,6 @@ export function primaryMeasureIndices(view: ViewBlock, measureIdx: number[]): nu
   return measureIdx.filter((index) => !auxiliary.has(index));
 }
 
-/**
- * 结构式标题 = 度量 · 按分类维度 · 趋势粒度，如「收入 · 按区域 · 月度趋势」。
- * 列角色取自 detectRoles，与图型判定同源。占比列与取值唯一的分类列不进标题；
- * 度量超过三个以「等」收束。时间列 ≥2 个时点才算趋势，带 month 列即月度、否则年度。
- */
 export function structureTitle(view: ViewBlock, titleOf: (c: string) => string): string | null {
   const roles = detectRoles(view);
   const measures = primaryMeasureIndices(view, roles.measureIdx).map((i) =>
@@ -560,7 +500,6 @@ export function structureTitle(view: ViewBlock, titleOf: (c: string) => string):
   return parts.join(" · ");
 }
 
-/** 分类对比图：一把尺子横排条形；开了副轴时改纵向，主轴画柱、副轴画线。 */
 function categoryBar(
   view: ViewBlock,
   roles: Roles,
@@ -614,12 +553,7 @@ function categoryBar(
   };
 }
 
-/**
- * 分类拆系列条形图核心：双分类 × 单度量——一侧做分类轴，另一侧派生系列（堆叠段或并列组）。
- * 堆叠仅限计数度量（率的分段相加无意义）；分类值对重复时数据不成矩阵退空。
- * 缺席的 (分类, 系列) 对：计数补 0（构成语义上缺席即为零），率留空（0 是实值不可混）。
- * 服务端派生占比列存在时，分类占比 = 该分类各段占比之和，随读数卡交付。
- */
+/** 稀疏分类矩阵中计数缺席为零，率缺席为空；重复坐标不可编译。 */
 function categorySeriesBar(
   view: ViewBlock,
   roles: Roles,
@@ -692,7 +626,6 @@ function categorySeriesBar(
   };
 }
 
-/** 饼图（仅声明路径）：单分类 × 单计数度量；率不做切片——不构成整体。 */
 function pieChart(
   view: ViewBlock,
   roles: Roles,
@@ -725,7 +658,6 @@ function pieChart(
   };
 }
 
-/** 声明的维度在结果里存在但取值唯一：它上不了分类轴（catIdx 只收 ≥2 取值），也分裂不出系列。 */
 function constantDimension(view: ViewBlock, roles: Roles, name: string): boolean {
   if (declaredIdx(view, roles.catIdx, name) !== undefined) return false;
   return view.columns.some(
@@ -733,7 +665,6 @@ function constantDimension(view: ViewBlock, roles: Roles, name: string): boolean
   );
 }
 
-/** 声明列（载荷列短名）→ 结果列下标；引擎折叠或全空列匹配不上时返回 undefined */
 function declaredIdx(view: ViewBlock, pool: number[], name: string): number | undefined {
   const idx = pool.find((i) => memberShortName(view.columns[i]) === name);
   return idx;
@@ -784,7 +715,6 @@ function tableValueIndices(roles: Roles): number[] {
   return roles.measureIdx;
 }
 
-/** 桶投影成只含时间列的合成行；轴取值与对照归属共用同一投影，不各自造键。 */
 function bucketRow(
   view: ViewBlock,
   bucket: ResultTime["buckets"][number],
@@ -888,17 +818,9 @@ function resolveTableAxis(
   };
 }
 
-/**
- * 差值列：来源列位与呈现身份；值由服务端算，消费方不做算术。
- * `after` 是该列在值列序列中的插入锚——恒为本组最后一列，读法因而是「各期…再看差值」。
- */
 type DeltaColumn = { after: number; primary: number; comparison: number; column: TableColumn };
 
-/**
- * 时间列轴取值 → 所属期间序号；归属经该轴自身的取值函数投影，与列键同源。
- * 月份层级不承载期间身份（同一月号在各期间都出现），不参与差值。
- * 期间与列值必须**一一对应**，否则不加列。
- */
+/** 期间与时间轴取值必须一一对应；月份层级不承载期间身份。 */
 function periodOfTimeValue(
   view: ViewBlock,
   axis: ResolvedTableAxis,
@@ -924,12 +846,7 @@ function periodOfTimeValue(
   return owner;
 }
 
-/**
- * 对照差值列：同一指标（及其余列轴取值）下，为每个对照期追加一列「主期 − 对照期」。
- * 算术属服务端：消费方（含 MCP 壳）只印不算。
- * 率的差是百分点，量的差是相对变化率（分母为零时无定义，留空）。
- * 差值列不参与下钻（sourceRows 记 null）。
- */
+/** 对照差值由服务端计算，且无可下钻来源。 */
 function comparisonDeltas(
   view: ViewBlock,
   columnsResolved: ResolvedTableAxis[],
@@ -992,20 +909,13 @@ function deltaValue(primary: Cell, comparison: Cell, rate: boolean): number | nu
   return b === 0 ? null : (a - b) / b;
 }
 
-/**
- * 指标卡的唯一数据源：大数字读的是整窗合计，不是碰巧只有一行的那一行。
- * 差值与表格差值列同走 deltaValue，率得百分点、量得相对变化率。
- */
 export type TotalBandMetric = {
   column: string;
   label: string;
   value: Cell;
   format: ColumnFormat;
   decimals?: number;
-  /**
-   * 主期真实覆盖的期间；不能整窗合并的指标在终点求值，这里写的就是终点期。
-   * from/to 是这个大数的身份坐标：构成记录下钻必须沿用同一覆盖，不得退回某一行的桶。
-   */
+  /** 指标读数的实际覆盖期，也是记录下钻的时间坐标。 */
   period?: { label: string; from: string; to: string };
   comparisons: { label: string; value: number | null; format: ColumnFormat; decimals?: number }[];
 };
@@ -1057,7 +967,6 @@ export function compileTotalBand(
       ...(decimals !== undefined ? { decimals } : {}),
       period: { label: totalPeriodLabel(primary), from: primary.from, to: primary.to },
       comparisons: comparisons.map((period, index) => ({
-        // 对照名取坐标本身（与表格差值列同一措辞），期内降级不改变「和谁比」。
         label: `较${periodLabel(coordinates[index + 1])}`,
         value: deltaValue(primary.value, period.value, rate),
         format: rate ? ("percentage_point" as const) : ("percent" as const),
@@ -1068,7 +977,6 @@ export function compileTotalBand(
   return metrics.length ? { metrics } : null;
 }
 
-/** 把差值列插进值列序列：每列紧随其对照列，行、总体行与来源映射同步扩展。 */
 function withDeltaColumns(table: TableModel, deltas: DeltaColumn[], offset: number): TableModel {
   if (!deltas.length) return table;
   const byAnchor = new Map<number, DeltaColumn[]>();
@@ -1111,7 +1019,6 @@ function unavailableTable(
   };
 }
 
-/** 结果里角色为 dimension 的列，按结果列序。 */
 function dimensionColumns(view: ViewBlock): string[] {
   return view.columns.filter((column) => view.column_roles[column] === "dimension");
 }
@@ -1119,9 +1026,6 @@ function dimensionColumns(view: ViewBlock): string[] {
 const tableAxisKey = (axis: TableAxis): string =>
   axis.kind === "field" ? `field:${memberShortName(axis.column)}` : axis.kind;
 
-/**
- * 表格布局出自结果签名：声明只说哪些轴上列轴，其余维度与实际存在的时间轴落行轴。
- */
 export function resolveTableLayout(
   view: ViewBlock,
   roles: Roles,
@@ -1147,7 +1051,6 @@ export function resolveTableLayout(
     .map((column): TableAxis => ({ kind: "field", column }));
   const timeOnColumns = columns.find((axis) => axis.kind === "time");
   if (temporal && !timeOnColumns) rows.push({ kind: "time", level: "bucket" });
-  // 年份上了列轴而结果按月：月份就是那一层余数。
   if (timeOnColumns?.kind === "time" && timeOnColumns.level === "year" && monthly) {
     rows.push({ kind: "time", level: "month" });
   }
@@ -1307,7 +1210,6 @@ function compileTableLayout(
     sourceRows,
     ...(summaryRows ? { summaryRows } : {}),
   };
-  // 差值是增益不是前提：超出渲染资源上限时保留基础矩阵，不因此判整份布局不可用。
   const deltas = comparisonDeltas(view, columnsResolved, columnCombos, valueColumns);
   const withDeltas = leafColumns + deltas.length > MAX_TABLE_LEAF_COLUMNS ? [] : deltas;
   return {
@@ -1319,10 +1221,6 @@ function compileTableLayout(
   };
 }
 
-/**
- * 绑定名已在 chart_spec 绑定层归一补齐，这里只剩数据完整性守卫：
- * 前提不满足时返回 null 退表格。
- */
 function declaredChart(
   view: ViewBlock,
   roles: Roles,
@@ -1331,7 +1229,6 @@ function declaredChart(
 ): ChartSpec | null {
   const measureIdx = decl.y.map((y) => declaredIdx(view, roles.measureIdx, y));
   if (measureIdx.some((i) => i === undefined)) return null;
-  // 辅助标注通道在场即说明调用方已裁定过主系列；缺席时才由本层按关系推断。
   const declaredAnnotations = decl.type === "pie" ? undefined : decl.annotations;
   const primary =
     declaredAnnotations === undefined
@@ -1351,7 +1248,6 @@ function declaredChart(
           }),
         );
 
-  // 取值唯一的维度不分裂任何东西，与没声明等价；只有引用不存在的成员才 fail-closed。
   const declaredGroupBy = decl.type === "pie" ? undefined : decl.groupBy;
   const groupBy =
     declaredGroupBy !== undefined && constantDimension(view, roles, declaredGroupBy)
@@ -1365,7 +1261,6 @@ function declaredChart(
       if (catIdx === undefined || measures.length !== 1) return null;
       return groupedLine(view, roles, catIdx, measures[0]);
     }
-    // 同期对照优先叠加成期间系列；不成立（相邻周期、异长窗口、多指标）时退回单一时间轴。
     const periods = measures.length === 1 ? overlayPeriods(view.time) : null;
     const overlay = periods ? comparisonLine(view, roles, measures[0], periods) : null;
     return overlay ?? timeSeriesLine(view, roles, titleOf, measures, secondary);
@@ -1426,7 +1321,6 @@ export type ResultShape = {
   temporal: boolean;
 };
 
-/** 只识别结果结构，不输出任何呈现选择。 */
 export function analyzeResultShape(view: ViewBlock): ResultShape {
   const detected = detectRoles(view);
   const roles = {
@@ -1456,7 +1350,6 @@ export function compileTableWithStatus(
         layout: { state: "applied" as const, leafColumns: tableValueIndices(roles).length },
       };
   if (decl?.type !== "table" || !decl.shading) return compiled;
-  // 只给指标列上色：交叉表的值列沿用度量列作 formatKey，长表的度量列即其本身
   const measureKeys = new Set(roles.measureIdx.map((index) => view.columns[index]));
   const shading = compileTableShading(
     decl.shading,
@@ -1492,7 +1385,6 @@ export function tableShadingDefaults(view: ViewBlock): TableShadingDefaults | nu
   };
 }
 
-/** 图表确定性编译：只执行已声明图型；table/kpi 不经过图表编译器。 */
 export function compileChart(
   view: ViewBlock,
   titleOf: (c: string) => string,
@@ -1516,7 +1408,6 @@ export function canCompileKpi(
   return !view.columns.some((column) => view.column_roles[column] === "dimension");
 }
 
-/** 结果侧的通道池：能上轴的分类维度（取值 ≥2）与主度量，名字用声明词表的载荷列短名。 */
 function resultChannelPool(
   view: ViewBlock,
   shape: ResultShape = analyzeResultShape(view),
@@ -1533,10 +1424,6 @@ function resultChannelPool(
   };
 }
 
-/**
- * 形态在当前结果上的候选声明：通道装得下（结构）且编译得出来（数据前提与可读预算）才成立。
- * 「这个图型可不可选」与「选了之后绑什么」是这一次装箱的同一个返回值，不存第二份默认。
- */
 export function proposeChartDecl(
   view: ViewBlock,
   type: Exclude<ChannelForm, "kpi">,
@@ -1547,7 +1434,6 @@ export function proposeChartDecl(
   if (!assignment) return null;
   const groupBy = assignment.groupBy !== undefined ? { groupBy: assignment.groupBy } : {};
   const y2 = assignment.y2 !== undefined ? { y2: assignment.y2 } : {};
-  // 分类轴是 bar/pie 的必备通道；装箱填不上它时上一行已经返回了 null。
   if (type !== "line" && assignment.x === undefined) return null;
   const decl: ChartTypeOf<PlottedDeclType> =
     type === "line"
@@ -1558,10 +1444,6 @@ export function proposeChartDecl(
   return compileChart(view, makeTitleOf(view), decl, shape) ? decl : null;
 }
 
-/**
- * 形态在当前结果上成不成立，以及不成立时卡在哪一关：通道装不下，还是装得下但结果形态撑不起。
- * 可用性与它的理由是同一个返回值——调用方不必也不该再算一遍。文案归界面，这里只给事实。
- */
 export type FormAvailability =
   | { state: "available" }
   | { state: "channels_unmet"; dimensions: number; measures: number }
@@ -1572,7 +1454,6 @@ export function formAvailability(
   form: PresentationType,
   shape: ResultShape = analyzeResultShape(view),
 ): FormAvailability {
-  // 表格容得下任意结果，因此恒是兜底形态。
   if (form === "table") return { state: "available" };
   const pool = resultChannelPool(view, shape);
   if (!assignChannels(form, pool)) {

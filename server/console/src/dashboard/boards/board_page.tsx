@@ -167,7 +167,6 @@ export function BoardPage({
     [id],
   );
 
-  // 切换看板即弃草稿；详情随 id 键位自动重取。
   useEffect(() => {
     setDraft(null);
     setRecordProjectionRequest(null);
@@ -374,7 +373,6 @@ export function BoardPage({
                       />
                     </div>
                   ) : null}
-                  {/* 标题恒为只读字，改名走旁边的入口 */}
                   <div className="flex min-w-0 items-end gap-3">
                     <h1 className="min-w-0 flex-1 truncate text-xl font-semibold text-pa-fg">
                       {boardTitle}
