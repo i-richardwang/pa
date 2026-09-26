@@ -19,7 +19,7 @@ export function registerCatalogTools(
     usage: Pick<UsageService, "wrap">;
   },
 ): void {
-  const { server, principal, catalog, usage } = context;
+  const { server, principal, logger, catalog, usage } = context;
   const caller = principal.email;
 
   server.registerTool(
@@ -33,6 +33,7 @@ export function registerCatalogTools(
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
     safeMcpToolHandler(
+      logger,
       "catalog",
       usage.wrap(
         {
@@ -71,6 +72,7 @@ export function registerCatalogTools(
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
     safeMcpToolHandler(
+      logger,
       "values_of",
       usage.wrap(
         {

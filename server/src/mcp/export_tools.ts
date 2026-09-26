@@ -24,7 +24,7 @@ export function registerExportTools(
     exports: Pick<ExportService, "exportResult" | "readResource">;
   },
 ): void {
-  const { server, principal, exports } = context;
+  const { server, principal, logger, exports } = context;
 
   server.registerTool(
     "export_result",
@@ -38,7 +38,7 @@ export function registerExportTools(
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    safeMcpToolHandler("export_result", async (input: { view_id: string }) => {
+    safeMcpToolHandler(logger, "export_result", async (input: { view_id: string }) => {
       const payload = await exports.exportResult(principal, input.view_id);
       return {
         content: [{ type: "text" as const, text: JSON.stringify(payload) }],
@@ -55,7 +55,7 @@ export function registerExportTools(
       description: "读取当前查询生成的限时 CSV 导出资源。",
       mimeType: EXPORT_RESOURCE_MIME_TYPE,
     },
-    safeMcpResourceHandler("export_csv", async (uri, variables) => {
+    safeMcpResourceHandler(logger, "export_csv", async (uri, variables) => {
       const rawTicket = variables.ticket;
       const ticket = Array.isArray(rawTicket) ? rawTicket[0] : rawTicket;
       try {

@@ -1,4 +1,5 @@
 import { USAGE_LOG_RETENTION_DAYS, type UsageLog, type UsageSummary } from "../ports/usage_log.js";
+import type { Logger } from "../ports/logger.js";
 import type { UsageStatistics } from "../ports/usage_statistics.js";
 import { normalizePagination } from "../contracts/pagination_contract.js";
 import type { Principal } from "../contracts/principal.js";
@@ -11,7 +12,11 @@ type UsageSpan<Result> = {
 };
 
 /** 工具调用日志的写入与控制台统计读取；transport 层不直接访问日志存储。 */
-export function createUsageService(deps: { log: UsageLog; statistics: UsageStatistics }) {
+export function createUsageService(deps: {
+  log: UsageLog;
+  statistics: UsageStatistics;
+  logger: Logger;
+}) {
   const assertAdmin = (principal: Principal) => {
     if (!principal.roles.includes("admin")) throw new ForbiddenError("需要管理员权限");
   };
@@ -24,7 +29,7 @@ export function createUsageService(deps: { log: UsageLog; statistics: UsageStati
     try {
       await deps.log.log(record);
     } catch (error) {
-      console.error("[pa] usage log 写入失败（不影响业务）:", error);
+      deps.logger.error("使用记录写入失败（不影响业务）", error);
     }
   }
 

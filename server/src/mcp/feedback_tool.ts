@@ -13,7 +13,7 @@ export function registerFeedbackTool(
     usage: Pick<UsageService, "wrap">;
   },
 ): void {
-  const { server, principal, feedback, usage } = context;
+  const { server, principal, logger, feedback, usage } = context;
   const caller = principal.email;
   server.registerTool(
     "feedback",
@@ -42,6 +42,7 @@ export function registerFeedbackTool(
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
     safeMcpToolHandler(
+      logger,
       "feedback",
       usage.wrap({ tool: "feedback", caller }, async (input: FeedbackInput) => {
         const payload = await feedback.submit(principal, input);

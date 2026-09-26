@@ -1,5 +1,5 @@
 /** CatalogService 集成测试（桩实现）：目录按授权读取 /meta，维度取值查询用同一 context 调 /load 并遵守数量上限。 */
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { DIMENSION_VALUES_CAP, DIMENSION_VALUES_SCAN_LIMIT } from "../engine/dimension_values.js";
 import type { Principal } from "../contracts/principal.js";
 import type { CubeSecurityContext, CubeView, LoadResponse } from "../ports/cube_gateway.js";
@@ -14,6 +14,7 @@ import {
   TEST_TIME_SOURCE_REGISTRY,
 } from "../test_support/semantic_taxonomy.js";
 import { canonicalModelFixture } from "../test_support/canonical_semantic_model.js";
+import { recordingLogger } from "../test_support/logger.js";
 
 const buildCatalogDocument = (views: CubeView[]) =>
   buildRawCatalogDocument(views, TEST_SEMANTIC_TAXONOMY, TEST_TIME_SOURCE_REGISTRY, {
@@ -75,10 +76,9 @@ const canonical = canonicalModelFixture(views, TEST_SEMANTIC_TAXONOMY);
 const noBusinessTerms = { resolve: async () => [] };
 type CatalogServiceDependencies = Parameters<typeof createCatalogService>[0];
 const createService = (
-  deps: Omit<CatalogServiceDependencies, "businessTerms"> & {
-    businessTerms?: CatalogServiceDependencies["businessTerms"];
-  },
-) => createCatalogService({ businessTerms: noBusinessTerms, ...deps });
+  deps: Omit<CatalogServiceDependencies, "businessTerms" | "logger"> &
+    Partial<Pick<CatalogServiceDependencies, "businessTerms" | "logger">>,
+) => createCatalogService({ businessTerms: noBusinessTerms, logger: recordingLogger(), ...deps });
 
 // 维度取值查询以语义 id 为参数，服务端再解析成物理成员；这里从编译器目录取稳定 id。
 const catalogDimensions = toCompilerCatalog(buildCatalogDocument(views)).dimensions;
@@ -147,16 +147,22 @@ describe("CatalogService", () => {
       },
       timeContext: async () => ({ dataAsOf: "2026-07", sources: {} }),
     };
+    const termFailure = new Error("app.db 打不开");
+    const logger = recordingLogger();
     const broken = createService({
       canonical,
       cube,
+      logger,
       businessTerms: {
         resolve: async () => {
-          throw new Error("app.db 打不开");
+          throw termFailure;
         },
       },
     });
     const degraded = await broken.query(principal, { terms: ["组织"] });
+    expect(logger.entries).toEqual([
+      { level: "error", message: "业务术语读取失败，本次目录不带术语解释", error: termFailure },
+    ]);
     expect(degraded.term_knowledge_status).toBe("unavailable");
     expect(degraded.term_resolutions).toEqual([]);
     expect(degraded.dimensions.map((member) => member.title)).toContain("组织");
@@ -287,9 +293,10 @@ describe("CatalogService", () => {
     const diagnostic = new Error(
       "执行 View test_people_metrics 的指标 active_employee_count 缺少 meta.metric_domain_id",
     );
-    const logged = spyOn(console, "error").mockImplementation(() => undefined);
+    const logger = recordingLogger();
     const service = createService({
       canonical,
+      logger,
       cube: {
         meta: async () => {
           throw diagnostic;
@@ -310,9 +317,9 @@ describe("CatalogService", () => {
       expect((error as Error).message).not.toContain("人员明细");
       expect((error as Error).message).not.toContain("test_people_metrics");
       expect((error as Error & { cause?: unknown }).cause).toBe(diagnostic);
-      expect(logged).toHaveBeenCalledWith("[pa] 语义模型装配失败:", diagnostic);
-    } finally {
-      logged.mockRestore();
+      expect(logger.entries).toEqual([
+        { level: "error", message: "语义模型装配失败", error: diagnostic },
+      ]);
     }
   });
 });

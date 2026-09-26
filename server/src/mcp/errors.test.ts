@@ -1,6 +1,7 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { InvalidRequestError } from "../application/errors.js";
 import { TimeSelectionError, timeSelectionIssueMessage } from "../semantic_core/time_contract.js";
+import { recordingLogger } from "../test_support/logger.js";
 import { safeMcpResourceHandler, safeMcpToolHandler } from "./errors.js";
 
 describe("MCP outer error boundary", () => {
@@ -11,7 +12,8 @@ describe("MCP outer error boundary", () => {
       required_grain: "month" as const,
       selected_grain: "year" as const,
     };
-    const invalid = safeMcpToolHandler("run_analysis", async () => {
+    const logger = recordingLogger();
+    const invalid = safeMcpToolHandler(logger, "run_analysis", async () => {
       throw new TimeSelectionError(issue);
     });
     const message = timeSelectionIssueMessage(issue);
@@ -26,30 +28,30 @@ describe("MCP outer error boundary", () => {
         details: { issue },
       },
     });
+    expect(logger.entries).toEqual([]);
   });
 
   test("工具与资源共用安全分类，未知异常不进入公共结果", async () => {
-    const invalidResource = safeMcpResourceHandler("invalid_resource", async () => {
+    const logger = recordingLogger();
+    const invalidResource = safeMcpResourceHandler(logger, "invalid_resource", async () => {
       throw new InvalidRequestError("请求需要修改");
     });
     await expect(invalidResource()).rejects.toThrow("请求需要修改");
 
-    const logged = spyOn(console, "error").mockImplementation(() => undefined);
-    const internal = safeMcpToolHandler("internal", async () => {
-      throw new Error("SQLITE_CANTOPEN /private/path");
+    const failure = new Error("SQLITE_CANTOPEN /private/path");
+    const internal = safeMcpToolHandler(logger, "internal", async () => {
+      throw failure;
     });
-    try {
-      const result = await internal();
-      expect(result.isError).toBe(true);
-      expect(result).not.toHaveProperty("structuredContent");
-      expect(JSON.parse(result.content[0].text)).toEqual({
-        error: { code: "internal", message: "服务暂时无法完成请求，请稍后重试" },
-      });
-      expect(JSON.stringify(result)).not.toContain("SQLITE_CANTOPEN");
-      expect(JSON.stringify(result)).not.toContain("/private/path");
-      expect(logged).toHaveBeenCalledWith("[pa] MCP internal 失败:", expect.any(Error));
-    } finally {
-      logged.mockRestore();
-    }
+    const result = await internal();
+    expect(result.isError).toBe(true);
+    expect(result).not.toHaveProperty("structuredContent");
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      error: { code: "internal", message: "服务暂时无法完成请求，请稍后重试" },
+    });
+    expect(JSON.stringify(result)).not.toContain("SQLITE_CANTOPEN");
+    expect(JSON.stringify(result)).not.toContain("/private/path");
+    expect(logger.entries).toEqual([
+      { level: "error", message: "MCP internal 失败", error: failure },
+    ]);
   });
 });

@@ -1,3 +1,4 @@
+import { recordingLogger } from "../test_support/logger.js";
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
@@ -9,7 +10,11 @@ import { createUsageService } from "../application/usage_service.js";
 import type { SqliteDatabase } from "../sqlite.js";
 
 const createUsage = (db: SqliteDatabase) =>
-  createUsageService({ log: createUsageLog(db), statistics: createUsageStats(db) });
+  createUsageService({
+    log: createUsageLog(db),
+    statistics: createUsageStats(db),
+    logger: recordingLogger(),
+  });
 import { semanticAnalysisOf } from "../test_support/report.js";
 import { createAnalysisRepository } from "./analysis_repository.js";
 import { createTestAppDatabase } from "../test_support/app_database.js";

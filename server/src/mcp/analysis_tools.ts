@@ -30,7 +30,7 @@ export function registerAnalysisTools(
     usage: Pick<UsageService, "wrap">;
   },
 ): void {
-  const { server, principal, analysis, presentation, usage } = context;
+  const { server, principal, logger, analysis, presentation, usage } = context;
   const caller = principal.email;
 
   server.registerTool(
@@ -51,6 +51,7 @@ export function registerAnalysisTools(
       },
     },
     safeMcpToolHandler(
+      logger,
       "run_analysis",
       async (input: { analysis: AnalysisDefinition; view: SemanticViewIntent }) =>
         analysisResult(presentation, await analysis.run(principal, input.analysis, input.view)),
@@ -71,6 +72,7 @@ export function registerAnalysisTools(
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
     safeMcpToolHandler(
+      logger,
       "rerun_analysis",
       async (input: { analysis_id: string; view: SemanticViewIntent }) =>
         analysisResult(
@@ -103,6 +105,7 @@ export function registerAnalysisTools(
       },
     },
     safeMcpToolHandler(
+      logger,
       "show_analysis",
       usage.wrap({ tool: "show_analysis", caller }, async (input: { view_id: string }) => {
         await analysis.ensureOwned(principal, input.view_id);
@@ -131,7 +134,7 @@ export function registerAnalysisTools(
         ui: { visibility: ["model"] },
       },
     },
-    safeMcpToolHandler("load_analysis_result", async (input: { view_id: string }) =>
+    safeMcpToolHandler(logger, "load_analysis_result", async (input: { view_id: string }) =>
       analysisResult(presentation, await analysis.replay(principal, input.view_id), {
         includeDefinition: true,
       }),
@@ -154,7 +157,7 @@ export function registerAnalysisTools(
         ui: { visibility: ["app"] },
       },
     },
-    safeMcpToolHandler("load_analysis_card", async (input: { view_id: string }) =>
+    safeMcpToolHandler(logger, "load_analysis_card", async (input: { view_id: string }) =>
       analysisResult(presentation, await analysis.replay(principal, input.view_id)),
     ),
   );

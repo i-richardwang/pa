@@ -1,3 +1,4 @@
+import { recordingLogger } from "../test_support/logger.js";
 import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import type {
@@ -239,6 +240,7 @@ test("非 HR 语义包走通注册、canonical model、比较策略、规划与�
   };
   const observedContexts: CubeSecurityContext[] = [];
   const catalog = createCatalogService({
+    logger: recordingLogger(),
     canonical,
     cube: {
       meta: async (context) => {

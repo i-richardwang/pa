@@ -29,7 +29,7 @@ function toMe(
 export function dashboardRoutes(deps: DashboardDependencies) {
   const dashboard = new Hono<DashboardEnv>();
 
-  dashboard.onError((error, c) => dashboardError(c, error));
+  dashboard.onError((error, c) => dashboardError(c, error, deps.logger));
 
   dashboard.get("/", async (c) => {
     const session = await deps.auth.api.getSession({ headers: c.req.raw.headers });

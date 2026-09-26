@@ -1,3 +1,4 @@
+import type { Logger } from "../ports/logger.js";
 import {
   browseCatalogDocument,
   searchCatalogDocument,
@@ -74,6 +75,7 @@ export type CatalogService = {
 
 /** 业务术语的相关成员只扩大本次检索结果，不写入目录文档和编译器目录，也不影响查询编译与执行。 */
 export function createCatalogService(deps: {
+  logger: Logger;
   cube: Pick<CubeGateway, "meta" | "load" | "timeContext">;
   canonical: CanonicalSemanticModel;
   businessTerms: Pick<BusinessTermRegistry, "resolve">;
@@ -86,7 +88,7 @@ export function createCatalogService(deps: {
       const authorized = authorizeCanonicalSemanticModel(deps.canonical, views);
       return { context, ...authorized };
     } catch (error) {
-      console.error("[pa] 语义模型装配失败:", error);
+      deps.logger.error("语义模型装配失败", error);
       throw new SemanticModelUnavailableError(error);
     }
   };
@@ -96,7 +98,7 @@ export function createCatalogService(deps: {
     const [authorized, timeContext] = await Promise.all([
       model(principal),
       deps.cube.timeContext().catch((error) => {
-        console.error("[pa] 时间上下文读取失败:", error);
+        deps.logger.error("时间上下文读取失败", error);
         throw new SemanticModelUnavailableError(error);
       }),
     ]);
@@ -138,7 +140,7 @@ export function createCatalogService(deps: {
         resolutions = await deps.businessTerms.resolve(input.terms, members);
       } catch (error) {
         termKnowledgeStatus = "unavailable";
-        console.error("[pa] 业务术语读取失败，本次目录不带术语解释:", error);
+        deps.logger.error("业务术语读取失败，本次目录不带术语解释", error);
       }
       const relatedIds = new Set(
         resolutions.flatMap(({ matches }) =>

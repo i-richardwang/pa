@@ -1,9 +1,10 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { UsageLog } from "../ports/usage_log.js";
 import type { UsageStatistics } from "../ports/usage_statistics.js";
 import { createUsageService } from "./usage_service.js";
 import type { Principal } from "../contracts/principal.js";
 import { ForbiddenError } from "./errors.js";
+import { recordingLogger } from "../test_support/logger.js";
 
 const admin: Principal = { email: "admin@x", roles: ["admin"], accessScope: { kind: "all" } };
 const alice: Principal = { email: "alice@x", roles: ["user"], accessScope: { kind: "all" } };
@@ -29,45 +30,40 @@ function failingLog(): UsageLog {
 }
 
 describe("usage service 日志写入失败", () => {
-  test("直接写日志失败时只打印错误，不抛出", async () => {
-    const error = spyOn(console, "error").mockImplementation(() => {});
-    try {
-      const usage = createUsageService({ log: failingLog(), statistics });
-      await expect(
-        usage.log({
-          caller: "alice@x",
-          tool: "save_report",
-          outcome: "ok",
-          duration_ms: 1,
-        }),
-      ).resolves.toBeUndefined();
-      expect(error).toHaveBeenCalledTimes(1);
-    } finally {
-      error.mockRestore();
-    }
+  test("使用记录写入失败时只记错误日志，不抛出", async () => {
+    const logger = recordingLogger();
+    const usage = createUsageService({ log: failingLog(), statistics, logger });
+    await expect(
+      usage.log({
+        caller: "alice@x",
+        tool: "save_report",
+        outcome: "ok",
+        duration_ms: 1,
+      }),
+    ).resolves.toBeUndefined();
+    expect(logger.entries.map(({ level, message }) => ({ level, message }))).toEqual([
+      { level: "error", message: "使用记录写入失败（不影响业务）" },
+    ]);
   });
 
   test("包装器保留成功返回值和原始业务异常", async () => {
-    const error = spyOn(console, "error").mockImplementation(() => {});
-    try {
-      const usage = createUsageService({ log: failingLog(), statistics });
-      const succeed = usage.wrap({ tool: "catalog", caller: "alice@x" }, async () => "ok");
-      await expect(succeed({})).resolves.toBe("ok");
+    const logger = recordingLogger();
+    const usage = createUsageService({ log: failingLog(), statistics, logger });
+    const succeed = usage.wrap({ tool: "catalog", caller: "alice@x" }, async () => "ok");
+    await expect(succeed({})).resolves.toBe("ok");
 
-      const businessError = new Error("business failed");
-      const fail = usage.wrap({ tool: "catalog", caller: "alice@x" }, async () => {
-        throw businessError;
-      });
-      await expect(fail({})).rejects.toBe(businessError);
-      expect(error).toHaveBeenCalledTimes(2);
-    } finally {
-      error.mockRestore();
-    }
+    const businessError = new Error("business failed");
+    const fail = usage.wrap({ tool: "catalog", caller: "alice@x" }, async () => {
+      throw businessError;
+    });
+    await expect(fail({})).rejects.toBe(businessError);
+    expect(logger.entries).toHaveLength(2);
   });
 
   test("统计天数与分页参数在服务内规范化，非管理员不能查看总览", async () => {
     const calls: unknown[] = [];
     const usage = createUsageService({
+      logger: recordingLogger(),
       log: { log: async () => {}, removeExpired: () => 0 },
       statistics: {
         overview: async (days) => {

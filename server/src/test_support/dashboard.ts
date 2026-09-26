@@ -1,3 +1,4 @@
+import { recordingLogger } from "./logger.js";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,7 +41,11 @@ import type { ExecutionPlan } from "../semantic_core/execution_plan.js";
 export { createBoardRepository, createFeedbackStore, createReports, dashboardRoutes };
 
 export function createTestUsage(db: SqliteDatabase) {
-  return createUsageService({ log: createUsageLog(db), statistics: createUsageStats(db) });
+  return createUsageService({
+    log: createUsageLog(db),
+    statistics: createUsageStats(db),
+    logger: recordingLogger(),
+  });
 }
 
 let sequence = 0;
@@ -351,6 +356,7 @@ export function dashboardTestDependencies(
       }
     : null;
   return {
+    logger: recordingLogger(),
     auth: { api: { getSession: async () => (sessionUser ? { user: sessionUser } : null) } },
     accessScopeDefinition: { id: "organization", title: "组织" },
     usage: createTestUsage(db),

@@ -6,6 +6,7 @@ import { cors } from "hono/cors";
 import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins";
 import { principalFromAttributes, type Principal } from "./contracts/principal.js";
 import { API_KEY_PREFIX, buildAuth, initializeAuthSchema, type Auth } from "./auth.js";
+import { consoleLogger as logger } from "./adapters/console_logger.js";
 import { createApplication } from "./composition/application.js";
 import { config } from "./config.js";
 import { createCubeGateway } from "./adapters/cube_gateway.js";
@@ -64,8 +65,10 @@ const application = createApplication({
   visibilityCube,
   canonical: canonicalModel,
   baseUrl: config.baseUrl,
+  logger,
 });
 const serverDependencies: McpServerDependencies = {
+  logger,
   analysis: application.analysis,
   presentation: application.presentation,
   catalog: application.catalog,
@@ -155,6 +158,7 @@ if (config.authSecret) {
   app.route(
     "/dashboard",
     dashboardRoutes({
+      logger,
       auth: enabledAuth,
       accessScopeDefinition: canonicalModel.access_scope,
       usage: application.usage,
@@ -204,7 +208,7 @@ app.use("/mcp", async (c, next) => {
       .catch(() => null);
     if (verified?.valid && verified.key) {
       const principal = await resolvePrincipal(enabledAuth, verified.key.referenceId);
-      console.log(`[pa] ${principal.email} ${c.req.method} /mcp (api key)`);
+      logger.info(`${principal.email} ${c.req.method} /mcp (api key)`);
       c.set("principal", principal);
       return next();
     }
@@ -212,7 +216,7 @@ app.use("/mcp", async (c, next) => {
   const session = await enabledAuth.api.getMcpSession({ headers: c.req.raw.headers });
   if (session) {
     const principal = await resolvePrincipal(enabledAuth, session.userId);
-    console.log(`[pa] ${principal.email} ${c.req.method} /mcp (oauth)`);
+    logger.info(`${principal.email} ${c.req.method} /mcp (oauth)`);
     c.set("principal", principal);
     return next();
   }
@@ -260,7 +264,7 @@ const exportDownload = async (c: Context<AppEnv>) => {
     if (e instanceof ExportIncompleteError) {
       return c.text(`${e.message}，未生成 CSV——请让助手加过滤条件缩小范围后分批导出。`, 413);
     }
-    console.error("[pa] export failed:", e);
+    logger.error("导出失败", e);
     return c.text("导出失败（查询已失效或数据服务暂时不可用），请让助手重新生成链接。", 500);
   }
 };
@@ -269,8 +273,8 @@ app.get("/export/:ticket", exportDownload);
 const httpServer = serve(
   { fetch: app.fetch, port: config.port, hostname: config.bindHost },
   (info) => {
-    console.log(
-      `pa-server listening on ${config.bindHost}:${info.port} ` +
+    logger.info(
+      `listening on ${config.bindHost}:${info.port} ` +
         `(endpoint /mcp, ${auth ? "oauth enabled" : "OPEN: no authentication"})`,
     );
   },

@@ -18,8 +18,10 @@ import { registerReportTools } from "./mcp/report_tools.js";
 import { registerRecordTools } from "./mcp/record_tools.js";
 import { registerWidgetResource } from "./mcp/widget_resource.js";
 import { PRODUCT_NAME, PRODUCT_VERSION } from "./contracts/product_metadata.js";
+import type { Logger } from "./ports/logger.js";
 
 export type McpServerDependencies = {
+  logger: Logger;
   analysis: Pick<AnalysisService, "run" | "rerun" | "replay" | "ensureOwned">;
   presentation: Pick<PresentationService, "compile" | "runtimeFallbacks">;
   catalog: Pick<CatalogService, "query" | "dimensionValues">;
@@ -47,6 +49,7 @@ export function buildServer(opts: {
   const context: McpRegistrationContext = {
     server,
     principal,
+    logger: opts.dependencies.logger,
   };
   registerCatalogTools({
     ...context,

@@ -43,7 +43,7 @@ export function registerRecordTools(
     usage: Pick<UsageService, "wrap">;
   },
 ): void {
-  const { server, principal, records, usage } = context;
+  const { server, principal, logger, records, usage } = context;
   const caller = principal.email;
 
   registerAppTool(
@@ -70,6 +70,7 @@ export function registerRecordTools(
       },
     },
     safeMcpToolHandler(
+      logger,
       "show_records",
       usage.wrap(
         { tool: "show_records", caller },
@@ -106,6 +107,7 @@ export function registerRecordTools(
       },
     },
     safeMcpToolHandler(
+      logger,
       "load_records_page",
       async (input: {
         view_id: string;

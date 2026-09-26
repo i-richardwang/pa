@@ -2,6 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { consoleLogger } from "../src/adapters/console_logger.js";
 import { createCubeGateway } from "../src/adapters/cube_gateway.js";
 import { createApplication } from "../src/composition/application.js";
 import { SERVICE_CUBE_CONTEXT } from "../src/engine/cube_security.js";
@@ -79,6 +80,7 @@ try {
     visibilityCube,
     canonical,
     baseUrl: "http://127.0.0.1",
+    logger: consoleLogger,
   });
   const semanticContext = await application.catalog.context(principal);
   const context = semanticContext.timeContext;

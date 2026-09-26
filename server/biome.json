@@ -39,5 +39,15 @@
   },
   "assist": {
     "enabled": false
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["src/**"],
+      "linter": { "rules": { "suspicious": { "noConsole": "error" } } }
+    },
+    {
+      "includes": ["src/adapters/console_logger.ts"],
+      "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
+    }
+  ]
 }

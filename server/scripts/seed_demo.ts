@@ -4,6 +4,7 @@ import { createBusinessTermRegistry } from "../src/application/business_term_reg
 import { createCatalogService } from "../src/application/catalog_service.js";
 import { createQueryExecutionService } from "../src/application/query_execution_service.js";
 import { createSemanticPlanningService } from "../src/application/semantic_planning_service.js";
+import { consoleLogger } from "../src/adapters/console_logger.js";
 import { createCubeGateway } from "../src/adapters/cube_gateway.js";
 import { SERVICE_CUBE_CONTEXT } from "../src/engine/cube_security.js";
 import type { Principal } from "../src/contracts/principal.js";
@@ -59,6 +60,7 @@ try {
     repository: createBusinessTermRepository(appDb),
   });
   const catalog = createCatalogService({
+    logger: consoleLogger,
     cube: visibilityCube,
     canonical,
     businessTerms: businessTermRegistry,

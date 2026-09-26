@@ -26,7 +26,7 @@ async function widgetHtml(mode: "analysis" | "records"): Promise<string> {
   return html.replace("<head>", `<head><meta name="pa-widget-mode" content="${mode}">`);
 }
 
-export function registerWidgetResource({ server }: McpRegistrationContext): void {
+export function registerWidgetResource({ server, logger }: McpRegistrationContext): void {
   registerAppResource(
     server,
     "query_result_view",
@@ -35,7 +35,7 @@ export function registerWidgetResource({ server }: McpRegistrationContext): void
       description: "以指标卡、图表或表格展示查询结果、数据截至月和口径说明。",
       _meta: { ui: UI_RESOURCE_META },
     },
-    safeMcpResourceHandler("query_result_view", async () => ({
+    safeMcpResourceHandler(logger, "query_result_view", async () => ({
       contents: [
         {
           uri: UI_RESOURCE_URI,
@@ -63,7 +63,7 @@ export function registerWidgetResource({ server }: McpRegistrationContext): void
       description: "以表格展示组成指标结果的构成记录及相关字段。",
       _meta: { ui: UI_RESOURCE_META },
     },
-    safeMcpResourceHandler("record_projection_view", async () => ({
+    safeMcpResourceHandler(logger, "record_projection_view", async () => ({
       contents: [
         {
           uri: RECORDS_UI_RESOURCE_URI,

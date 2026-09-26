@@ -13,6 +13,7 @@ import { createRecordProjectionService } from "../application/record_projection_
 import { createReportService } from "../application/report_service.js";
 import { createSemanticPlanningService } from "../application/semantic_planning_service.js";
 import type { CubeGateway } from "../ports/cube_gateway.js";
+import type { Logger } from "../ports/logger.js";
 import { runExport } from "../engine/export.js";
 import type { SqliteDatabase } from "../sqlite.js";
 import { createAnalysisRepository } from "../storage/analysis_repository.js";
@@ -34,15 +35,18 @@ export function createApplication(input: {
   visibilityCube: CubeGateway;
   canonical: CanonicalSemanticModel;
   baseUrl: string;
+  logger: Logger;
 }) {
   const usage = createUsageService({
     log: createUsageLog(input.db),
     statistics: createUsageStats(input.db),
+    logger: input.logger,
   });
   const businessTermRegistry = createBusinessTermRegistry({
     repository: createBusinessTermRepository(input.db),
   });
   const catalog = createCatalogService({
+    logger: input.logger,
     cube: input.visibilityCube,
     canonical: input.canonical,
     businessTerms: businessTermRegistry,

@@ -1,3 +1,4 @@
+import { recordingLogger } from "../test_support/logger.js";
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
@@ -16,7 +17,11 @@ function fresh() {
   const path = join(tmpdir(), `pa_usage_log_test_${runId}_${seq}.db`);
   const db = createTestAppDatabase(path);
   return {
-    usage: createUsageService({ log: createUsageLog(db), statistics: createUsageStats(db) }),
+    usage: createUsageService({
+      log: createUsageLog(db),
+      statistics: createUsageStats(db),
+      logger: recordingLogger(),
+    }),
     path,
   };
 }

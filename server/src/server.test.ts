@@ -1,3 +1,4 @@
+import { recordingLogger } from "./test_support/logger.js";
 import { describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -290,6 +291,7 @@ test("MCP 提供全部工具和 Apps 资源", async () => {
     visibilityCube: cube,
     canonical,
     baseUrl: "http://127.0.0.1:8788",
+    logger: recordingLogger(),
   });
   const executedAnalysis = (viewId: string, analysisId = baseAnalysisId) => {
     const view = {
@@ -439,6 +441,7 @@ test("MCP 提供全部工具和 Apps 资源", async () => {
   const server = buildServer({
     principal: { email: "test@x", roles: ["admin"], accessScope: { kind: "all" } },
     dependencies: {
+      logger: recordingLogger(),
       analysis: {
         run: async (_principal, definition, intent) => {
           parseAnalysisDefinition(definition);

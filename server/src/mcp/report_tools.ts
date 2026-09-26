@@ -20,7 +20,7 @@ export function registerReportTools(
     baseUrl: string;
   },
 ): void {
-  const { server, principal, reports, usage, baseUrl } = context;
+  const { server, principal, logger, reports, usage, baseUrl } = context;
   const caller = principal.email;
 
   server.registerTool(
@@ -41,7 +41,7 @@ export function registerReportTools(
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
-    safeMcpToolHandler("save_report", async (input) => {
+    safeMcpToolHandler(logger, "save_report", async (input) => {
       const report = await reports.save({
         principal,
         viewId: input.view_id,
@@ -80,6 +80,7 @@ export function registerReportTools(
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
     safeMcpToolHandler(
+      logger,
       "update_report",
       async (input: { id: string; action: ReportUpdateAction; if_revision?: number }) => {
         const report = await reports.update(principal, input.id, input.action, input.if_revision);
@@ -122,6 +123,7 @@ export function registerReportTools(
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
     safeMcpToolHandler(
+      logger,
       "find_report",
       usage.wrap({ tool: "find_report", caller }, async (input: { query?: string }) => {
         const found = (await reports.listOwned(principal, input.query)).map((report) => ({

@@ -1,4 +1,5 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import { recordingLogger } from "../test_support/logger.js";
 import { createFeedbackService } from "../application/feedback_service.js";
 import { InvalidRequestError } from "../application/errors.js";
 import { cubeSecurityContext } from "../engine/cube_security.js";
@@ -275,10 +276,11 @@ describe("dashboard app routes and access control", () => {
 
   test("全局错误边界覆盖未做局部捕获的 Dashboard 端点", async () => {
     const failure = new Error("SQLITE_CANTOPEN /private/path");
-    const logged = spyOn(console, "error").mockImplementation(() => undefined);
+    const logger = recordingLogger();
     const app = dashboardApp(
       { email: "u@x", name: "u", role: "user" },
       {
+        logger,
         usage: {
           mine: async () => {
             throw failure;
@@ -286,16 +288,14 @@ describe("dashboard app routes and access control", () => {
         } as never,
       },
     );
-    try {
-      const response = await app.request("/api/usage/mine");
-      expect(response.status).toBe(500);
-      expect(await response.json()).toEqual({
-        error: { code: "internal", message: "服务暂时无法完成请求，请稍后重试" },
-      });
-      expect(logged).toHaveBeenCalledWith("[pa] dashboard 请求失败:", failure);
-    } finally {
-      logged.mockRestore();
-    }
+    const response = await app.request("/api/usage/mine");
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: { code: "internal", message: "服务暂时无法完成请求，请稍后重试" },
+    });
+    expect(logger.entries).toEqual([
+      { level: "error", message: "dashboard 请求失败", error: failure },
+    ]);
   });
 
   test("Web 分析输入错误保留修改建议", async () => {
@@ -406,6 +406,7 @@ describe("dashboard app routes and access control", () => {
     const logged: { tool: string; title?: string }[] = [];
     const writes: unknown[] = [];
     let listError: Error | null = null;
+    const logger = recordingLogger();
     const publicRow = {
       id,
       canonical_term: "Band C+",
@@ -431,6 +432,7 @@ describe("dashboard app routes and access control", () => {
       dashboardApp(
         { email: `${role}@x`, name: role, role },
         {
+          logger,
           catalog,
           businessTerms: {
             listPublic: async (principal) => {
@@ -537,17 +539,14 @@ describe("dashboard app routes and access control", () => {
     });
 
     listError = new Error("SQLITE_CANTOPEN");
-    const errorLog = spyOn(console, "error").mockImplementation(() => {});
-    try {
-      const failed = await admin.request("/api/admin/business_terms");
-      expect(failed.status).toBe(500);
-      expect(await failed.json()).toEqual({
-        error: { code: "internal", message: "服务暂时无法完成请求，请稍后重试" },
-      });
-      expect(errorLog).toHaveBeenCalledWith("[pa] dashboard 请求失败:", listError);
-    } finally {
-      errorLog.mockRestore();
-    }
+    const failed = await admin.request("/api/admin/business_terms");
+    expect(failed.status).toBe(500);
+    expect(await failed.json()).toEqual({
+      error: { code: "internal", message: "服务暂时无法完成请求，请稍后重试" },
+    });
+    expect(logger.entries).toEqual([
+      { level: "error", message: "dashboard 请求失败", error: listError },
+    ]);
   });
 
   test("role 缺省时按 user 处理", async () => {

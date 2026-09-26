@@ -9,6 +9,7 @@ import type { FeedbackService } from "../application/feedback_service.js";
 import type { UsageService } from "../application/usage_service.js";
 import type { UserAdministrationService } from "../application/user_administration_service.js";
 import type { AccessScopeDefinition } from "../contracts/access_scope.js";
+import type { Logger } from "../ports/logger.js";
 import type { Principal } from "../contracts/principal.js";
 import type { MePayload } from "../contracts/session_contract.js";
 import type { DataCapabilityMapData } from "../presentation_core/data_capability_map.js";
@@ -31,6 +32,7 @@ export type DashboardEnv = {
 };
 
 export type DashboardDependencies = {
+  logger: Logger;
   auth: SessionProvider;
   accessScopeDefinition: AccessScopeDefinition;
   usage: UsageService;
