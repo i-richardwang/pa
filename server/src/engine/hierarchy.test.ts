@@ -46,7 +46,7 @@ describe("completeWithChains：无需补全", () => {
 });
 
 describe("completeWithChains：补全上级", () => {
-  test("按下级分组而上级未约束：上级依层级序补进分组维度前部", () => {
+  test("按下级分组且上级未被约束时，按层级顺序把上级补到分组维度前面", () => {
     const r = completeWithChains(q({ dimensions: [O3] }), CHAINS);
     expect(r.added).toEqual([
       { member: O1, children: [O2] },
@@ -54,7 +54,7 @@ describe("completeWithChains：补全上级", () => {
     ]);
     expect(r.query.dimensions).toEqual([O1, O2, O3]);
   });
-  test("只按下级过滤（无分组）：同样补全，拆行呈现歧义", () => {
+  test("只按下级筛选（不分组）时同样补全上级，按上级拆成多行", () => {
     const r = completeWithChains(
       q({ filters: [{ member: O2, operator: "equals", values: ["Marketplace"] }] }),
       CHAINS,
@@ -62,7 +62,7 @@ describe("completeWithChains：补全上级", () => {
     expect(r.added).toEqual([{ member: O1, children: [O2] }]);
     expect(r.query.dimensions).toEqual([O1]);
   });
-  test("上级 equals 多值仍算未约束（跨上级歧义未消除）", () => {
+  test("上级 equals 多个值时仍视为未约束，需要补全", () => {
     const r = completeWithChains(
       q({
         dimensions: [DEPARTMENT],
@@ -81,7 +81,7 @@ describe("completeWithChains：补全上级", () => {
     ]);
     expect(r.query.dimensions).toEqual([ROOT, O1, O2, DEPARTMENT, O3]);
   });
-  test("中间级被约束不减免更上级：只要被引用级之上有未约束者皆补", () => {
+  test("中间级被约束时，更上级中未被约束的仍要补全", () => {
     const r = completeWithChains(
       q({
         dimensions: [O3],

@@ -2,7 +2,7 @@ import type { ViewBlock } from "@payload";
 
 type ResultTimeBucket = NonNullable<ViewBlock["time"]>["buckets"][number];
 
-/** 行在时间轴上的键：与结果的时间列一一对应，无时间列时为 null。 */
+/** 行的时间键，取自结果的 year/month 列；没有时间列时为 null。 */
 function rowTimeKey(view: ViewBlock, row: number): { year: number; month?: number } | null {
   const valueAt = (column: string) => {
     const index = view.columns.indexOf(column);
@@ -15,8 +15,7 @@ function rowTimeKey(view: ViewBlock, row: number): { year: number; month?: numbe
 }
 
 /**
- * 按行键定位该行所属的业务时间桶。桶由服务端唯一编译点解析并随结果交付，此处只做匹配。
- * 一行匹配不到或匹配到多个桶时返回 null。
+ * 按时间键匹配该行所属的时间桶（桶由服务端解析后随结果返回）；匹配不到或匹配到多个时返回 null。
  */
 function bucketOfRow(view: ViewBlock, buckets: ResultTimeBucket[], row: number) {
   const key = rowTimeKey(view, row);
@@ -29,8 +28,8 @@ function bucketOfRow(view: ViewBlock, buckets: ResultTimeBucket[], row: number) 
 }
 
 /**
- * 渲染结果格携带的是已解析业务时间；Record Projection 只复用它，不接受“最新月”等相对表达。
- * `override`（被点击读数显式携带的覆盖期间）优先于行桶：名单必须回答用户点的那个数。
+ * 返回单元格的绝对时间范围，不使用“最新月”等相对表达。
+ * `override` 是被点击的数值自带的期间，优先于行所在的时间桶，保证明细与该数值对应。
  */
 export function recordProjectionTimeCoordinate(
   view: ViewBlock,

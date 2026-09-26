@@ -19,7 +19,7 @@ const view = (name: string, measure: string): CubeView => ({
   dimensions: [],
 });
 
-test("正式指标由端口装饰层叠加，原始 Cube gateway 保持物理模型", async () => {
+test("正式指标只加在包装后的 gateway 上，原 gateway 仍返回物理模型", async () => {
   const physical = [
     view("employee_hire_metrics", "hire_count"),
     view("employee_snapshot_metrics", "active_headcount"),

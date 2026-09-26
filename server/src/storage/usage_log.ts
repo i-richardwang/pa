@@ -1,7 +1,6 @@
 /**
- * MCP 使用日志：每次工具调用落 app.db 的 usage_log 表。
- * 只记最小观察元数据与结果规模，不落原始入参或结果行；title 保留问题原文，
- * catalog 只记概念数与逐项 unmatched_terms；query_fingerprint 供聚合重复查询候选。
+ * 每次 MCP 工具调用写一行 usage_log，只记元数据与结果规模，不存原始入参或结果行。
+ * title 保存问题原文；query_fingerprint 用于聚合重复查询。
  */
 import { USAGE_LOG_RETENTION_DAYS, type UsageLog, type UsageRecord } from "../ports/usage_log.js";
 import type { SqliteDatabase } from "../sqlite.js";

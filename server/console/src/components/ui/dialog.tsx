@@ -25,7 +25,7 @@ export function OverlayCloseButton(props: React.ComponentProps<typeof Button>): 
 
 export type DialogVariant = "form" | "stage";
 
-/** `form` 是要提交或确认的动作表单，`stage` 是占满视口中央的舞台（设置面、受控明细）。 */
+/** `form` 用于提交或确认操作的表单；`stage` 占满视口中央，用于设置和受控明细。 */
 export const dialogViewportVariants = cva(
   "fixed inset-0 z-50 grid grid-rows-[1fr_auto_3fr] justify-items-center p-4",
   {

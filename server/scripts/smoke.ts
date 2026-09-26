@@ -1,4 +1,4 @@
-/** 以 MCP 客户端走通公开 Demo 的目录、候选值、分析与 App 资源。 */
+/** 用 MCP 客户端依次调用公开 Demo 的目录、维度取值、分析工具，并读取结果卡片资源。 */
 import type { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -47,7 +47,7 @@ try {
     "统计范围：公开虚构数据中完成最近一期Q12答卷的员工。",
   ];
   if (!expectedPopulationScopes.every((scope) => catalog.observation_scopes.includes(scope))) {
-    throw new Error("公开 Demo 默认统计范围未从模型透传");
+    throw new Error("catalog 没有返回模型里声明的统计范围");
   }
   const member = (title: string, kind: "measure" | "dimension") => {
     const values = kind === "measure" ? catalog.measures : catalog.dimensions;
@@ -95,9 +95,9 @@ try {
   const resource = await client.readResource({ uri: UI_RESOURCE_URI });
   const html = resource.contents[0];
   if (!html || !("text" in html) || html.mimeType !== "text/html;profile=mcp-app") {
-    throw new Error("MCP App 结果预览资源不可用");
+    throw new Error("MCP App 结果卡片资源不可用");
   }
-  console.log(`公开 Demo MCP 冒烟通过：${run.view.rows.length} 行`);
+  console.log(`公开 Demo MCP 检查通过：${run.view.rows.length} 行`);
 } finally {
   await client.close();
 }

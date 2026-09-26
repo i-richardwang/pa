@@ -1,12 +1,11 @@
 /**
- * OAuth 全流程冒烟：动态客户端注册 → 密码登录 → 授权码（PKCE S256）→ 换 token →
- * 持 token 走 MCP 查数 → 派生新 View → App 展示/加载工具 → View 保存为报告 → 查找、运行、更新、归档报告
- * → 导出分析结果 → 控制台按 View 重放并与 MCP 通道对数 → 未授权端点返回 401。
- * 模拟 MCP 客户端连接器的完整握手路径与报告生命周期，
- * OAuth 侧改动后必跑。
- * 前置：服务已启用 OAuth（PA_AUTH_SECRET）且测试用户已开通。
+ * 模拟 MCP 客户端走完整个 OAuth 流程和报告生命周期：动态注册客户端 → 密码登录 → 授权码（PKCE S256）
+ * → 换取 token → 用 token 调 MCP 查询 → 重新运行生成新 View → App 展示和加载工具 → 保存为报告 →
+ * 查找、改名、归档报告 → 导出结果 → 控制台重放并与 MCP 结果比对 → 未授权请求返回 401。
+ * 修改 OAuth 相关代码后必须运行。
+ * 前提：服务已启用 OAuth（设置了 PA_AUTH_SECRET），测试用户已创建。
  * 运行：PA_OAUTH_EMAIL=... PA_OAUTH_PASSWORD=... bun run smoke:oauth [-- http://127.0.0.1:8788]
- * 受限权限回归：账号先配置单一 access_scope，再加 PA_EXPECT_ACCESS_SCOPE_VALUE=<授权值>；脚本会验证派生查询及重放。
+ * 检查受限权限：先给账号设置单个授权值，再加 PA_EXPECT_ACCESS_SCOPE_VALUE=<授权值>，脚本会检查派生分析只返回该范围的数据。
  */
 import { createHash, randomBytes } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -37,20 +36,20 @@ function toolText(result: unknown): string {
   const text = (result as { content?: { type: string; text?: string }[] }).content?.find(
     (item) => item.type === "text",
   )?.text;
-  if (!text) throw new Error("工具未返回文本应答");
+  if (!text) throw new Error("工具没有返回文本内容");
   return text;
 }
 
-// 根路径 well-known 是 MCP 客户端的探测入口
+// MCP 客户端从根路径的 well-known 地址发现 OAuth 配置
 const meta = (await (await fetch(`${base}/.well-known/oauth-authorization-server`)).json()) as {
   authorization_endpoint: string;
   token_endpoint: string;
   registration_endpoint: string;
 };
-if (!meta.registration_endpoint) throw new Error("发现元数据缺 registration_endpoint");
+if (!meta.registration_endpoint) throw new Error("OAuth 元数据缺少 registration_endpoint");
 console.log("发现:", meta.authorization_endpoint);
 
-// 公共客户端，PKCE 免密钥
+// 公共客户端：使用 PKCE，不需要 client secret
 const redirectUri = "http://127.0.0.1:9876/callback";
 const reg = (await (
   await fetch(meta.registration_endpoint, {
@@ -68,10 +67,10 @@ const reg = (await (
 if (!reg.client_id) throw new Error(`注册失败: ${JSON.stringify(reg)}`);
 console.log("注册 client_id:", reg.client_id);
 
-// 与浏览器登录页同一接口
+// 与浏览器登录页使用同一个接口
 const signIn = await fetch(`${base}/api/auth/sign-in/email`, {
   method: "POST",
-  // Origin 为 Better Auth CSRF 校验所需（浏览器自动携带，脚本模拟之）
+  // Better Auth 的 CSRF 校验需要 Origin 头（浏览器会自动带上，这里手动设置）
   headers: { "Content-Type": "application/json", Origin: base },
   body: JSON.stringify({ email, password }),
 });
@@ -83,7 +82,7 @@ const cookie = signIn.headers
 if (!cookie) throw new Error("登录未返回会话 cookie");
 console.log("登录成功:", email);
 
-// PKCE S256；已登录会话直接发码重定向
+// PKCE S256；已登录时授权端点直接重定向并附上授权码
 const verifier = b64url(randomBytes(32));
 const challenge = b64url(createHash("sha256").update(verifier).digest());
 const authorizeURL = new URL(meta.authorization_endpoint);
@@ -96,8 +95,8 @@ authorizeURL.searchParams.set("state", b64url(randomBytes(8)));
 const authorize = await fetch(authorizeURL, { headers: { cookie }, redirect: "manual" });
 const location = authorize.headers.get("location") ?? "";
 const code = new URL(location, base).searchParams.get("code");
-if (!code) throw new Error(`授权未发码: ${authorize.status} ${location}`);
-console.log("授权码已发");
+if (!code) throw new Error(`授权端点没有返回授权码: ${authorize.status} ${location}`);
+console.log("已取得授权码");
 
 const token = (await (
   await fetch(meta.token_endpoint, {
@@ -112,10 +111,9 @@ const token = (await (
     }),
   })
 ).json()) as { access_token?: string; error?: string };
-if (!token.access_token) throw new Error(`换 token 失败: ${JSON.stringify(token)}`);
+if (!token.access_token) throw new Error(`用授权码换取 token 失败: ${JSON.stringify(token)}`);
 console.log("access token 已取得");
 
-// 金标准数字与 API key 通道一致
 const client = new Client({ name: "pa-oauth-smoke", version: "0.1.0" });
 await client.connect(
   new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
@@ -137,7 +135,7 @@ if (
   showMeta?.ui?.resourceUri !== UI_RESOURCE_URI ||
   JSON.stringify(showMeta.ui.visibility) !== JSON.stringify(["model"])
 ) {
-  throw new Error("show_analysis UI 契约异常");
+  throw new Error("show_analysis 的 UI 元数据不符合预期");
 }
 const loadMeta = listedByName.load_analysis_result?._meta as
   | { ui?: { resourceUri?: string; visibility?: string[] } }
@@ -146,7 +144,7 @@ if (
   loadMeta?.ui?.resourceUri !== undefined ||
   JSON.stringify(loadMeta?.ui?.visibility) !== JSON.stringify(["model"])
 ) {
-  throw new Error("load_analysis_result model-only 契约异常");
+  throw new Error("load_analysis_result 应只对模型可见");
 }
 const appLoadMeta = listedByName.load_analysis_card?._meta as
   | { ui?: { resourceUri?: string; visibility?: string[] } }
@@ -155,7 +153,7 @@ if (
   appLoadMeta?.ui?.resourceUri !== undefined ||
   JSON.stringify(appLoadMeta?.ui?.visibility) !== JSON.stringify(["app"])
 ) {
-  throw new Error("load_analysis_card app-only 契约异常");
+  throw new Error("load_analysis_card 应只对 App 可见");
 }
 const showRecordsMeta = listedByName.show_records?._meta as
   | { ui?: { resourceUri?: string; visibility?: string[] } }
@@ -164,10 +162,10 @@ if (
   showRecordsMeta?.ui?.resourceUri !== RECORDS_UI_RESOURCE_URI ||
   JSON.stringify(showRecordsMeta.ui.visibility) !== JSON.stringify(["model"])
 ) {
-  throw new Error("show_records UI 契约异常");
+  throw new Error("show_records 的 UI 元数据不符合预期");
 }
 
-// run_analysis 收独立的 AnalysisDefinition 与 ViewIntent；成员一律用 catalog 语义 id。
+// run_analysis 分别接收 AnalysisDefinition 和 ViewIntent；成员都用 catalog 返回的语义 id。
 function analysisInput(raw: Record<string, unknown>) {
   const { title, views: declaredViews, ...flat } = raw;
   const sourceViews = Array.isArray(declaredViews) ? declaredViews : [flat];
@@ -198,7 +196,7 @@ async function callTool(request: Parameters<typeof client.callTool>[0]) {
       : request,
   );
 }
-// catalog 协议：terms 每项是完整业务概念；成员只发语义 id/title/kind，真实值由 values_of 独立负责。
+// catalog 的 terms 每项是一个完整的业务概念；返回的成员只有语义 id、标题和类型，维度取值要另用 values_of 查询。
 const catalogPayload = CATALOG_OUTPUT_SCHEMA.parse(
   JSON.parse(
     toolText(
@@ -214,14 +212,14 @@ if (
   !catalogPayload.metric_domains.some((row) => row.title === "编制计划与完成")
 ) {
   throw new Error(
-    `catalog terms 数组检索异常: ${JSON.stringify({
+    `catalog 按 terms 检索的结果不符合预期: ${JSON.stringify({
       matched_terms: catalogPayload.matched_terms,
       unmatched_terms: catalogPayload.unmatched_terms,
       metric_domains: catalogPayload.metric_domains.map((row) => row.title),
     })}`,
   );
 }
-// 语义 id 解析器：只从 catalog 返回的 id/title/kind 解析，按业务标题 + 类型唯一命中；物理名从不出现。
+// 按业务标题和类型，从 catalog 结果里找出唯一的语义 id。
 const resolverCatalog = CATALOG_OUTPUT_SCHEMA.parse(
   JSON.parse(
     toolText(
@@ -237,7 +235,7 @@ function sid(title: string, kind: "measure" | "dimension"): string {
   const matches = resolverMembers.filter((m) => m.title === title && m.kind === kind);
   if (matches.length !== 1) {
     throw new Error(
-      `catalog 未唯一解析语义 id：${kind} ${title}; ${JSON.stringify(
+      `catalog 结果里找不到唯一匹配的成员：${kind} ${title}; ${JSON.stringify(
         resolverMembers
           .filter((member) => member.kind === kind)
           .map((member) => ({
@@ -252,15 +250,14 @@ function sid(title: string, kind: "measure" | "dimension"): string {
 const ACTIVE_EMPLOYEE = sid("在职人数", "measure");
 const HIRE_COUNT = sid("入职人数", "measure");
 const ORG_NAME = sid("组织", "dimension");
-// values_of 只收语义 dimension id
+// values_of 只接受维度的语义 id
 const valuesResult = JSON.parse(
   toolText(await callTool({ name: "values_of", arguments: { dimension: ORG_NAME } })),
 ) as { values?: unknown };
-if (!Array.isArray(valuesResult.values)) throw new Error("values_of 未返回真实值数组");
-console.log("catalog terms / values_of / 语义 id 解析已验证");
-// 本条只验证 OAuth 通道能查数，查询不携带业务值：
-// 全局在职人数（显式使用 data_as_of 快照）；
-// title 是后续从 mine 端点精确定位该查询的稳定标识。
+if (!Array.isArray(valuesResult.values)) throw new Error("values_of 没有返回取值数组");
+console.log("catalog、values_of 和语义 id 查找正常");
+// 这里只验证 OAuth token 能查询数据，所以查全量在职人数，不带筛选值；
+// title 用于稍后在查询记录里找到这次查询。
 const smokeTitle = `oauth-smoke 在职人数 ${Date.now()}`;
 const q = await callTool({
   name: "run_analysis",
@@ -277,25 +274,27 @@ const queryPayload = RUN_OUTPUT_SCHEMA.parse(
 );
 const queryView = queryPayload.view;
 const row = queryView?.rows?.[0];
-console.log("OAuth 通道查数:", JSON.stringify(row));
-if (!row?.length) throw new Error("OAuth 通道查数无结果");
+console.log("OAuth 查询结果:", JSON.stringify(row));
+if (!row?.length) throw new Error("OAuth 查询没有返回数据");
 if (
   queryView?.time?.grain !== "total" ||
   queryView.time.buckets.length !== 1 ||
   queryView.time.buckets[0].from !== queryPayload.data_as_of ||
   queryView.time.buckets[0].to !== queryPayload.data_as_of
 ) {
-  throw new Error(`默认查询未声明业务时间: ${JSON.stringify(queryView?.time)}`);
+  throw new Error(
+    `查询结果的时间信息不符合预期（应为数据截止月）: ${JSON.stringify(queryView?.time)}`,
+  );
 }
 const activeEmployeeNote = queryView.display_notes?.find((note) => note.member === ACTIVE_EMPLOYEE);
 if (!activeEmployeeNote || activeEmployeeNote.text.includes("累计")) {
-  throw new Error(`快照指标口径被动态改写: ${JSON.stringify(activeEmployeeNote)}`);
+  throw new Error(`在职人数的口径说明不应出现「累计」: ${JSON.stringify(activeEmployeeNote)}`);
 }
 if (typeof queryPayload.analysis_id !== "string") {
   throw new Error("run_analysis 未返回 analysis_id");
 }
 
-// 重跑创建新的不可变 View
+// 重新运行会创建新的 View，原 Analysis 不变
 const rerunResult = await callTool({
   name: "rerun_analysis",
   arguments: {
@@ -310,7 +309,7 @@ if (
   rerunPayload.analysis_id !== queryPayload.analysis_id ||
   rerunPayload.view_id === queryPayload.view_id
 ) {
-  throw new Error("rerun_analysis 未保留 Analysis 并派生新 View");
+  throw new Error("rerun_analysis 应沿用原 Analysis 并创建新 View");
 }
 const shownResult = await callTool({
   name: "show_analysis",
@@ -320,7 +319,7 @@ if (
   (shownResult as { structuredContent?: { view_id?: unknown } }).structuredContent?.view_id !==
   rerunPayload.view_id
 ) {
-  throw new Error("show_analysis 未回显指定的新 view_id");
+  throw new Error("show_analysis 返回的 view_id 与请求不一致");
 }
 const loadedResult = await callTool({
   name: "load_analysis_result",
@@ -334,11 +333,11 @@ if (
   JSON.stringify(loadedPayload.view.rows) !== JSON.stringify(rerunPayload.view.rows) ||
   loadedPayload.view_intent.type !== "table"
 ) {
-  throw new Error("load_analysis_result 未按新 View 返回定义、呈现意图与重放结果");
+  throw new Error("load_analysis_result 返回的定义、呈现方式或结果与新 View 不一致");
 }
-console.log("不可变 rerun / show / model load 链路已验证");
+console.log("rerun、show、load 流程正常");
 
-// 人员名单由聚合 Analysis 直接投影：模型只见摘要，逐人记录只在 App 私有 _meta。
+// 人员名单从聚合分析直接取得：模型只能看到摘要，逐人记录只放在 App 专用的 _meta 里。
 const recordsResult = await callTool({
   name: "show_records",
   arguments: { view_id: rerunPayload.view_id },
@@ -351,14 +350,14 @@ if (
   JSON.stringify(recordsSummary).includes("employee_name") ||
   JSON.stringify(recordsSummary).includes("rows")
 ) {
-  throw new Error("show_records 模型可见摘要泄漏了人员记录");
+  throw new Error("show_records 给模型的摘要里出现了人员记录");
 }
 RECORD_PROJECTION_PAYLOAD_SCHEMA.parse(
   (recordsResult as { _meta?: Record<string, unknown> })._meta?.[RECORD_PROJECTION_META_KEY],
 );
-console.log("show_records 聚合单元格 → App 私有人员记录链路已验证");
+console.log("show_records 正常，人员记录只在 App 中可见");
 
-// 产品结果契约：跨年月粒度带完整 year/month 行键，explain 恒为逐窗数组。
+// 跨年按月查询时，每行都要有 year 和 month 两列。
 const asOfYear = Number(String(queryPayload.data_as_of).slice(0, 4));
 const periodQuery = await callTool({
   name: "run_analysis",
@@ -388,7 +387,7 @@ if (
   periodView.row_count !== 18 ||
   periodView.rows.some((periodRow) => periodRow.length !== 3)
 ) {
-  throw new Error("跨年 period 月粒度结果缺完整 year/month 行键");
+  throw new Error("跨年按月查询的结果缺少 year 或 month 列");
 }
 if (
   periodView.time?.grain !== "month" ||
@@ -396,7 +395,7 @@ if (
   periodView.time.buckets[0]?.from !== `${asOfYear - 2}-01` ||
   periodView.time.buckets.at(-1)?.to !== `${asOfYear - 1}-06`
 ) {
-  throw new Error(`period 业务时间声明异常: ${JSON.stringify(periodView.time)}`);
+  throw new Error(`按期间查询的时间信息不符合预期: ${JSON.stringify(periodView.time)}`);
 }
 const smokeTitle2 = `oauth-smoke 分组织在职 ${Date.now()}`;
 await callTool({
@@ -417,7 +416,7 @@ await callTool({
   },
 });
 
-// 派生链路恒验两路输入、关联与逐行算式；受限账号额外验证三张结果都只出现 scope 内组织。
+// 派生分析：检查两个输入、join 和逐行公式；受限账号还要检查结果里只有授权范围内的组织。
 const expectedScopedOrg = process.env.PA_EXPECT_ACCESS_SCOPE_VALUE?.trim();
 const scopedTitle = `oauth-smoke ${expectedScopedOrg ? "受限" : ""}派生 ${Date.now()}`;
 const scopedQuery = await callTool({
@@ -472,9 +471,9 @@ if (
   !scopedView.provenance.join_keys.some((key) => key.id === ORG_NAME) ||
   !scopedView.rows.length
 ) {
-  throw new Error(`派生查询交付面或 provenance 异常: ${JSON.stringify(scopedPayload.view)}`);
+  throw new Error(`派生分析的结果或 provenance 不符合预期: ${JSON.stringify(scopedPayload.view)}`);
 }
-console.log(`派生查询: 单一组合结果，${scopedView.rows.length} 行，join 与逐行算式正常`);
+console.log(`派生分析: ${scopedView.rows.length} 行，join 和逐行公式正常`);
 if (expectedScopedOrg) {
   const orgColumn = scopedView.columns.indexOf("组织");
   if (
@@ -482,7 +481,7 @@ if (expectedScopedOrg) {
     scopedView.rows.length !== 1 ||
     scopedView.rows[0]?.[orgColumn] !== expectedScopedOrg
   ) {
-    throw new Error(`受限派生链路出现 scope 外数据: ${JSON.stringify(scopedView)}`);
+    throw new Error(`受限账号的派生分析出现了授权范围外的组织: ${JSON.stringify(scopedView)}`);
   }
   const current = Number(scopedView.rows[0]?.[scopedView.columns.indexOf(`${asOfYear}年在职人数`)]);
   const previous = Number(
@@ -490,11 +489,11 @@ if (expectedScopedOrg) {
   );
   const delta = Number(scopedView.rows[0]?.[scopedView.columns.indexOf("在职人数同比变化")]);
   if (!Number.isFinite(delta) || delta !== current - previous) {
-    throw new Error(`受限派生差值错误: ${delta} != ${current} - ${previous}`);
+    throw new Error(`受限账号的派生分析差值错误: ${delta} != ${current} - ${previous}`);
   }
-  console.log(`受限派生查询: ${expectedScopedOrg} 单一组合结果为 1 行，差值 ${delta}`);
+  console.log(`受限账号派生分析: ${expectedScopedOrg} 1 行，差值 ${delta}`);
 }
-// analysis → report pointer → find/update/export 的 MCP 产品链路
+// MCP 报告流程：保存、查找、改名、导出、归档
 const saved = JSON.parse(
   toolText(
     await callTool({
@@ -514,7 +513,7 @@ if (
   foundReport.view_id !== queryPayload.view_id ||
   !foundReport.url.includes("#/report/")
 ) {
-  throw new Error(`find_report 未返回报告深链: ${JSON.stringify(found)}`);
+  throw new Error(`find_report 没有返回报告链接: ${JSON.stringify(found)}`);
 }
 const updated = JSON.parse(
   toolText(
@@ -528,7 +527,8 @@ const updated = JSON.parse(
     }),
   ),
 );
-if (updated.revision !== saved.revision + 1) throw new Error("update_report revision 未递增");
+if (updated.revision !== saved.revision + 1)
+  throw new Error("update_report 之后 revision 没有加 1");
 const exported = JSON.parse(
   toolText(
     await callTool({
@@ -556,7 +556,7 @@ await callTool({
 });
 await client.close();
 
-// 控制台按不可变 View 重放，usage_log 仅承担观察日志职责。
+// 控制台通过查询记录找到 View 并重放；查询记录本身只是日志。
 const mine = (await (
   await fetch(`${base}/dashboard/api/usage/mine?days=1`, { headers: { cookie } })
 ).json()) as { rows: { title: string; analysis_id: string | null; view_id: string | null }[] };
@@ -569,19 +569,19 @@ if (!mineRow) {
 const replayRes = await fetch(`${base}/dashboard/api/analysis_views/${mineRow.view_id}/replay`, {
   headers: { cookie },
 });
-if (!replayRes.ok)
-  throw new Error(`analysis 重放失败: ${replayRes.status} ${await replayRes.text()}`);
+if (!replayRes.ok) throw new Error(`重放失败: ${replayRes.status} ${await replayRes.text()}`);
 const replay = (await replayRes.json()) as {
   payload: { view: { rows: (string | number | null)[][] } };
 };
 if (JSON.stringify(replay.payload.view.rows[0]) !== JSON.stringify(row)) {
-  throw new Error("web analysis 重放与 MCP 通道不同数");
+  throw new Error("控制台重放结果与 MCP 查询结果不一致");
 }
 const anonReplay = await fetch(`${base}/dashboard/api/analysis_views/${mineRow.view_id}/replay`);
-if (anonReplay.status !== 401) throw new Error(`重放端点未登录应 401: ${anonReplay.status}`);
-console.log("analysis/report/export 与 web 重放链路正常");
+if (anonReplay.status !== 401)
+  throw new Error(`未登录访问重放接口应返回 401: ${anonReplay.status}`);
+console.log("分析、报告、导出和控制台重放正常");
 
-// WWW-Authenticate 须指向受保护资源元数据（MCP 客户端发现链路）
+// WWW-Authenticate 头要指向受保护资源元数据，MCP 客户端靠它找到授权服务器
 const unauth = await fetch(`${base}/mcp`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
@@ -589,12 +589,13 @@ const unauth = await fetch(`${base}/mcp`, {
 });
 const wwwAuth = unauth.headers.get("www-authenticate") ?? "";
 if (unauth.status !== 401 || !wwwAuth.includes("resource_metadata")) {
-  throw new Error(`未授权应答异常: ${unauth.status} ${wwwAuth}`);
+  throw new Error(`未授权请求的响应不符合预期: ${unauth.status} ${wwwAuth}`);
 }
 const prm = (await (await fetch(`${base}/.well-known/oauth-protected-resource`)).json()) as {
   authorization_servers?: string[];
 };
-if (!prm.authorization_servers?.length) throw new Error("受保护资源元数据缺 authorization_servers");
-console.log("401 指引与资源元数据正常");
+if (!prm.authorization_servers?.length)
+  throw new Error("受保护资源元数据缺少 authorization_servers");
+console.log("401 响应和资源元数据正常");
 
 console.log("OAUTH SMOKE OK");

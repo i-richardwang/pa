@@ -9,7 +9,7 @@ export type CompletedHierarchyDimensions = {
   added: { member: string; children: string[] }[];
 };
 
-/** 层级子项只有在全部上级可见或被单值等值过滤约束时才可唯一识别。 */
+/** 引用层级子项时，补上既未分组、也未被单值等值筛选固定的上级维度，使子项能唯一识别。 */
 export function completeHierarchyDimensions(
   dimensions: readonly string[],
   filters: readonly HierarchyCondition[],

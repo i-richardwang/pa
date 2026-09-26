@@ -1,4 +1,4 @@
-/** 当前主体可见语义目录上的唯一分析与视图规划入口。 */
+/** 分析与视图规划的唯一入口：查询是否可行、结果如何呈现都由这里判定，客户端不另行判断。 */
 import type { Principal } from "../contracts/principal.js";
 import { compileAnalysisView } from "../engine/semantic_analysis_compiler.js";
 import type { AnalysisDefinition, SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
@@ -9,10 +9,6 @@ import {
   type ViewPreferences,
 } from "../presentation_core/view_preferences.js";
 
-/**
- * 服务端规划是查询兼容性与呈现绑定的唯一权威，只编译纯工件。
- * AnalysisService 负责执行与身份创建；Web 可用同一规划入口创建新 View。
- */
 export type AuthorizedAnalysisPlan = CompiledAnalysisView & {
   access: AuthorizedSemanticContext;
 };

@@ -52,7 +52,7 @@ describe("business time intent", () => {
     });
   });
 
-  test("单月窗口是一个时点，期间窗口的粒度就是窗口自带的那一档，服务端不推导", () => {
+  test("单月窗口是一个时点；期间窗口使用自己声明的粒度，服务端不推导", () => {
     expect(resolved(compileTimeIntent({ window: { kind: "current_month" } })).outputGrain).toBe(
       "total",
     );
@@ -119,7 +119,7 @@ describe("business time intent", () => {
     expect(resolved.compare).toEqual([{ range: { from: "2026-02", to: "2026-04" } }]);
   });
 
-  test("粒度只有序列两档，YTD 只使用去年同期或明确对照", () => {
+  test("序列粒度只有按年和按月；YTD 只能与去年同期或明确指定的期间对比", () => {
     // 整段合计不在这条轴上：不可表达的组合不需要事前拒绝。
     expect(
       TIME_INTENT_INPUT.safeParse({
@@ -140,7 +140,7 @@ describe("business time intent", () => {
     ).toBe(false);
   });
 
-  test("任何窗口都不接受截止字段：冻结只能由绝对表达式承载", () => {
+  test("窗口不接受截止月字段，固定期间只能用绝对起止月份表达", () => {
     const accepts = (window: unknown) => TIME_INTENT_INPUT.safeParse({ window }).success;
     const grain = "month";
     expect(
@@ -283,7 +283,7 @@ describe("business time intent", () => {
   });
 });
 
-describe("整窗合计的求值期间", () => {
+describe("整段合计的求值期间", () => {
   const window = { from: "2025-06", to: "2026-07" };
 
   const flow: MetricTimeResolution = {
@@ -309,7 +309,7 @@ describe("整窗合计的求值期间", () => {
     expect(totalPeriodOf(snapshot, window)).toEqual({ from: "2026-07", to: "2026-07" });
   });
 
-  test("年初累计指标恒从终点所在年的一月起算，与坐标起点无关", () => {
+  test("年初累计指标从终点所在年的一月起算，与坐标起点无关", () => {
     expect(totalPeriodOf(ytd, window)).toEqual({ from: "2026-01", to: "2026-07" });
     // 同一日历年内也一样：值按年初归零，不因为坐标从三月起就少算两个月。
     expect(totalPeriodOf(ytd, { from: "2026-03", to: "2026-07" })).toEqual({
@@ -318,7 +318,7 @@ describe("整窗合计的求值期间", () => {
     });
   });
 
-  test("按月定义的指标跨月即降级到终点当月，并显式标记；单月窗口不降级", () => {
+  test("按月定义的指标跨月时改取终点月并标记 degraded；单月窗口不受影响", () => {
     expect(totalPeriodOf(monthly, window)).toEqual({
       from: "2026-07",
       to: "2026-07",
@@ -328,7 +328,7 @@ describe("整窗合计的求值期间", () => {
     expect(totalPeriodOf(monthly, single)).toEqual(single);
   });
 
-  test("能力卡由指标合同推导，与目录装配同出一源", () => {
+  test("时间能力由指标合同推导，与目录使用同一来源", () => {
     expect(metricTimeCapabilities({ aggregation: "sum", window: "selected" })).toEqual({});
     expect(metricTimeCapabilities({ aggregation: "recompute", window: "year_to_date" })).toEqual({
       year_scoped: true,
@@ -338,7 +338,7 @@ describe("整窗合计的求值期间", () => {
     ).toEqual({ grain: "month" });
   });
 
-  test("年初归零指标的跨年总计是结构化冲突，序列粒度不受影响", () => {
+  test("年初累计指标的跨年合计返回结构化冲突，序列粒度不受影响", () => {
     const selection = resolved({
       range: { from: "2025-01", to: "2026-07" },
       grain: "total",
@@ -365,7 +365,7 @@ describe("时间键", () => {
     window: { kind: "range" as const, from: "2024-01", to: "2026-07", grain: "year" as const },
   };
 
-  test("单月带对照时按坐标给键：同年撞桶按月，跨年按年；省略主截止月恒按月", () => {
+  test("单月带对照时：同一年内的对照按月区分，跨年按年区分；省略主截止月时按月区分", () => {
     expect(
       resolved(
         compileTimeIntent({
@@ -392,7 +392,7 @@ describe("时间键", () => {
     ).toBe("month");
   });
 
-  test("期间带对照时沿用窗口粒度，合计腿不得带对照", () => {
+  test("期间带对照时沿用窗口粒度，合计子查询不带对照", () => {
     const compared = compileTimeIntent({
       ...range,
       comparison: { kind: "custom", window: { kind: "range", from: "2021-01", to: "2023-07" } },

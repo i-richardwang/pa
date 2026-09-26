@@ -1,7 +1,5 @@
 /**
- * 查询栏：筛选、指标、分组三节。栏内只有一条编辑规则——选择类控件（下拉、分段、行选）
- * 一改即落草稿；文本框在失焦或回车时落，落的是此刻框里的值，故文本框不受控、
- * 以外部值为 `key` 重挂。
+ * 选择类控件改动后立即写入草稿；文本框在失焦或回车时写入，因此文本框不受控，以外部值作 `key` 重新挂载。
  */
 import type { ReactNode } from "react";
 import {
@@ -60,36 +58,30 @@ import { MemberPopover, type PickableMember } from "./member_picker";
 
 const MEMBER_CONTENT_CLASS = "px-0 pt-0 md:px-0";
 
-/**
- * CSS `auto` 列是整列一起量：分组各行共用一张网格，触发件才对齐同一条竖线。
- */
+/** CSS `auto` 列按整列计算宽度：分组各行共用一张网格，各行的触发按钮才能纵向对齐。 */
 const BREAKDOWN_CONTENT_CLASS = cn(
   INSPECTOR_ROW_INDENT_CLASS,
   "grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-y-1.5 px-0 pl-2 md:px-0 md:pl-2",
 );
 
-/** 最大项数的上限：排名只看头部。 */
 const MAX_ITEMS_LIMIT = 20;
 
-/**
- * 返回元素而非组件：交给 `PopoverTrigger render={...}`，处理器与 ref 直接合并到该元素上。
- */
+/** 返回元素而非组件：`PopoverTrigger render={...}` 会把事件处理器和 ref 合并到这个元素上。 */
 const addButton = (label: string) => (
   <Button aria-label={label} className="text-pa-muted" size="icon-sm" variant="subtle">
     <PlusIcon />
   </Button>
 );
 
-/** 同一枚减号在筛选题行与成员行删的宾语不同，一律配 Tooltip 讲明。 */
 function RowAction({
   label,
   tip,
   icon,
   onClick,
 }: {
-  /** 无障碍名，带成员名（读屏在一列同形的钮里靠它区分）。 */
+  /** 无障碍名，包含成员名，读屏靠它区分同一列里外观相同的按钮。 */
   label: string;
-  /** 可见说明，只说这枚钮做什么，不重复成员名——名字就在同一行左边。 */
+  /** 可见提示，只说明按钮作用，不含成员名。 */
   tip: string;
   icon: ReactNode;
   onClick: () => void;
@@ -131,10 +123,9 @@ function calculationTitle(dimensionTitle: string): string {
   return `${stem}结构`;
 }
 
-/** 成员浮层里那条「构成占比」的身份：不是目录成员，只是加进查询的另一种指标。 */
+/** 成员浮层中「占比」选项的 id，不对应目录成员。 */
 const PERCENT_OF_TOTAL_PICK_ID = "calculation:percent_of_total";
 
-/** 前置条件不满足时仍列出、只是灰，理由讲「先去做什么」。 */
 export function percentOfTotalPick({
   measures,
   dimensions,
@@ -257,7 +248,7 @@ function CalculationRow({
                 if (!value) return;
                 const member = dimensions.find((candidate) => candidate.id === value);
                 if (!member) return;
-                // 名字还是默认那句时跟着维度走；用户改过名就不动它。
+                // 名称仍是默认值时随维度更新；用户改过名称则保留。
                 const isDefaultTitle = calculation.title === calculationTitle(dimensionTitle);
                 commit({
                   category_dimension: value,
@@ -363,7 +354,6 @@ function BreakdownField({
     : direction === "desc"
       ? "从高到低"
       : "从低到高";
-  // 触发件印这一句设置的结论，不印控件名。
   const rangeLabel = !active
     ? "全部"
     : active.max_items
@@ -373,7 +363,7 @@ function BreakdownField({
       : byName
         ? "按名称"
         : "按数值";
-  // 一枚图标同时表达依据与方向：名称升序与数值降序都是「从宽到窄」那一支。
+  // 同一个图标同时表示依据和方向：名称升序与数值降序都用「从宽到窄」图标。
   const descending = byName ? direction === "asc" : direction === "desc";
   const RangeIcon = !active
     ? ArrowUpDownIcon
@@ -488,7 +478,6 @@ function BreakdownField({
                 inputMode="numeric"
                 key={active?.max_items ?? "all"}
                 onBlur={(event) => {
-                  // 空或非正整数即不限项；超过上限压到上限。框里回写落下的那个值。
                   const count = Number(event.currentTarget.value.replace(/[^\d]/g, ""));
                   const next =
                     Number.isInteger(count) && count >= 1
@@ -529,7 +518,7 @@ export function ReportQueryRail({
   children,
 }: {
   draft: AnalysisEditState;
-  /** 空白起点尚无结果：字段标题与最新数据月份都直接使用目录。 */
+  /** 新建分析尚未运行时为 null，字段标题从目录取。 */
   replay: ReplayPayload | null;
   catalog: CatalogPayload | null;
   onChange: (draft: AnalysisEditState) => void;
@@ -539,7 +528,6 @@ export function ReportQueryRail({
   leading?: ReactNode;
   children?: ReactNode;
 }) {
-  // 被编辑的视图取自草稿规格的收敛点：草稿是编辑对象的真相，结果只是它上一次运行的产物。
   const resultTitleOf = replay ? makeTitleOf(replay.payload.view) : (member: string) => member;
   const queryView = semanticEditableQuery(draft.analysis);
 
@@ -552,7 +540,7 @@ export function ReportQueryRail({
             {queryView ? (
               <LoadingMark className="py-6" />
             ) : (
-              <p className="px-2 text-sm/4.5 text-pa-muted">该分析仅支持调整呈现。</p>
+              <p className="px-2 text-sm/4.5 text-pa-muted">该分析只能调整显示方式。</p>
             )}
           </section>
           {children}
@@ -680,7 +668,7 @@ export function ReportQueryRail({
               candidateIssue={(member) =>
                 candidateIssueOf({ ...intent, measures: [...measures, member.id] })
               }
-              extras={{ label: "用已选指标再算", items: [calculationPick] }}
+              extras={{ label: "基于已选指标计算", items: [calculationPick] }}
               members={catalog.measures}
               metricDomains={catalog.metric_domains}
               onPick={(member) => {

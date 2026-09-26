@@ -1,7 +1,4 @@
-/**
- * 看板瓦片的分叉调整：保存时以当前身份铸自有 Analysis/View 并新建报告，
- * 不把别人的身份挂到自己名下。
- */
+/** 调整看板里的报告：保存时以当前用户身份新建 Analysis/View 和报告，原报告不变。 */
 import { AnalysisWorkbench } from "../analyses/analysis_workbench";
 import { errorText } from "../api";
 import { useBoard, useBoardReportReplay, useCatalogQuery } from "../dashboard_queries";
@@ -36,7 +33,6 @@ export function BoardReportEditPage({ boardId, reportId }: { boardId: string; re
             hasSavedResult: true,
           }
         : null,
-    // 分叉的规格取自那份重放本身。
     savedReplay: replay,
     target: { kind: "create" },
     onCreated: (report) => navigateTo(reportHash(report.id)),

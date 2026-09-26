@@ -84,7 +84,7 @@ export type PublicApplicationError = PublicErrorPayload & {
   internal: boolean;
 };
 
-/** 所有 transport 共用的错误分类；未知异常一律收口为安全的 internal。 */
+/** HTTP 与 MCP 共用的错误分类；未知异常映射为 internal，不向调用方暴露原始错误信息。 */
 export function publicApplicationError(error: unknown): PublicApplicationError {
   let classified: ApplicationError;
   if (error instanceof ApplicationError) {

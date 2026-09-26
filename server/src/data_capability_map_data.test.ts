@@ -1,6 +1,6 @@
 /**
- * Demo 能力地图夹具漂移门禁：参考 JSON 必须等于 Demo 分类、正式指标图与 Cube 模型装配结果。
- * 装配器测试同时锁定全局维度身份、业务指标域归属和物理事实血缘的 fail-closed 合同。
+ * Demo 能力地图的参考 JSON 必须与 Demo 分类、正式指标依赖图和 Cube 模型组装出的结果一致。
+ * 同时测试组装器在维度身份、指标域归属和事实表来源不合规时报错。
  */
 import { expect, test } from "bun:test";
 import { readdir, readFile } from "node:fs/promises";
@@ -61,7 +61,7 @@ test("Demo 能力地图参考夹具与统一语义模型一致", async () => {
   expect(reference).toEqual(built);
 });
 
-test("统一语义目录装配唯一的数据时钟锚点", async () => {
+test("统一语义目录为每个时间源组装唯一的时钟锚点", async () => {
   const catalog = buildSemanticModelCatalog(
     await modelFiles(),
     semanticPackage.taxonomy,
@@ -84,7 +84,7 @@ test("统一语义目录装配唯一的数据时钟锚点", async () => {
   ]);
 });
 
-test("地图呈现七张公开演示事实、四个业务指标域且不引入运行时 join", async () => {
+test("地图包含七张 Demo 事实表、四个指标域，且没有运行时 join", async () => {
   const graph = buildMap(
     await modelFiles(),
     semanticCatalogFormalMetrics(semanticPackage.formal_metrics),
@@ -129,7 +129,7 @@ test("地图呈现七张公开演示事实、四个业务指标域且不引入�
   });
 });
 
-test("维度构件是全局语义身份，事实只保留物理绑定", async () => {
+test("维度分组是全局语义身份，事实表只保留物理绑定", async () => {
   const graph = buildMap(
     await modelFiles(),
     semanticCatalogFormalMetrics(semanticPackage.formal_metrics),
@@ -198,7 +198,7 @@ views:
         includes: [department_name, total]
 `;
 
-test("执行 View 对不存在成员的投影 fail-closed", () => {
+test("执行 View 引用不存在的成员时组装失败", () => {
   const brokenView = validView.replace("total]", "missing_member]");
   expect(() =>
     buildMap([
@@ -208,7 +208,7 @@ test("执行 View 对不存在成员的投影 fail-closed", () => {
   ).toThrow("不存在成员");
 });
 
-test("业务指标域属于指标，执行 View 不得声明域身份", () => {
+test("指标域声明在指标上，执行 View 不能声明指标域", () => {
   const viewWithDomain = validView.replace(
     "query_surface: metric_source",
     "query_surface: metric_source\n      metric_domain_id: metric_domain:workforce_structure",
@@ -221,7 +221,7 @@ test("业务指标域属于指标，执行 View 不得声明域身份", () => {
   ).toThrow("执行 View 不得声明 metric_domain_id");
 });
 
-test("公开叶子指标必须归属已登记的业务指标域", () => {
+test("公开的基础指标必须属于已登记的指标域", () => {
   const missingDomain = validCube.replace(
     "meta: { metric_domain_id: metric_domain:workforce_structure }",
     "",
@@ -245,7 +245,7 @@ test("公开叶子指标必须归属已登记的业务指标域", () => {
   ).toThrow("未登记的业务指标域");
 });
 
-test("受控明细 View 不进入业务指标域与普通指标来源", () => {
+test("明细 View 不属于任何指标域，也不作为指标来源", () => {
   const detailView = validView
     .replace("metric_source", "detail")
     .replace("      time_anchor_measure: total\n", "");
@@ -282,7 +282,7 @@ cubes:
   );
 });
 
-test("事实公开维度必须归属已登记的全局维度构件", () => {
+test("事实表公开的维度必须属于已登记的维度分组", () => {
   const ungrouped = validCube.replace("meta: { dimension_group: organization }", "");
   expect(() => buildMap([{ path: "cubes/demo.yml", text: ungrouped }])).toThrow(
     "缺少 dimension_group",
@@ -297,7 +297,7 @@ test("事实公开维度必须归属已登记的全局维度构件", () => {
   );
 });
 
-test("同名规范维度不得跨构件归属或产生不同公开契约", () => {
+test("同名标准维度不能属于不同分组，也不能有不同的公开定义", () => {
   const conflictingGroup = `
 cubes:
   - name: fact_a
@@ -328,7 +328,7 @@ cubes:
   );
 });
 
-test("非公开成员必须声明可解释职责", () => {
+test("非公开成员必须说明用途", () => {
   const missingRole = `
 cubes:
   - name: demo_fact

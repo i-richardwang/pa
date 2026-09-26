@@ -18,7 +18,7 @@ const INSPECTOR_SECTION_RULE_CLASS =
   "mx-2 hidden border-pa-line border-b-[0.5px] pt-4 " +
   "group-data-[face=profile]/inspector:group-[&:not(:last-child)]/section:block";
 
-/** 6.5 = 图标 4 格 + 图标到名字 2.5 格。 */
+/** 6.5 = 图标宽 4 + 图标与名称间距 2.5（Tailwind spacing 单位）。 */
 export const INSPECTOR_ROW_INDENT_CLASS = "ml-6.5";
 
 export function InspectorSection({
@@ -116,7 +116,6 @@ export function InspectorSection({
   );
 }
 
-/** 与壳的 `StageAside.face` 同一份枚举。 */
 export type InspectorFace = "settings" | "profile";
 
 export function InspectorBody({

@@ -6,7 +6,7 @@ import { InvalidRequestError, NotFoundError } from "../application/errors.js";
 const days = (request: { query(name: string): string | undefined }) =>
   Number(request.query("days") ?? 30);
 
-/** 分页缺省值与硬上限由各应用服务统一裁定，HTTP 层只解析可选数字。 */
+/** 分页默认值和上限由各应用服务决定，HTTP 层只解析可选的数字参数。 */
 function page(request: { query(name: string): string | undefined }) {
   const number = (name: string) => (request.query(name) ? Number(request.query(name)) : undefined);
   return { limit: number("limit"), offset: number("offset") };

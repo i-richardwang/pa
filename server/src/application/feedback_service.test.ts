@@ -3,7 +3,7 @@ import type { FeedbackRepository } from "../ports/feedback_repository.js";
 import { createFeedbackService } from "./feedback_service.js";
 import { ForbiddenError, InvalidRequestError } from "./errors.js";
 
-test("Feedback Application 一次完成输入、审核说明与分页规范化", async () => {
+test("反馈服务去掉输入与审核说明的首尾空白、规范化分页参数，并校验主题键与管理员权限", async () => {
   const calls: unknown[] = [];
   const repository = {
     create: async (input, caller) => {

@@ -71,7 +71,7 @@ function comparisonChoice(time: TimeIntent): ComparisonChoice {
 }
 
 export function previousPeriodLabel(window: TimeIntent["window"]): string {
-  return window.kind === "current_month" ? "上月" : "上一等长期间";
+  return window.kind === "current_month" ? "上月" : "上一期";
 }
 
 export function previousYearLabel(window: TimeIntent["window"]): string {
@@ -88,7 +88,7 @@ function comparisonSummary(time: TimeIntent): string {
   return "自定义对比";
 }
 
-/** 冻结与否只看窗口自身是不是绝对表达式：固定单月与明确起止月冻结，其余随数据滚动。 */
+/** 指定月份的单月与自定义范围是固定时间，其余窗口随数据更新。 */
 function fixedWindow(time: TimeIntent): boolean {
   return (
     time.window.kind === "range" ||
@@ -109,7 +109,7 @@ export function adjustTimeWindow(
   const adjustments: string[] = [];
   if (comparison?.kind === "previous_period" && window.kind === "year_to_date") {
     comparison = { kind: "previous_year" };
-    adjustments.push("已将对比改为“去年同期”，因为今年至今不使用跨年的上一等长期间。");
+    adjustments.push("已将对比改为“去年同期”：今年至今的上一期会跨年，不能用于比较。");
   }
   if (comparison?.kind === "custom") {
     const kind = window.kind === "current_month" ? "current_month" : "range";
@@ -133,7 +133,6 @@ export function setTimeComparison(
   return { ...base, ...(comparison ? { comparison } : {}) };
 }
 
-/** 只有绝对表达式承载冻结，故只有它们从上一窗口继承终点。 */
 function presetWindow(
   choice: WindowChoice,
   latest: string,
@@ -181,7 +180,7 @@ export function summarizeResolvedTime(time: TimeIntent, latest: string): string 
     grain === undefined ? "一个结果" : grain === "month" ? "每月一个结果" : "每年一个结果";
   const comparison = comparisons.length ? ` · 对比 ${comparisons.map(rangeLabel).join("、")}` : "";
   const rolling = !fixedWindow(parsed);
-  return `主期 ${rangeLabel(primary)} · ${displayText}${comparison} · ${rolling ? "随数据更新" : "固定时间"}`;
+  return `观察期 ${rangeLabel(primary)} · ${displayText}${comparison} · ${rolling ? "随数据更新" : "固定时间"}`;
 }
 
 export function timeChangeIssue(
@@ -360,10 +359,7 @@ function grainChoiceIssues(
   return issues;
 }
 
-/**
- * 序列粒度分段，只在期间窗口出现：一击直达，恒有一档亮。
- * 禁用钮不派发指针事件，Tooltip 挂在外层 span 上。
- */
+/** 禁用的按钮不派发指针事件，Tooltip 挂在外层元素上。 */
 function GrainSegments({
   time,
   latest,
@@ -383,7 +379,7 @@ function GrainSegments({
       aria-label="序列粒度"
       columns={2}
       onValueChange={(value) => {
-        // 单选组里再点亮着的档会给出空值：粒度不可撤回，视为没有动作。
+        // 单选组再次点击已选项会返回空值；粒度不能取消，忽略这次操作。
         const choice = value[0] as SeriesGrain | undefined;
         if (choice && choice !== active) onChange(withSeriesGrain(time, choice));
       }}
@@ -593,10 +589,7 @@ function TimeMonthPickers({
   return null;
 }
 
-/**
- * 工作台底栏与看板时间覆盖同用这一条；每次落值都过 `timeChangeIssue`，
- * 联动调整与拒绝都以 toast 回执。
- */
+/** 工作台底栏和看板时间覆盖共用此组件。 */
 export function TimeBar({
   time,
   onChange,

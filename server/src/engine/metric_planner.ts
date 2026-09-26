@@ -1,4 +1,4 @@
-/** 正式指标 Planner：把逻辑指标查询编译为最少数量的单事实 Cube 查询腿。 */
+/** 正式指标 Planner：把逻辑指标查询编译为数量最少的单事实 Cube 子查询。 */
 import type { TopNSelectionSpec } from "../semantic_core/analysis_spec.js";
 import type { TimeInput } from "../semantic_core/time_contract.js";
 import { z } from "zod";
@@ -37,7 +37,7 @@ export type MetricQueryLeg = {
   measures: Record<string, string>;
 };
 
-/** 聚合后最小支撑量保护；Planner 已确保支撑指标叶子进入查询腿。 */
+/** 聚合后最小支撑量保护；支撑指标的叶子由 Planner 加入子查询。 */
 export type PlannedResultGuard = {
   kind: "minimum_support";
   /** 受保护的输出指标限定名。 */
@@ -255,10 +255,7 @@ export function planMetricQuery(
   return planMetricQueryWithPlanning(query, planning, views, options.timeView, options.selection);
 }
 
-/**
- * 解析一个语义查询视图的业务时间。同一视图展开的排名、总体与其他 grouping set 复用返回值，
- * 不得各自再解析一次。
- */
+/** 解析一个语义查询视图的业务时间；同一视图展开的排名、总体等 grouping set 共用此结果，不各自重新解析。 */
 export function resolveMetricQueryPlanning(
   query: CubeQuery,
   time: TimeInput | undefined,
@@ -307,7 +304,7 @@ function metricQueryParts(query: CubeQuery, views: CubeView[]): MetricQueryParts
   return { requested, outputMetricIds, nodes, resultGuards, leaves };
 }
 
-/** 在已经解析的视图时间签名下规划一个 grouping set。 */
+/** 使用视图已解析的业务时间规划一个 grouping set。 */
 export function planMetricQueryWithPlanning(
   query: CubeQuery,
   planning: ResolvedTimePlanning,
@@ -324,7 +321,7 @@ export function planMetricQueryWithPlanning(
   for (const leaf of leaves) {
     const source = sourceForLeaf(views, leaf.member);
     const form = planning.evalForms.get(leaf.member);
-    if (!form) throw new Error(`叶子指标 ${leaf.member} 缺少时间求值形态`);
+    if (!form) throw new Error(`叶子指标 ${leaf.member} 缺少时间求值方式`);
     const key = groupKey(source.name, form);
     const group = groups.get(key) ?? { source, form, leaves: [] };
     group.leaves.push(leaf);
@@ -371,9 +368,7 @@ export function planMetricQueryWithPlanning(
   };
 }
 
-/**
- * 从模型声明提取聚合后结果保护规则，并把显式支撑指标展入执行图。
- */
+/** 从模型声明提取聚合后结果保护规则，并把支撑指标加入执行图。 */
 function resultGuardsOf(
   member: CubeMember,
   index: MetricIndex,

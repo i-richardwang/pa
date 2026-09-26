@@ -33,7 +33,7 @@ export const reportKeys = {
   draftPreview: (sessionKey: string) => ["draft_preview", sessionKey] as const,
 };
 
-/** 重放载荷所依据的版本必须与当前报告详情一致；临时预览（无 revision）视为一致。 */
+/** 重放的 revision 必须与当前报告详情一致；临时预览没有 revision，视为一致。 */
 export function revisionsConsistent(report: ReportDetail, replay: ReplayPayload): boolean {
   return replay.revision === undefined || replay.revision === report.revision;
 }
@@ -46,7 +46,7 @@ function useReportDetail(id: string) {
   });
 }
 
-/** 报告所有者视角的重放：报告页与看板编辑态的瓦片同取这一份。 */
+/** 按报告所有者权限重放；报告页和看板编辑时的瓦片共用这份缓存。 */
 export function reportReplayQueryOptions(id: string) {
   return {
     queryKey: reportKeys.replay(id),
@@ -59,10 +59,7 @@ function useReportReplay(id: string) {
   return useQuery(reportReplayQueryOptions(id));
 }
 
-/**
- * 报告详情 + 与其版本对位的已存重放，两跳并排发。
- * 重放自带 revision，与详情对不上即双双拉回；与两跳先后无关。
- */
+/** 并行请求报告详情和已保存的重放；两者 revision 不一致时都重新取数。 */
 export function useReportResource(id: string) {
   const queryClient = useQueryClient();
   const detail = useReportDetail(id);
@@ -193,7 +190,7 @@ type DraftRunInput = {
   analysis: AnalysisDefinition;
   view: SemanticViewIntent;
   view_preferences: ViewPreferences;
-  /** 传 null 表示规格已变，创建 Run 并执行；否则只铸新 View。 */
+  /** null 表示规格已变，需要创建新 Run 并执行；否则只新建 View。 */
   base: ReplayPayload | null;
 };
 
@@ -213,7 +210,7 @@ export async function runDraft(input: DraftRunInput): Promise<ReplayPayload> {
   );
   const resultView = base.render_bundle.view;
   const presentation = compilePresentationBlock(resultView, materialized.render_decl);
-  // 降级说明与呈现同源重算：只改呈现时不回服务端，说明也必须跟着新声明一起出。
+  // 只改呈现时不重新查询，降级说明要和呈现一起按新声明在本地重新计算。
   const notes = presentationFallbacks(resultView.id, resultView, materialized.render_decl);
   return {
     ...base,
@@ -238,9 +235,7 @@ export function useRunDraft() {
   return useMutation({ mutationFn: runDraft });
 }
 
-/**
- * 预览结果住在会话键位 `draftPreview(sessionKey)`，无观察者即回收（gcTime 0）。
- */
+/** 预览结果由调用方写入这个查询键，没有订阅者时立即回收。 */
 export function useDraftPreview(sessionKey: string): ReplayPayload | null {
   const query = useQuery({
     queryKey: reportKeys.draftPreview(sessionKey),

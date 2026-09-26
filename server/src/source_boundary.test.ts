@@ -8,7 +8,7 @@ const BROWSER_SAFE_ROOTS = [
   ["result_view", new URL("../result_view/src/", import.meta.url)],
 ] as const;
 
-/** 令牌单源是 presentation_core/tokens.css，两个宿主样式表都必须导入。 */
+/** 设计令牌定义在 presentation_core/tokens.css，两个宿主样式表都必须导入它。 */
 const RENDER_STACK = new URL("../result_view/src/", import.meta.url);
 const HOST_STYLESHEETS = ["../widget/src/styles.css", "../console/src/styles.css"];
 const TOKENS_CSS = new URL("./presentation_core/tokens.css", import.meta.url);
@@ -43,7 +43,7 @@ test("every pa-* token the render stack uses is defined by both host stylesheets
   );
   const source = sources.join("\n");
 
-  // 工具类 bg-pa-surface → @theme inline 需有 --color-pa-surface（透明度修饰符 /50 不计入色名）
+  // 工具类 bg-pa-surface 需要 @theme inline 里有 --color-pa-surface（透明度修饰符如 /50 不算颜色名的一部分）
   const utilities = new Set(
     [
       ...source.matchAll(
@@ -51,7 +51,7 @@ test("every pa-* token the render stack uses is defined by both host stylesheets
       ),
     ].map((match) => match[1]),
   );
-  // 内联 style 消费的每个变量都必须有裸变量定义。
+  // 内联 style 用到的每个 CSS 变量都必须有定义。
   const VAR_PATTERN = /var\(\s*(--pa-[a-z][a-z-]*)/g;
   expect([...'style="color:var(--pa-fg)"'.matchAll(VAR_PATTERN)].map((match) => match[1])).toEqual([
     "--pa-fg",
@@ -72,7 +72,7 @@ test("every pa-* token the render stack uses is defined by both host stylesheets
     expect(tokens.includes(`${variable}:`), `tokens.css lacks ${variable}`).toBe(true);
   }
 
-  // 令牌单源只在被宿主样式表导入时才生效：两个宿主都必须显式 @import
+  // tokens.css 只有被宿主样式表导入才生效，两个宿主都必须显式 @import
   for (const stylesheet of HOST_STYLESHEETS) {
     const css = await readFile(new URL(stylesheet, import.meta.url), "utf8");
     expect(
@@ -82,28 +82,29 @@ test("every pa-* token the render stack uses is defined by both host stylesheets
   }
 });
 
-/** 出类名的源目录必须在两个宿主样式表里 `@source` 登记。 */
+/** 会产生 Tailwind 类名的源码目录，必须在两个宿主样式表里用 `@source` 登记，否则其中的新类不会被生成。 */
 const CLASS_BEARING_SOURCES = ["../../result_view/src", "../../src/presentation_core"];
 
 test("every source directory that emits class names is registered with both host stylesheets", async () => {
   for (const stylesheet of HOST_STYLESHEETS) {
     const css = await readFile(new URL(stylesheet, import.meta.url), "utf8");
     const registered = [...css.matchAll(/@source\s+"([^"]+)"/g)].map((match) => match[1]);
-    // 探测器活性：认得出真登记项，且不把随便一个路径当成已登记
     expect(
       registered.length,
-      `${stylesheet} 一条 @source 都没读到，断言失去着力点`,
+      `${stylesheet} 里没有读到任何 @source，这条检查已经不起作用`,
     ).toBeGreaterThan(0);
     expect(registered).not.toContain("../../src/semantic_core");
     for (const source of CLASS_BEARING_SOURCES) {
-      expect(registered, `${stylesheet} 少登记 ${source}，那里的新类会静默丢失`).toContain(source);
+      expect(registered, `${stylesheet} 没有登记 ${source}，该目录新增的样式类不会生成`).toContain(
+        source,
+      );
     }
   }
 });
 
 /**
- * 浏览器工作区的模块别名：tsconfig 与 vite 两套声明同一个集合，每个别名都有源码在 import，
- * 自身工作区根别名之外，别名一律指向显式源码边界（contracts / semantic_core / presentation_core）。
+ * 浏览器工作区的模块别名：tsconfig 和 vite 必须声明同一组别名，每个别名至少被 import 一次；
+ * 除工作区自身的根别名外，别名只能指向 contracts、semantic_core 或 presentation_core。
  */
 const BROWSER_WORKSPACES = ["console", "widget"] as const;
 const WORKSPACE_ROOT_ALIASES = new Set(["@", "@widget"]);
@@ -117,7 +118,7 @@ const importers = (alias: string, sources: string[]): number =>
   ).length;
 
 test("every browser alias is declared twice and imported at least once", async () => {
-  // 探测器活性：登记形态必须被抽出，非别名键必须落空；importer 计数认 from 与动态 import 两种写法
+  // 先验证匹配规则本身：能提取别名、不误认普通键，并同时识别 from 和动态 import 两种写法
   expect(
     aliasNames(`"@shape": ["../src/presentation_core/view_shape.ts"]`, /"(@[^"]*)"\s*:\s*\[/g),
   ).toEqual(["@shape"]);

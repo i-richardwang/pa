@@ -51,7 +51,7 @@ export function AddBoardWidget({
       open={open}
       value={query}
     >
-      {/* 名字与面上那行字同文：`combobox` 这个角色不许从内容取名，不写它就是一枚无名件。 */}
+      {/* combobox 角色不从内容计算可访问名称，需要显式 aria-label。 */}
       <AutocompleteTrigger
         aria-label="添加瓦片"
         className="pa-focus flex h-16 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-pa-wash font-normal text-base text-pa-muted hover:bg-pa-surface hover:text-pa-fg"
@@ -67,7 +67,7 @@ export function AddBoardWidget({
       >
         <AutocompleteSearch aria-label="搜索报告" placeholder="搜索…" />
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
-          {/* Empty 的根必须常挂着，读屏靠它播报结果条数的变化；变的只是它的孩子。 */}
+          {/* Empty 根节点需一直渲染，读屏器靠它播报结果数量的变化。 */}
           <AutocompleteEmpty className="not-empty:px-2.5 not-empty:py-6 text-center text-sm text-pa-faint">
             {error ?? (reports === null ? <LoadingMark size="small" /> : "没有匹配的报告")}
           </AutocompleteEmpty>
@@ -83,14 +83,14 @@ export function AddBoardWidget({
                 >
                   <span className="min-w-0 flex-1 truncate">{report.name}</span>
                   <span className="shrink-0 text-2xs text-pa-faint">
-                    {added ? "已在板内" : PRESENTATION_TYPE_LABELS[report.presentation_type]}
+                    {added ? "已在看板中" : PRESENTATION_TYPE_LABELS[report.presentation_type]}
                   </span>
                 </AutocompleteItem>
               );
             }}
           </AutocompleteList>
         </div>
-        {/* 这两条不是候选项，是另外两条出口，故不进列表——列表的方向键只走报告。 */}
+        {/* 这两个操作放在列表外，方向键只在报告候选之间移动。 */}
         <div className="flex shrink-0 flex-col gap-0.5 border-t border-pa-line p-1.5">
           <button
             className={FOOTER_ACTION_CLASS}

@@ -1,6 +1,4 @@
-/**
- * 以当前浏览者权限运行报告的薄容器；各瓦片独立成败，权限或规格错误不影响整板。
- */
+/** 以当前浏览者的权限运行报告；单个瓦片失败不影响其他瓦片。 */
 import { type UseQueryOptions, useQuery } from "@tanstack/react-query";
 import {
   ArrowDownIcon,
@@ -58,19 +56,19 @@ export function BoardTile({
   name: string;
   editing?: boolean;
   viewerEmail: string;
-  /** 查看态板级时间覆盖；编辑态忽略。 */
+  /** 查看时的看板级时间覆盖；编辑时忽略。 */
   timeOverride?: TimeIntent | null;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
-  /** 看板页集中承载唯一明细弹层。 */
+  /** 明细对话框由看板页统一渲染。 */
   onRecordProjectionRequest: (request: RecordProjectionDialogRequest) => void;
 
   onRemove?: () => void;
 }) {
   const override = !editing && timeOverride ? timeOverride : null;
-  // 编辑期草稿瓦片未落库，board-scoped 端点会 404，故编辑期走所有者重放。
+  // 编辑时新加的瓦片尚未保存，看板端点会返回 404，所以编辑时直接重放报告。
   const replayOptions: UseQueryOptions<ReplayPayload, Error, ReplayPayload, readonly unknown[]> =
     editing
       ? reportReplayQueryOptions(reportId)
@@ -88,7 +86,7 @@ export function BoardTile({
 
   const isReportOwner = data?.caller === viewerEmail;
   const hasReportAction = !!data && (isReportOwner || !!data.payload.view_id);
-  /** 非报告主只给「调整并另存」。 */
+  /** 非报告所有者只提供「调整并另存」。 */
   const reportMenuItem = hasReportAction ? (
     isReportOwner ? (
       <MenuLinkItem href={reportHash(reportId)}>
@@ -116,10 +114,10 @@ export function BoardTile({
               />
             }
           >
-            自身口径
+            使用报告时间
           </TooltipTrigger>
           <TooltipPopup>
-            <p>该分析含多视图或异窗派生，板级时间覆盖不适用，仍按自身声明运行。</p>
+            <p>该报告由多个查询组合而成，看板统一设置的时间对它不生效，仍按报告自己的时间运行。</p>
           </TooltipPopup>
         </Tooltip>
       )}

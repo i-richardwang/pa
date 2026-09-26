@@ -9,19 +9,19 @@ const terms = [
 ];
 
 describe("business term matcher", () => {
-  test("归一全半角、大小写与空白，但保留业务符号", () => {
+  test("规范化全半角、大小写与空白，保留业务符号", () => {
     expect(normalizeBusinessTerm(" Ｂａｎｄ Ｃ+  ")).toBe("band c+");
     expect(normalizeBusinessTerm("Band C")).not.toBe(normalizeBusinessTerm("Band C+"));
   });
 
-  test("精确匹配优先，短标签不反向命中扩展标签", () => {
+  test("精确匹配优先；输入只是标签的一部分时不匹配", () => {
     expect(matchBusinessTerms(["Band C+"], terms)).toEqual([
       { input_term: "Band C+", status: "resolved", term_ids: ["band_c"] },
     ]);
     expect(matchBusinessTerms(["Band C"], terms)).toEqual([]);
   });
 
-  test("整句按最长完整标签命中", () => {
+  test("整句输入匹配其中最长的完整标签", () => {
     expect(matchBusinessTerms(["请看Band C及以上的离职率"], terms)[0]).toEqual({
       input_term: "请看Band C及以上的离职率",
       status: "resolved",
@@ -29,7 +29,7 @@ describe("business term matcher", () => {
     });
   });
 
-  test("同一叫法多个含义显式返回歧义", () => {
+  test("同一叫法对应多个术语时返回 ambiguous", () => {
     expect(matchBusinessTerms(["组织"], terms)[0]).toEqual({
       input_term: "组织",
       status: "ambiguous",

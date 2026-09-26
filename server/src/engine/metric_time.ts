@@ -61,7 +61,7 @@ export function resolveMetricTime(
   }
 }
 
-/** 物理求值形态：年初累计与月末时点都落在同一条截止月份腿上。 */
+/** 物理求值方式：年初累计和月末时点指标都在同一条截止月份子查询上求值。 */
 export type TimeEvalForm = "interval" | "endpoint";
 
 export function physicalForm(basis: MetricValueBasis): TimeEvalForm {

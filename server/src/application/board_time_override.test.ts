@@ -13,7 +13,7 @@ const singleView: AnalysisDefinition = {
 };
 
 describe("applyBoardTimeOverride", () => {
-  test("单 query view：整体替换 time 并丢弃自身 compare", () => {
+  test("单查询视图的时间整体替换，原有对比一并去掉", () => {
     const override = {
       window: {
         kind: "trailing" as const,
@@ -29,7 +29,7 @@ describe("applyBoardTimeOverride", () => {
     expect(result.definition.query.time.comparison).toBeUndefined();
   });
 
-  test("含派生视图：unsupported", () => {
+  test("包含派生视图时返回 unsupported，定义保持不变", () => {
     const derived: AnalysisDefinition = {
       query: {
         view_title: "来源",

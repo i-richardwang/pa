@@ -2,7 +2,7 @@ cubes:
   - name: employee_fact_base
     title: 通用人员事实模板
     public: false
-    description: 为公开演示事实复用时间、组织、雇佣与岗位属性合同。
+    description: 演示数据中各张人员事实表共用的时间、组织、雇佣和岗位维度定义。
     meta: { model_role: template }
     sql: "SELECT * FROM read_parquet('/semantic/current/employee_month_snapshot_fact.parquet')"
     dimensions:

@@ -114,7 +114,7 @@ describe("dashboard report routes", () => {
     });
   });
 
-  test("明细业务校验错误保留可执行改法", async () => {
+  test("明细的业务校验错误保留修改建议", async () => {
     const app = dashboardApp({ email: "alice@x", name: "Alice" }, freshPath(), {
       records: {
         runReport: async () => {
@@ -261,7 +261,7 @@ describe("dashboard report routes", () => {
               {
                 status: "incompatible",
                 result_view_id: "query",
-                reason: "没有一个当前可见的执行来源能够承载维度「分类层级」",
+                reason: "当前可用的数据来源都不能同时支持维度「分类层级」；请去掉其中部分维度",
               },
             ],
           );
@@ -323,7 +323,7 @@ describe("dashboard report routes", () => {
         {
           result_view_id: "structure",
           kind: "empty_result",
-          note: expect.stringContaining("结果为空"),
+          note: expect.stringContaining("没有返回数据"),
         },
       ],
     });
@@ -341,7 +341,7 @@ describe("dashboard report routes", () => {
     expect(await incompatible.json()).toEqual({
       error: {
         code: "invalid_request",
-        message: "没有一个当前可见的执行来源能够承载维度「分类层级」",
+        message: "当前可用的数据来源都不能同时支持维度「分类层级」；请去掉其中部分维度",
         details: {
           issue: {
             code: "query_dimensions_unavailable",
@@ -352,7 +352,7 @@ describe("dashboard report routes", () => {
             {
               status: "incompatible",
               result_view_id: "query",
-              reason: "没有一个当前可见的执行来源能够承载维度「分类层级」",
+              reason: "当前可用的数据来源都不能同时支持维度「分类层级」；请去掉其中部分维度",
             },
           ],
         },
@@ -392,7 +392,7 @@ describe("dashboard report routes", () => {
     expect(plannedFor).toEqual(["alice@x", "alice@x", "alice@x"]);
   });
 
-  test("派生报告通过新 View 指针与名称原子更新", async () => {
+  test("派生报告在同一次更新中换成新的 View 和名称", async () => {
     const path = freshPath();
     const repository = createAnalysisRepository(createTestAppDatabase(path));
     const reports = createReports(createTestAppDatabase(path));
@@ -469,7 +469,7 @@ describe("dashboard report routes", () => {
     });
   });
 
-  test("owner 可经 PATCH 修改名称与呈现，CAS 冲突不静默覆盖", async () => {
+  test("所有者可通过 PATCH 修改名称和呈现；版本冲突时返回错误，不覆盖", async () => {
     const path = freshPath();
     const repository = createAnalysisRepository(createTestAppDatabase(path));
     const reports = createReports(createTestAppDatabase(path));
@@ -647,7 +647,7 @@ describe("dashboard report routes", () => {
     expect((await app.request(`/api/reports/${bobReport.id}/replay`)).status).toBe(404);
   });
 
-  test("报告存在但执行失败时返回上游错误而不是伪装成 404", async () => {
+  test("报告存在但执行失败时返回上游错误，不返回 404", async () => {
     const path = freshPath();
     const repository = createAnalysisRepository(createTestAppDatabase(path));
     const reports = createReports(createTestAppDatabase(path));

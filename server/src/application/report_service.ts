@@ -24,7 +24,7 @@ import { applyBoardTimeOverride, type BoardTimeOverrideStatus } from "./board_ti
 import type { ViewPreferences } from "../presentation_core/view_preferences.js";
 import { InvalidRequestError } from "./errors.js";
 
-/** Report 元数据与当前 View 的读取投影；定义与视图只物化在各自事实表。 */
+/** 报告元数据加上当前视图的定义、意图与偏好；定义和视图只存在各自的表里，不写入报告记录。 */
 export type ReportDocument = ReportRecord & {
   analysis_id: string;
   definition: AnalysisDefinition;

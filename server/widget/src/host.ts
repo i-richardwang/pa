@@ -1,9 +1,8 @@
 /**
- * 结果卡宿主接线：show_analysis 的 tool input 只交付 view_id；App 完成握手后调用
- * load_analysis_card，消费其 structuredContent 与不进模型上下文的 `_meta` 全量行块。
- * React 组件经 useHostState 消费合并后的 QueryPayload。
- * 卡片上限截断走 export 限时票据；仅当宿主支持标准下载时
- * 才提交 _meta 中的 resource_link，外链与剪贴板不作为结果卡的导出退路。
+ * 结果卡与宿主的连接：show_analysis 的输入只包含 view_id；握手完成后调用 load_analysis_card，
+ * 读取 structuredContent，以及 `_meta` 中不进入模型上下文的完整行数据。
+ * 超出卡片行数上限的结果通过限时导出票据下载；只在宿主支持标准下载时才提交 _meta 中的
+ * resource_link，不用外链或剪贴板代替。
  */
 import { deliverExport, resolveExportDelivery, type ExportDelivery } from "./host_actions.js";
 import type { PresentationBlock } from "@charts";
@@ -22,7 +21,7 @@ import {
 
 export type HostState = HostShellState & {
   payload: QueryPayload | null;
-  /** 服务端完整呈现配置，仅经 _meta 交付。 */
+  /** 完整呈现配置，只通过 _meta 交付。 */
   presentation: PresentationBlock | null;
   exportResource: ExportResourceLink | null;
   /** payload 为空时显示的状态文案（等待/错误/取消） */

@@ -35,7 +35,7 @@ export function ReportPage({ id }: { id: string }) {
     seed,
     savedReplay,
     target: { kind: "update", reportId: id, ifRevision: report?.revision ?? 1 },
-    // 原地保存留在本页；只有「另存为」产生新报告，才换向那份新报告。
+    // 原地保存留在本页；「另存为」新建报告后跳转到新报告。
     onCreated: (created) => navigateTo(reportHash(created.id)),
   });
   function archive() {

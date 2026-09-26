@@ -182,7 +182,7 @@ describe("semantic query intent", () => {
     });
   });
 
-  test("跨指标域指标编译为一份逻辑查询，由正式指标 Planner 再拆事实腿", () => {
+  test("跨指标域指标编译为一份逻辑查询，由正式指标 Planner 再拆成单事实子查询", () => {
     const result = planQueryIntent(
       catalog,
       {
@@ -273,7 +273,7 @@ describe("semantic query intent", () => {
     });
   });
 
-  test("受控明细绑定不参与普通指标唯一归属", () => {
+  test("明细绑定不计入「指标只能归属一个执行 View」的限制", () => {
     expect(
       planQueryIntent(
         catalog,

@@ -29,7 +29,7 @@ function dashboardApp(
 }
 
 describe("dashboard app routes and access control", () => {
-  test("未登录：页面 302 到登录页带回跳，API 401", async () => {
+  test("未登录：页面重定向到登录页并带回跳地址，API 返回 401", async () => {
     const app = buildApp(null);
     const page = await app.request("/");
     expect(page.status).toBe(302);
@@ -43,7 +43,7 @@ describe("dashboard app routes and access control", () => {
     expect((await app.request("/api/usage/overview")).status).toBe(401);
   });
 
-  test("普通用户：可进壳（me）与本人分析记录，管理端点 403", async () => {
+  test("普通用户：可访问会话信息（me）和本人分析记录，管理端点返回 403", async () => {
     const app = buildApp({
       email: "u@x.com",
       name: "u",
@@ -72,7 +72,7 @@ describe("dashboard app routes and access control", () => {
     expect(denied.status).toBe(403);
   });
 
-  test("会话按语义包标题呈现非 HR 授权范围", async () => {
+  test("会话中的授权范围使用语义包定义的标题，不限于组织维度", async () => {
     const app = dashboardApp(
       {
         email: "regional@x.com",
@@ -92,7 +92,7 @@ describe("dashboard app routes and access control", () => {
     });
   });
 
-  test("业务目录：PA 用户按同一 Principal 读取公共投影，真实值按需透传行权限", async () => {
+  test("业务目录：用户以同一身份读取公开目录，维度取值查询带上行权限", async () => {
     const contexts: unknown[] = [];
     const app = dashboardApp(
       {
@@ -219,7 +219,7 @@ describe("dashboard app routes and access control", () => {
     ).toBe(400);
   });
 
-  test("数据能力地图：仅管理员读取当前语义包投影", async () => {
+  test("数据能力地图：只有管理员可以读取", async () => {
     const capabilityMap = { facts: [], dimension_groups: [], metric_domains: [] };
     const routes = (role: string) =>
       dashboardApp({ email: `${role}@x`, name: role, role }, { capabilityMap });
@@ -298,7 +298,7 @@ describe("dashboard app routes and access control", () => {
     }
   });
 
-  test("Web 分析输入错误保留可执行提示", async () => {
+  test("Web 分析输入错误保留修改建议", async () => {
     const app = dashboardApp(
       { email: "u@x", name: "u", role: "user" },
       {
@@ -363,7 +363,7 @@ describe("dashboard app routes and access control", () => {
     expect((await app.request("/api/usage/unanswered")).status).toBe(200);
   });
 
-  test("反馈审核端点：仅 admin 可列出和处置，处置动作落 feedback 使用日志", async () => {
+  test("反馈审核端点：只有管理员可以列出和处理，处理操作写入使用日志", async () => {
     const path = freshPath();
     const feedbackRepository = createFeedbackStore(createTestAppDatabase(path));
     const created = await feedbackRepository.create(
@@ -401,7 +401,7 @@ describe("dashboard app routes and access control", () => {
     expect(logged).toEqual([{ tool: "feedback", title: "接受反馈：能否查看工时" }]);
   });
 
-  test("业务术语端点：公共阅读、管理员即时写入删除与审计均 fail-closed", async () => {
+  test("业务术语接口：所有人可读，只有管理员可写且每次写入都记日志，存储出错时返回通用 500", async () => {
     const id = "b1161af9-a5c1-4d28-b958-9185c04f7a51";
     const logged: { tool: string; title?: string }[] = [];
     const writes: unknown[] = [];
@@ -424,7 +424,7 @@ describe("dashboard app routes and access control", () => {
         dimensions: [],
       }),
       dimensionValues: async () => {
-        throw new Error("术语维护不应翻值");
+        throw new Error("业务术语接口不应查询维度候选值");
       },
     };
     const routes = (role: string) =>

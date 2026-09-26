@@ -126,7 +126,7 @@ describe("TimeExecutor 月粒度输出", () => {
     ]);
   });
 
-  test("多窗跨年结果恒以真实桶年份为准，窗口起点只作缺省兜底", () => {
+  test("多窗口跨年结果以时间桶的实际年份为准，缺少年份时才用窗口起点", () => {
     const compared: PlannedQuery = {
       ...plan,
       query: {
@@ -181,7 +181,7 @@ describe("TimeExecutor 月粒度输出", () => {
   });
 });
 
-test("完整执行按单窗探测上限 fail-closed，不返回部分比较矩阵", async () => {
+test("完整执行时任一窗口达到行数上限就报错，不返回不完整的对比结果", async () => {
   const compared: PlannedQuery = {
     ...plan,
     query: {

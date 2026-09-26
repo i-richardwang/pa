@@ -224,14 +224,14 @@ export function encodeQueryResult(input: {
   const resolvedDeliveryColumns = Object.fromEntries(
     metricTimeMembers(queryPlan).map((member) => {
       const column = columnOfMember.get(member);
-      if (!column) throw new Error(`已解析时间签名的成员 ${member} 不在执行结果列中`);
+      if (!column) throw new Error(`时间成员 ${member} 不在执行结果列中`);
       return [column, memberShortName(member)];
     }),
   );
   const calculatedStructureShares = grouping.structure_shares.map((share) => {
     const measure = columnOfMember.get(share.measure);
     const numerator = columnOfMember.get(share.numerator);
-    if (!measure || !numerator) throw new Error("构成占比的结果列关系无法投影");
+    if (!measure || !numerator) throw new Error("找不到构成占比对应的结果列");
     return { measure, numerator };
   });
   const structureShares = [...modelStructureShares, ...calculatedStructureShares];
@@ -239,7 +239,7 @@ export function encodeQueryResult(input: {
   const summaryRows = grouping.summary ? toCells(grouping.summary.data) : undefined;
   const totals = metricTotals.map(({ member, periods }) => {
     const column = columnOfMember.get(member);
-    if (!column) throw new Error(`整窗合计的指标 ${member} 不在结果列中`);
+    if (!column) throw new Error(`整段合计的指标 ${member} 不在结果列中`);
     return { column, periods };
   });
   const block: EngineViewBlock = {

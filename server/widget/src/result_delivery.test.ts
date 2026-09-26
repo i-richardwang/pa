@@ -66,7 +66,7 @@ describe("result delivery", () => {
       deliverAnalysisResult({
         content: [{ type: "text", text: JSON.stringify(payload) }],
       }),
-    ).toEqual({ ok: false, error: "查询结果缺少结构化载荷。" });
+    ).toEqual({ ok: false, error: "查询结果缺少结果数据。" });
   });
 
   test("工具错误沿用服务端文本，协议错误使用稳定提示", () => {
@@ -78,7 +78,7 @@ describe("result delivery", () => {
     ).toEqual({ ok: false, error: "分析不存在、已过期或无权访问" });
     expect(deliverAnalysisResult({ structuredContent: { view_id: ANALYSIS_ID } })).toEqual({
       ok: false,
-      error: "查询结果不符合结果卡载荷契约。",
+      error: "查询结果的数据格式无效。",
     });
   });
 
@@ -88,7 +88,7 @@ describe("result delivery", () => {
     expect(viewIdFrom(undefined)).toBeUndefined();
   });
 
-  test("人员记录只从 App 私有 _meta 读取，不从模型可见通道恢复", () => {
+  test("人员记录只从私有 _meta 读取，不从模型可见的字段读取", () => {
     const records: RecordProjectionPayload = {
       metric_id: "measure:active_employee_count",
       metric_title: "在职人数",
@@ -114,6 +114,6 @@ describe("result delivery", () => {
       deliverRecordProjection({
         structuredContent: { view_id: ANALYSIS_ID, ...records },
       }),
-    ).toEqual({ ok: false, error: "构成记录缺少有效的受控记录载荷。" });
+    ).toEqual({ ok: false, error: "构成记录的数据格式无效。" });
   });
 });

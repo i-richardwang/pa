@@ -5,7 +5,7 @@ export type ReportRecord = {
   owner: string;
   name: string;
   view_id: string;
-  /** 最近一次 owner 重放解析出的布局提示；下一次重放可以覆盖。 */
+  /** 所有者最近一次重新执行时解析出的布局提示，下次执行会覆盖。 */
   render_shape: RenderShape | null;
   archived_at: string | null;
   revision: number;
@@ -25,7 +25,7 @@ export type ReportRevision = {
 export class ReportNotFoundError extends Error {}
 export class ReportConflictError extends Error {}
 
-/** 清单按归档与否分面；`all` 只给播种这类需要连归档一起认领的场合。 */
+/** `all` 包含已归档报告，供种子脚本按名称匹配已有记录。 */
 export type ReportListScope = "active" | "archived" | "all";
 
 export type ReportRepository = {

@@ -28,7 +28,7 @@ test("异构时间指标计划的导出与预览复用同一结果计算", async
   const dimension = `${view}.organization_name`;
   const active_employee_count = `${view}.active_employee_count`;
   const leavers = `${view}.turnover_count`;
-  // 两腿同源于一个业务坐标：2025-01 至 2026-07 按年切成 2025 整年与 2026 部分年两个桶。
+  // 两个子查询来自同一个业务时间坐标：2025-01 至 2026-07 按年切成 2025 整年与 2026 部分年两个桶。
   const coordinates = [
     {
       kind: "range" as const,

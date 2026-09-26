@@ -9,7 +9,6 @@ import {
 } from "../semantic_core/time_contract.js";
 import { planMetricQuery, planTimeQuery } from "../test_support/planning.js";
 
-/** 截止月份坐标恒为单月桶，与结果粒度无关。 */
 const atCutoff = (month: string) => ({
   kind: "cutoff" as const,
   from: month,
@@ -98,7 +97,7 @@ describe("业务时间桶枚举", () => {
     }
   });
 
-  test("按月逐月成桶，按年每个日历年一桶，合计整段一个大桶", () => {
+  test("按月输出每月一个桶，按年输出每个日历年一个桶，合计输出整段一个桶", () => {
     const range = { kind: "range", from: "2025-11", to: "2026-02" } as const;
     expect(timeBuckets(range, "month")).toEqual([
       { from: "2025-11", to: "2025-11" },
@@ -113,7 +112,7 @@ describe("业务时间桶枚举", () => {
     expect(timeBuckets(range, "total")).toEqual([{ from: "2025-11", to: "2026-02" }]);
   });
 
-  test("非 1 月起点与未满年的年度期间产出部分年桶，不是特例", () => {
+  test("起点不在 1 月或末年未满时，按年输出不满一年的年桶", () => {
     expect(timeBuckets({ kind: "range", from: "2024-06", to: "2026-07" }, "year")).toEqual([
       { from: "2024-06", to: "2024-12" },
       { from: "2025-01", to: "2025-12" },
@@ -121,7 +120,7 @@ describe("业务时间桶枚举", () => {
     ]);
   });
 
-  test("桶恒覆盖整段且首尾对齐坐标，终点即桶末月", () => {
+  test("时间桶连续覆盖整段期间，首尾与期间起止月份一致", () => {
     const ranges = [
       { from: "2026-06", to: "2026-06" },
       { from: "2025-11", to: "2026-02" },
@@ -144,7 +143,7 @@ describe("业务时间桶枚举", () => {
 });
 
 describe("TimePlan 业务时间坐标", () => {
-  test("受控明细可沿内部计数成员规划时间，公开目录仍不暴露该成员", () => {
+  test("内部计数指标可以规划时间，但不出现在公开指标列表中", () => {
     const internal = "test_people_metrics.ytd_guarded_event_count_raw";
     const plan = planTimeQuery({ measures: [internal] }, { cutoff: "2026-06" }, context, views);
     expect(plan.query.measures).toEqual([internal]);
@@ -155,7 +154,7 @@ describe("TimePlan 业务时间坐标", () => {
     expect(views[0].measures.some((measure) => measure.name === internal)).toBe(false);
   });
 
-  test("同一截止月份允许期末值、区间聚合与 YTD 指标同查", () => {
+  test("同一截止月份下，期末值、区间合计与 YTD 指标可以一起查询", () => {
     const plan = planTimeQuery(
       {
         measures: [
@@ -181,7 +180,7 @@ describe("TimePlan 业务时间坐标", () => {
     ]);
   });
 
-  test("月度率允许单月与按月序列，拒绝把多个月份合并为一个率", () => {
+  test("月度率支持单月和按月序列，不能把多个月份合并为一个率", () => {
     const measure = "test_people_metrics.current_month_turnover_rate";
     expect(
       planTimeQuery({ measures: [measure] }, { cutoff: "2026-06" }, context, views).query
@@ -219,7 +218,7 @@ describe("TimePlan 业务时间坐标", () => {
     ).toThrow(/按月定义.*不能合并多个月份/);
   });
 
-  test("仅有 cutoff 时 flow 解释为当前桶", () => {
+  test("只给截止月份时，流量指标查询该月", () => {
     const plan = planTimeQuery(
       { measures: ["test_people_metrics.new_hire_count"] },
       { cutoff: "2026-05" },
@@ -229,7 +228,7 @@ describe("TimePlan 业务时间坐标", () => {
     expect(plan.time.windows).toEqual([{ from: "2026-05-01", to: "2026-05-31" }]);
   });
 
-  test("point 与 PTD 的总计 range 都取终点月", () => {
+  test("期间合计时，期末值指标和年初至今指标都取期间最后一个月", () => {
     const plan = planTimeQuery(
       {
         measures: [
@@ -247,7 +246,7 @@ describe("TimePlan 业务时间坐标", () => {
     });
   });
 
-  test("flow 的连续期间按月分桶", () => {
+  test("流量指标的连续期间按月分组，并按涉及年份过滤", () => {
     const plan = planTimeQuery(
       { measures: ["test_people_metrics.new_hire_count"] },
       { range: { from: "2025-11", to: "2026-02" }, grain: "month" },
@@ -270,7 +269,7 @@ describe("TimePlan 业务时间坐标", () => {
     ]);
   });
 
-  test("日历年初对齐的 PTD range 生成逐月 YTD", () => {
+  test("从 1 月开始的期间按月输出年初至今指标的逐月值", () => {
     const plan = planTimeQuery(
       {
         measures: [
@@ -288,7 +287,7 @@ describe("TimePlan 业务时间坐标", () => {
     });
   });
 
-  test("对照截止月份编译为多窗并自动带出年份", () => {
+  test("对照截止月份编译为多个时间窗口，并按年输出", () => {
     const input = TIME_INPUT.parse({
       cutoff: "2026-06",
       compare: [{ cutoff: "2024-06" }, { cutoff: "2025-06" }],
@@ -354,7 +353,7 @@ describe("TimePlan 业务时间坐标", () => {
     ]);
   });
 
-  test("省略主截止月的 years_ago 对照落到 actual_through 并保守按月", () => {
+  test("省略主截止月时，years_ago 对照以 actual_through 为主截止月并按月输出", () => {
     const relative = TIME_INPUT.parse({ compare: [{ years_ago: 1 }] });
     const plan = planTimeQuery(
       { measures: ["test_people_metrics.ytd_primary_event_rate"] },
@@ -366,7 +365,7 @@ describe("TimePlan 业务时间坐标", () => {
     expect(plan.businessTime.coordinates).toEqual([atCutoff("2026-07"), atCutoff("2025-07")]);
   });
 
-  test("range 主坐标的 years_ago 对照两端同移一年", () => {
+  test("主坐标为期间时，years_ago 对照把起止月份都前移相应年数", () => {
     const relative = TIME_INPUT.parse({
       range: { from: "2026-01", to: "2026-06" },
       compare: [{ years_ago: 1 }],
@@ -384,7 +383,7 @@ describe("TimePlan 业务时间坐标", () => {
     );
   });
 
-  test("相对窗口 last:{months} 与等价绝对 range 逐字节一致，随锚点滚动", () => {
+  test("相对窗口 last:{months} 与等价的绝对期间编译结果相同", () => {
     const relative = TIME_INPUT.parse({ cutoff: "2026-07", last: { months: 12 }, grain: "month" });
     const absolute = TIME_INPUT.parse({
       range: { from: "2025-08", to: "2026-07" },
@@ -421,7 +420,7 @@ describe("TimePlan 业务时间坐标", () => {
     ]);
   });
 
-  test("相对窗口 last:{years} 历年口径与等价绝对 range 逐字节一致", () => {
+  test("相对窗口 last:{years} 按日历年计，与等价的绝对期间编译结果相同", () => {
     const relative = TIME_INPUT.parse({ cutoff: "2026-07", last: { years: 3 }, grain: "year" });
     const absolute = TIME_INPUT.parse({
       range: { from: "2024-01", to: "2026-07" },
@@ -449,7 +448,6 @@ describe("TimePlan 业务时间坐标", () => {
       views,
     );
     expect(plan.businessTime.outputGrain).toBe("year");
-    // 相对窗口 last:{years:3} 以锚点年 1 月起算，末年止于锚点月，产出部分年桶。
     expect(plan.businessTime.coordinates).toEqual([
       {
         kind: "range",
@@ -464,7 +462,7 @@ describe("TimePlan 业务时间坐标", () => {
     ]);
   });
 
-  test("省略锚点的 last 落到 actual_through 并随数据滚动", () => {
+  test("省略截止月时，last 以 actual_through 为终点", () => {
     const relative = TIME_INPUT.parse({ last: { months: 6 }, grain: "month" });
     const plan = planTimeQuery(
       { measures: ["test_people_metrics.active_employee_count"] },
@@ -487,7 +485,7 @@ describe("TimePlan 业务时间坐标", () => {
     ]);
   });
 
-  test("同年截止月份自动按月区分，显式按年则 fail-closed", () => {
+  test("同一年内的多个截止月份默认按月输出，显式按年时报错", () => {
     const implicit = planTimeQuery(
       { measures: ["test_people_metrics.active_employee_count"] },
       { cutoff: "2026-06", compare: [{ cutoff: "2026-07" }] },
@@ -506,7 +504,7 @@ describe("TimePlan 业务时间坐标", () => {
     ).toThrow(/按年.*2026 年.*无法区分.*按月/);
   });
 
-  test("跨年 range 对照按输出桶检查重叠，不以窗口终点代替唯一性", () => {
+  test("跨年期间对照按输出时间桶判断能否区分：按月通过，按年落入同一年时报错", () => {
     const time: TimeInput = {
       range: { from: "2025-11", to: "2026-02" },
       grain: "month",
@@ -533,7 +531,7 @@ describe("TimePlan 业务时间坐标", () => {
     ).toThrow(/按年.*2025 年.*无法区分.*按月/);
   });
 
-  test("省略 cutoff 使用 actual_through，不误用未来计划月份", () => {
+  test("省略截止月时使用 actual_through，而不是计划数据覆盖的最后月份", () => {
     const input = TIME_INPUT.parse({});
     const plan = planTimeQuery(
       { measures: ["headcount_plan.point_in_time_target_count"] },
@@ -557,7 +555,7 @@ describe("TimePlan 业务时间坐标", () => {
   });
 });
 
-describe("TimePlan fail-closed 与覆盖守卫", () => {
+describe("TimePlan 输入校验与拒绝规则", () => {
   test("时间输入只接受业务坐标", () => {
     expect(TIME_INPUT.safeParse({ mode: "as_of", at: "2026-07" }).success).toBe(false);
     expect(TIME_INPUT.safeParse({ cutoff: "最近月份" }).success).toBe(false);
@@ -578,7 +576,7 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
     ).toBe(false);
   });
 
-  test("期间形态互斥且必须显式声明粒度", () => {
+  test("range 与 last 不能同时出现，期间必须声明粒度", () => {
     expect(
       TIME_INPUT.safeParse({
         range: { from: "2024-01", to: "2026-07" },
@@ -623,7 +621,7 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
     ).toThrow(/时间字段不能直接/);
   });
 
-  test("PTD 跨年连续期间按月为单窗，按年展开为逐年终点桶", () => {
+  test("年初至今指标的跨年期间按月输出时用一个窗口，按年输出时取每年最后一个月", () => {
     const monthly = planTimeQuery(
       { measures: ["test_people_metrics.ytd_primary_event_rate"] },
       { range: { from: "2024-01", to: "2026-06" }, grain: "month" },
@@ -666,7 +664,7 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
     ]);
   });
 
-  test("快照跨年连续期间按年走同一逐年终点桶展开", () => {
+  test("期末值指标的跨年期间按年输出时取每年最后一个月", () => {
     const plan = planTimeQuery(
       { measures: ["test_people_metrics.active_employee_count"] },
       { range: { from: "2024-05", to: "2026-06" }, grain: "year" },
@@ -684,7 +682,7 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
     });
   });
 
-  test("PTD 非 1 月起点的年内连续期间合法，逐桶自年初重算", () => {
+  test("年初至今指标可以使用不从 1 月开始的年内期间", () => {
     const plan = planTimeQuery(
       { measures: ["test_people_metrics.ytd_primary_event_rate"] },
       { range: { from: "2026-03", to: "2026-06" }, grain: "month" },
@@ -697,7 +695,7 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
     });
   });
 
-  test("PTD 跨年连续期间不能合为总计，返回结构化时间问题", () => {
+  test("年初至今指标的跨年期间不能合计，错误携带结构化时间问题", () => {
     try {
       planTimeQuery(
         { measures: ["test_people_metrics.ytd_primary_event_rate"] },
@@ -720,7 +718,7 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
     }
   });
 
-  test("连续期间总计中的 flow 与终点类指标自动编译为不同物理查询腿", () => {
+  test("期间合计时，流量指标和期末值指标拆成两条物理查询", () => {
     const plan = planMetricQuery(
       {
         measures: [
@@ -742,12 +740,12 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
     ]);
   });
 
-  test("求值形态不同的指标直接同查即报错，形态相同则放行", () => {
+  test("时间窗口不同的指标放进同一条物理查询时报错，窗口相同时允许", () => {
     const mixed = [
       "test_people_metrics.active_employee_count",
       "test_people_metrics.new_hire_count",
     ];
-    // 按年与合计：快照取桶终点、期间聚合整段，发射形态不同，拆腿前的安全网必须命中。
+    // 按年与合计时，期末值取每个桶的末月、流量取整段，窗口不同。
     expect(() =>
       planTimeQuery(
         { measures: mixed },
@@ -764,7 +762,7 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
         views,
       ),
     ).toThrow(/不能混用不同时间窗口/);
-    // 按月与截止月份：桶即单月，两类求值发射同一形态，安全网不得误报。
+    // 按月与截止月份时每个桶都是单月，两类指标窗口相同。
     expect(() =>
       planTimeQuery(
         { measures: mixed },
@@ -778,7 +776,7 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
     ).not.toThrow();
   });
 
-  test("坏范围、未来月份和无标识多窗全部拒绝", () => {
+  test("拒绝起止颠倒的期间、超出数据范围的月份和无法区分的多窗口合计", () => {
     expect(() =>
       planTimeQuery(
         { measures: ["test_people_metrics.new_hire_count"] },
@@ -805,7 +803,7 @@ describe("TimePlan fail-closed 与覆盖守卫", () => {
     ).toThrow(/不能合并为无时间标识的总计/);
   });
 
-  test("每类合法输入都有活路", () => {
+  test("每类合法时间输入都能规划成功", () => {
     expect(() =>
       planTimeQuery(
         { measures: ["test_people_metrics.active_employee_count"] },

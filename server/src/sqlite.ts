@@ -1,6 +1,6 @@
 /**
- * 按运行时选 SQLite 驱动：服务（Node）用 node:sqlite，本机脚本（Bun）用 bun:sqlite
- * （Bun 1.3 尚无 node:sqlite）。auth 与 app 共用此选择逻辑。
+ * 按运行时选择 SQLite 驱动：服务（Node）用 node:sqlite，本机脚本（Bun）用 bun:sqlite，
+ * 因为 Bun 1.3 还没有 node:sqlite。
  */
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -18,7 +18,7 @@ export type SqliteDatabase = {
   close(): void;
 };
 
-/** readonly 打开要求文件已存在，由调用方处理缺失（如返回空结果） */
+/** 只读打开要求文件已存在，文件缺失由调用方处理 */
 export async function openSqlite(
   path: string,
   opts?: { readonly?: boolean },

@@ -1,11 +1,11 @@
 /**
- * 派生结果的公共判定与文案：语义层与物理层的图形状不同，但「列来源、输出列名、排序引用」
- * 三条规则和它们的措辞只有这一份。物理层额外校验 views 图的引用与出口。
+ * 语义层与物理层共用的派生结果校验（列来源、输出列名、排序列）；
+ * 物理层另外校验 views 图的引用与唯一出口。
  */
 
 type GraphNode = { id: string; view_title?: string; from?: readonly string[] };
 
-/** 派生列的来源操作数；label 是该层可读的列标识，省略时错误文案不点名列。 */
+/** label 用于在错误消息中指明列，可省略。 */
 export type DerivedOperand = { source: string; label?: string };
 
 export type DerivedColumnReader<Column> = {
@@ -27,20 +27,18 @@ type DerivedGraphNode<Column> = DerivedColumns<Column> & {
 
 const isDerived = (view: GraphNode): boolean => "from" in view;
 
-/** 物理计算图只有一个答案：必须恰好收敛到一个未被继续消费的结果节点。 */
 export function analysisGraphSink(views: readonly GraphNode[]): string {
   const consumed = new Set(views.flatMap((view) => [...(view.from ?? [])]));
   const sinks = views.filter((view) => !consumed.has(view.id)).map((view) => view.id);
   if (sinks.length !== 1) {
     throw new Error(
-      `执行图必须恰好收敛到一个结果；当前有 ${sinks.length} 个` +
+      `执行图必须只有一个最终结果；当前有 ${sinks.length} 个` +
         `${sinks.length ? `（${sinks.join("、")}）` : ""}`,
     );
   }
   return sinks[0];
 }
 
-/** 派生列自身的约束：来源属于给定集合、输出列名不重复、排序列在输出中。 */
 export function validateDerivedColumns<Column>(
   view: DerivedColumns<Column>,
   sources: readonly string[],
@@ -70,7 +68,6 @@ export function validateDerivedColumns<Column>(
   }
 }
 
-/** 物理派生节点的引用、join 元数与输出列约束。 */
 export function validateDerivedGraphView<Column>(
   view: DerivedGraphNode<Column>,
   views: readonly GraphNode[],

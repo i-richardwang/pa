@@ -55,7 +55,7 @@ const canonicalViews: CubeView[] = [
 const canonical = canonicalModelFixture(canonicalViews, TEST_SEMANTIC_TAXONOMY);
 
 describe("CanonicalSemanticModel 权限投影", () => {
-  test("用户 /meta 只决定可见性，不能覆盖权威语义合同", () => {
+  test("用户 /meta 只决定可见性，语义合同取自 canonical model", () => {
     const visible: CubeView[] = [
       {
         ...canonicalViews[0]!,
@@ -97,7 +97,7 @@ describe("CanonicalSemanticModel 权限投影", () => {
     expect(authorized.views[0]?.meta).toEqual(canonicalViews[0]?.meta);
   });
 
-  test("不可见成员从目录、执行绑定和指标域同步消失", () => {
+  test("不可见成员同时从目录、执行视图和指标域中移除", () => {
     const visible = [{ ...canonicalViews[0]!, measures: [] }];
     const authorized = authorizeCanonicalSemanticModel(canonical, visible);
     expect(authorized.compiler.measures).toEqual([]);
@@ -118,7 +118,7 @@ describe("CanonicalSemanticModel 权限投影", () => {
     expect(authorized.compiler.measures).toEqual([]);
   });
 
-  test("记录集字段不完整时同步隐藏记录投影能力", () => {
+  test("记录集字段不完整时隐藏记录投影能力", () => {
     const detail: CubeView = {
       name: "test_people_records",
       title: "人员记录",
@@ -181,7 +181,7 @@ describe("CanonicalSemanticModel 权限投影", () => {
     expect(authorized.views[1]?.meta?.record_sets).toBeUndefined();
   });
 
-  test("权限结果出现 canonical model 未登记的公开成员时 fail-closed", () => {
+  test("权限结果出现 canonical model 未登记的公开成员时报错", () => {
     const visible = [
       {
         ...canonicalViews[0]!,
@@ -200,7 +200,7 @@ describe("CanonicalSemanticModel 权限投影", () => {
     );
   });
 
-  test("能力目录与 Cube 编译指标漂移时 fail-closed", () => {
+  test("能力目录与 Cube 编译出的指标不一致时报错", () => {
     expect(() =>
       buildCanonicalSemanticModel({
         capabilities: {
@@ -217,7 +217,7 @@ describe("CanonicalSemanticModel 权限投影", () => {
     ).toThrow("指标能力目录");
   });
 
-  test("启动读取 Cube /meta 时等待引擎就绪", async () => {
+  test("启动时重试读取 Cube /meta 直到引擎就绪", async () => {
     let attempts = 0;
     const waits: number[] = [];
     const views = await loadCanonicalViews({
@@ -246,7 +246,7 @@ describe("CanonicalSemanticModel 权限投影", () => {
     expect(waits).toEqual([25, 25]);
   });
 
-  test("Cube gateway 的执行消费者也只收到 canonical 语义", async () => {
+  test("经 Cube gateway 读取的视图同样使用 canonical 语义", async () => {
     const visible = [
       {
         ...canonicalViews[0]!,

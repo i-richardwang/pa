@@ -17,10 +17,10 @@ function timeOverride(c: Context<DashboardEnv>): TimeIntent | undefined {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new InvalidRequestError("时间覆盖参数无效");
+    throw new InvalidRequestError("看板时间参数无效");
   }
   const checked = TIME_INTENT_INPUT.safeParse(parsed);
-  if (!checked.success) throw new InvalidRequestError("时间覆盖参数无效");
+  if (!checked.success) throw new InvalidRequestError("看板时间参数无效");
   return checked.data;
 }
 

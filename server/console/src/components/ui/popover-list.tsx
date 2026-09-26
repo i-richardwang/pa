@@ -27,7 +27,7 @@ export function popoverListCheck(selected: boolean): React.ReactNode {
   return selected ? <CheckIcon aria-hidden="true" className="size-3" /> : undefined;
 }
 
-/** `unavailable` 不叫 `inert`：HTML 的 `inert` 会把元素撤出无障碍树，选不了的档仍要被读屏念出。 */
+/** 不用 HTML `inert`：它会把元素移出无障碍树，而不可选的项仍需被读屏读出。 */
 export function PopoverListRow({
   children,
   icon,

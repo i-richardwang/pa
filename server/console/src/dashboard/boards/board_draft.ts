@@ -1,12 +1,8 @@
-/**
- * tile_id 在客户端生成，走 getRandomValues 而非 crypto.randomUUID——
- * 后者仅安全上下文可用，控制台可经局域网明文 http 访问。
- */
 import type { BoardMutationTile, BoardPayload, BoardTile, Place } from "@contracts/board_contract";
 import type { ReportRow } from "@contracts/report_contract";
 import { reportTileSize, TILE_SIZES } from "./tile_sizing";
 
-/** 生成合法 UUID v4 tile_id，不依赖安全上下文。 */
+/** 用 getRandomValues 生成 UUID v4：crypto.randomUUID 只在安全上下文可用，控制台可能经局域网 http 访问。 */
 function newTileId(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
@@ -43,7 +39,7 @@ export function newTextTile(tiles: BoardTile[]): BoardTile {
   };
 }
 
-/** 持久化投影：只留会落库的字段（忽略报告瓦片的派生摘要），供脏比较。 */
+/** 只取会保存的字段（不含报告瓦片的名称等派生字段），用于判断是否有未保存的修改。 */
 function persistProjection(tile: BoardTile): string {
   const { x, y, w, h } = tile.place;
   const body = tile.kind === "report" ? `c:${tile.report_id}` : `t:${tile.md}`;
@@ -130,7 +126,7 @@ export function tilesInReadingOrder(tiles: readonly BoardTile[]): BoardTile[] {
   return [...tiles].sort((a, b) => a.place.y - b.place.y || a.place.x - b.place.x);
 }
 
-/** 对换整格 `place`（含宽高），不只换 y；已在顶/底则原样返回。 */
+/** 交换两块瓦片的完整 `place`（含宽高）；已在顶端或底端时原样返回。 */
 export function moveBoardTile(
   draft: BoardEditState,
   tileId: string,

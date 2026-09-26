@@ -1,7 +1,4 @@
-/**
- * 三列归属：指标域居中为枢纽，维度构件在左、事实构件在右；
- * 维度构件按全局业务语义组织，同一构件只出现一次；列内按绑定连接度排序。
- */
+// 三列布局：属性组在左、指标域居中、事实在右；每个属性组只出现一次，列内按绑定数排序。
 import type {
   DataCapabilityMapMetricDomain,
   DataCapabilityMapFact,
@@ -15,7 +12,7 @@ const COLUMN_GAP = 176;
 const NODE_GAP = 32;
 const LANE_LABEL_OFFSET = 48;
 
-/** 业务名由类型带着走：节点标题、档案与关系行都无处回落到物理名。 */
+/** 只有带业务名的事实才上图，节点标题、右栏和关系行都不显示物理名。 */
 export type CanvasFact = DataCapabilityMapFact & { title: string };
 
 export type CapabilityNodeRef =
@@ -23,7 +20,7 @@ export type CapabilityNodeRef =
   | { kind: "dimension_group"; group: DataCapabilityMapDimensionGroup }
   | { kind: "metric_domain"; topic: DataCapabilityMapMetricDomain };
 
-/** 事实节点的 id 只认名字：还没上图的事实也要问得出「它在不在图上」。 */
+/** 事实节点 id 只由事实名决定，未上图的事实也能据此判断是否在图上。 */
 export function factNodeId(fact: DataCapabilityMapFact): string {
   return `fact:${fact.name}`;
 }
@@ -34,7 +31,6 @@ export function nodeId(ref: CapabilityNodeRef): string {
   return ref.topic.id;
 }
 
-/** 左侧泳道只承载全局规范维度构件。 */
 export type DimensionComponentRef = {
   kind: "dimension_group";
   group: DataCapabilityMapDimensionGroup;
@@ -62,10 +58,7 @@ export type ListedHierarchy = {
   levels: string[];
 };
 
-/**
- * 不传 names 取事实全部公开成员；传 names（绑定 includes）时逐名解析，
- * 公开成员按类型归组、部门树归入维度组。
- */
+/** 不传 names 时返回事实的全部公开成员；传 names（绑定的 includes）时逐个解析，部门树按维度返回。 */
 export function listedMembers(fact: DataCapabilityMapFact, names?: string[]): ListedMember[] {
   const named = (name: string, title: string | null, kind: ListedMember["kind"]) =>
     title ? [{ name, label: title, kind }] : [];
@@ -82,7 +75,7 @@ export function listedMembers(fact: DataCapabilityMapFact, names?: string[]): Li
   });
 }
 
-/** 任一层无业务名即整条树不发。 */
+/** 任一层级缺少业务名时，整棵部门树都不返回。 */
 export function listedHierarchies(fact: DataCapabilityMapFact): ListedHierarchy[] {
   return fact.hierarchies.flatMap((hierarchy) => {
     const levels = hierarchy.levels.map(
@@ -93,7 +86,7 @@ export function listedHierarchies(fact: DataCapabilityMapFact): ListedHierarchy[
   });
 }
 
-/** 某事实被属性组认领的维度名集合；这些成员在呈现上归属左列属性组而非事实本体。 */
+/** 事实中已归入属性组的维度名；这些维度显示在属性组下，不计入事实自身的成员。 */
 export function groupedMemberNames(
   groups: DataCapabilityMapDimensionGroup[],
   fact: string,
@@ -107,7 +100,7 @@ export function groupedMemberNames(
   return names;
 }
 
-/** 指标域共同维度落入某个规范构件的成员，按构件声明顺序。 */
+/** 指标域共同维度中属于该属性组的成员，按属性组声明顺序返回。 */
 export function bindingGroupIncludes(
   includes: string[],
   group: DataCapabilityMapDimensionGroup,
@@ -233,7 +226,7 @@ export function capabilityEdges(data: DataCapabilityMapData): CapabilityEdgeRef[
         kind: "attribute" as const,
       })),
   );
-  // 指标域只连接一次规范维度构件，并按正式指标叶子来源连接物理事实。
+  // 指标域与每个属性组最多连一条边；与事实的边来自正式指标的叶子来源。
   const bindings = data.metric_domains.flatMap((topic) => {
     const dimensionEdges = data.dimension_groups.flatMap((group): CapabilityEdgeRef[] => {
       const includes = bindingGroupIncludes(topic.dimensions, group).length;
@@ -285,7 +278,7 @@ export function highlightFor(
   return { nodes, edges: lit };
 }
 
-/** 常亮边只有语义绑定线；事实承载血缘仅在选中端点时入画。 */
+/** binding 边始终显示；attribute 边只在选中其端点时显示。 */
 export function visibleEdges(
   edges: CapabilityEdgeRef[],
   highlight: CapabilityHighlight | null,

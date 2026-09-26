@@ -34,7 +34,7 @@ export function DimensionsPage() {
   const [groupId, setGroupId] = useState(ALL);
   const profile = useCatalogProfile(data, termsQuery.data?.rows ?? []);
 
-  // 组序随目录给的成员次序，前端不另排。
+  // 属性组顺序沿用目录中维度的顺序。
   const groupOptions = useMemo(() => {
     const groups: { value: string; label: string }[] = [];
     for (const { dimension_group: group } of data?.dimensions ?? []) {

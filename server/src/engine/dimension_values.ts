@@ -1,24 +1,17 @@
 /**
- * 维度值核实（翻值）：catalog 的查前核实能力——"这个维度在数据里都有哪些值"。
- * 供 Agent 在过滤分类名录值前确认标准全名，代替猜测简称；
- * 只读不改写，查询本身仍是查什么给什么。
- *
- * 公开字符串维度天然可翻；数值/时间维度只有显式声明 dimension_kind: categorical 才可翻。
- * 受控记录字段属于 internal 成员，在进入本模块前已从公开目录剥离。
- * 成员与行权限都由 Cube access_policy 承担：无权维度不可见即不可翻，翻出的值也只在授权范围内。
+ * 查询维度候选值，供 Agent 在过滤前确认标准全名。
+ * 成员与行权限由 Cube access_policy 执行，返回值只在授权范围内。
  */
 import type { CubeMember, CubeQuery, CubeView } from "../ports/cube_gateway.js";
 import { memberDisplayTitle } from "./member_presentation.js";
 import { isSearchableDimension } from "./model_contract.js";
 
-/** 单次翻值返回的值数上限；超出提示用 contains 缩小范围 */
+/** 单次候选值查询的返回上限；超出时提示用 contains 缩小范围。 */
 export const DIMENSION_VALUES_CAP = 200;
 /** distinct 结果至多包含一个 null 和一个空串，多取三行才能准确判断有效值是否截断。 */
 export const DIMENSION_VALUES_SCAN_LIMIT = DIMENSION_VALUES_CAP + 3;
 
-/**
- * 在（已按成员权限裁剪的）目录视图中定位可翻维度；不可翻时抛出面向 Agent 的改法指引。
- */
+/** 在已按成员权限裁剪的目录中查找可搜索维度；不可搜索时报错并说明改法。 */
 export function findSearchableDimension(
   views: CubeView[],
   member: string,
@@ -37,7 +30,6 @@ export function findSearchableDimension(
   );
 }
 
-/** 翻值查询（纯组装）：取维度 distinct 值 + 可选子串过滤；为 null/空串预留探测行。 */
 export function dimensionValuesQuery(member: string, contains?: string): CubeQuery {
   return {
     dimensions: [member],

@@ -1,4 +1,4 @@
-/** 公开 Demo 的正式指标规划与受控记录投影实链。 */
+/** 用真实 Cube 检查公开 Demo 的明细查看：保存报告后按单元格取明细，且只返回授权组织内的记录。 */
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,7 +25,7 @@ function assert(condition: unknown, message: string): asserts condition {
 const apiSecret = process.env.CUBEJS_API_SECRET;
 if (!apiSecret) throw new Error("缺少 CUBEJS_API_SECRET");
 const semanticPackage = await loadSemanticPackage(configuredSemanticPackageDir());
-if (semanticPackage.id !== "pa_demo") throw new Error("本冒烟只验证公开 pa_demo 包");
+if (semanticPackage.id !== "pa_demo") throw new Error("此检查只适用于公开 Demo 包 pa_demo");
 const visibilityCube = withFormalMetricModel(
   createCubeGateway({
     cubeUrl: process.env.CUBE_URL ?? "http://localhost:4000",
@@ -65,7 +65,7 @@ const scopeRows = (
   )
 ).data;
 const scopeValue = scopeRows[0]?.["employee_snapshot_metrics.organization_name"];
-assert(typeof scopeValue === "string", "公开 Demo 没有可用于记录投影回归的组织");
+assert(typeof scopeValue === "string", "公开 Demo 没有查到任何组织，无法检查明细");
 const principal: Principal = {
   email: "records-demo@example.com",
   roles: ["user"],
@@ -85,7 +85,10 @@ try {
   const compiler = semanticContext.compiler;
   const active = compiler.measures.find((metric) => metric.title === "在职人数");
   const organization = compiler.dimensions.find((dimension) => dimension.title === "组织");
-  assert(active?.records_available === true && organization, "在职人数或组织明细合同缺失");
+  assert(
+    active?.records_available === true && organization,
+    "在职人数不支持查看明细，或目录里没有组织维度",
+  );
 
   const definition: AnalysisDefinition = {
     title: "公开 Demo 人员明细",
@@ -96,7 +99,7 @@ try {
     },
   };
   const executed = await application.analysis.run(principal, definition, { type: "table" });
-  assert(executed.record_projection_bindings.views[0], "分析没有生成记录投影绑定");
+  assert(executed.record_projection_bindings.views[0], "分析结果没有明细查看所需的绑定信息");
   const report = await application.report.save({
     principal,
     name: "公开 Demo 人员明细",
@@ -117,9 +120,9 @@ try {
   assert(organizationColumn >= 0, "明细缺少组织列");
   assert(
     payload.rows.every((row) => row[organizationColumn] === scopeValue),
-    "受限身份看到了授权组织之外的记录",
+    "受限权限的账号看到了授权组织之外的记录",
   );
-  console.log("公开 Demo 记录投影冒烟通过");
+  console.log("公开 Demo 明细查看检查通过");
 } finally {
   appDb.close();
 }

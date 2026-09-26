@@ -87,7 +87,7 @@ export function SettingsDialog({
   me: MePayload;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 弹层不留上次停在哪的记忆。 */
+  /** 每次打开都从该页开始，不记住上次停留的页。 */
   tab?: SettingsTab;
 }) {
   const [current, setCurrent] = useState<SettingsTab>(tab);
@@ -109,7 +109,7 @@ export function SettingsDialog({
                   <XIcon aria-hidden="true" />
                 </DialogClose>
               </div>
-              {/* 设置页是拿来读的：事实行按档案密度排。 */}
+              {/* 设置页使用详情栏的行密度。 */}
               <InspectorBody className="overscroll-auto" face="profile">
                 <div
                   className={cn(
@@ -278,7 +278,7 @@ function KeysPage() {
   const revokeKey = useRevokeApiKey();
   const [showCreate, setShowCreate] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyRow | null>(null);
-  // 顺序即服务端签发序（倒序）。
+  // 沿用服务端顺序（按签发时间倒序）。
   const keys = keysQuery.data ?? null;
   const rows = keys ?? [];
   const error = errorText(keysQuery.error) ?? errorText(revokeKey.error);
@@ -385,7 +385,7 @@ function KeysPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>吊销「{revokeTarget?.name || "未命名"}」？</AlertDialogTitle>
             <AlertDialogDescription>
-              正在用这把 key 接入的客户端或脚本会立即断连，且无法恢复——需重新签发一把新 key。
+              使用这个 Key 的客户端和脚本会立即断开连接，且无法恢复，需要重新创建 Key。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -435,7 +435,7 @@ function CreateKeyDialog({ open, onClose }: { open: boolean; onClose: () => void
     );
   }
 
-  // 明文在场且尚未确认保存时，把弹层的所有自动关闭路径都掐掉。
+  // 明文显示且未确认已保存时，禁止弹层的所有自动关闭方式。
   const locked = issued != null && !saved;
 
   return (
@@ -541,7 +541,7 @@ function IssuedKeyStep({
       <DialogPanel className="grid gap-5">
         <Alert variant="warning">
           <AlertTitle>只显示这一次</AlertTitle>
-          <AlertDescription>关闭这个窗口之后，这串明文就再也取不回来了。</AlertDescription>
+          <AlertDescription>关闭窗口后将无法再次查看完整的 Key。</AlertDescription>
         </Alert>
 
         <div className="flex flex-col gap-4 rounded-xl border border-pa-line p-4">

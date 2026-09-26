@@ -1,8 +1,6 @@
 /**
- * 一个语义查询视图的 grouping-set Executor。
- *
- * 业务时间由基础分组集解析一次；其他分组集只改变分组与筛选血缘。构成占比与总体
- * 通过同一套粗粒度结果广播完成，不借用派生视图 join。
+ * 一个语义查询视图的 grouping-set Executor。业务时间只由基础分组集解析一次，其他分组集只改变分组与筛选；
+ * 构成占比按业务键把粗粒度结果对到基础结果行上计算。
  */
 import type { CubeCell } from "../ports/cube_gateway.js";
 import type { ResolvedMetricLoad } from "./metric_calculator.js";
@@ -57,18 +55,18 @@ export function applyGroupingSets(
       JSON.stringify(leg.signature.business_time) !==
       JSON.stringify(plan.base_signature.business_time)
     ) {
-      throw new Error(`分组腿 ${leg.id} 的执行时间签名与基础分组集不一致`);
+      throw new Error(`分组子查询 ${leg.id} 的执行时的业务时间与基础分组集不一致`);
     }
     const baseDimensions = new Set(plan.base_signature.grouping_set);
     if (
       leg.signature.grouping_set.length > plan.base_signature.grouping_set.length ||
       leg.signature.grouping_set.some((dimension) => !baseDimensions.has(dimension))
     ) {
-      throw new Error(`分组腿 ${leg.id} 的执行分组集不是基础分组集的语义子集`);
+      throw new Error(`分组子查询 ${leg.id} 的执行分组集不是基础分组集的语义子集`);
     }
     const baseGrouping = new Set(plan.base_grouping_members);
     if (leg.plan.dimensions.some((dimension) => !baseGrouping.has(dimension))) {
-      throw new Error(`分组腿 ${leg.id} 的执行物理分组不是基础物理分组的子集`);
+      throw new Error(`分组子查询 ${leg.id} 的执行物理分组不是基础物理分组的子集`);
     }
   }
   uniqueRows(base.data, plan.base_keys, "基础分组集");
@@ -78,7 +76,7 @@ export function applyGroupingSets(
   for (const calculation of plan.calculations) {
     const leg = plan.legs.find((candidate) => candidate.id === calculation.denominator_leg);
     const load = resolvedLegs.get(calculation.denominator_leg);
-    if (!leg || !load) throw new Error(`计算「${calculation.title}」的粗分组腿未完整执行`);
+    if (!leg || !load) throw new Error(`计算「${calculation.title}」的粗粒度分组子查询未完整执行`);
     if (
       leg.plan.dimensions.length >= plan.base_grouping_members.length ||
       leg.plan.dimensions.includes(calculation.category_member)
@@ -116,12 +114,12 @@ export function applyGroupingSets(
     };
   }
   const summaryLoad = plan.summary_leg ? resolvedLegs.get(plan.summary_leg) : undefined;
-  if (plan.summary_leg && !summaryLoad) throw new Error("总体分组腿未完整执行");
+  if (plan.summary_leg && !summaryLoad) throw new Error("总计子查询未完整执行");
   if (plan.summary_leg) {
     const summaryLeg = plan.legs.find((leg) => leg.id === plan.summary_leg);
-    if (!summaryLeg) throw new Error("总体分组腿不存在");
+    if (!summaryLeg) throw new Error("总计子查询不存在");
     if (summaryLeg.plan.dimensions.length) {
-      throw new Error("总体分组腿的执行物理分组必须为空");
+      throw new Error("总计子查询的执行物理分组必须为空");
     }
   }
   const summary = summaryLoad

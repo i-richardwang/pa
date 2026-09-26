@@ -1,6 +1,6 @@
 /**
- * 截行引导全屏、服务端截断引导下载；行数与截行事实由表格行数条陈述。
- * 动作只在环境经 CardActions 注入时出现，不留失效退路。
+ * 表格只显示了前几行时提供全屏入口，服务端截断结果时提供下载入口；行数本身由表格的行数栏显示。
+ * 操作按钮只在宿主通过 CardActions 注入对应能力时显示。
  */
 import { useState } from "react";
 import { Check, Download, ExternalLink, Link2, Maximize2 } from "lucide-react";
@@ -10,7 +10,7 @@ import { INLINE_ROWS } from "./data_table.js";
 import type { CardActions } from "./view_actions.js";
 import type { ExportLink, ViewBlock } from "../../../src/semantic_core/query_payload.js";
 
-/** 浏览器复制导出链接；运行时失败时保留手动复制退路。MCP Widget 不注入此动作。 */
+/** 复制导出链接；剪贴板写入失败时改为显示链接供手动复制。MCP widget 不注入此操作。 */
 function CopyLinkButton({
   url,
   copyText,
@@ -54,8 +54,7 @@ function CopyLinkButton({
   );
 }
 
-/** 是否有提示可显示：调用方据此决定是否渲染承载的 footer（空垫不出现）。
- * 截行由行数条陈述；只有环境支持全屏时才为截行提供动作入口。 */
+/** 是否有提示要显示；调用方据此决定是否渲染外层 footer，避免出现空白区域。 */
 export function noticesVisible(
   view: ViewBlock,
   rowCount: number,
@@ -73,12 +72,12 @@ export function Notices({
   allRows,
 }: {
   view: ViewBlock;
-  /** 完整结果下载入口（聚合在卡片上限截断时随附） */
+  /** 完整结果的下载链接（结果超出卡片行数上限被截断时提供） */
   exportLink?: ExportLink;
-  /** 表格实际展示的行数（交叉表转置后少于返回行数） */
+  /** 表格实际显示的行数（交叉表会少于返回的行数） */
   rowCount: number;
   actions: CardActions;
-  /** 表格已全量渲染；否则截行提示引导全屏 */
+  /** 表格是否已渲染全部行；否则提示可全屏查看 */
   allRows: boolean;
 }) {
   const hiddenRows = !allRows && rowCount > INLINE_ROWS;
@@ -91,7 +90,7 @@ export function Notices({
     try {
       await action();
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "宿主未能完成此操作。");
+      setActionError(error instanceof Error ? error.message : "当前环境无法完成此操作。");
     } finally {
       setPendingAction(null);
     }

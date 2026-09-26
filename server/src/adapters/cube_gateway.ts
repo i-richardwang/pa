@@ -1,4 +1,4 @@
-/** Cube Core HTTP 适配器：负责鉴权、缓存、协议调用与响应归一。 */
+/** Cube Core HTTP 适配器：鉴权、缓存和请求调用；Cube 的单窗/多窗应答只在这里转换成产品使用的结构。 */
 import { SignJWT } from "jose";
 import { z } from "zod";
 import { accessScopeValues } from "../contracts/access_scope.js";
@@ -30,13 +30,13 @@ export type CubeGatewayConfig = {
   accessScopeId: string;
   serviceContext: CubeSecurityContext;
   timeSources: TimeSourceRegistry;
-  /** 单次 HTTP 往返上限；省略即取本模块默认值。Continue wait 的总轮数由查询循环另行约束。 */
+  /** 单次 HTTP 请求超时；Continue wait 的重试轮数由 loadRaw 单独限制。 */
   requestTimeoutMs?: number;
 };
 
 const TOKEN_TTL_S = 3600;
 const META_TTL_MS = 5 * 60 * 1000;
-/** 单次 Cube HTTP 往返上限的默认值；PA_CUBE_REQUEST_TIMEOUT_MS 未设置时生效。 */
+/** PA_CUBE_REQUEST_TIMEOUT_MS 未设置时的默认值。 */
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 type CubeGatewayState = {
@@ -77,7 +77,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Cube 应答可能是非 JSON（网关 502 页面），在此转成可重试信息。 */
+/** Cube 可能返回非 JSON 应答（如网关 502 页面）。 */
 async function request(
   state: CubeGatewayState,
   path: string,
@@ -122,7 +122,7 @@ async function request(
   return body;
 }
 
-/** meta.internal 成员移出公开 measures/dimensions，只留在 internal* 字段供服务端契约解析。 */
+/** meta.internal 成员从公开 measures/dimensions 移到 internal* 字段，只供服务端解析模型契约。 */
 function normalizeMetaViews(cubes: (CubeView & { type: string })[]): CubeView[] {
   const isInternal = (member: CubeMember) => member.meta?.internal === true;
   return cubes
@@ -154,7 +154,6 @@ const CUBE_HIERARCHY_SCHEMA = z.object({
   levels: z.array(z.string()),
 });
 
-/** 只有 public view 进目录。 */
 const META_SCHEMA = z.object({
   cubes: z.array(z.object({ type: z.string() }).passthrough()),
 });
@@ -183,10 +182,10 @@ const LOAD_RESPONSE_SCHEMA = z.object({
   }),
 });
 
-/** 引擎应答按契约解析后才进应用层；不合契约即引擎不可用，不把半个结构往下传。 */
 function parse<T>(schema: z.ZodType<T>, value: unknown, label: string): T {
   const parsed = schema.safeParse(value);
-  if (!parsed.success) throw unavailable(`Cube ${label} 应答不合契约：${parsed.error.message}`);
+  if (!parsed.success)
+    throw unavailable(`Cube ${label} 应答格式与预期不符：${parsed.error.message}`);
   return parsed.data;
 }
 
@@ -230,7 +229,7 @@ async function loadRaw(
     if (body.error) throw unavailable(`Cube /load 错误：${String(body.error)}`);
     return body;
   }
-  throw unavailable("Cube 查询超时（Continue wait 重试耗尽）");
+  throw unavailable("Cube 查询超时（等待结果的重试次数已用完）");
 }
 
 async function fetchLoad(
@@ -242,17 +241,14 @@ async function fetchLoad(
   return parse(LOAD_RESPONSE_SCHEMA, body, "/load");
 }
 
-/**
- * /v1/load 的同期多窗形态（timeDimensions 带 compareDateRange）：POST 体须带
- * queryType=multi 声明客户端支持，应答为逐窗结果数组，序与 compareDateRange 一致。
- */
+/** compareDateRange 查询的 POST 体须带 queryType=multi；应答 results 的顺序与 compareDateRange 一致。 */
 async function fetchLoadMulti(
   state: CubeGatewayState,
   query: CubeQuery,
   context: CubeSecurityContext,
 ): Promise<LoadResponse[]> {
   const body = await loadRaw(state, query, { queryType: "multi" }, context);
-  if (!Array.isArray(body.results)) throw unavailable("Cube /load 多窗应答缺少 results");
+  if (!Array.isArray(body.results)) throw unavailable("Cube /load 多窗口查询的应答缺少 results");
   return body.results.map((result, index) =>
     parse(LOAD_RESPONSE_SCHEMA, result, `/load results[${index}]`),
   );
@@ -280,7 +276,7 @@ function sqlPair(value: unknown): [string, SqlParameter[]] | null {
   return isRecord(value) && "sql" in value ? sqlPair(value.sql) : null;
 }
 
-/** Cube 单窗/多窗 SQL 应答到稳定产品形态的唯一归一边界。 */
+/** 兼容 Cube /sql 对单期间与多期间查询的两种应答形态。 */
 export function normalizeSqlResponse(query: CubeQuery, body: unknown): GeneratedSqlStatement[] {
   const direct = sqlPair(body);
   const rawStatements = direct ? [body] : Array.isArray(body) ? body : [body];
@@ -317,11 +313,7 @@ const TIME_CONTEXT_TTL_MS = 10 * 60 * 1000;
 
 export type TimeSourceAnchor = { view: string; measure: string };
 
-/**
- * 时间锚点由执行 View 显式声明；重命名物理 View 时不会在客户端留下第二份映射。
- * 哪些时间来源在场由当前语义包决定：主时钟必须在场；其余来源只要有执行 View 声明了它，
- * 就必须给出唯一锚点；当前模型未使用的非主来源不要求锚点。
- */
+/** 主时间来源必须有锚点；其他来源只要被执行 View 使用，就必须有唯一锚点。 */
 export function resolveTimeSourceAnchors(
   views: CubeView[],
   registry: TimeSourceRegistry,
@@ -355,7 +347,7 @@ export function resolveTimeSourceAnchors(
   return anchors;
 }
 
-/** 取某个公开指标有非零数据的最新月份；year/month 是仅供内部查询的分区成员。 */
+/** 取某个公开指标有非零数据的最新月份；year/month 是不对外公开的内部分区维度。 */
 async function latestMonth(
   state: CubeGatewayState,
   view: string,
@@ -395,8 +387,8 @@ async function latestMonth(
 }
 
 /**
- * 数据时间上下文：各来源读取自己的可用边界；计划来源从 reference_source 取得实际参考月。
- * actualThrough 是默认参考月，availableThrough 是显式查询上界。
+ * actualThrough 取 reference_source 的最新月份，作为默认参考月；
+ * availableThrough 取本来源的最新月份，作为显式查询的上界。
  */
 async function fetchTimeContext(state: CubeGatewayState): Promise<TimeContext> {
   if (
@@ -409,7 +401,7 @@ async function fetchTimeContext(state: CubeGatewayState): Promise<TimeContext> {
     await fetchMeta(state, state.config.serviceContext),
     state.config.timeSources,
   );
-  // 只为当前包在场的时间来源取边界；不在场的来源不进上下文，客户端按目录 time_sources 感知
+  // 当前语义包未使用的时间来源不进入上下文；客户端按目录的 time_sources 判断可用来源
   const present = state.config.timeSources.definitions.filter((source) => anchors.has(source.id));
   const anchorMonths = new Map(
     await Promise.all(
@@ -423,7 +415,7 @@ async function fetchTimeContext(state: CubeGatewayState): Promise<TimeContext> {
   for (const source of present) {
     const actualThrough = anchorMonths.get(source.reference_source);
     if (actualThrough === undefined) {
-      throw new Error(`时间来源 ${source.id} 依赖的实际数据时钟 ${source.reference_source} 不在场`);
+      throw new Error(`时间来源 ${source.id} 引用的实际数据来源 ${source.reference_source} 不存在`);
     }
     const availableThrough = anchorMonths.get(source.id)!;
     sources[source.id] = {

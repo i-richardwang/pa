@@ -1,18 +1,17 @@
 /**
- * 派生视图只对同一次调用已查得的完整聚合行做
- * join、逐行标量算式、排序与限行，不创造时间/人群语义，不做跨行聚合或 pivot。
+ * 派生视图：对同一次调用已查得的完整聚合行做 join、逐行标量算式、排序与限行；
+ * 不引入新的时间或人群口径，不做跨行聚合或透视。
  *
- * 语义钉死如下：
- * - 两侧 join 键必须各自唯一。left 保留左侧，inner 只保留两侧命中行，
- *   full 保留两侧全集并从已有侧回填缺失侧的关联键。未命中的度量保持 null，不填 0。
- * - 组合键中的 null 是可对齐的业务空值：只有两侧整组键（含其余非空键）一致时才合并。
- *   任一算式操作数为 null、除零或结果非有限数时返回 null。
- * - 任一输入 has_more=true 即拒绝；调用方必须传入采样前的服务端完整行。
- * - 派生列不得冒用 catalog 标准度量展示名；正式指标仍只能在模型层定义。
- * - join 键只能是同源或规范同名维度以及执行器生成的同类时间列；算式列只能引用度量。
- * - 不同业务时间的度量只在同一标准度量命中封闭可比矩阵时参与算术；跨时间语义恒拒绝。
- * - 输出列序与身份完全由 columns 决定；搬运列可用 as 区分同名来源列，格式与口径随列继承。
- * - 任一派生规格或变换失败即拒绝整件查询工件。
+ * - 两侧 join 键必须各自唯一。left 保留左侧行；inner 只保留两侧都命中的行；
+ *   full 保留两侧全部行，并用已有一侧的值补上缺失一侧的 join 键列。未命中的度量为 null，不填 0。
+ * - join 键中的 null 作为普通值参与对齐：整组键都相同才合并。
+ *   算式任一操作数为 null、除数为 0 或结果不是有限数时，结果为 null。
+ * - 任一输入 has_more=true 即拒绝；调用方需传入未截断的完整行。
+ * - 派生列不能与目录中标准指标的标题同名；正式指标只在模型层定义。
+ * - join 键只能是同源维度、同名维度或同类时间列；算式只能引用度量。
+ * - 不同业务时间的度量只有属于同一标准度量且时间可比时才能参与算术；求值基准不同时拒绝。
+ * - 输出列顺序和列名由 columns 决定；直接引用的列可用 as 改名，格式和说明沿用来源列。
+ * - 任一派生规格或计算失败，整次查询报错。
  */
 import type { ViewBlock, QueryNote } from "../semantic_core/query_payload.js";
 import {
@@ -33,7 +32,7 @@ type ExpressionColumn = Extract<DerivedViewSpec["columns"][number], { expr: Expr
 type Row = Cell[];
 type RowContext = Map<string, Row | null>;
 
-/** 执行器内部结果块：派生公式尚未与语义来源血缘合并，绝不直接上线。 */
+/** 执行器内部结果：derived.formula 需先与来源的 provenance 合并，不能直接返回给调用方。 */
 export type EngineViewBlock = Omit<ViewBlock, "provenance"> & {
   derived?: { formula: string };
 };
@@ -219,12 +218,12 @@ const monthNumber = (value: string) => {
 };
 const rangeMonths = (from: string, to: string) => monthNumber(to) - monthNumber(from) + 1;
 
-/** 期末值与年初窗口都在桶终点求值，故共用终点月列表——桶由编译点给出，此处不重新枚举。 */
+/** 期末值和年初至今指标都在时间桶的末月求值。 */
 function bucketEndpoints(time: BusinessTimeResolution): string[] {
   return time.coordinates.flatMap((coordinate) => coordinate.buckets.map((bucket) => bucket.to));
 }
 
-/** 区间求值在坐标期间上进行；截止月份坐标的 from 与 to 同为该月。 */
+/** 区间指标按整段期间求值；截止月份坐标的 from 与 to 都是该月。 */
 function intervalRanges(time: BusinessTimeResolution): { from: string; to: string }[] {
   return time.coordinates.map(({ from, to }) => ({ from, to }));
 }
@@ -696,7 +695,6 @@ export function transformDerivedView(
   const hasMore = spec.limit !== undefined && rows.length > spec.limit;
   if (spec.limit !== undefined) rows = rows.slice(0, spec.limit);
 
-  // 两类说明只在算式列上措辞不同：查询说明带公式，展示说明只讲跨期比较。搬运列与来源随行的说明一致。
   const notesOf = (
     kind: "query_notes" | "display_notes",
     expressionNote: (column: ExpressionColumn, comparisons: string[]) => QueryNote | undefined,
@@ -729,7 +727,6 @@ export function transformDerivedView(
       ? { member: column.as, title: column.as, text: `跨期比较：${comparisons.join("；")}。` }
       : undefined,
   );
-  // 列角色随血缘走：搬运列继承来源成员的角色，算式列一律是结果级指标。
   const columnRoles = Object.fromEntries(
     spec.columns.map((column) => [
       derivedColumnName(column),
@@ -739,7 +736,7 @@ export function transformDerivedView(
     ]),
   );
 
-  // 派生列的基准随血缘走：搬运列继承来源指标的基准，算式列的期间已由 provenance 表达。
+  // 算式列不带时间基准，它的期间由 provenance 表达。
   const columnTimeBasis = Object.fromEntries(
     spec.columns.flatMap((column) => {
       if (!("col" in column)) return [];
@@ -763,7 +760,7 @@ export function transformDerivedView(
     ...(displayNotes.length ? { display_notes: displayNotes } : {}),
   };
   if (!spec.summary) return block;
-  // 空结果不造总体；有结果而来源无总体即抛错。
+  // 结果为空时不生成总体行。
   if (!rows.length) return block;
 
   const summarySources = new Map<string, EngineViewBlock>();

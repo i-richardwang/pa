@@ -3,7 +3,7 @@ import { resolveBetterAuthPrincipal } from "./better_auth_principal.js";
 
 const ACCESS_SCOPE = { id: "organization", title: "组织" };
 
-test("认证用户实时属性解析保留角色与数据范围", async () => {
+test("按用户当前属性解析出角色与数据范围", async () => {
   const principal = await resolveBetterAuthPrincipal(
     {
       findUserById: async () => ({
@@ -26,7 +26,7 @@ test("认证用户实时属性解析保留角色与数据范围", async () => {
   });
 });
 
-test("用户已删除时保持 fail-closed，回查故障则保留原始异常", async () => {
+test("用户不存在时返回无权限主体，查询出错时抛出原始异常", async () => {
   await expect(
     resolveBetterAuthPrincipal({ findUserById: async () => null }, "deleted-user", ACCESS_SCOPE),
   ).resolves.toEqual({

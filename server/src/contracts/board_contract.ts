@@ -35,7 +35,7 @@ export type BoardTile =
     }
   | { kind: "text"; tile_id: string; md: string; place: Place };
 
-/** 看板写入只接受持久字段；报告名称与呈现摘要由服务端读取时投影。 */
+/** 写入只含持久字段；报告名称与呈现类型由服务端读取时补齐。 */
 export type BoardMutationTile =
   | { kind: "report"; tile_id: string; report_id: string; place: Place }
   | { kind: "text"; tile_id: string; md: string; place: Place };
@@ -64,7 +64,7 @@ const PLACE_SCHEMA: z.ZodType<Place> = z
     if (place.x + place.w > BOARD_GRID_COLUMNS) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `瓦片越出画布：x+w 不得超过 ${BOARD_GRID_COLUMNS} 列`,
+        message: `瓦片超出看板宽度：x+w 不能超过 ${BOARD_GRID_COLUMNS} 列`,
       });
     }
   });

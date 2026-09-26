@@ -63,10 +63,10 @@ describe("deliverExport", () => {
   });
 
   test("下载动作缺少 resource_link 时明确失败", async () => {
-    await expect(deliverExport(host(), undefined)).rejects.toThrow("ResourceLink");
+    await expect(deliverExport(host(), undefined)).rejects.toThrow("没有提供下载链接");
   });
 
-  test("宿主拒绝下载时向 UI 报错", async () => {
+  test("下载被拒绝时向界面报错", async () => {
     await expect(
       deliverExport(
         host({
@@ -75,6 +75,6 @@ describe("deliverExport", () => {
         }),
         RESOURCE,
       ),
-    ).rejects.toThrow("拒绝或取消");
+    ).rejects.toThrow("被拒绝或已取消");
   });
 });

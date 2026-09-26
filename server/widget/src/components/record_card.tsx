@@ -2,10 +2,6 @@ import { ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
 import { ActionButton } from "pa-result-view";
 import type { RecordProjectionPayload } from "@records";
 
-/**
- * 名单卡：清单表判据与控制台同源，本包只引 pa-result-view。
- */
-
 export function RecordCard({
   payload,
   status,
@@ -96,7 +92,7 @@ export function RecordCard({
             </tbody>
           </table>
           {!payload.rows.length ? (
-            <div className="px-4 py-12 text-center text-pa-muted">当前口径下没有构成记录。</div>
+            <div className="px-4 py-12 text-center text-pa-muted">当前条件下没有构成记录。</div>
           ) : null}
         </div>
 

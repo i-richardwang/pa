@@ -4,7 +4,7 @@ import { TimeSelectionError, timeSelectionIssueMessage } from "../semantic_core/
 import { safeMcpResourceHandler, safeMcpToolHandler } from "./errors.js";
 
 describe("MCP outer error boundary", () => {
-  test("工具把可恢复问题交付为机器可读的 MCP 错误结果", async () => {
+  test("可恢复的问题以机器可读的 MCP 错误结果返回", async () => {
     const issue = {
       code: "metric_time_grain_incompatible" as const,
       metric_titles: ["月度入职率"],

@@ -39,7 +39,7 @@ const catalog = (visible = members) => ({
 });
 
 describe("business term application boundary", () => {
-  test("定义可以独立保存并立即参与解析，成员关联只作可选导航", async () => {
+  test("术语不关联成员也能保存，保存后立即参与解析", async () => {
     const db = createTestAppDatabase();
     const registry = createBusinessTermRegistry({
       repository: createBusinessTermRepository(db),
@@ -63,7 +63,7 @@ describe("business term application boundary", () => {
     db.close();
   });
 
-  test("相关成员只由应用服务从当前 Principal 的授权目录取得", async () => {
+  test("相关成员按当前用户的授权目录解析，不可见成员对普通用户隐藏、对管理员标为 missing", async () => {
     const db = createTestAppDatabase();
     const registry = createBusinessTermRegistry({
       repository: createBusinessTermRepository(db),
@@ -105,7 +105,7 @@ describe("business term application boundary", () => {
     db.close();
   });
 
-  test("管理员授权在 Application 内 fail-closed", async () => {
+  test("非管理员不能读取管理列表或创建术语", async () => {
     const db = createTestAppDatabase();
     const registry = createBusinessTermRegistry({
       repository: createBusinessTermRepository(db),
@@ -123,7 +123,7 @@ describe("business term application boundary", () => {
     db.close();
   });
 
-  test("归一后重复的叫法 fail-closed", async () => {
+  test("归一化后与标准叫法重复的别名被拒绝", async () => {
     const db = createTestAppDatabase();
     const registry = createBusinessTermRegistry({
       repository: createBusinessTermRepository(db),

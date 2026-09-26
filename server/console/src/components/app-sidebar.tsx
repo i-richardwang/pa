@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { RouteKey } from "@/dashboard/router";
 
-/** 工具钮与导航条是两套配方，禁止混用 SidebarMenuButton。 */
+/** 顶部工具按钮用 SidebarTrigger / SidebarSearchButton；SidebarMenuButton 只用于导航项。 */
 export function AppSidebar({
   groups,
   route,

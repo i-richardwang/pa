@@ -2,19 +2,19 @@ cubes:
   - name: q12_survey_response_fact
     title: Q12调研答卷
     public: false
-    description: 公开演示数据中每名答卷员工在每个月度状态下一行，承载最近一期Q12的十二项虚构评分。
+    description: 公开演示数据中，每个月为最近一期Q12调研的每名答卷员工记一行，包含十二项虚构评分。
     extends: employee_fact_base
     sql: "SELECT * FROM read_parquet('/semantic/current/q12_survey_response_fact.parquet')"
     dimensions:
       - name: wave_id
         title: 调研期次编码
-        description: 最近一期Q12调研的稳定期次编码。
+        description: 最近一期Q12调研的期次编码。
         sql: wave_id
         type: string
         meta: { dimension_group: survey_wave }
       - name: wave_name
         title: 调研期次
-        description: 最近一期Q12调研的可读期次名称。
+        description: 最近一期Q12调研的期次名称。
         sql: wave_name
         type: string
         meta: { dimension_group: survey_wave }

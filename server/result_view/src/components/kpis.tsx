@@ -5,7 +5,7 @@ import { VIEW_SCENES, type ViewScene } from "../scene.js";
 const VALUE_SIZE =
   "text-[24px] @min-[224px]:text-[28px] @2xs:text-[36px] @sm:text-[48px] leading-[1.1]";
 
-/** 大数的注脚：覆盖期间与各对照差值；全部缺席时不占行。 */
+/** 指标卡数值下方的说明：覆盖期间和各对照期差值；都没有时不渲染。 */
 function TotalCaption({ metric }: { metric: TotalBandMetric }) {
   const parts = [
     ...(metric.period ? [metric.period.label] : []),
@@ -25,7 +25,7 @@ export function Kpis({
   onOpen,
 }: {
   totals: TotalBand;
-  /** 填充场景（容器给定高度）卡面撑满并纵向居中；答数卡按内容高度加呼吸空间。 */
+  /** fill 场景撑满容器高度并垂直居中；结果卡按内容高度加上下留白。 */
   scene: ViewScene;
   canOpen?: (column: string) => boolean;
   onOpen?: (column: string) => void;

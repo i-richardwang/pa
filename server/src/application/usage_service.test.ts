@@ -28,8 +28,8 @@ function failingLog(): UsageLog {
   };
 }
 
-describe("usage service 旁路失败隔离", () => {
-  test("直接观察失败不改变业务结果", async () => {
+describe("usage service 日志写入失败", () => {
+  test("直接写日志失败时只打印错误，不抛出", async () => {
     const error = spyOn(console, "error").mockImplementation(() => {});
     try {
       const usage = createUsageService({ log: failingLog(), statistics });
@@ -65,7 +65,7 @@ describe("usage service 旁路失败隔离", () => {
     }
   });
 
-  test("统计时间与分页策略只在 Application 规范化", async () => {
+  test("统计天数与分页参数在服务内规范化，非管理员不能查看总览", async () => {
     const calls: unknown[] = [];
     const usage = createUsageService({
       log: { log: async () => {}, removeExpired: () => 0 },

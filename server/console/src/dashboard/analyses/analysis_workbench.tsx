@@ -41,7 +41,7 @@ import { TimeBar, windowSummary } from "./time_editor";
 import type { AnalysisEditSession } from "./use_analysis_edit_session";
 
 const PRESENTATION_NOTE_COPY: Record<string, string> = {
-  empty_result: "查询结果为空，以空表显示；图表选择保留，数据满足后自动出图。",
+  empty_result: "查询结果为空，暂以空表显示；有数据后会按所选图表显示。",
 };
 
 export function AnalysisWorkbench({
@@ -55,20 +55,20 @@ export function AnalysisWorkbench({
   saveLabel,
 }: {
   crumb: { href: string; label: string };
-  /** 草稿到位前的题名回落（载入中显示的名字）。 */
+  /** 草稿载入前显示的标题。 */
   title: string;
   session: AnalysisEditSession;
   catalog: CatalogPayload | null;
   actions?: ReactNode;
   error?: string | null;
-  /** 明细能力（格点记录弹层）由工作台据此统一派生，宿主页面不自行接线。 */
+  /** 工作台据此生成单元格明细弹窗，调用页面无需另行接入。 */
   recordSource: RecordProjectionSource;
-  /** 主保存动作文案：本人报告为「保存」，未落库的分析为「存为报告」。 */
+  /** 主保存按钮文案：本人报告为「保存」，未保存过的分析为「存为报告」。 */
   saveLabel: string;
 }) {
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [recordRequest, setRecordRequest] = useState<RecordProjectionDialogRequest | null>(null);
-  // 明细只对已保存的重放开放：草稿坐标与落库 revision 会交叉。
+  // 只在显示已保存结果时开放明细，草稿的查询条件可能与已保存版本不一致。
   const records = useRecordProjection({
     source: recordSource,
     replay: session.activeReplay,
@@ -116,7 +116,7 @@ export function AnalysisWorkbench({
             {saveLabel}
           </Button>
         )}
-        {/* 开栏时收起钮住右栏顶带；左题条只在收起后给展开入口。 */}
+        {/* 右栏展开时收起按钮在右栏标题栏里，这里只在右栏收起后显示展开按钮。 */}
         {!inspectorOpen ? (
           <HeaderIconButton label="展开配置栏" onClick={() => setInspectorOpen(true)}>
             <PanelRightIcon aria-hidden="true" />
@@ -154,8 +154,6 @@ export function AnalysisWorkbench({
 
   const note = session.presentationNotes[0];
   const replay = session.activeReplay;
-
-  // 四个内容态共用同一底栏壳。
 
   const queryView = draft && catalog ? semanticEditableQuery(draft.analysis) : null;
   const timeBar =

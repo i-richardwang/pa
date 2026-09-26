@@ -75,7 +75,7 @@ const views: CubeView[] = [
   },
 ];
 
-test("Agent Catalog 从真实授权目录投影查询所需能力", async () => {
+test("Agent 目录从授权后的真实目录生成查询所需的能力", async () => {
   const principal: Principal = { email: "agent@x", roles: ["user"], accessScope: { kind: "all" } };
   const service = createCatalogService({
     canonical: canonicalModelFixture(views, TEST_SEMANTIC_TAXONOMY),

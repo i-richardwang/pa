@@ -97,7 +97,7 @@ describe("report aggregate", () => {
     });
   });
 
-  test("只从本人 View 身份保存，revision 乐观锁与归档生效", async () => {
+  test("只能从本人的 View 保存报告，revision 乐观锁与归档生效", async () => {
     const db = createTestAppDatabase();
     const analyses = createAnalysisRepository(db);
     const reports = createReportRepository(db);
@@ -149,7 +149,7 @@ describe("report aggregate", () => {
     expect(await reports.listOwned("alice@x", undefined, "all")).toHaveLength(1);
   });
 
-  test("报告重放只解析一次 Analysis/View 身份", async () => {
+  test("报告重放只解析一次 Analysis 与 View", async () => {
     const db = createTestAppDatabase();
     const analyses = createAnalysisRepository(db);
     const reports = createReportRepository(db);
@@ -255,7 +255,7 @@ describe("report aggregate", () => {
     expect(await first.listRevisions(report.id, "alice@x")).toHaveLength(1);
   });
 
-  test("每次更新保存更新前快照、只留最近 20 版，恢复追加新 revision", async () => {
+  test("每次更新保存更新前的版本，只保留最近 20 版，恢复会追加新 revision", async () => {
     const db = createTestAppDatabase();
     const reports = createReportRepository(db);
     const analyses = createAnalysisRepository(db);
@@ -317,7 +317,7 @@ describe("report aggregate", () => {
     expect((await reports.listOwned("alice@x", "_100%"))[0]?.name).toBe("人数_100%");
   });
 
-  test("render shape 缓存不递增 revision，非当前 view_id 不能覆盖当前缓存", async () => {
+  test("写入 render_shape 缓存不递增 revision，非当前 view_id 不能覆盖缓存", async () => {
     const db = createTestAppDatabase();
     const analyses = createAnalysisRepository(db);
     const reports = createReportRepository(db);

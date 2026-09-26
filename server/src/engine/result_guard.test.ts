@@ -139,7 +139,7 @@ describe("聚合后结果保护", () => {
     expect(result.masked).toBeUndefined();
   });
 
-  test("minimum_support 缺少显式支撑指标时 fail-closed", () => {
+  test("minimum_support 缺少显式支撑指标时报错", () => {
     const broken: CubeView[] = [
       {
         ...views[0],
@@ -229,7 +229,7 @@ describe("聚合后结果保护", () => {
     );
   });
 
-  test("minimum_support 阈值不是正整数时 fail-closed", () => {
+  test("minimum_support 阈值不是正整数时报错", () => {
     const broken: CubeView[] = [
       {
         ...views[0],

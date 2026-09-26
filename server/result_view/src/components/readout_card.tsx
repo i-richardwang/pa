@@ -4,9 +4,8 @@ import { IconButton } from "./icon_button.js";
 import { chartMarkerClass, themedColor } from "../../../src/presentation_core/chart_config.js";
 
 /**
- * 壳与菜单同一张（`.pa-popup-surface`），模糊取卡那一档（`.pa-popup-surface-card`）。
- * 一栏 17 行、至多四栏：再多会顶穿画布。
- * 未钉住时整张卡不可命中，钉住后才接管悬停与点击。
+ * 背景与菜单相同（`.pa-popup-surface`），模糊强度用卡片档（`.pa-popup-surface-card`）。
+ * 每栏 17 行，最多四栏，否则卡片会超出绘图区域。
  */
 
 const COLUMN_TIERS = [
@@ -37,7 +36,7 @@ function Marker({ color, span, sole }: { color?: string; span: number; sole: boo
   );
 }
 
-/** 副读数：占比与对照差值同占值下方那一行，与主值同一档中性色。 */
+/** 次要读数：占比和对照差值显示在值的下方。 */
 function subReadings(row: ReadoutRow): string[] {
   return [row.secondary, row.delta].filter((text): text is string => text !== undefined);
 }
@@ -92,12 +91,12 @@ export function ReadoutCard({
 }: {
   model: ReadoutModel;
   dark: boolean;
-  /** 钉住：卡片接管命中，行可悬停可点，角上出关闭钮 */
+  /** 钉住后卡片响应鼠标，行可以悬停和点击，右上角显示关闭按钮 */
   pinned?: boolean;
   onClose?: () => void;
   onRowHover?: (series: number | null) => void;
   onRowClick?: (point: { row: number; column: string }) => void;
-  /** 该行能不能开明细：不能开就不画成可点的样子，缺省即有投影就能开。 */
+  /** 该行能否查看明细，决定是否显示为可点击；不传时有明细定义即可点击。 */
   canOpenRow?: (point: { row: number; column: string }) => boolean;
 }) {
   const columns = columnCount(model.rows.length);
@@ -117,7 +116,7 @@ export function ReadoutCard({
           </IconButton>
         </div>
       )}
-      {/* 右上角留给关闭钮 */}
+      {/* mr-5 为右上角的关闭按钮留出位置 */}
       {model.header && (
         <div className="mr-5 truncate px-4 pt-3 pb-0.5 text-pa-fg text-sm">{model.header}</div>
       )}
@@ -127,7 +126,7 @@ export function ReadoutCard({
           if (!pinned) {
             return <div key={`${row.name}-${index}`}>{body}</div>;
           }
-          // 行恒为按钮：无投影的行也要能聚焦提亮
+          // 所有行都渲染成按钮：没有明细的行也要能获得焦点并高亮对应系列
           const point = row.point;
           const openable = point && onRowClick && (canOpenRow?.(point) ?? true);
           const open = openable && point ? () => onRowClick?.(point) : undefined;

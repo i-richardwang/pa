@@ -4,7 +4,7 @@ import type { Auth } from "../auth.js";
 import type { UserAccountRequestError } from "../ports/user_account_administration.js";
 import { createBetterAuthUserAccountAdministration } from "./better_auth_user_account_administration.js";
 
-test("Better Auth 账号适配器封装持久化编码并只向应用层返回结构化授权", async () => {
+test("账号适配器负责数据范围的存储编码，向应用层返回结构化授权", async () => {
   const calls: unknown[] = [];
   const stored = '{"scope_id":"region","kind":"limited","values":["North","West, D.C."]}';
   const user = {
@@ -88,7 +88,7 @@ test("Better Auth 账号适配器封装持久化编码并只向应用层返回�
   ]);
 });
 
-test("多角色账号按最高数据权限投影，避免管理员被误判为普通用户", async () => {
+test("多角色账号只要含 admin 即视为管理员", async () => {
   const auth = {
     api: {
       listUsers: async () => ({
@@ -112,7 +112,7 @@ test("多角色账号按最高数据权限投影，避免管理员被误判为�
   expect((await accounts.list())[0]?.role).toBe("admin");
 });
 
-test("Better Auth 的预期拒绝不越过适配器泄漏第三方错误", async () => {
+test("Better Auth 的 4xx 拒绝转成统一的账号请求错误，不透出第三方错误信息", async () => {
   const auth = {
     api: {
       listUsers: async () => {

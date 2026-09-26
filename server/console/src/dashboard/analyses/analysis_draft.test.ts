@@ -149,7 +149,7 @@ function replay(view: ReplayPayload["view"] = { type: "table" }): ReplayPayload 
   };
 }
 
-describe("analysis draft 三层状态", () => {
+describe("分析草稿状态", () => {
   test("Analysis、View 与视觉偏好分别判定变化", () => {
     const draft = begin();
     expect(hasAnalysisChanges(draft)).toBe(false);
@@ -175,7 +175,7 @@ describe("analysis draft 三层状态", () => {
     expect(hasViewChanges(renamed)).toBe(false);
   });
 
-  test("对象键顺序不制造伪变更，数组顺序仍属于语义", () => {
+  test("对象键顺序不同不算变更，数组顺序不同算变更", () => {
     const base = begin();
     const samePreferences = {
       value_labels: "all" as const,
@@ -207,7 +207,7 @@ describe("analysis draft 三层状态", () => {
     expect(hasViewChanges(reversedSeries)).toBe(true);
   });
 
-  test("保存落定三层基线，预览身份只由预览结果落定", () => {
+  test("保存后更新三部分基线，预览状态只在预览完成后更新", () => {
     const changed = setSemanticViewIntent(begin(), { type: "table" }, catalog);
     expect(isPreviewCurrent(changed)).toBe(false);
     const previewed = settlePreview(changed, replay());
@@ -215,7 +215,7 @@ describe("analysis draft 三层状态", () => {
     expect(isAnalysisEditDirty(settleSaved(previewed))).toBe(false);
   });
 
-  test("声明的条件时间列轴保留到结果布局解析", () => {
+  test("表格列轴中的 time 保留到结果布局解析时再决定", () => {
     const next = setSemanticViewIntent(
       begin(),
       { type: "table", columns: ["metrics", "time"] },
@@ -224,7 +224,7 @@ describe("analysis draft 三层状态", () => {
     expect(next.view).toEqual({ type: "table", columns: ["metrics", "time"] });
   });
 
-  test("省略 series 表示默认通道，不会误删已有系列配色", () => {
+  test("省略 series 时保留已有系列配色", () => {
     const draft = { ...begin(), view: { type: "line" as const } };
     const next = setViewPreferences(draft, {
       series: { "measure:active_employee_count": { color: "#509ee3" } },
@@ -249,7 +249,7 @@ describe("analysis draft 三层状态", () => {
     expect(next.view_preferences).toEqual({});
   });
 
-  test("默认呈现由语义结果成员生成，不读取物理字段", () => {
+  test("默认呈现由语义成员生成", () => {
     expect(defaultSemanticViewIntent(begin(), "bar", catalog)).toEqual({
       type: "bar",
       category: "dimension:organization_name",
@@ -257,7 +257,7 @@ describe("analysis draft 三层状态", () => {
     });
   });
 
-  test("切图型时的默认绑定与图型可选性同源：趋势结果上的折线按维度拆线", () => {
+  test("切换图型的默认绑定与图型可选性来自同一次通道分配：趋势结果上的折线按维度拆分", () => {
     const result = {
       id: "result",
       columns: ["year", "month", "dimension:organization_name", "measure:active_employee_count"],
@@ -284,7 +284,7 @@ describe("analysis draft 三层状态", () => {
     });
   });
 
-  test("指标卡没有任何维度通道：查询带分组维度时退回表格", () => {
+  test("查询带分组维度时指标卡退回表格", () => {
     const draft = begin();
     const query = semanticEditableQuery(draft.analysis)!;
     expect(defaultSemanticViewIntent(draft, "kpi", catalog)).toEqual({ type: "table" });
@@ -335,7 +335,7 @@ describe("analysis draft 三层状态", () => {
     expect(widened.view).toEqual({ type: "table" });
   });
 
-  test("空白定义是合法编辑中间态，但没有成员前不可执行", () => {
+  test("空白定义可以编辑，但选择成员前不能执行", () => {
     const blank = beginAnalysisEdit(
       {
         name: "未命名分析",
@@ -398,7 +398,7 @@ describe("analysis draft 三层状态", () => {
     ]);
   });
 
-  test("历史规格中的时间自身冲突稳定阻断，不依赖指标能力", () => {
+  test("已保存规格中的时间冲突会被阻断，与指标能力无关", () => {
     const historical = beginAnalysisEdit(
       {
         name: "历史分析",
@@ -427,7 +427,7 @@ describe("analysis draft 三层状态", () => {
     ]);
   });
 
-  test("派生分析没有唯一可编辑查询收敛点", () => {
+  test("派生分析不可编辑", () => {
     const derived: AnalysisDefinition = {
       query: { ...definition.query, view_title: "来源" },
       derived: {
@@ -472,7 +472,7 @@ describe("查询成员纯转换", () => {
     expect(removed.calculations).toBeUndefined();
   });
 
-  test("替换分组维度保持位次并清理旧维度计算", () => {
+  test("替换分组维度保持位置并清理旧维度的计算", () => {
     const replaced = replaceSemanticQueryDimension(
       query,
       "dimension:organization_name",

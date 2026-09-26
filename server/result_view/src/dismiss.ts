@@ -1,4 +1,4 @@
-/** 撤下 = Esc 或按在块外；宿主由调用方注入。 */
+/** 按 Esc 或在元素外按下鼠标时关闭；事件源由调用方传入。 */
 import { useEffect, useRef, type RefObject } from "react";
 
 export type DismissEvent = { type: string; key?: string; target?: unknown };
@@ -10,7 +10,7 @@ export type DismissHost = {
   removeEventListener(type: string, handler: DismissHandler): void;
 };
 
-/** 落在这一块之内的按下不算「按在外面」；块还没挂上时，按哪儿都算外面。 */
+/** 在元素内按下不关闭；元素尚未挂载时，任何位置按下都关闭。 */
 function dismisses(event: DismissEvent, within: { contains(node: Node): boolean } | null): boolean {
   if (event.type === "keydown") return event.key === "Escape";
   return !within || !within.contains(event.target as Node);
@@ -32,9 +32,7 @@ export function watchDismiss(
   };
 }
 
-/**
- * 回调存进 ref 再读——它多半是调用处现写的闭包，直接进依赖会让每帧都退订重订。
- */
+/** 回调存进 ref：调用处通常每次渲染都传入新闭包，放进依赖会导致每次渲染都重新订阅。 */
 export function useDismiss(
   active: boolean,
   within: RefObject<HTMLElement | null>,

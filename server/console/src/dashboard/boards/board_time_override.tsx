@@ -20,7 +20,7 @@ export function BoardTimeOverride({
       <div className="flex flex-wrap items-center gap-2" data-testid="board-time-override">
         <TimeBar dataAsOf={dataAsOf} onChange={onChange} time={time} />
         <Button
-          aria-label="清除时间覆盖"
+          aria-label="清除看板时间"
           size="icon-sm"
           variant="subtle"
           onClick={() => onChange(null)}
@@ -39,7 +39,7 @@ export function BoardTimeOverride({
         onClick={() => onChange({ window: DEFAULT_TIME_WINDOW.trailing_months })}
         variant="subtle"
       >
-        设置板级时间
+        设置看板时间
       </Button>
     </div>
   );

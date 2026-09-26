@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { CATALOG_OUTPUT_SCHEMA, RECORDS_OUTPUT_SCHEMA, RUN_OUTPUT_SCHEMA } from "./contracts.js";
 
-test("公共 MCP 响应 schema 递归 strict，物理字段不能被静默剥离", () => {
+test("公共 MCP 响应 schema 各层均为 strict，出现未声明字段时解析失败", () => {
   const catalog = {
     access_scope: { id: "organization", title: "组织" },
     observation_scopes: ["测试人群口径。"],
@@ -94,7 +94,7 @@ test("公共 MCP 响应 schema 递归 strict，物理字段不能被静默剥离
     },
   };
   expect(RUN_OUTPUT_SCHEMA.safeParse(run).success).toBe(true);
-  // derived 不在公共输出协议内：工件内部的派生声明不得随结果外泄。
+  // derived 是服务端内部的派生声明，不属于公共输出协议。
   expect(
     RUN_OUTPUT_SCHEMA.safeParse({
       ...run,

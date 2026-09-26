@@ -1122,7 +1122,7 @@
     {
       "name": "q12_survey_participation_fact",
       "title": "Q12调研投放",
-      "description": "公开演示数据中每名受邀员工在每个月度状态下一行，记录最近一期Q12调研的投放与回复状态。",
+      "description": "公开演示数据中，每个月为最近一期Q12调研的每名受邀员工记一行，记录其投放与回复状态。",
       "kind": "fact",
       "members": [
         {
@@ -1401,7 +1401,7 @@
         {
           "name": "wave_id",
           "title": "调研期次编码",
-          "description": "最近一期Q12调研的稳定期次编码。",
+          "description": "最近一期Q12调研的期次编码。",
           "kind": "dimension",
           "member_type": "string",
           "internal": false,
@@ -1414,7 +1414,7 @@
         {
           "name": "wave_name",
           "title": "调研期次",
-          "description": "最近一期Q12调研的可读期次名称。",
+          "description": "最近一期Q12调研的期次名称。",
           "kind": "dimension",
           "member_type": "string",
           "internal": false,
@@ -1488,7 +1488,7 @@
     {
       "name": "q12_survey_response_fact",
       "title": "Q12调研答卷",
-      "description": "公开演示数据中每名答卷员工在每个月度状态下一行，承载最近一期Q12的十二项虚构评分。",
+      "description": "公开演示数据中，每个月为最近一期Q12调研的每名答卷员工记一行，包含十二项虚构评分。",
       "kind": "fact",
       "members": [
         {
@@ -1767,7 +1767,7 @@
         {
           "name": "wave_id",
           "title": "调研期次编码",
-          "description": "最近一期Q12调研的稳定期次编码。",
+          "description": "最近一期Q12调研的期次编码。",
           "kind": "dimension",
           "member_type": "string",
           "internal": false,
@@ -1780,7 +1780,7 @@
         {
           "name": "wave_name",
           "title": "调研期次",
-          "description": "最近一期Q12调研的可读期次名称。",
+          "description": "最近一期Q12调研的期次名称。",
           "kind": "dimension",
           "member_type": "string",
           "internal": false,

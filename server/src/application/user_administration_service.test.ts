@@ -55,7 +55,7 @@ function harness() {
 }
 
 describe("user administration service", () => {
-  test("列表只返回结构化账号投影，创建一次提交角色与授权范围", async () => {
+  test("列表返回账号字段，创建时一次提交角色与去重后的授权范围", async () => {
     const { service, calls } = harness();
     expect(await service.list(admin)).toEqual({
       users: [
@@ -88,7 +88,7 @@ describe("user administration service", () => {
     ]);
   });
 
-  test("角色与授权范围由一个账号更新动作提交，并在服务端禁止自降权", async () => {
+  test("角色与授权范围一起更新，管理员不能降低自己的角色", async () => {
     const { service, calls, accounts } = harness();
     await service.updateAuthorization(admin, " u1 ", {
       role: "admin",
@@ -113,7 +113,7 @@ describe("user administration service", () => {
     ).rejects.toBeInstanceOf(InvalidRequestError);
   });
 
-  test("非管理员与无效输入在账号端口之前 fail-closed", async () => {
+  test("非管理员请求和无效输入在调用账号端口前被拒绝", async () => {
     const { service } = harness();
     await expect(service.list(user)).rejects.toBeInstanceOf(ForbiddenError);
     await expect(service.resetPassword(admin, "u1", { password: "short" })).rejects.toBeInstanceOf(
@@ -121,7 +121,7 @@ describe("user administration service", () => {
     );
   });
 
-  test("账号端口的可预期拒绝与系统故障分别投影为安全的 400 和 503", async () => {
+  test("账号端口的请求错误转为 400，其他故障转为 503 并使用通用消息", async () => {
     const { service, accounts } = harness();
     accounts.list = async () => {
       throw new UserAccountRequestError("无法读取用户目录");

@@ -4,7 +4,6 @@ import {
   type AccessScopeDefinition,
 } from "./access_scope.js";
 
-/** 已认证调用者及其产品授权属性。 */
 export type Principal = {
   email: string;
   roles: string[];
@@ -17,7 +16,7 @@ export type PrincipalAttributes = {
   access_scope?: string | null;
 };
 
-/** Better Auth 持久化字段到产品身份的唯一解析边界。 */
+/** 把 Better Auth 用户字段解析为 Principal；role 字段是逗号分隔的多个角色。 */
 export function principalFromAttributes(
   attributes: PrincipalAttributes,
   accessScope: AccessScopeDefinition,

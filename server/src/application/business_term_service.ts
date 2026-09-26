@@ -1,4 +1,3 @@
-/** 当前调用者可见目录上的业务术语读取与管理员维护用例。 */
 import type { BusinessTermContentInput } from "../contracts/business_term_contract.js";
 import type { Principal } from "../contracts/principal.js";
 import type { BusinessTermRegistry } from "./business_term_registry.js";

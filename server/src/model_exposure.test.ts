@@ -1,4 +1,4 @@
-/** 公开 Demo 包的架构门禁：模型展示能力，但不编码任何内部源表或公司专属口径。 */
+/** 公开 Demo 语义包的结构检查：展示产品能力，不包含任何内部源表或公司专属口径。 */
 import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -52,7 +52,7 @@ const metricViews = views.filter((view) => view.meta?.query_surface === "metric_
 const detailViews = views.filter((view) => view.meta?.query_surface === "detail");
 
 describe("公开 Demo 语义包", () => {
-  test("以独立宽事实展示跨事实规划，不定义运行时事实 join", () => {
+  test("用独立的宽事实表演示跨表指标，不定义运行时 join", () => {
     expect(semanticPackage.id).toBe("pa_demo");
     expect(facts.map((fact) => fact.name).sort()).toEqual([
       "department_headcount_plan_fact",
@@ -69,7 +69,7 @@ describe("公开 Demo 语义包", () => {
     }
   });
 
-  test("每个执行面只绑定一张事实，明细面通过记录集显式开放", () => {
+  test("每个执行 View 只绑定一张事实表，明细 View 通过记录集显式开放", () => {
     expect(metricViews.map((view) => view.name).sort()).toEqual([
       "employee_hire_metrics",
       "employee_leave_metrics",
@@ -95,7 +95,7 @@ describe("公开 Demo 语义包", () => {
     }
   });
 
-  test("正式指标来自包声明，组件与宿主均可由物理模型解析", () => {
+  test("正式指标来自语义包声明，其组成指标和所在 View 都能在物理模型中找到", () => {
     const leafMeasures = new Set(
       facts.flatMap((fact) => (fact.measures ?? []).map((measure) => measure.name)),
     );
@@ -117,7 +117,7 @@ describe("公开 Demo 语义包", () => {
     }
   });
 
-  test("公开成员具有自含说明，并只引用包内登记的分类身份", () => {
+  test("公开成员都有完整说明，并只引用包内登记的分类", () => {
     const domains = new Set<string>(
       semanticPackage.taxonomy.metric_domains.map((domain) => domain.id),
     );

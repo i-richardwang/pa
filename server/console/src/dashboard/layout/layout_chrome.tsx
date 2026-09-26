@@ -1,6 +1,6 @@
 /**
- * 壳的挂载面：页面把题条动作、面包屑与右栏交给壳排版，壳负责位置，页面负责内容。
- * 三个槽各自独立，每槽一个写入 hook、一个读出 hook；写入 hook 卸载即清空。
+ * 页面通过这里向应用外框提交标题栏动作、面包屑和右栏，由外框负责摆放。
+ * 写入 hook 卸载时清空对应的槽。
  */
 import {
   createContext,
@@ -46,8 +46,7 @@ const TitlebarActionsContext = createContext<Slot<React.ReactNode | null>>({
 });
 
 /**
- * 题条动作的登记处。壳为主区题条开一处；设置弹层为自己的题条另开一处，
- * 弹层里的页面登记到离它最近的那一处。
+ * 标题栏动作的注册处。主区标题栏和设置弹层的标题栏各有一处，页面注册到离它最近的一处。
  */
 export function TitlebarActionsProvider({ children }: { children: React.ReactNode }) {
   const slot = useSlotState<React.ReactNode | null>(null);
@@ -80,26 +79,20 @@ export function useDetailCrumb(): DetailCrumb | null {
   return useContext(DetailCrumbContext).value;
 }
 
-/**
- * 详情页把 `父级 / 当前` 挂到与列表页同槽的 titlebar。
- * 定位由 titlebar 承担，内容区不重复标题与返回链。
- */
+/** 详情页把「父级 / 当前」面包屑放进标题栏，内容区不再重复标题和返回链接。 */
 export function useSetDetailCrumb(factory: () => DetailCrumb | null, deps: DependencyList): void {
   useSlotWriter(useContext(DetailCrumbContext), factory, deps, null);
 }
 
 export type StageAside = {
   node: React.ReactNode;
-  /** 这栏是拿来调的还是拿来读的——壳据此取宽度那一档。 */
+  /** 右栏用途（配置或详情），决定宽度。 */
   face: InspectorFace;
-  /** 同一个「收起」动作：壳在 Esc、窄屏 Sheet 的背景点击上调用它，开关仍握在页面手里。 */
+  /** 外框在 Esc 和窄屏 Sheet 背景点击时调用它收起右栏，开关状态由页面持有。 */
   dismiss: () => void;
 };
 
-/**
- * 右栏宽度单源，按栏的用途分两档：配置面摆控件，档案面摆记录本身、行更长也更该摊开。
- * 页面自己不写宽度，否则常量与真实 DOM 各活各的。
- */
+/** 右栏宽度只在这里定义，页面不自己写宽度。 */
 export const STAGE_ASIDE_WIDTH = { settings: 320, profile: 380 } as const;
 
 const StageAsideContext = createContext<Slot<StageAside | null>>({
@@ -111,7 +104,7 @@ export function useStageAside(): StageAside | null {
   return useContext(StageAsideContext).value;
 }
 
-/** `dismiss` 经 ref 转交，不进依赖：换个闭包不该让栏重挂。 */
+/** `dismiss` 通过 ref 传递、不进依赖数组，换闭包不会让右栏重新挂载。 */
 export function useSetStageAside(
   factory: () => React.ReactNode | null,
   deps: DependencyList,
@@ -159,9 +152,7 @@ export function ListPageBody({
   );
 }
 
-/**
- * 清单控制条下方的唯一滚动容器：表 / 空态 / 页脚在此内滚，控制条本身不跟着走。
- */
+/** 清单控制条下方的滚动容器，控制条不随内容滚动。 */
 export function ListScrollBody({
   children,
   className,
@@ -208,7 +199,7 @@ export function ListSegmentGroup({
   className?: string;
 }): React.ReactElement {
   return (
-    // biome-ignore lint/a11y/useSemanticElements: fieldset 是表单控件的分组语义，本组是按钮档位，套上去等于向读屏器报出一个并不存在的表单
+    // biome-ignore lint/a11y/useSemanticElements: 本组是分段按钮而非表单控件，用 fieldset 会让读屏器误报为表单
     <div
       aria-label={label}
       className={cn("flex flex-wrap items-center gap-1", className)}
@@ -277,7 +268,7 @@ export function ListControlCategory<T extends string>({
   );
 }
 
-/** `absent` = 本该有个去处但它不在；只读的分类标签不可点，仍走实线。 */
+/** `absent`：应有的跳转目标不存在时显示虚线边框。 */
 export function ListCategoryPill({
   children,
   className,

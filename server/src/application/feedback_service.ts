@@ -1,4 +1,3 @@
-/** 数据能力缺口的校验与入队用例。 */
 import type { Principal } from "../contracts/principal.js";
 import type { FeedbackRepository } from "../ports/feedback_repository.js";
 import type { UsageService } from "./usage_service.js";

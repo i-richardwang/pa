@@ -1,6 +1,6 @@
 /**
- * 正式指标 Executor：执行 Planner 产生的单事实查询腿，并把结果交给 Calculator。
- * Top-N 的选择粒度与展示粒度也在此统一编排，预览与导出共享同一路径。
+ * 正式指标 Executor：执行 Planner 产生的单事实子查询，并把结果交给 Calculator。
+ * Top-N 先按选择粒度排名、再按展示粒度查询，预览与导出都走这里。
  */
 import type { TopNSelectionSpec } from "../semantic_core/analysis_spec.js";
 import type { TimeInput } from "../semantic_core/time_contract.js";
@@ -33,7 +33,7 @@ export type PreparedMetricQueryExecution = {
   timePlanning: ResolvedTimePlanning;
   /** 选择粒度与展示粒度相同时，排名结果本身就是最终结果。 */
   precomputed?: ResolvedMetricLoad;
-  /** 排名结果及其选择过滤；展示是否复用排名载荷不改变选择合同。 */
+  /** 排名结果及选中分组的过滤条件。 */
   selection?: {
     outcome: MetricSelectionOutcome;
     filter: CubeFilter;

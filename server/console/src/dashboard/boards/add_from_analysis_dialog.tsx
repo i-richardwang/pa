@@ -15,7 +15,7 @@ import { LoadingMark } from "pa-result-view";
 import { errorText, formatAt } from "../api";
 import { useMyAnalyses } from "../dashboard_queries";
 
-/** 选材窗口覆盖近三个月本人分析；更早记录可从「我的报告 · 查询记录」保存。 */
+/** 只列本人近 90 天的分析；更早的记录在「我的报告 · 查询记录」里保存。 */
 const LOOKBACK_DAYS = 90;
 const MAX_ROWS = 200;
 
@@ -27,7 +27,7 @@ export function AddFromAnalysisDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 关掉后焦点还给谁：这一面没有触发件，由开它的那一处交代（见 board_page）。 */
+  /** 关闭后焦点的归还目标；对话框没有触发按钮，由调用方提供。 */
   finalFocus?: CommandFinalFocus;
   onPick: (row: MyAnalysisRow) => void;
 }) {

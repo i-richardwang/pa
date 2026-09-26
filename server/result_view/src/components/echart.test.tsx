@@ -36,9 +36,8 @@ const seriesOf = (chart: ViewChart, over: Partial<RenderState> = {}) =>
   renderOption(chart, state(over)).series as Record<string, unknown>[];
 
 /**
- * 存根落在 import 之后：模块求值期 `document` 必须仍然缺席——zrender 在加载时嗅探
- * 宿主能力，闻到半个 document 会走进浏览器分支去摸 `documentElement.style`。
- * 渲染期则要有它：isDarkTheme 问一次宿主主题。
+ * document 存根必须在 import 之后设置：zrender 加载时会检测运行环境，发现不完整的 document 会进入
+ * 浏览器分支并访问 `documentElement.style` 而报错。渲染时则需要它，因为 isDarkTheme 要读取主题。
  */
 Object.assign(globalThis, {
   document: { documentElement: { dataset: {} } },
@@ -76,7 +75,7 @@ const CHART_PRESENTATION = compilePresentationBlock(CHART_VIEW, {
 });
 const CHART = chartOf(CHART_PRESENTATION);
 
-test("渲染器忠实呈现声明的图或表", () => {
+test("渲染器按声明渲染图表或表格", () => {
   const chart = renderToStaticMarkup(
     <ViewRenderer actions={{}} payload={PAYLOAD} presentation={CHART_PRESENTATION} scene="page" />,
   );
@@ -95,7 +94,7 @@ test("渲染器忠实呈现声明的图或表", () => {
   expect(table).not.toContain(chartMarkerClass());
 });
 
-test("结果面的场地按场景定，图与表同框", () => {
+test("绘图区域按场景设置，图表和表格使用同一个区域", () => {
   const surfaceOf = (html: string) =>
     html.match(/<div[^>]*data-slot="plot-surface"[^>]*>/)?.[0] ?? "";
   const tablePresentation = compilePresentationBlock(CHART_VIEW, { type: "table" });
@@ -107,7 +106,7 @@ test("结果面的场地按场景定，图与表同框", () => {
   for (const scene of ["card", "page"] as const) {
     const table = surfaceOf(render(tablePresentation, scene));
     const chart = surfaceOf(render(CHART_PRESENTATION, scene));
-    expect(table, `${scene} 的表格没铺在场地上`).not.toBe("");
+    expect(table, `${scene} 场景的表格没有放在绘图区域（PlotSlab）内`).not.toBe("");
     for (const slab of [table, chart]) {
       expect(slab, scene).toContain("border-pa-line");
       expect(slab, scene).toContain(`border-radius:${PLOT_RADIUS}px`);
@@ -116,13 +115,13 @@ test("结果面的场地按场景定，图与表同框", () => {
     expect(table).toContain("my-3");
   }
   const tile = surfaceOf(render(tablePresentation, "tile"));
-  expect(tile, "瓦片里的表格没经过场地").not.toBe("");
+  expect(tile, "瓦片中的表格没有放在绘图区域（PlotSlab）内").not.toBe("");
   expect(tile).not.toContain("border-pa-line");
   expect(tile).not.toContain("p-4");
   expect(tile).not.toContain("my-3");
 });
 
-test("热力着色随 table 声明：指标格铺色片、字色随底色、仅颜色档不印数", () => {
+test("表格声明热力着色时：指标单元格显示色块，文字色随底色变化，仅颜色模式下不显示数值", () => {
   const shaded = compilePresentationBlock(CHART_VIEW, {
     type: "table",
     shading: { palette: SERIES_COLORS[0] },
@@ -134,8 +133,8 @@ test("热力着色随 table 声明：指标格铺色片、字色随底色、仅�
   expect(chips).toHaveLength(4);
   const darkest = chips.find((chip) => chip.includes("1.000"));
   const lightest = chips.find((chip) => chip.includes("0.050"));
-  expect(darkest, "极大值该是全浓底色").toContain("text-pa-ink-fg");
-  expect(lightest, "极小值该是淡底墨字").toContain("text-pa-ink");
+  expect(darkest, "最大值应使用最深的底色和白色文字").toContain("text-pa-ink-fg");
+  expect(lightest, "最小值应使用浅底色和深色文字").toContain("text-pa-ink");
   expect(html).toContain(">120<");
 
   const colorsOnly = compilePresentationBlock(CHART_VIEW, {
@@ -173,12 +172,12 @@ function legendClass(scene: "card" | "tile" | "page"): string {
 
 function padPx(token: string): number {
   const step = Number(token.replace("px-", ""));
-  expect(Number.isFinite(step), `衬垫记号 ${token} 认不出来，断言失去着力点`).toBe(true);
+  expect(Number.isFinite(step), `无法解析内边距类 ${token}`).toBe(true);
   return step * 4;
 }
 
-test("读数条、题名与 plot 框左缘同轴", () => {
-  expect(CHART, "柱图没编译出来，下面全部落空").not.toBeNull();
+test("图例行、结果卡标题与绘图区左边缘对齐", () => {
+  expect(CHART, "柱状图未生成").not.toBeNull();
 
   const cardTitleBox =
     renderToStaticMarkup(
@@ -189,19 +188,19 @@ test("读数条、题名与 plot 框左缘同轴", () => {
         scene="card"
       />,
     ).match(/<div class="((?:px|pt|pb)-[^"]*)">\s*<div class="flex min-w-0/)?.[1] ?? "";
-  expect(cardTitleBox, "答数态题名块没找到，断言失去着力点").not.toBe("");
+  expect(cardTitleBox, "没有找到结果卡的标题区域").not.toBe("");
   expect(padX(legendClass("card"))).toEqual(padX(cardTitleBox));
 
-  expect(padX(legendClass("page")), "整页档的读数条叠了第二道横向衬垫").toEqual(["px-0"]);
-  expect(padX(legendClass("tile")), "瓦片档的读数条叠了第二道横向衬垫").toEqual(["px-0"]);
+  expect(padX(legendClass("page")), "page 场景的读数栏不应再加水平内边距").toEqual(["px-0"]);
+  expect(padX(legendClass("tile")), "tile 场景的读数栏不应再加水平内边距").toEqual(["px-0"]);
 
   for (const scene of ["card", "tile", "page"] as const) {
     const [token, ...extra] = padX(legendClass(scene));
-    expect(extra, `${scene} 档的读数条给了不止一个横向衬垫`).toEqual([]);
-    expect(padPx(token ?? ""), `${scene} 档的读数条与 plot 框不同轴`).toBe(
+    expect(extra, `${scene} 场景的读数栏有多个水平内边距类`).toEqual([]);
+    expect(padPx(token ?? ""), `${scene} 场景的读数栏与绘图区左边缘没有对齐`).toBe(
       PLOT_PADDING[scene].left,
     );
-    expect(PLOT_PADDING[scene].left, "横向留白左右不对称，框会歪").toBe(PLOT_PADDING[scene].right);
+    expect(PLOT_PADDING[scene].left, "绘图区左右留白应相等").toBe(PLOT_PADDING[scene].right);
   }
 
   expect(padX(legendClass("card")).length).toBeGreaterThan(0);
@@ -226,7 +225,7 @@ const TREND_VIEW = {
   query_notes: [],
 } as unknown as Parameters<typeof compilePresentationBlock>[0];
 
-test("触屏上图例兼作读数位：末桶的值与桶名随图例交付，桌面档不占位", () => {
+test("触屏设备上图例同时显示最后一个时间桶的名称和数值，桌面端不显示", () => {
   const trend = chartOf(
     compilePresentationBlock(TREND_VIEW, {
       type: "line",
@@ -246,8 +245,8 @@ test("触屏上图例兼作读数位：末桶的值与桶名随图例交付，�
   expect(barHtml).not.toContain("pointer-coarse:block");
 });
 
-test("聚焦某条系列时它单独抬层，收回时按序号落回各自那一层", () => {
-  expect(CHART, "柱图没编译出来，下面全部落空").not.toBeNull();
+test("聚焦的系列提到最上层，取消聚焦后按序号恢复各自层级", () => {
+  expect(CHART, "柱状图未生成").not.toBeNull();
   const z = (focused: number | null) => seriesOf(CHART!, { focused }).map((s) => s.z);
   expect(z(1).slice(0, 2)).toEqual([seriesZ(0), SERIES_Z.focused]);
   expect(z(null).slice(0, 2)).toEqual([seriesZ(0), seriesZ(1)]);
@@ -258,8 +257,8 @@ test("聚焦某条系列时它单独抬层，收回时按序号落回各自那�
   expect(SERIES_Z.focused).toBeGreaterThan(seriesZ(100));
 });
 
-test("焦点只改色不换态：落选换成失焦色，暗色下走与首帧同一道主题翻译", () => {
-  expect(CHART, "柱图没编译出来，下面全部落空").not.toBeNull();
+test("聚焦只改变颜色：其他系列改用失焦色，深色模式下使用同一套颜色替换", () => {
+  expect(CHART, "柱状图未生成").not.toBeNull();
   const colors = (over: Partial<RenderState>) =>
     seriesOf(CHART!, over)
       .slice(0, 2)
@@ -275,7 +274,7 @@ test("焦点只改色不换态：落选换成失焦色，暗色下走与首帧�
   expect(compiled[0]).not.toHaveProperty("blur");
 });
 
-test("读数卡落在光标左侧 24，左边放不下才翻到右侧，且恒夹在场地内留一道边", () => {
+test("读数卡显示在光标左侧 24px 处，左侧放不下时显示在右侧，并始终留在绘图区域内", () => {
   const card = { width: 200, height: 100 };
   const bounds = { width: 800, height: 400 };
   expect(readoutPosition({ x: 500, y: 200 }, card, bounds)).toEqual({ left: 276, top: 150 });
@@ -285,7 +284,7 @@ test("读数卡落在光标左侧 24，左边放不下才翻到右侧，且恒�
   expect(readoutPosition({ x: 60, y: 10 }, card, { width: 150, height: 400 }).left).toBe(10);
 });
 
-test("钉住期间指针停在被钉的那一格，撤钉即交还给鼠标", () => {
+test("钉住期间指针停在钉住的数据点上，取消钉住后恢复跟随鼠标", () => {
   const calls: unknown[] = [];
   const stub = { dispatchAction: (action: unknown) => void calls.push(action) };
 
@@ -307,14 +306,14 @@ test("钉住期间指针停在被钉的那一格，撤钉即交还给鼠标", ()
   expect(calls).toEqual([]);
 });
 
-test("绘图区那块场地是圆角的，且瓦片档不画框", () => {
+test("绘图区域有圆角，瓦片场景不画边框", () => {
   const slabOf = (scene: "card" | "tile" | "page") =>
     renderToStaticMarkup(<ViewChartCanvas chart={CHART!} scene={scene} />).match(
       /<div[^>]*data-slot="plot-surface"[^>]*>/,
     )?.[0] ?? "";
 
   const card = slabOf("card");
-  expect(card, "结果卡没铺出绘图场地").not.toBe("");
+  expect(card, "结果卡中没有绘图区域").not.toBe("");
   expect(card).toContain("border-pa-line");
   expect(card).not.toContain("bg-pa-");
   expect(card).toContain(`border-radius:${PLOT_RADIUS}px`);
@@ -328,7 +327,7 @@ test("绘图区那块场地是圆角的，且瓦片档不画框", () => {
   expect(PLOT_RADIUS).toBeGreaterThan(0);
 });
 
-test("排行版式逐行陈述：条长按本屏最大值归一，且不落 echarts 容器", () => {
+test("排行样式逐行显示，条形长度按最大值归一化，不使用 echarts 容器", () => {
   const rank = chartOf(
     compilePresentationBlock(
       {
@@ -352,7 +351,7 @@ test("排行版式逐行陈述：条长按本屏最大值归一，且不落 echa
       },
     ),
   );
-  expect(rank?.layout, "单系列横排条形没走排行版式").toBe("rank");
+  expect(rank?.layout, "单系列横向条形图应使用排行样式").toBe("rank");
 
   const html = renderToStaticMarkup(<ViewChartCanvas chart={rank!} scene="card" />);
   for (const text of ["研发", "市场", "120", "30"]) expect(html).toContain(text);
@@ -361,7 +360,7 @@ test("排行版式逐行陈述：条长按本屏最大值归一，且不落 echa
   expect(html).toContain('data-slot="plot-surface"');
   expect(html.match(/<div/g)?.length ?? 0).toBeLessThan(20);
 
-  expect(CHART!.layout, "多系列被误判成排行版式").toBeUndefined();
+  expect(CHART!.layout, "多系列条形图不应使用排行样式").toBeUndefined();
 });
 
 const LINE_CHART = chartOf(
@@ -371,7 +370,7 @@ const LINE_CHART = chartOf(
   }),
 );
 
-test("值轴档数随绘图区尺度走，不是编译期那个定数", () => {
+test("数值轴刻度数随绘图区尺寸变化，不固定为编译时的值", () => {
   type Axes = { xAxis: { splitNumber?: number }; yAxis: { splitNumber?: number }[] };
   const axes = (chart: typeof CHART, width: number, height: number) =>
     renderOption(chart!, state({ viewport: { width, height } })) as unknown as Axes;
@@ -385,10 +384,10 @@ test("值轴档数随绘图区尺度走，不是编译期那个定数", () => {
   expect(axes(LINE_CHART, 900, 700).xAxis.splitNumber).toBeUndefined();
   const wide = axes(CHART, 900, 300).xAxis.splitNumber ?? 0;
   const narrow = axes(CHART, 260, 300).xAxis.splitNumber ?? 0;
-  expect(wide, "横排条形的值轴没跟着宽走").toBeGreaterThan(narrow);
+  expect(wide, "横向条形图的数值轴应随容器宽度变长").toBeGreaterThan(narrow);
 });
 
-/** 拆卸时实例已 dispose：`getZr()` 改口返回 null，回头再要手柄就是在清理里抛错。 */
+/** 模拟卸载时实例已 dispose 的情况：此时调用 `getZr()` 会抛错。 */
 function disposableSource() {
   const events: string[] = [];
   const zr = {
@@ -412,7 +411,7 @@ function disposableSource() {
   };
 }
 
-test("读数订阅的清理只碰订阅时那两个手柄，实例散场后照样退得干净", () => {
+test("读数订阅的清理只使用订阅时拿到的引用，实例 dispose 后也能正常退订", () => {
   const pie = disposableSource();
   const release = subscribeReadout(
     pie.source,
@@ -420,7 +419,7 @@ test("读数订阅的清理只碰订阅时那两个手柄，实例散场后照�
     () => {},
   );
   expect(pie.events).toEqual(["on:mouseover", "on:mouseout", "zr.on:globalout"]);
-  // 实例先散场（建实例那道 effect 的清理声明在前，拆卸时先跑）
+  // 实例先 dispose（创建实例的 effect 声明在前，卸载时先执行清理）
   pie.dispose();
   release?.();
   expect(pie.events.slice(3)).toEqual([
@@ -430,7 +429,7 @@ test("读数订阅的清理只碰订阅时那两个手柄，实例散场后照�
     "zr.off:globalout",
   ]);
 
-  // 整列触发的图订的是另一件事，退订同样不回头要手柄
+  // 轴指针图订阅的是另一个事件，退订时同样不再调用 getZr
   const axis = disposableSource();
   const releaseAxis = subscribeReadout(axis.source, CHART!, () => {});
   expect(axis.events).toEqual(["on:updateAxisPointer", "zr.on:globalout"]);

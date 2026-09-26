@@ -1,7 +1,4 @@
-/**
- * export 审计：链接创建、下载与失败三类事件落应用库。
- * 独立于 auth.db——审计在未启用 OAuth 的部署形态下同样生效。
- */
+// 导出审计写应用库而非 auth.db，未启用 OAuth 的部署也会记录。
 import type { SqliteDatabase } from "../sqlite.js";
 import type { ExportAudit, ExportAuditEvent } from "../ports/export_audit.js";
 

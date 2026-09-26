@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { resolveFilterLineage, sameFilterLineage } from "./filter_lineage.js";
 
 describe("filter lineage", () => {
-  test("交换可交换条件和值顺序仍是同一血缘", () => {
+  test("条件顺序和 equals/notEquals 的值顺序不影响过滤指纹", () => {
     const left = resolveFilterLineage([
       { member: "view.region", operator: "equals", values: ["east", "west"] },
       { member: "view.status", operator: "notEquals", values: ["inactive"] },
@@ -14,7 +14,7 @@ describe("filter lineage", () => {
     expect(sameFilterLineage(left, right)).toBe(true);
   });
 
-  test("不同谓词或有序值不合并", () => {
+  test("运算符不同或有序值顺序不同时视为不同过滤", () => {
     const baseline = resolveFilterLineage([
       { member: "view.region", operator: "equals", values: ["east"] },
     ]);

@@ -4,8 +4,8 @@ import type { SemanticQueryView } from "./semantic_analysis.js";
 import { compileTimeIntent } from "./time_contract.js";
 
 /**
- * 指标域与受控记录面职责分离。这里只在模型标记为 detail 的技术绑定中寻找
- * 记录来源，并要求报告的全部分组与筛选都能原样绑定；业务指标域不参与记录投影选路。
+ * 只在标记为 detail 且可查明细的绑定中寻找记录来源，并要求报告的全部分组与筛选
+ * 都能绑定到同一个 View；业务指标域不参与选择。
  */
 export function planMetricRecordProjection(
   catalog: CompilerCatalog,
@@ -58,7 +58,7 @@ export function planMetricRecordProjection(
         member: dimensionBindings[index]!.member,
       })),
       query: {
-        // 明细投影只对直接交付的查询成立，其执行视图身份恒为顶层来源角色。
+        // 明细只对直接交付的查询成立，节点 id 使用顶层查询的固定 id。
         id: "query",
         ...(intent.view_title ? { view_title: intent.view_title } : {}),
         time_view: binding.view,

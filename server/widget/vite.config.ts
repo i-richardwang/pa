@@ -8,7 +8,7 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 export default defineConfig({
   plugins: [react(), tailwindcss(), viteSingleFile()],
   resolve: {
-    // 别名带 widget 前缀（不用裸 @），与外部宿主的 @ 不冲突；服务端共享件是唯一事实源。
+    // 用 @widget 前缀而非裸 @，避免与外部宿主的 @ 别名冲突
     alias: {
       "@widget": path.resolve(import.meta.dirname, "src"),
       "@payload": path.resolve(import.meta.dirname, "../src/semantic_core/query_payload.ts"),
@@ -26,9 +26,8 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
-    // 令牌靠 light-dark() 跟随宿主 color-scheme（applyDocumentTheme 主题翻转）；
-    // 默认 cssTarget 会让 lightningcss 把它降级成只认 prefers-color-scheme 的
-    // 媒体查询变量对，宿主暗色随即失效——钉住原生支持 light-dark 的基线
+    // 令牌用 light-dark() 跟随宿主 color-scheme；默认 cssTarget 下 lightningcss 会把它降级为
+    // prefers-color-scheme 媒体查询，宿主设置的暗色随之失效，所以指定原生支持 light-dark 的基线
     cssTarget: ["chrome123", "safari17.5", "firefox120"],
     chunkSizeWarningLimit: 2048,
   },

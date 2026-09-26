@@ -39,7 +39,7 @@ export interface SelectButtonProps extends useRender.ComponentProps<"button"> {
   icon?: React.ReactNode;
 }
 
-/** 「点开一张面选一个值」的触发件都用它，形与 `SelectTrigger` 同一份。 */
+/** 打开浮层选择单个值的触发按钮统一用此组件，外观与 `SelectTrigger` 相同。 */
 export function SelectButton({
   className,
   size,
@@ -124,9 +124,8 @@ export function SelectTrigger({
 }
 
 /**
- * 下拉的名字由 Base UI 绑定到触发件上；不带它的下拉没有可读名称。
- *
- * 它出 `<span>`：设置行的左槽是行内的（见 `InspectorRow`），Base UI 默认的 div 塞不进去。
+ * Base UI 把它绑定为触发按钮的可访问名称，不带它的下拉没有可读名称。
+ * 渲染为 `<span>`：设置行左侧是行内元素（见 `InspectorRow`），放不下 Base UI 默认的 div。
  */
 export function SelectLabel({
   className,
@@ -155,7 +154,7 @@ export function SelectValue({
   );
 }
 
-/** `alignItemWithTrigger` 恒 false：Base UI 默认把选中项对到触发件上，与浮层列表的开合方式不一致。 */
+/** `alignItemWithTrigger` 固定为 false：Base UI 默认让选中项与触发按钮对齐，与其他浮层列表的展开方式不一致。 */
 export function SelectPopup({
   className,
   children,

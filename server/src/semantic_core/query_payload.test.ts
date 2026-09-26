@@ -116,7 +116,7 @@ describe("求值基准在结果里只声明一次", () => {
     ).toBe(false);
   });
 
-  test("合计位的期间只能是本列基准展开出来的那一段", () => {
+  test("合计的期间必须与本列求值基准对应的期间一致", () => {
     const valid = payload(view([["a", 1]], 1));
     const withTotals = (periods: Record<string, unknown>[]) => ({
       ...valid,

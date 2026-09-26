@@ -1,7 +1,3 @@
-/**
- * 使用日志单测：包装层的成败落行、最小化摘要与摘要容错。
- * 真实查数工具链路由 scripts/smoke.ts 端到端覆盖；feedback 存取另见 feedback.test.ts。
- */
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
@@ -31,7 +27,7 @@ function rows(path: string): Row[] {
 }
 
 describe("usage_log.wrap", () => {
-  test("成功查询写分析指纹，同一规格可聚合为重复查询", async () => {
+  test("成功查询写入查询指纹，同一规格可按指纹聚合", async () => {
     const { usage, path } = fresh();
     for (const title of ["组织人数", "再看一次组织人数"]) {
       await usage.log({
@@ -54,7 +50,7 @@ describe("usage_log.wrap", () => {
     expect(groups[0].n).toBe(2);
   });
 
-  test("成功调用只落稳定标题与结果摘要，不保存原始入参", async () => {
+  test("成功调用只记录标题与结果摘要，不保存原始入参", async () => {
     const { usage, path } = fresh();
     const handler = usage.wrap(
       {
@@ -86,7 +82,7 @@ describe("usage_log.wrap", () => {
     expect(Number(row.duration_ms)).toBeGreaterThanOrEqual(0);
   });
 
-  test("目录调用只保留概念数量，逐项缺口来自摘要", async () => {
+  test("目录调用只记录概念数量，未命中词来自摘要", async () => {
     const { usage, path } = fresh();
     const handler = usage.wrap(
       {
@@ -115,7 +111,7 @@ describe("usage_log.wrap", () => {
     expect(rows(path)[0].title).toBe("能否查看工时？");
   });
 
-  test("工具包装器把 Analysis 与 View 身份分别写入观察日志", async () => {
+  test("工具包装器把 analysis_id 与 view_id 分别写入日志", async () => {
     const { usage, path } = fresh();
     const analysisId = randomUUID();
     const viewId = randomUUID();
@@ -131,7 +127,7 @@ describe("usage_log.wrap", () => {
     });
   });
 
-  test("feedback 报错调用仍以 ask 落 title，并原样上抛", async () => {
+  test("feedback 调用报错时仍以 ask 作为 title，并原样抛出错误", async () => {
     const { usage, path } = fresh();
     const handler = usage.wrap(
       { tool: "feedback", caller: "tester" },
@@ -148,7 +144,7 @@ describe("usage_log.wrap", () => {
     expect(row.row_count).toBeNull();
   });
 
-  test("摘要抛错不影响成功日志与应答", async () => {
+  test("摘要函数抛错不影响成功日志与返回值", async () => {
     const { usage, path } = fresh();
     const handler = usage.wrap(
       {

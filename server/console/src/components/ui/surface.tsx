@@ -17,7 +17,7 @@ export type PopupWidth = keyof typeof POPUP_WIDTH;
 
 export const POPUP_ROW = "min-h-8 gap-2.5 rounded-md py-2 pr-2.5 pl-3 text-sm leading-4";
 
-/** 组题的排印：浮层里的组题与右栏里的段题同取这一档。 */
+/** 浮层分组标题与右栏分节标题共用这套排印。 */
 export const SECTION_TITLE_TEXT = "font-semibold text-md text-pa-ink leading-4";
 
 export const POPUP_TITLE = cn("truncate px-3 py-2", SECTION_TITLE_TEXT);
@@ -39,7 +39,7 @@ export function PopupTitle({
   );
 }
 
-/** `-mx-1.5` 假定所在浮层正文内衬为 1.5 格，线才贴到浮层边。 */
+/** `-mx-1.5` 假定所在浮层正文的内边距为 1.5，分隔线才能贴到浮层边缘。 */
 export function PopupSection({
   label,
   blocked,

@@ -47,7 +47,7 @@ const count = (html: string, needle: string) => html.split(needle).length - 1;
 const countTag = (html: string, tag: string) =>
   (html.match(new RegExp(`<${tag}[ >]`, "g")) ?? []).length;
 
-test("单层表头：每列一个 th，数值列头与体都右对齐", () => {
+test("单层表头：每列一个 th，数值列的表头和单元格都右对齐", () => {
   const html = render(flat);
   expect(countTag("<thead><th>a</th><th>b</th></thead>", "th")).toBe(2);
   expect(countTag(html, "th")).toBe(2);
@@ -57,7 +57,7 @@ test("单层表头：每列一个 th，数值列头与体都右对齐", () => {
   expect(count(html, "flex-row-reverse")).toBe(1);
 });
 
-test("换模型后旧排序列必须仍指向同一语义列才保留", () => {
+test("切换模型后，只有原排序列仍指向同一列时才保留排序", () => {
   const active = {
     column: 1,
     columnKey: JSON.stringify([
@@ -73,7 +73,7 @@ test("换模型后旧排序列必须仍指向同一语义列才保留", () => {
   ).toBeNull();
 });
 
-test("表体语言：明细常规字重、空值出破折号、文本列带截断上限", () => {
+test("表体：明细用常规字重，空值显示破折号，文本列有最大宽度", () => {
   const withNull: TableModel = {
     columns: flat.columns,
     rows: [
@@ -90,7 +90,7 @@ test("表体语言：明细常规字重、空值出破折号、文本列带截�
   expect(count(html, 'class="truncate" style="max-width:')).toBe(1);
 });
 
-test("两层表头：分组行 colSpan 覆盖组宽，独立列 rowSpan 跨两行", () => {
+test("两层表头：分组单元格 colSpan 覆盖整组，不分组的列 rowSpan 跨两行", () => {
   const html = render(grouped);
   expect(html).toContain('colSpan="2"');
   expect(html).toContain('rowSpan="2"');
@@ -98,7 +98,7 @@ test("两层表头：分组行 colSpan 覆盖组宽，独立列 rowSpan 跨两�
   expect(count(html, ">组织<")).toBe(1);
 });
 
-test("三层表头：按完整路径逐层合并，行轴表头跨越全部层级", () => {
+test("三层表头：按完整路径逐层合并，行维度的表头跨越全部层级", () => {
   const threeLevels: TableModel = {
     columns: [
       column("组织", "hr.organization_name", false),
@@ -136,7 +136,7 @@ test("三层表头：按完整路径逐层合并，行轴表头跨越全部层�
   expect(html).toContain('rowSpan="3"');
 });
 
-test("独立组含多列（组织维度带父级列）：每列各自跨两行，表头与表体列数对齐", () => {
+test("不分组的多列（如组织维度带父级列）各自跨两行，表头与表体列数一致", () => {
   const twoLabelCols: TableModel = {
     columns: [
       column("组织", "hr.organization_name", false),
@@ -155,7 +155,7 @@ test("独立组含多列（组织维度带父级列）：每列各自跨两行�
   expect(count(html, ">部门<")).toBe(1);
 });
 
-test("组首列的左分隔线贯穿表体：组边界由 formatKey 变化推出，只画在组的第一列上", () => {
+test("分组分隔线画在每组第一列左侧并贯穿表体，组边界按 formatKey 变化判断", () => {
   const html = render(grouped);
   const bands = new Set(grouped.columns.filter((c) => c.numeric).map((c) => c.headerPath[0]?.key));
   expect(bands.size).toBe(2);
@@ -163,7 +163,7 @@ test("组首列的左分隔线贯穿表体：组边界由 formatKey 变化推出
   expect(render(flat)).not.toContain("border-l");
 });
 
-test("组标签偶然同名不并带：组边界认 formatKey，不认标签相等", () => {
+test("两组标签同名时不合并：组边界按 formatKey 判断，与标签是否相同无关", () => {
   const collide: TableModel = {
     columns: [
       column("组织", "hr.organization_name", false),
@@ -179,7 +179,7 @@ test("组标签偶然同名不并带：组边界认 formatKey，不认标签相�
   expect(count(html, "border-l-pa-line")).toBe(2 * (2 + collide.rows.length));
 });
 
-test("记录格按 sourceRows 回指原始结果行；无来源的空格不出记录入口", () => {
+test("单元格通过 sourceRows 对应原始结果行；没有来源行的空单元格不提供明细入口", () => {
   const pivot: TableModel = {
     columns: [
       column("组织", "hr.organization_name", false),
@@ -229,7 +229,7 @@ test("记录格按 sourceRows 回指原始结果行；无来源的空格不出�
   ]);
 });
 
-test("可点性由列决定：零值照样出记录入口，空格没有数字可点", () => {
+test("能否点击由列决定：值为 0 也可查看明细，空单元格没有可点击的数字", () => {
   const withZero: TableModel = {
     columns: [
       column("组织", "hr.organization_name", false),
@@ -255,7 +255,7 @@ test("可点性由列决定：零值照样出记录入口，空格没有数字�
   expect(html).not.toContain("平均周期 ");
 });
 
-test("无 sourceRows 的长表：记录投影行号即模型行序", () => {
+test("没有 sourceRows 的长表，明细行号就是模型行号", () => {
   const asked: number[] = [];
   renderToStaticMarkup(
     <DataTable
@@ -271,7 +271,7 @@ test("无 sourceRows 的长表：记录投影行号即模型行序", () => {
   expect(asked).toEqual([0, 1]);
 });
 
-test("行数条常驻：全量陈述总行数，截行时陈述已显示行数", () => {
+test("行数栏始终显示：显示全部行时显示总行数，截断时同时显示已显示的行数", () => {
   expect(render(flat)).toContain(`共 ${flat.rows.length} 行`);
   const many: TableModel = {
     columns: flat.columns,
@@ -282,7 +282,7 @@ test("行数条常驻：全量陈述总行数，截行时陈述已显示行数",
   );
 });
 
-test("总体成带吸在表头下沿，不计入明细行数与记录投影", () => {
+test("总计行吸附在表头下方，不计入明细行数，也不提供明细入口", () => {
   const asked: number[] = [];
   const html = renderToStaticMarkup(
     <DataTable
@@ -308,7 +308,7 @@ test("总体成带吸在表头下沿，不计入明细行数与记录投影", ()
   expect(asked).toEqual([0, 1]);
 });
 
-test("字色分两档：维度格取 muted，数值格与总体行取本色", () => {
+test("维度单元格用 muted 文字色，数值单元格和总计行用默认文字色", () => {
   const html = renderToStaticMarkup(
     <DataTable model={{ ...flat, summaryRows: [["总体", 165]] }} scene="card" allRows />,
   );
@@ -319,14 +319,14 @@ test("字色分两档：维度格取 muted，数值格与总体行取本色", ()
   expect(cellOf("总体")).not.toContain("text-pa-muted");
 });
 
-test("表尾不封口：末行不留行线，下边界由行数条交代", () => {
+test("最后一行不画下边框，由行数栏的上边框代替", () => {
   const html = render(flat, { allRows: true });
   const body = html.match(/<tbody class="[^"]*">[\s\S]*$/)?.[0] ?? "";
   expect(body).toContain("[&amp;&gt;tr:last-child&gt;td]:border-b-0");
   expect(body).toContain("border-pa-line border-b");
 });
 
-test("总体带不吸顶时不占位：非 fill 表格无 sticky 与偏移", () => {
+test("非 fill 表格的总计行不吸顶，没有 sticky 和偏移", () => {
   const html = renderToStaticMarkup(
     <DataTable model={{ ...flat, summaryRows: [["总体", 165]] }} scene="card" allRows />,
   );
@@ -334,7 +334,7 @@ test("总体带不吸顶时不占位：非 fill 表格无 sticky 与偏移", () 
   expect(html.match(/<tbody aria-label="总体"[^>]*>/)?.[0]).not.toContain("sticky");
   expect(band).not.toContain("top:");
   const valueCell = band.match(/<td class="([^"]*)"[^>]*>165/)?.[1] ?? "";
-  expect(valueCell, "总体值格没匹配到——选择器过期").not.toBe("");
+  expect(valueCell, "没有找到总计行的数值单元格，请检查选择器").not.toBe("");
   expect(valueCell).toContain("font-medium");
   expect(valueCell).toContain("bg-pa-bg");
 });
@@ -348,7 +348,7 @@ test("非全屏截断到 INLINE_ROWS，全屏渲染全部行", () => {
   expect(countTag(render(many, { allRows: true }), "tr")).toBe(1 + many.rows.length);
 });
 
-test("fill 时表格自带内滚且表头吸顶；非 fill 时都不挂", () => {
+test("fill 时表格内部滚动且表头吸顶；非 fill 时都不启用", () => {
   const head = (html: string) => html.match(/<thead class="[^"]*"/)?.[0] ?? "";
   const filled = render(flat, { scene: "page" });
   expect(filled).toContain("overflow-auto");
@@ -364,7 +364,7 @@ test("右缘渐隐只在可横向滚动时显示", () => {
   expect(render(flat, { scene: "card" })).not.toContain("bg-linear-to-r");
 });
 
-test("坐标列横向冻结：首列是维度才冻，数值打头的表不冻", () => {
+test("首列是维度时横向固定，首列是数值时不固定", () => {
   const html = render(flat, { scene: "page" });
   const cells = [...html.matchAll(/<t[dh] class="([^"]*)"/g)].map((match) => match[1]);
   expect(cells.filter((cls) => cls.includes("sticky left-0")).length).toBe(1 + flat.rows.length);
@@ -399,7 +399,7 @@ const renderDensity = (scene: ViewScene) =>
 
 const classOf = (html: string, pattern: RegExp) => html.match(pattern)?.[1] ?? "";
 
-test("瓦片密度档只改内衬：字级、线色、底色三样与默认档同值", () => {
+test("瓦片场景的密度只改内边距，字号、线色和底色与整页场景相同", () => {
   expect(nonSpacing("px-2 py-1.5 text-sm border-pa-line-subtle"), "spacing filter is stale") //
     .toEqual(["border-pa-line-subtle", "text-sm"]);
   expect(
@@ -417,29 +417,33 @@ test("瓦片密度档只改内衬：字级、线色、底色三样与默认档�
   for (const [site, pattern] of sites) {
     const a = classOf(tile, pattern);
     const b = classOf(wide, pattern);
-    expect(a, `${site} 没匹配到——选择器过期`).not.toBe("");
-    expect(nonSpacing(a), `瓦片档的${site}写成 "${a}"，默认档是 "${b}"——密度只许由内衬分`).toEqual(
-      nonSpacing(b),
-    );
+    expect(a, `没有找到 ${site}，请检查选择器`).not.toBe("");
+    expect(
+      nonSpacing(a),
+      `tile 场景的 ${site} 是 "${a}"，默认是 "${b}"；两者只应在内边距上不同`,
+    ).toEqual(nonSpacing(b));
   }
 });
 
-test("吸顶的带铺实体底：表头与总体格都取卡面/带底色，不留透明", () => {
+test("吸顶的表头和总计行使用不透明底色", () => {
   for (const scene of ["tile", "page"] as const) {
     const html = renderDensity(scene);
-    expect(classOf(html, /<th class="([^"]*)"/), `${scene} 表头透明会让明细透出来`) //
+    expect(
+      classOf(html, /<th class="([^"]*)"/),
+      `${scene} 场景的表头需要不透明背景，否则滚动时会透出明细`,
+    ) //
       .toContain("bg-pa-bg");
     expect(html).toContain('aria-label="总体" class="sticky z-10 bg-pa-bg"');
     expect(classOf(html, /aria-label="总体"[\s\S]*?<td class="([^"]*)"/)).toContain("bg-pa-bg");
   }
 });
 
-test("行数条不另立字级：两档同为 text-xs，差别只在高度与字色", () => {
+test("行数栏在各场景都用 text-xs，只有高度和文字色不同", () => {
   const bar = (html: string) =>
     html.match(/<div class="(flex shrink-0 items-center justify-end[^"]*)"/)?.[1] ?? "";
   const tile = bar(renderDensity("tile"));
   const wide = bar(renderDensity("card"));
-  expect(tile, "行数条没匹配到——选择器过期").not.toBe("");
+  expect(tile, "没有找到行数栏，请检查选择器").not.toBe("");
   expect(tile).toContain("text-xs");
   expect(wide).toContain("text-xs");
   expect(tile).not.toContain("text-2xs");

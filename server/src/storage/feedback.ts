@@ -1,8 +1,4 @@
-/**
- * 数据能力反馈：反馈只进入审核队列，不改变查询与目录；补齐能力由管理员改模型完成。
- * topic_key 只把同一缺口聚合为优先级信号，问题原话每次仍逐行保留。
- * 业务术语不走本通道：术语由管理员在业务术语页维护。
- */
+// 同一 topic_key 的反馈聚合成一组计数，每条原始提问仍逐行保存。
 import { createHash } from "node:crypto";
 import type {
   FeedbackGroup,
@@ -13,7 +9,7 @@ import type { FeedbackRecord, FeedbackRepository } from "../ports/feedback_repos
 import type { NormalizedFeedbackInput } from "../contracts/feedback_input.js";
 import type { SqliteDatabase } from "../sqlite.js";
 
-/** 同一缺口的聚合身份：按缺口解释归一。 */
+/** 按 detail 文本归一化后的摘要聚合同一缺口。 */
 export function feedbackTopicKey(input: NormalizedFeedbackInput): string {
   const identity = input.detail.normalize("NFKC").toLocaleLowerCase().replace(/\s+/g, " ").trim();
   return createHash("sha256")

@@ -12,7 +12,7 @@ const STORED_USER_SCHEMA = z.object({
   access_scope: z.string().nullish(),
 });
 
-/** token 只带 user id；实时回查当前角色与数据范围，查询失败不得伪装成空权限用户。 */
+/** token 只含 user id，每次回查当前角色与数据范围；查询出错时抛出异常，不按无权限用户处理。 */
 export async function resolveBetterAuthPrincipal(
   users: BetterAuthUserLookup,
   userId: string,

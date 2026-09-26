@@ -1,4 +1,4 @@
-/** MCP Origin 守门、CORS 与 Better Auth trustedOrigins 共用同一判据。 */
+/** MCP Origin 校验、CORS 与 Better Auth trustedOrigins 使用同一套规则。 */
 
 export function isLocalOrigin(origin: string | null | undefined): origin is string {
   if (typeof origin !== "string") return false;
@@ -12,7 +12,6 @@ export function isLocalOrigin(origin: string | null | undefined): origin is stri
   }
 }
 
-/** 配置只接受完整 origin；路径、查询和凭证都不是可信来源声明。 */
 export function normalizeAllowedOrigins(raw: string | undefined): string[] {
   if (!raw) return [];
   return [

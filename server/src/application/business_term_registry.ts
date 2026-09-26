@@ -1,4 +1,3 @@
-/** 业务术语的持久化集合、目录成员校验与权限后投影。 */
 import { matchBusinessTerms, normalizeBusinessTerm } from "../engine/business_term_matcher.js";
 import type {
   BusinessTermContentInput,

@@ -15,7 +15,7 @@ export type CatalogQueryInput = z.infer<typeof CATALOG_QUERY_INPUT>;
 
 export type NormalizedCatalogQuery = { mode: "overview" } | { mode: "search"; terms: string[] };
 
-/** 保留第一次出现的原始写法，供 unmatched_terms 逐项记账。 */
+/** 保留第一次出现的原始写法，供 unmatched_terms 逐项回报。 */
 export function normalizeCatalogTerms(terms: string[]): string[] {
   const seen = new Set<string>();
   const normalized: string[] = [];
@@ -31,7 +31,7 @@ export function normalizeCatalogTerms(terms: string[]): string[] {
   return normalized;
 }
 
-/** 空入参浏览全部成员，terms 筛选目录；真实值由独立 values_of 工具负责。 */
+/** 无 terms 时返回目录概览，有 terms 时按术语检索；维度取值由 values_of 工具查询。 */
 export function normalizeCatalogQuery(input: CatalogQueryInput): NormalizedCatalogQuery {
   return input.terms === undefined
     ? { mode: "overview" }

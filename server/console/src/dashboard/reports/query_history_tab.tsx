@@ -1,6 +1,6 @@
 /**
- * 查询记录：纵向可见——只含自己，caller 由服务端锁定，仅记问题与结果规模。
- * 带 view_id 的记录可重放，也可升格为独立报告；审计日志本身不承载资产恢复职责。
+ * 查询记录只含当前用户自己的分析（服务端按 caller 过滤），只记录问题和结果行数。
+ * 带 view_id 的记录可以重放，也可以保存为报告。
  */
 import { useState } from "react";
 import { HistoryIcon, SaveIcon } from "lucide-react";
@@ -35,7 +35,7 @@ export function QueryHistoryTab({
 }) {
   const [saveTarget, setSaveTarget] = useState<SaveReportTarget | null>(null);
 
-  // 翻页走服务端切片：日志无界，前端不持全量。
+  // 服务端分页：日志条数不设上限，前端不加载全部。
   const analysesQuery = useMyAnalyses(days, DASHBOARD_PAGE_SIZE, offset);
   const data = analysesQuery.data ?? null;
   const loading = analysesQuery.isFetching;
@@ -57,7 +57,7 @@ export function QueryHistoryTab({
                 <EmptyMedia variant="icon">
                   <HistoryIcon />
                 </EmptyMedia>
-                <EmptyTitle>窗口内暂无查询记录</EmptyTitle>
+                <EmptyTitle>所选时间范围内暂无查询记录</EmptyTitle>
               </EmptyHeader>
             </Empty>
           ) : (

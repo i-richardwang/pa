@@ -219,7 +219,7 @@ describe("query contract", () => {
     ).toThrow(/物理查询不变量失效.*性别.*固定为单值/);
   });
 
-  test("结构占比按未筛死的分类分组时放行", () => {
+  test("结构占比按未被单值筛选的分类分组时通过", () => {
     for (const query of [
       {
         measures: ["test_people_metrics.active_employee_share"],
@@ -241,7 +241,7 @@ describe("query contract", () => {
     }
   });
 
-  test("OR 单腿的单值条件不被误判为整个查询已筛死分类", () => {
+  test("OR 中某个分支的单值条件，不会被误判为整个查询已把分类固定为单值", () => {
     expect(() =>
       assertPhysicalQueryInvariants(
         {

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { itemText, type PaletteItem } from "./palette_item";
 
-test("黑话进面板的可搜文本：术语别名与指标域别名都能命中", () => {
+test("术语别名和指标域别名都能在命令面板中搜到", () => {
   const term: PaletteItem = {
     kind: "business_term",
     id: "t1",
@@ -21,7 +21,7 @@ test("黑话进面板的可搜文本：术语别名与指标域别名都能命�
   expect(itemText(domain)).toContain("Turnover");
 });
 
-test("成员的语义 id 只进可搜文本，不进标签", () => {
+test("成员的语义 id 可被搜索，但不显示在标签里", () => {
   const member: PaletteItem = {
     kind: "member",
     name: "dimension:work_location",

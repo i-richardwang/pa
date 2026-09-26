@@ -67,7 +67,7 @@ const STORED_ACCESS_SCOPE_SCHEMA = z
 
 const emptyScope = (): AccessScope => ({ kind: "limited", values: [] });
 
-/** 持久化授权必须属于当前语义包；未知结构与其他包的授权均 fail-closed。 */
+/** 存储值无法解析或 scope_id 与当前语义包不符时，按无任何授权值处理。 */
 export function parseStoredAccessScope(value: unknown, expectedScopeId: string): AccessScope {
   if (typeof value !== "string" || !value.trim()) return { kind: "limited", values: [] };
   try {

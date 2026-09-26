@@ -140,7 +140,7 @@ function supports(member: CompilerCatalogMember, view: string): boolean {
 
 /**
  * 指标来源自动规划：指标各自绑定唯一执行 View；所选维度、筛选与分组必须存在于
- * 每个相关执行来源；维度统一绑定到一个确定性锚点，Metric Planner 再映射到每条事实查询腿。
+ * 每个相关执行来源；维度统一绑定到一个确定性锚点，Metric Planner 再映射到每条事实子查询。
  */
 export function planQueryIntent(
   catalog: CompilerCatalog,

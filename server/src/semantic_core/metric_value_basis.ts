@@ -12,9 +12,8 @@ export const METRIC_VALUE_BASIS_INPUT = z
 export type MetricValueBasis = (typeof METRIC_VALUE_BASES)[number];
 
 /**
- * 基准在一个业务桶上展开出的真实期间。执行、结果声明与协议校验共用这一处展开。
- *
- * degraded 表示该指标在这个桶上没有合计（按月定义的指标遇上跨月桶），值只在桶末当月成立。
+ * 求值基准在一个时间桶上对应的实际期间；执行、结果声明与协议校验都调用这里。
+ * degraded：按月定义的指标遇到跨月桶时没有整桶值，只取桶末月。
  */
 export function basisPeriod(
   basis: MetricValueBasis,

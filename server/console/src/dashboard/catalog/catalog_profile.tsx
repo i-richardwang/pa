@@ -31,10 +31,7 @@ function formatLabel(format: string | undefined): string | null {
 
 export type DimensionGroupRow = { group: string; titles: string[] };
 
-/**
- * 维度语义 id 清单 → 按业务属性组归拢的业务名。查不到名字的直接丢掉，
- * 宁可少一项也不退回 id 顶替。组序与组内序都随模型给的次序，前端不另排。
- */
+// 目录里找不到的维度 id 直接跳过，不显示 id；组序和组内顺序沿用目录顺序。
 function dimensionGroups(catalog: CatalogPayload | null, ids: string[]): DimensionGroupRow[] {
   const wanted = new Set(ids);
   const rows: DimensionGroupRow[] = [];
@@ -81,7 +78,7 @@ export function useCatalogProfile(catalog: CatalogPayload | null, terms: PublicB
   const [detail, setDetail] = useState<Detail | null>(null);
   const [valuesTarget, setValuesTarget] = useState<ValuesTarget | null>(null);
 
-  // 先收栏再开弹窗，两者不同时持有焦点。
+  // 先关闭右栏再打开弹窗，避免两者同时持有焦点。
   const openValues = useCallback((target: ValuesTarget) => {
     setDetail(null);
     setValuesTarget(target);
@@ -139,7 +136,7 @@ function CatalogProfileAside({
   const dimensions = dimensionGroups(catalog, domain?.dimension_ids ?? []);
 
   return (
-    <ProfileAside closeLabel="关闭档案" label="字典档案" onClose={onClose}>
+    <ProfileAside closeLabel="关闭详情" label="字典详情" onClose={onClose}>
       {detail.kind === "member" ? (
         <MemberProfileBody
           dimensions={dimensions}

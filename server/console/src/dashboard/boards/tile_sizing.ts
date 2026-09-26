@@ -15,7 +15,7 @@ export type TileShape = NonNullable<ReportRow["render_shape"]> | "text";
 
 export type TileSize = { w: number; h: number; minW: number; minH: number };
 
-/** 静态格数表：默认值管落位版面，最小值只挡「小到必然不可读」的极端。 */
+/** 默认格数用于新加瓦片；最小格数只防止缩到无法阅读。 */
 export const TILE_SIZES: Record<TileShape, TileSize> = {
   kpi: { w: 6, h: 3, minW: 2, minH: 2 },
   line: { w: 12, h: 6, minW: 4, minH: 3 },

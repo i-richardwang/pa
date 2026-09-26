@@ -51,7 +51,7 @@ export function observeElementSize(
   };
 }
 
-/** 元素尺寸 hook：ref 回调式挂载（节点换人时自动改订阅），尺寸未量得前为 null。 */
+/** 元素尺寸 hook：通过回调 ref 挂载，节点变化时自动重新订阅；首次测量前为 null。 */
 export function useElementSize<T extends Element>(): {
   ref: (node: T | null) => void;
   size: ElementSize | null;

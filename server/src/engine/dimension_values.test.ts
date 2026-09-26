@@ -1,4 +1,3 @@
-/** 行权限由 Cube access_policy 与 query 共用同一策略。 */
 import { describe, expect, test } from "bun:test";
 import {
   DIMENSION_VALUES_CAP,
@@ -40,12 +39,12 @@ const views: CubeView[] = [
 ];
 
 describe("findSearchableDimension", () => {
-  test("公开字符串维度自动放行并返回成员", () => {
+  test("公开的 string 维度可搜索并返回成员", () => {
     const d = findSearchableDimension(views, "test_people_metrics.organization_name");
     expect(d.title).toBe("组织");
   });
 
-  test("连续数值拒绝，显式 categorical 数值放行", () => {
+  test("普通数值维度不可搜索，声明 categorical 的数值维度可搜索", () => {
     expect(() => findSearchableDimension(views, "employee_attributes_fixture.age")).toThrow(
       "不是可搜索的分类维度",
     );
@@ -54,7 +53,7 @@ describe("findSearchableDimension", () => {
     ).toBe("评定年份");
   });
 
-  test("度量与未知成员拒绝并给出入参指引（语义 id，不教物理全名）", () => {
+  test("度量和未知成员报错，并提示使用语义维度 id", () => {
     expect(() =>
       findSearchableDimension(views, "test_people_metrics.active_employee_count"),
     ).toThrow("语义维度 id");
@@ -63,7 +62,7 @@ describe("findSearchableDimension", () => {
 });
 
 describe("dimensionValuesQuery", () => {
-  test("取 distinct 值：仅维度、升序、为 null 与空串预留截断探测行", () => {
+  test("查询维度 distinct 值并升序，为 null 和空串多取三行", () => {
     const q = dimensionValuesQuery("test_people_metrics.organization_name");
     expect(q.dimensions).toEqual(["test_people_metrics.organization_name"]);
     expect(q.filters).toBeUndefined();

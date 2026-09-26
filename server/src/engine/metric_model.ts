@@ -6,9 +6,9 @@ import type { SemanticCatalogFormalMetric } from "../semantic_core/semantic_mode
 import type { ResultGuard } from "../semantic_core/result_guard.js";
 
 export type MetricComponent = {
-  /** 组件的规范指标身份；解析时必须唯一落到一个普通指标来源。 */
+  /** 组件的规范指标 id，必须唯一对应一个普通指标来源。 */
   metric_id: string;
-  /** 聚合结果缺行或为空时的显式解释，禁止结果对齐器自行猜测。 */
+  /** 聚合结果缺行或为空时按空值还是按 0 参与计算。 */
   missing: "null" | "zero";
 };
 
@@ -42,7 +42,7 @@ export type MetricRecordProjection = {
 export type FormalMetricDefinition = {
   name: string;
   metric_domain_id: MetricDomainId;
-  /** 复合指标在 Cube /meta 中的执行锚点；只用于物理成员命名与维度绑定，不表示业务域。 */
+  /** 复合指标在 Cube /meta 中挂载的视图，只用于物理成员命名与维度绑定，与业务域无关。 */
   host_view: string;
   title: string;
   description: string;
@@ -56,7 +56,7 @@ export type FormalMetricDefinition = {
   record_projection?: MetricRecordProjection;
 };
 
-/** build-time 语义目录只消费正式指标的业务身份与依赖边，不复制公式或执行配置。 */
+/** 构建期语义目录只取正式指标的业务身份与依赖关系，不含公式和执行配置。 */
 export function semanticCatalogFormalMetrics(
   formalMetrics: readonly FormalMetricDefinition[],
 ): SemanticCatalogFormalMetric[] {
@@ -130,10 +130,7 @@ function virtualMember(
   };
 }
 
-/**
- * 把正式指标图叠加到权限裁剪后的 Cube 元数据：只有全部组件可见时才暴露复合指标。
- * PA 层不另造授权规则。
- */
+/** 把正式指标图叠加到权限裁剪后的 Cube 元数据：复合指标在全部组件可见时暴露，可见性只来自 Cube。 */
 export function applyFormalMetricModel(
   views: CubeView[],
   formalMetrics: readonly FormalMetricDefinition[],

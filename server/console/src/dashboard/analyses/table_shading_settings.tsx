@@ -1,7 +1,6 @@
 /**
- * 色带样片的颜色出自编译层 `shadingStops`，与结果格同一份取值；
- * 读数与占位是当前结果的数据缺省（`tableShadingDefaults`），阈值留空即落在那里。
- * 率族指标的阈值按表里印出来的百分数读写，存回声明时换回 0–1 标度。
+ * 色带颜色取自 `shadingStops`，与表格单元格着色一致；阈值留空时使用当前结果的默认刻度（`tableShadingDefaults`）。
+ * 比率类指标的阈值按百分数输入和显示，保存时换算回 0–1。
  */
 import { ArrowDownUpIcon } from "lucide-react";
 import { DIVERGING_PALETTES, SERIES_COLORS, shadingStops } from "@charts";
@@ -35,7 +34,7 @@ export function TableShadingSettings({
   onChange,
 }: {
   shading: TableShadingPreferences;
-  /** 当前结果的数据缺省刻度；无结果时为 null，读数退回两端的名字。 */
+  /** 当前结果的默认刻度；没有结果时为 null，读数显示下限/中点/上限文字。 */
   defaults: TableShadingDefaults | null;
   onChange: (patch: Partial<TableShadingPreferences>) => void;
 }) {

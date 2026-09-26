@@ -40,7 +40,6 @@ async function bootstrap() {
   ]);
   function HostedAnalysis() {
     const state = host.useHostState();
-    // 下载走的是宿主那侧的 resource_link，在注入时闭包带上；载荷里的导出票据对它没有用处
     const { exportResource } = state;
     return (
       <ResultCard

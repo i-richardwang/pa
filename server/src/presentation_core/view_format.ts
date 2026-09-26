@@ -1,12 +1,8 @@
 /**
- * 结果列的语义与格式化：呈现层（服务端图表配置生成、预览卡片、重放页）共用的唯一落点。
- * 列格式以载荷 column_formats 为准（percent / percentage_point 原始值恒为 0–1 标度），
- * 缺省即普通数值/文本；时间列只认 year / month 两个成员名。
- * 本文件只做展示格式化（缩放到显示单位、千分位、排序比较），不做任何度量算术。
- *
- * 小数位：全站默认一位；模型成员可用 meta.decimals 按列改（载荷 column_decimals），
- * 需要固定精度的指标由模型声明整数或小数位。产品不提供逐指标的位数设置，只采用一套全局策略，
- * 这里的默认位数就是那套策略；声明位数是给「口径本身如此」的指标留的，不是给读者调的。
+ * 结果列的格式化，服务端图表配置、预览卡片和重放页共用。
+ * 列格式取载荷 column_formats，未声明时按普通数值或文本处理；percent / percentage_point 的原始值是 0–1 比例。
+ * 时间列按成员名 year / month 识别。
+ * 小数位默认一位，模型成员可用 meta.decimals 按列声明（载荷 column_decimals）。
  */
 import { memberShortName } from "../semantic_core/member_name.js";
 import type { ColumnFormat } from "../semantic_core/query_payload.js";
@@ -23,7 +19,7 @@ export function columnDecimals(column: string, decimals?: Record<string, number>
   return decimals?.[column] ?? DEFAULT_DECIMALS;
 }
 
-/** 率族格式（percent / percentage_point，0–1 标度）：作差得百分点；量作相对变化率。 */
+/** 率类格式（percent / percentage_point，0–1 比例）：比较时作差得百分点；普通数值比较时算相对变化率。 */
 export function isRateFormat(format: ColumnFormat | undefined): boolean {
   return (format ?? "number") !== "number";
 }
@@ -45,9 +41,8 @@ export function toNumber(value: string | number | null): number | null {
 }
 
 /**
- * 维度取值的显示名。**空只出占位符，不编词**：编出的名字会和真叫这个名字的取值撞在一起。
- * 空、空串与纯空白同归一处。轴与图例都从这里取名，故它同时是**分组键**：绕过即查不到。
- * 明细表体不走这里（见 `data_table`）。
+ * 维度取值的显示名。空值、空串和纯空白都显示占位符，不生成名称，以免与真实取值重名。
+ * 轴和图例的名称同时用作分组键，都必须经过这里取得。明细表体不经过这里（见 `data_table`）。
  */
 export function isBlankCell(value: string | number | null | undefined): boolean {
   return value === null || value === undefined || String(value).trim() === "";
@@ -74,8 +69,8 @@ export function formatCell(
 }
 
 /**
- * 带符号的差值读法；量纲与小数位沿用 formatCell。
- * 符号只陈述方向：模型层没有指标方向声明，涨跌染色会把流失类指标读反。
+ * 带符号的差值，格式与小数位同 formatCell。
+ * 只标正负号不着色：模型没有声明指标方向，按涨跌着色会把流失类指标读反。
  */
 export function formatSignedDelta(
   value: number | null,
@@ -100,7 +95,7 @@ export function formatTick(
   return compact.format(value);
 }
 
-/** 读数卡 / 读数条 / 值标签数值：率带单位、定位小数，普通数值用千分位。 */
+/** 读数卡、读数条和数值标签的数值：率带单位并固定小数位，普通数值用千分位。 */
 export function formatSeriesValue(
   value: unknown,
   format: ColumnFormat,
@@ -128,7 +123,7 @@ export function monthLabel(month: string): string {
   return `${Number(month.slice(0, 4))}年${Number(month.slice(5, 7))}月`;
 }
 
-/** 月份闭区间的业务写法；单月不画区间。 */
+/** 月份闭区间的业务写法；起止同月时只写一个月。 */
 export function monthRangeLabel(from: string, to: string): string {
   return from === to ? monthLabel(from) : `${monthLabel(from)}—${monthLabel(to)}`;
 }

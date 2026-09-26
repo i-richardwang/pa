@@ -21,8 +21,8 @@ function explicitDimensionKind(member: CubeMember): DimensionKind | undefined {
 }
 
 /**
- * 字符串维度天然是分类维度；数值和时间只有显式声明后才进入候选值查询。
- * overlapping 仍是可搜索分类，只额外改变结果解释。
+ * string 维度默认为分类维度；数值和时间维度需显式声明 dimension_kind 才能查询候选值。
+ * overlapping 维度同样可搜索，只影响结果解释。
  */
 export function dimensionKind(member: CubeMember): DimensionKind | undefined {
   const explicit = explicitDimensionKind(member);

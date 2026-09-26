@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/sheet";
 import { PanelLeftIcon, SearchIcon } from "lucide-react";
 
-/** 导航侧栏的宽；弹层里的分节栏同取这一档。 */
+/** 导航侧栏宽度；设置弹窗的分节栏也使用这个宽度。 */
 export const SIDEBAR_WIDTH = "13.75rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 
@@ -48,10 +48,7 @@ function useSidebar() {
   return context;
 }
 
-/**
- * 开合状态恒由调用方持有（shell 记 localStorage）：纯客户端渲染没有 SSR 消费者，
- * 不引入 cookie 这第二份真相。
- */
+/** 开合状态由调用方持有并存入 localStorage；控制台纯客户端渲染，不使用 cookie 持久化。 */
 function SidebarProvider({
   open,
   onOpenChange,

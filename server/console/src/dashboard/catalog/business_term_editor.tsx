@@ -124,11 +124,11 @@ export function BusinessTermEditorDialog({
               id="business-term-definition"
               maxLength={BUSINESS_TERM_LIMITS.definition}
               onChange={(event) => setDefinition(event.target.value)}
-              placeholder="用一句自含说明解释它在业务中的含义。"
+              placeholder="用一句完整的话说明它在业务中的含义。"
               value={definition}
             />
             <FieldDescription>
-              这是 Agent 理解术语的事实源；不需要对应某个字段或数据值。
+              Agent 根据这段定义理解术语，不需要对应具体的字段或数据值。
             </FieldDescription>
           </Field>
           <Field>
@@ -155,13 +155,13 @@ export function BusinessTermEditorDialog({
           </Field>
           <fieldset className="flex min-w-0 flex-col items-start gap-1">
             <legend className="font-medium text-base/4.5 text-pa-fg sm:text-sm/4">
-              相关数据成员（可选）
+              相关指标或维度（可选）
             </legend>
             <p className="text-pa-muted text-xs">
               只帮助 Agent 从解释导航到目录，不会生成过滤条件或改写查询。
             </p>
             <Input
-              aria-label="搜索相关数据成员"
+              aria-label="搜索相关指标或维度"
               className="mt-1"
               onChange={(event) => setMemberQuery(event.target.value)}
               placeholder="搜索指标或维度"
@@ -196,7 +196,7 @@ export function BusinessTermEditorDialog({
                     key={member.id}
                   >
                     <Checkbox
-                      aria-label={`关联数据成员：${member.title}`}
+                      aria-label={`关联：${member.title}`}
                       checked={checked}
                       id={`business-term-member-${member.id}`}
                       onCheckedChange={(next) =>
@@ -213,7 +213,7 @@ export function BusinessTermEditorDialog({
                 );
               })}
               {visibleMembers.length === 0 ? (
-                <p className="px-2 py-4 text-center text-sm text-pa-muted">没有匹配的数据成员</p>
+                <p className="px-2 py-4 text-center text-sm text-pa-muted">没有匹配的指标或维度</p>
               ) : null}
             </div>
           </fieldset>

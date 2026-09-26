@@ -14,7 +14,7 @@ function parsePort(raw: string | undefined): number {
   return port;
 }
 
-/** 未设置时返回 undefined，由消费方决定默认值——默认值只归它一处。 */
+/** 未设置时返回 undefined，默认值由使用方决定。 */
 function optionalPositiveInteger(name: string, raw: string | undefined): number | undefined {
   if (!raw?.trim()) return undefined;
   const value = Number(raw);
@@ -54,14 +54,14 @@ export const config = {
   port: parsePort(process.env.PORT),
   /** Node 监听地址；Docker 宿主侧暴露地址另由 PA_SERVER_BIND_IP 控制。 */
   bindHost: parseHost(process.env.PA_BIND_HOST),
-  /** OAuth 与 API key 两条 /mcp 通道的共同前提；未设且未放行即拒绝启动。 */
+  /** /mcp 的 OAuth 和 API key 认证都需要它；未设置且未开启 PA_ALLOW_OPEN 时拒绝启动。 */
   authSecret: process.env.PA_AUTH_SECRET,
-  /** 鉴权基座未配置时的显式放行开关；表示部署者接受当前监听范围内无鉴权。 */
+  /** 未配置认证时显式允许无认证运行；表示部署者接受监听范围内任何人都可访问。 */
   allowOpen: process.env.PA_ALLOW_OPEN === "1",
-  /** OAuth issuer、回跳与导出链接基址；公网部署时改为对外 HTTPS 地址 */
+  /** OAuth issuer、回调和导出链接使用的基础地址；公网部署时改为对外 HTTPS 地址 */
   baseUrl: parseBaseUrl(process.env.PA_BASE_URL),
   authDb: process.env.PA_AUTH_DB ?? "data/auth.db",
   appDb: process.env.PA_APP_DB ?? "data/app.db",
-  /** 除 loopback 外额外放行的网页 origin，逗号分隔。 */
+  /** 除 loopback 外额外允许的网页 origin，逗号分隔。 */
   allowedOrigins: normalizeAllowedOrigins(process.env.PA_ALLOWED_ORIGINS),
 };

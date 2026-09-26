@@ -196,7 +196,7 @@ describe("正式指标查询", () => {
     expect(result.annotation.measures[rate]?.title).toBe("本月离职率");
   });
 
-  test("单条事实腿出现重复业务键时 fail-closed，不做隐式合并", async () => {
+  test("单个事实子查询返回重复业务键时报错，不隐式合并", async () => {
     const plan = planMetricQuery(
       { measures: [rate], dimensions: [organization] },
       { cutoff: "2026-07", grain: "total" },
@@ -219,7 +219,7 @@ describe("正式指标查询", () => {
     await expect(executeMetricQuery(cube, plan, security, views)).rejects.toThrow("返回重复业务键");
   });
 
-  test("零分母和缺失分母都返回空值，不把未知覆盖率解释成 0%", async () => {
+  test("分母为零或缺失时比例返回空值", async () => {
     const plan = planMetricQuery(
       { measures: [rate], dimensions: [organization] },
       { cutoff: "2026-07", grain: "total" },
@@ -245,7 +245,7 @@ describe("正式指标查询", () => {
     ]);
   });
 
-  test("Top-N 在正式指标算完后排名，不用任一叶子指标替代比例", async () => {
+  test("Top-N 按算完的正式指标排名", async () => {
     const plan = planMetricQuery(
       { measures: [rate], dimensions: [organization] },
       { cutoff: "2026-07", grain: "total" },
@@ -315,7 +315,7 @@ describe("正式指标查询", () => {
     expect(result.selection).toMatchObject({ window: "all", selectedCount: 2 });
   });
 
-  test("可用性守卫把缺失事件解释为零，但把缺失批次保留为空", async () => {
+  test("可用性守卫把缺失事件记为零，缺失批次保留为空值", async () => {
     const plan = planMetricQuery(
       { measures: [guardedCount], dimensions: [organization] },
       { cutoff: "2026-07", grain: "total" },
@@ -342,7 +342,7 @@ describe("正式指标查询", () => {
     ]);
   });
 
-  test("持久化计划仍满足封闭结构，物理查询里的未知键不被静默剥离", () => {
+  test("持久化计划按封闭结构解析，物理查询中出现未知键时报错", () => {
     const persisted = {
       kind: "metric_query",
       business_time: {

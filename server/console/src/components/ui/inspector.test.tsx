@@ -1,4 +1,4 @@
-/** 密度坏在栏、段、行任一头都是静默的：照样渲染，只是变回配置面那副样子。 */
+/** 右栏密度样式分别挂在栏、段、行三层，缺任何一层都不会报错，只会退回配置栏的默认密度。 */
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -12,7 +12,7 @@ import {
 const PROFILE = "group-data-[face=profile]/inspector:";
 const SETTINGS = "group-data-[face=settings]/inspector:";
 
-test("头卡把名字、口径与事实行收在同一张卡里", () => {
+test("详情头卡在同一张卡片中显示名称、口径说明和事实行", () => {
   const markup = renderToStaticMarkup(
     <InspectorProfileCard description="按组织分析入离职。" title="人员流动">
       <div>事实行</div>
@@ -28,7 +28,7 @@ test("头卡把名字、口径与事实行收在同一张卡里", () => {
   );
 });
 
-test("值给字符串就按值排版，给节点就照放；记号槽可放勾选框", () => {
+test("字符串值按值样式排版，节点值原样渲染；图标位可以放勾选框", () => {
   const text = renderToStaticMarkup(<InspectorRow label="格式">百分比</InspectorRow>);
   expect(text).toMatch(/truncate text-pa-muted text-xs" title="百分比">百分比/);
   expect(text).toContain("max-w-3/5");
@@ -44,14 +44,14 @@ test("值给字符串就按值排版，给节点就照放；记号槽可放勾�
   const control = renderToStaticMarkup(
     <InspectorRow icon={<input type="checkbox" />} label="在职人数" />,
   );
-  // 记号槽里的控件是可达的：槽不遮蔽它。
+  // 图标位里的控件可交互，不被 aria-hidden 隐藏。
   expect(control).toMatch(/data-slot="inspector-row-icon"><input type="checkbox"/);
   expect(control).not.toContain(
     'aria-hidden="true" class="flex shrink-0 items-center text-pa-faint',
   );
 });
 
-test("行外的动作不占右槽，名字只在配置面让位", () => {
+test("行动作渲染在行框之外；名称只在配置栏使用弱化字色", () => {
   const markup = renderToStaticMarkup(
     <InspectorRow actions={<button type="button">移除</button>} indent label="入职人数" />,
   );
@@ -62,12 +62,12 @@ test("行外的动作不占右槽，名字只在配置面让位", () => {
   );
   expect(markup).toContain("min-h-11");
   expect(markup).toContain("md:min-h-8");
-  // 档案面不预先压灰：不许出现无前缀的 text-pa-muted。
+  // 详情栏名称不使用弱化字色：text-pa-muted 只带配置栏前缀出现。
   expect(markup).toContain(`${SETTINGS}text-pa-muted`);
   expect(markup).not.toMatch(/(?<!:)\btext-pa-muted\b/);
 });
 
-test("档案密度由栏发出、由段与行认领", () => {
+test("详情栏密度由 InspectorBody 设置，分节和行按该密度渲染", () => {
   const markup = renderToStaticMarkup(
     <InspectorBody face="profile">
       <InspectorSection title="指标">
@@ -81,7 +81,7 @@ test("档案密度由栏发出、由段与行认领", () => {
   expect(markup).toContain('data-slot="inspector-section-rule"');
   expect(markup).toContain(`${PROFILE}px-0`);
   expect(markup).toContain(`${PROFILE}py-0.5`);
-  // 段题走 semibold（PA 的 520 一档）。
+  // 分节标题使用 font-semibold（PA 中对应字重 520）。
   expect(markup).toContain("font-semibold");
 
   const settings = renderToStaticMarkup(

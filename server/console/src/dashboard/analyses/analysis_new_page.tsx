@@ -9,7 +9,7 @@ const BLANK_NAME = "未命名分析";
 
 export function AnalysisNewPage() {
   const catalog = useCatalogQuery().data ?? null;
-  // 种子恒定：换引用会让编辑会话把用户已录入的草稿当成新种子重播。
+  // 种子引用须保持不变，换引用会让编辑会话用新种子覆盖用户已录入的草稿。
   const seed = useMemo(() => blankAnalysisSeed(BLANK_NAME), []);
   const edit = useAnalysisEditSession({
     catalog,

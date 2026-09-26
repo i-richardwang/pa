@@ -10,9 +10,9 @@ import { PlotSlab } from "./plot_slab.js";
 
 export const INLINE_ROWS = 8;
 
-/** 表头一行的高度（px），与 `headCell` 的 `h-8` 同值；总体带的吸顶偏移按层数叠加，挂载后按量得的实高校正。 */
+/** 表头单行高度（px），须与 `headCell` 的 `h-8` 一致；作为总计行吸顶偏移的初值，挂载后改用实测高度。 */
 const HEAD_ROW_HEIGHT = 32;
-/** 文本格的截断上限（px）：超过即省略，悬停出展开钮。 */
+/** 文本单元格的最大宽度（px），超出时截断，悬停时显示展开按钮。 */
 const TEXT_CELL_MAX_WIDTH = 780;
 
 const headCell =
@@ -21,13 +21,12 @@ const cellText = "whitespace-nowrap font-normal";
 const frozenCell = "sticky left-0 z-[1] bg-pa-bg group-hover:bg-pa-wash-solid";
 const EMPTY_CELL = <span className="text-pa-faint">—</span>;
 /**
- * 总体带与组边界线只用单边工具类：两个 border-color 工具类落在同一元素上时，胜者由样式表生成
- * 顺序决定而非书写顺序；单边类之间冲突在结构上不可能发生。
+ * 总计行和分组边界只用单边 border 工具类：同一元素上有两个 border-color 工具类时，生效的是样式表中
+ * 后生成的那个，与 className 里的书写顺序无关。
  */
 const groupEdge = "border-l border-l-pa-line";
 const shadeText = { ink: "text-pa-ink", inverse: "text-pa-ink-fg" } as const;
 
-/** 明暗只有着色的表要问，故订阅落在本件而不在表上。 */
 function ShadeChip({
   value,
   formatKey,
@@ -70,14 +69,14 @@ export type TableSort = { column: number; columnKey: string; dir: 1 | -1 };
 const tableColumnKey = (column: TableColumn): string =>
   JSON.stringify([column.formatKey, column.headerPath.map(({ key }) => key)]);
 
-/** 模型切换时旧下标只有仍指向同一语义列才有效；首个新模型渲染就先裁掉陈旧状态。 */
+/** 切换模型后，只有原下标仍指向同一列时才保留排序；新模型首次渲染时就丢弃失效的排序。 */
 export function resolveTableSort(sort: TableSort | null, columns: TableColumn[]): TableSort | null {
   if (!sort) return null;
   const column = columns[sort.column];
   return column && tableColumnKey(column) === sort.columnKey ? sort : null;
 }
 
-/** 相邻叶子列的共同路径前缀合并成表头格；headerPath 是分组结构的唯一事实源。 */
+/** 把相邻列 headerPath 的共同前缀合并成多层表头的单元格。 */
 function tableHeaderRows(columns: TableColumn[]): HeaderCell[][] {
   const depth = Math.max(1, ...columns.map((column) => column.headerPath.length));
   const rows = Array.from({ length: depth }, () => [] as HeaderCell[]);
@@ -112,13 +111,12 @@ export function DataTable({
   onOpenCell,
 }: {
   model: TableModel;
-  /** 宿主场景：场地、密度、行数条与是否自带内滚都由 `VIEW_SCENES[scene]` 定。 */
   scene: ViewScene;
-  /** 全量渲染；否则只铺前 INLINE_ROWS 行。它是运行态：答数卡在宿主全屏时放开。 */
+  /** 为 true 时渲染全部行，否则只渲染前 INLINE_ROWS 行；结果卡全屏查看时为 true。 */
   allRows: boolean;
   /**
-   * 能否查看构成记录是列的属性，与格里的数值无关——因此不收值参数。
-   * row 为该格的原始结果行下标（经 sourceRows 解析），不是表格展示行序。
+   * 能否查看明细只取决于列，与单元格数值无关。
+   * row 是单元格对应的原始结果行下标（经 sourceRows 映射），不是表格的显示顺序。
    */
   canOpenCell?: (row: number, column: number) => boolean;
   onOpenCell?: (row: number, column: number) => void;
@@ -131,7 +129,6 @@ export function DataTable({
   const columnSchemaKey = JSON.stringify(model.columns.map(tableColumnKey));
   const headerRows = tableHeaderRows(model.columns);
   const headerDepth = headerRows.length;
-  /** 首列是坐标才冻结。 */
   const frozen = model.columns[0] ? !model.columns[0].numeric : false;
   const bodyCell = `${cellText} ${traits.cellPad} border-pa-line border-b`;
   const summaryCell = `${cellText} ${traits.cellPad} border-b border-b-pa-line bg-pa-bg font-medium`;
@@ -140,9 +137,9 @@ export function DataTable({
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [scrollableRight, setScrollableRight] = useState(false);
   const [headHeight, setHeadHeight] = useState(headerDepth * HEAD_ROW_HEIGHT);
-  /** 已被用户放开截断上限的列 */
+  /** 用户已取消宽度限制的列 */
   const [uncapped, setUncapped] = useState<Set<number>>(() => new Set());
-  /** 悬停中且确实被截断的格子（展开钮只在这里出现） */
+  /** 鼠标悬停且内容被截断的单元格，展开按钮只在这里显示 */
   const [expandHint, setExpandHint] = useState<{ row: number; col: number } | null>(null);
   const rows = model.rows.map((row, source) => ({ row, source }));
   if (activeSort) {
@@ -154,12 +151,12 @@ export function DataTable({
   const total = `共 ${rows.length} 行`;
   const footer = shown.length < rows.length ? `已显示前 ${shown.length} 行 · ${total}` : total;
 
-  /** 滚动、改尺寸、换模型三处都要重问。 */
+  /** 滚动、尺寸变化和模型切换后，都要重新检查右侧是否还能滚动。 */
   const probeScroll = () => {
     const node = scrollerRef.current;
     setScrollableRight(!!node && node.scrollWidth - node.clientWidth - node.scrollLeft > 1);
   };
-  // 列宽随模型与放开截断变，容器尺寸交给尺寸订阅（订阅即回调一次，首问在此）
+  // observeElementSize 订阅时会立即回调一次，首次检查也在这里完成
   useEffect(() => {
     const node = scrollerRef.current;
     if (!node) return;
@@ -173,7 +170,7 @@ export function DataTable({
   }, [fill]);
 
   const columns = model.columns;
-  /** 依赖只认列身份：列语义不变时保住排序、展开与悬停状态，模型对象换引用不影响。 */
+  /** 只在列结构变化时重置排序、展开和悬停状态；模型对象换了引用但列不变时保留。 */
   useEffect(() => {
     setSort((previous) => resolveTableSort(previous, columns));
     setUncapped((previous) => (previous.size ? new Set() : previous));
@@ -218,7 +215,7 @@ export function DataTable({
     </button>
   );
 
-  /** 多层表头下每个顶层分组的首列画一条，贯穿表头、总体与明细。 */
+  /** 多层表头时，在每个顶层分组的第一列左侧画分隔线，贯穿表头、总计行和明细。 */
   const edgeAt = new Set(
     headerDepth <= 1
       ? []
@@ -233,7 +230,7 @@ export function DataTable({
         }),
   );
 
-  /** 格→原始结果行：交叉表经 sourceRows 映射（null=无来源行），长表即模型行序。 */
+  /** 单元格对应的原始结果行：交叉表通过 sourceRows 映射（null 表示没有来源行），长表直接用模型行号。 */
   const sourceOf = (modelRow: number, col: number): number | null =>
     model.sourceRows ? (model.sourceRows[modelRow]?.[col] ?? null) : modelRow;
 
@@ -247,7 +244,6 @@ export function DataTable({
     if (text === null) return EMPTY_CELL;
     if (col.numeric) {
       const cellSource = sourceOf(rows[ri].source, i);
-      // 可点性只在悬停/聚焦时现形
       const content =
         cellSource !== null && canOpenCell?.(cellSource, i) ? (
           <button
@@ -329,7 +325,7 @@ export function DataTable({
               </tr>
             ))}
           </thead>
-          {/* 必须排在明细之前：吸顶偏移按表头实高叠加 */}
+          {/* 总计行必须排在明细之前：它的吸顶偏移等于表头实际高度 */}
           {model.summaryRows?.length ? (
             <tbody
               aria-label="总体"
@@ -352,7 +348,7 @@ export function DataTable({
               ))}
             </tbody>
           ) : null}
-          {/* 下边界由行数条的顶线交代 */}
+          {/* 最后一行不画下边框，由下方行数栏的上边框代替 */}
           <tbody
             className="[&>tr:last-child>td]:border-b-0"
             onMouseLeave={() => setExpandHint((prev) => (prev === null ? prev : null))}
@@ -365,8 +361,8 @@ export function DataTable({
                     className={`${bodyCell} ${
                       col.numeric
                         ? "text-right"
-                        : // sticky 本身就是定位元素，展开钮的绝对定位有它作参照；再叠一个
-                          // relative 会与它争同一条 position 声明，胜负由样式表顺序而非书写顺序定
+                        : // sticky 已是定位元素，可作展开按钮的定位参照；再加 relative 会与它冲突，
+                          // 生效的取决于样式表顺序
                           `text-pa-muted ${i === 0 && frozen ? frozenCell : "relative"}`
                     } ${edgeAt.has(i) ? groupEdge : ""}`}
                     onMouseEnter={probeTruncation(ri, i, !col.numeric && !uncapped.has(i))}
@@ -379,7 +375,7 @@ export function DataTable({
           </tbody>
         </table>
       </div>
-      {/* 右缘渐隐：宽度取 40px，够把最后一列的数字化开而不遮住它。 */}
+      {/* 右边缘渐隐提示，宽 40px，不遮住最后一列数字 */}
       {scrollableRight && (
         <div
           aria-hidden="true"

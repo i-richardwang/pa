@@ -1,9 +1,6 @@
 import type { ReactNode } from "react";
 
-/**
- * 结果面里的小动作钮（全屏、下载、翻页、复制）：描边、正文色、带图标。
- * 两个宿主的结果卡与名单卡共用这一件，停用态只降可用性，不另加边框或底色。
- */
+/** 结果区域里的小操作按钮（全屏、下载、翻页、复制），控制台和 MCP widget 的结果卡与名单共用。 */
 export function ActionButton({
   onClick,
   disabled = false,

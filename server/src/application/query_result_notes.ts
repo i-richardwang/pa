@@ -92,13 +92,13 @@ export function buildResultNotes(input: {
     );
     const selectionRule =
       selection.window === "anchor"
-        ? `按最新逻辑时间桶的「${rankingTitle}」保留数值${selection.direction === "desc" ? "最高" : "最低"}的 ${selection.requestedCount} 个`
+        ? `按最近一个时间段的「${rankingTitle}」保留数值${selection.direction === "desc" ? "最高" : "最低"}的 ${selection.requestedCount} 个`
         : `按「${rankingTitle}」名称保留${selection.direction === "asc" ? "最靠前" : "最靠后"}的 ${selection.requestedCount} 个`;
     const text =
       `结果${selectionRule}「${dimensionTitles.join("、")}」分组，实际选中 ${selection.selectedCount} 个；` +
       (selection.window === "anchor"
-        ? "其余查询时间桶只补齐这些分组，不参与排名。"
-        : "全部时间桶只展示这些分组。");
+        ? "其他时间段只显示这些分组，不参与排名。"
+        : "所有时间段都只显示这些分组。");
     queryNotes.push({ member: "notice:top_n_selection", title: "分组选择", text });
     displayNotes.push({ member: "notice:top_n_selection", title: "结果范围", text });
   }
@@ -112,10 +112,8 @@ export function buildResultNotes(input: {
     );
     const note = {
       member: `notice:minimum_support:${memberShortName(mask.member)}`,
-      title: "最小支撑量保护",
-      text:
-        `「${title}」有 ${mask.groups} 个结果格的支撑量不足 ${mask.threshold}，` +
-        "数值按最小支撑量保护未显示。",
+      title: "样本量不足",
+      text: `「${title}」有 ${mask.groups} 个结果格的样本量少于 ${mask.threshold}，这些数值已隐藏。`,
     };
     queryNotes.push(note);
     displayNotes.push(note);

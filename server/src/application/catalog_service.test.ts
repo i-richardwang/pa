@@ -1,4 +1,4 @@
-/** CatalogService 集成纯桩：授权模型读取 /meta，翻值复用同一 context 走 /load 与上限协议。 */
+/** CatalogService 集成测试（桩实现）：目录按授权读取 /meta，维度取值查询用同一 context 调 /load 并遵守数量上限。 */
 import { describe, expect, spyOn, test } from "bun:test";
 import { DIMENSION_VALUES_CAP, DIMENSION_VALUES_SCAN_LIMIT } from "../engine/dimension_values.js";
 import type { Principal } from "../contracts/principal.js";
@@ -80,7 +80,7 @@ const createService = (
   },
 ) => createCatalogService({ businessTerms: noBusinessTerms, ...deps });
 
-// 翻值以语义 id 入参；从编译器目录取稳定 id（服务端再解析成物理绑定翻值）。
+// 维度取值查询以语义 id 为参数，服务端再解析成物理成员；这里从编译器目录取稳定 id。
 const catalogDimensions = toCompilerCatalog(buildCatalogDocument(views)).dimensions;
 const dimId = (title: string) => {
   const found = catalogDimensions.find((dimension) => dimension.title === title);

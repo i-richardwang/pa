@@ -37,9 +37,9 @@ export type MaskedMeasureSummary = {
 
 export type ResolvedMetricLoad = ResolvedLoad & {
   selection?: MetricSelectionOutcome;
-  /** 选中分组的规范维度过滤，仅供总体与完整展示查询复用。 */
+  /** 选中分组的规范维度过滤，供总体查询和完整展示查询复用。 */
   selectionFilter?: CubeFilter;
-  /** 结果保护实际生效的指标；空缺表示本次结果没有格被置空。 */
+  /** 结果保护实际生效的指标；缺省表示本次结果没有单元格被置空。 */
   masked?: MaskedMeasureSummary[];
 };
 
@@ -202,7 +202,6 @@ function applySelection(
   }
   const rank = new Map(selectedKeys.map((key, index) => [key, index]));
   const selectedRows = rows.filter((row) => rank.has(selectionKey(selection.dimensions, row)));
-  // selectedRows 已按 rank.has 过滤，两侧名次必然存在。
   selectedRows.sort(
     (left, right) =>
       rank.get(selectionKey(selection.dimensions, left))! -
@@ -249,7 +248,7 @@ export function alignMetricLoads(
   loads: ResolvedLoad[],
   views: CubeView[],
 ): ResolvedMetricLoad {
-  if (loads.length !== plan.legs.length) throw new Error("正式指标查询腿执行结果不完整");
+  if (loads.length !== plan.legs.length) throw new Error("正式指标子查询执行结果不完整");
   const keys = metricKeyMembers(plan);
   const aligned = new Map<string, Record<string, CubeCell>>();
   loads.forEach((load, index) => {
@@ -259,7 +258,7 @@ export function alignMetricLoads(
       const normalized = canonicalRow(plan, leg, source);
       const key = JSON.stringify(keys.map((member) => cell(normalized[member])));
       if (seen.has(key)) {
-        throw new Error(`正式指标查询腿 ${index + 1} 返回重复业务键，无法安全对齐`);
+        throw new Error(`正式指标子查询 ${index + 1} 返回重复业务键，无法安全对齐`);
       }
       seen.add(key);
       const target =

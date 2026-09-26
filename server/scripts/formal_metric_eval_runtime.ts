@@ -42,7 +42,7 @@ export async function createFormalMetricEvalRuntime() {
           (member) => member.split(".")[0],
         ),
       );
-      assert(prefixes.size <= 1, "单条 Cube 查询腿混入多个事实来源");
+      assert(prefixes.size <= 1, "一条 Cube 子查询里混入了多个事实来源");
     }
     const result = await executeMetricQuery(cube, plan, SERVICE_CUBE_CONTEXT, views);
     return { plan, row: result.data[0] ?? {} };

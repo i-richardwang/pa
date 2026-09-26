@@ -4,14 +4,14 @@ import { CHART_DECL_SCHEMA } from "./chart_decl.js";
 const table = { type: "table" };
 
 describe("public chart declaration", () => {
-  test("接受当前完整合同并可无损 JSON 往返", () => {
+  test("解析结果可以无损 JSON 往返", () => {
     const parsed = CHART_DECL_SCHEMA.parse(table);
     expect(CHART_DECL_SCHEMA.parse(JSON.parse(JSON.stringify(parsed)))).toEqual(parsed);
   });
 
-  test("通道只属于声明了它的图型：形状本身即校验", () => {
+  test("缺少必备通道或使用该图型没有的通道时解析失败", () => {
     const parse = (decl: Record<string, unknown>) => () => CHART_DECL_SCHEMA.parse(decl);
-    // 必备通道缺席
+    // 缺少必备通道
     expect(parse({ type: "bar", y: ["active_employee_count"] })).toThrow();
     expect(parse({ type: "pie", y: ["active_employee_count"] })).toThrow();
     expect(parse({ type: "line", y: [] })).toThrow();
@@ -33,7 +33,7 @@ describe("public chart declaration", () => {
     expect(parse({ ...table, unexpected: true })).toThrow();
   });
 
-  test("两把尺子不共享系列；拆分在场时没有副轴", () => {
+  test("同一系列不能同时在主轴和副轴，有拆分通道时不能用副轴", () => {
     expect(() =>
       CHART_DECL_SCHEMA.parse({
         type: "bar",
@@ -41,7 +41,7 @@ describe("public chart declaration", () => {
         y: ["active_employee_count"],
         y2: ["active_employee_count"],
       }),
-    ).toThrow("bar 呈现声明的同一系列不能同时在主轴与副轴");
+    ).toThrow("bar 图中同一指标不能同时放在主轴和副轴");
     expect(() =>
       CHART_DECL_SCHEMA.parse({
         type: "line",
@@ -49,20 +49,20 @@ describe("public chart declaration", () => {
         y2: ["ytd_primary_event_rate"],
         groupBy: "organization_name",
       }),
-    ).toThrow("line 呈现声明拆分通道时值通道只容一个系列");
+    ).toThrow("line 图使用拆分维度时只能有一个指标");
     expect(() =>
       CHART_DECL_SCHEMA.parse({ type: "pie", x: "organization_name", y: ["a"], y2: ["b"] }),
     ).toThrow();
   });
 
-  test("拆分通道占掉系列来源时值通道只剩一个位置", () => {
+  test("有拆分通道时值通道只能有一个系列", () => {
     expect(() =>
       CHART_DECL_SCHEMA.parse({
         type: "line",
         y: ["active_employee_count", "new_hire_count"],
         groupBy: "organization_name",
       }),
-    ).toThrow("line 呈现声明拆分通道时值通道只容一个系列");
+    ).toThrow("line 图使用拆分维度时只能有一个指标");
     expect(
       CHART_DECL_SCHEMA.parse({
         type: "line",

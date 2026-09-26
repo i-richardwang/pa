@@ -121,7 +121,7 @@ export function presentationFallbacks(
           {
             result_view_id: viewId,
             kind: "unsupported_shape",
-            note: `声明的表格布局未生效：${compiledTable.layout.message}`,
+            note: `表格布局未生效：${compiledTable.layout.message}`,
           },
         ]
       : [];
@@ -132,7 +132,7 @@ export function presentationFallbacks(
       {
         result_view_id: viewId,
         kind: "empty_result",
-        note: "查询成功但结果为空，本次以空表呈现；呈现声明保留，数据满足后重跑即可生效。",
+        note: "查询成功，但没有返回数据，暂以空表显示；有数据后重新运行即可按设定的图表显示。",
       },
     ];
   }
@@ -141,7 +141,7 @@ export function presentationFallbacks(
     {
       result_view_id: viewId,
       kind: "unsupported_shape",
-      note: "查询已成功，但当前结果形态不支持声明的呈现，本次已按表格呈现。",
+      note: "查询成功，但当前结果无法用设定的图表显示，已改用表格显示。",
     },
   ];
 }
@@ -934,13 +934,13 @@ export function compilePresentationBlock(
   if (!chart) return { type: "table", ...base };
   switch (decl.type) {
     case "line":
-      if (chart.form !== "line") throw new Error("折线声明生成了错误图表形态");
+      if (chart.form !== "line") throw new Error("折线图声明编译出了其他类型的图表");
       return { type: "line", ...base, chart };
     case "bar":
-      if (chart.form !== "bar") throw new Error("柱形声明生成了错误图表形态");
+      if (chart.form !== "bar") throw new Error("柱状图声明编译出了其他类型的图表");
       return { type: "bar", ...base, chart };
     case "pie":
-      if (chart.form !== "pie") throw new Error("饼图声明生成了错误图表形态");
+      if (chart.form !== "pie") throw new Error("饼图声明编译出了其他类型的图表");
       return { type: "pie", ...base, chart };
   }
 }

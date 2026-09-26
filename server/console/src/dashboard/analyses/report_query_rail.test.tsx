@@ -62,7 +62,7 @@ const blankDraft = (): AnalysisEditState =>
 
 function withMembers(draft: AnalysisEditState): AnalysisEditState {
   const view = draft.analysis.query;
-  if (!view || "from" in view) throw new Error("空白种子必须是语义查询视图");
+  if (!view || "from" in view) throw new Error("空白分析应是单个语义查询");
   return {
     ...draft,
     analysis: {
@@ -78,7 +78,7 @@ function withMembers(draft: AnalysisEditState): AnalysisEditState {
 
 function withAnnualMonthlyMetric(draft: AnalysisEditState): AnalysisEditState {
   const view = draft.analysis.query;
-  if (!view || "from" in view) throw new Error("空白种子必须是语义查询视图");
+  if (!view || "from" in view) throw new Error("空白分析应是单个语义查询");
   return {
     ...draft,
     analysis: {
@@ -95,7 +95,7 @@ function withAnnualMonthlyMetric(draft: AnalysisEditState): AnalysisEditState {
 function withOverlappingTime(draft: AnalysisEditState): AnalysisEditState {
   const withMeasure = withMembers(draft);
   const view = withMeasure.analysis.query;
-  if (!view || "from" in view) throw new Error("测试草稿必须是语义查询视图");
+  if (!view || "from" in view) throw new Error("测试草稿应是单个语义查询");
   return {
     ...withMeasure,
     analysis: {
@@ -116,7 +116,7 @@ function withSort(
   group_sort: Omit<NonNullable<SemanticQueryView["group_sort"]>, "dimension">,
 ): AnalysisEditState {
   const view = draft.analysis.query;
-  if (!view || "from" in view) throw new Error("空白种子必须是语义查询视图");
+  if (!view || "from" in view) throw new Error("空白分析应是单个语义查询");
   return {
     ...draft,
     analysis: {
@@ -129,7 +129,7 @@ function withSort(
 function withCalculation(draft: AnalysisEditState): AnalysisEditState {
   const withMembersDraft = withMembers(draft);
   const view = withMembersDraft.analysis.query;
-  if (!view || "from" in view) throw new Error("测试草稿必须是语义查询视图");
+  if (!view || "from" in view) throw new Error("测试草稿应是单个语义查询");
   return {
     ...withMembersDraft,
     analysis: {
@@ -156,7 +156,7 @@ function withFilter(
   values = ["示例组织甲"],
 ): AnalysisEditState {
   const view = draft.analysis.query;
-  if (!view || "from" in view) throw new Error("空白种子必须是语义查询视图");
+  if (!view || "from" in view) throw new Error("空白分析应是单个语义查询");
   return {
     ...draft,
     analysis: {
@@ -169,7 +169,7 @@ function withFilter(
   };
 }
 
-// 筛选行就地取维度取值（TanStack Query），故整栏与运行时一样活在 QueryClient 里。
+// 筛选行通过 TanStack Query 查询维度候选值，渲染时需要 QueryClientProvider。
 const render = (draft: AnalysisEditState) =>
   renderToStaticMarkup(
     <QueryClientProvider client={new QueryClient()}>
@@ -184,7 +184,6 @@ const render = (draft: AnalysisEditState) =>
     </QueryClientProvider>,
   );
 
-/** 「运行预览」是栏内唯一的 filled 按钮；只看它这一枚的 disabled 属性。 */
 function previewDisabled(markup: string): boolean {
   const at = markup.lastIndexOf("运行预览");
   if (at < 0) throw new Error("查询栏必须渲染「运行预览」");
@@ -192,38 +191,38 @@ function previewDisabled(markup: string): boolean {
   return button.includes("disabled=");
 }
 
-test("无结果且零成员：预览禁用并给出补齐提示", () => {
+test("没有结果也没有成员时，预览禁用并提示先选成员", () => {
   const out = render(blankDraft());
   expect(previewDisabled(out)).toBe(true);
   expect(out).toContain("至少选择一个指标或分组维度");
 });
 
-test("补上成员后预览即可点，提示随之消失", () => {
+test("选了成员后预览可用，提示消失", () => {
   const out = render(withMembers(blankDraft()));
   expect(previewDisabled(out)).toBe(false);
   expect(out).not.toContain("至少选择一个指标或分组维度");
 });
 
-test("可预测的指标时间冲突在草稿出口阻断并显示真实原因", () => {
+test("指标与时间设置冲突时，预览禁用并显示冲突原因", () => {
   const out = render(withAnnualMonthlyMetric(blankDraft()));
   expect(previewDisabled(out)).toBe(true);
   expect(out).toContain("指标「月度入职率」按月定义；连续期间请改为按月呈现，不能合并多个月份");
 });
 
-test("历史规格的时间自身冲突不会中断渲染，运行出口显示原因", () => {
+test("已保存规格的时间设置自相冲突时照常渲染，预览禁用并显示原因", () => {
   const out = render(withOverlappingTime(blankDraft()));
   expect(previewDisabled(out)).toBe(true);
   expect(out).toContain("主时间与对照时间在按年呈现时都会产生 2022 年");
   expect(out).not.toContain("服务暂时无法完成请求");
 });
 
-test("时间不在查询栏：它是舞台 chrome，唯一实现在工作台页脚时间栏", () => {
+test("查询栏不渲染时间控件", () => {
   const out = render(withMembers(blankDraft()));
   expect(out).not.toContain('aria-label="观察时间"');
   expect(out).not.toContain("数据最新月份");
 });
 
-test("无结果时成员名仍走目录翻译，不上屏限定名", () => {
+test("没有结果时成员名取目录标题，不显示成员 id", () => {
   const out = render(withMembers(blankDraft()));
   expect(out).toContain("在职人数");
   expect(out).toContain("组织");
@@ -231,7 +230,7 @@ test("无结果时成员名仍走目录翻译，不上屏限定名", () => {
   expect(out).not.toContain("dimension:organization_name");
 });
 
-test("已选成员成行不成片：胶囊只留给筛选取值", () => {
+test("已选成员按行显示，只有筛选取值显示成胶囊", () => {
   const out = render(withMembers(blankDraft()));
   expect(out.match(/data-slot="inspector-row"/g)).toHaveLength(1);
   expect(out.match(/data-slot="breakdown-field"/g)).toHaveLength(1);
@@ -242,22 +241,22 @@ test("已选成员成行不成片：胶囊只留给筛选取值", () => {
   );
 });
 
-test("筛选条件就地成行：维度、取值关系与已选值都在栏内直接可读", () => {
+test("筛选条件在栏内按行显示维度、取值关系和已选值", () => {
   const out = render(withFilter(withMembers(blankDraft()), "one_of"));
-  // 行不是浮层：维度、关系与取值片必须出现在这一次静态渲染里（浮层只会渲染触发件）。
+  // 浮层在静态渲染中只输出触发器，这些内容能出现说明它们直接渲染在行内。
   expect(out).toContain('data-slot="filter-row"');
   expect(out).toContain("是其中之一");
   expect(out).toContain("示例组织甲");
   expect(out).not.toContain("搜索或输入取值");
 });
 
-test("未取值的筛选是可编辑中间态，但不能运行预览", () => {
+test("筛选未选取值时可以继续编辑，但预览禁用", () => {
   const out = render(withFilter(withMembers(blankDraft()), "one_of", []));
   expect(previewDisabled(out)).toBe(true);
   expect(out).toContain("请先为筛选选择至少一个值");
 });
 
-test("添加入口一律在题行右端，没有行内添加位", () => {
+test("添加按钮在各节标题行右侧，行内没有添加入口", () => {
   const out = render(withFilter(withMembers(blankDraft()), "one_of"));
   for (const label of ["添加筛选条件", "选择指标", "选择分组维度", "移除 组织 筛选"]) {
     expect(out).toContain(`aria-label="${label}"`);
@@ -267,7 +266,7 @@ test("添加入口一律在题行右端，没有行内添加位", () => {
   expect(out).not.toContain("添加筛选条件缩小范围");
 });
 
-test("取值关系只有两档，翻转即换文案", () => {
+test("取值关系只有「是其中之一」和「不是其中之一」两种", () => {
   const out = render(withFilter(withMembers(blankDraft()), "none_of"));
   expect(out).toContain("不是其中之一");
   for (const dropped of ["包含", "大于", "小于", "有值", "无值"]) {
@@ -275,7 +274,7 @@ test("取值关系只有两档，翻转即换文案", () => {
   }
 });
 
-test("题行记号要么都给要么都不给：每一节题行左端恰好一枚", () => {
+test("每一节标题行左侧各有一个图标", () => {
   const out = render(withMembers(blankDraft()));
   const headers = out.match(/data-slot="inspector-section-header"/g) ?? [];
   const icons = out.match(/data-slot="inspector-section-icon"/g) ?? [];
@@ -283,7 +282,7 @@ test("题行记号要么都给要么都不给：每一节题行左端恰好一�
   expect(icons.length).toBe(headers.length);
 });
 
-test("一个分组维度一行：维度可就地换，排名选项只在范围浮层里", () => {
+test("每个分组维度一行，维度可直接替换，排序选项在范围浮层里", () => {
   const out = render(withMembers(blankDraft()));
   const row = out.slice(out.indexOf('data-slot="breakdown-field"'));
   const rowEnd = row.indexOf('data-slot="inspector-section-content"');
@@ -296,13 +295,13 @@ test("一个分组维度一行：维度可就地换，排名选项只在范围�
   }
 });
 
-test("范围触发件印的是结论不是控件名：限项说端与量，只排序说依据", () => {
+test("范围按钮显示当前设置：限制项数时显示方向和数量，只排序时显示排序依据", () => {
   const cases: [Parameters<typeof withSort>[1], string][] = [
     [{ by: "measure:active_employee_count", direction: "desc", max_items: 5 }, "前 5"],
     [{ by: "measure:active_employee_count", direction: "asc", max_items: 5 }, "后 5"],
     [{ by: "name", direction: "asc", max_items: 5 }, "A→Z (5)"],
     [{ by: "name", direction: "desc", max_items: 5 }, "Z→A (5)"],
-    // 只声明排序、不限项数：仍是展示全部，但它已不是「没设过」，触发件得说清按什么排。
+    // 只排序、不限项数时显示全部分组，按钮显示排序依据。
     [{ by: "measure:active_employee_count", direction: "desc" }, "按数值"],
     [{ by: "name", direction: "asc" }, "按名称"],
   ];
@@ -313,17 +312,17 @@ test("范围触发件印的是结论不是控件名：限项说端与量，只�
   }
 });
 
-test("分组默认展示全部，不在新增维度时暗写 Top 10", () => {
+test("新增分组维度默认显示全部，不设置项数上限", () => {
   const draft = withMembers(blankDraft());
   const view = draft.analysis.query;
-  if (!view || "from" in view) throw new Error("测试草稿必须是语义查询视图");
+  if (!view || "from" in view) throw new Error("测试草稿应是单个语义查询");
   expect(view.group_sort).toBeUndefined();
   const out = render(draft);
   expect(out).toContain('aria-label="组织分组范围：全部"');
   expect(out).not.toContain("分组 Top-N");
 });
 
-test("三节常驻：一项能力没被用上，它的题行仍在原位；没有「计算」第四节", () => {
+test("筛选、指标、分组三节始终按顺序显示，没有单独的「计算」节", () => {
   const out = render(blankDraft());
   const titles = ["筛选", "指标", "分组"];
   const at = titles.map((title) => out.indexOf(`>${title}<`));
@@ -333,7 +332,7 @@ test("三节常驻：一项能力没被用上，它的题行仍在原位；没�
   expect(out).not.toContain("添加构成占比");
 });
 
-test("构成占比住在指标节：候选就在指标浮层里，落定后是一行带算法触发件的指标", () => {
+test("占比在指标节中显示为一行，带计算设置按钮", () => {
   const empty = render(withMembers(blankDraft()));
   expect(empty).not.toContain('aria-label="添加构成占比"');
   const calculated = render(withCalculation(blankDraft()));
@@ -344,14 +343,14 @@ test("构成占比住在指标节：候选就在指标浮层里，落定后是�
   expect(rowAt).toBeLessThan(groupsAt);
   expect(calculated).toContain("组织结构");
   expect(calculated).toContain('aria-label="组织结构怎么算：在职人数按组织的占比"');
-  // 结论不写成 `A / B`——那读成除法。
+  // 不写成 `A / B`，避免被读成除法。
   expect(calculated).not.toContain("在职人数 / 组织");
   expect(calculated).toContain(">按组织<");
   expect(calculated).toContain('aria-label="移除 组织结构"');
   expect(calculated).not.toContain("calculation:active_employee_organization_share");
 });
 
-test("构成占比候选：前置条件不满足时仍列出、只是灰，理由讲的是先去做什么", () => {
+test("占比选项在前置条件不满足时仍列出但不可选，并提示需要先做什么", () => {
   const nothing = percentOfTotalPick({ measures: [], dimensions: [], chosen: false });
   expect(nothing.incompatible).toBe(true);
   expect(nothing.incompatible_reason).toBe("先添加一个可以算占比的指标（例如人数）");

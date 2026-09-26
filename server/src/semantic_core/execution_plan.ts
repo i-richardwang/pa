@@ -1,4 +1,4 @@
-/** 私有执行计划；内部执行腿不得直接成为用户可见结果。 */
+/** 私有执行计划；只有 output 节点交付给用户，其余节点是内部子查询。 */
 import {
   analysisSink,
   derivedColumnName,
@@ -24,7 +24,7 @@ export type ExecutionOutput = OutputDelivery & {
   id: string;
 };
 
-/** 计划带有不可伪造的类型品牌，只能由本模块的 planner 产生。 */
+/** 类型品牌：ExecutionPlan 只能由 planExecution 产生。 */
 declare const executionPlanBrand: unique symbol;
 
 export type ExecutionPlan = {
@@ -47,7 +47,6 @@ function identityDelivery(view: AnalysisViewSpec): OutputDelivery {
   return { columns: Object.fromEntries(columns.map((column) => [column, column])) };
 }
 
-/** 解析输入规格并产出唯一执行计划。 */
 export function planExecution(input: AnalysisSpec, opts: PlanOptions): ExecutionPlan {
   const spec = parseAnalysisSpec(input);
   const outputId = analysisSink(spec.views);

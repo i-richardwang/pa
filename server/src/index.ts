@@ -31,8 +31,8 @@ import { createUserAdministrationService } from "./application/user_administrati
 
 if (!config.authSecret && !config.allowOpen) {
   throw new Error(
-    "未配置鉴权：需设 PA_AUTH_SECRET（openssl rand -hex 32）启用鉴权基座；" +
-      "若明确接受当前监听范围内无鉴权，可设 PA_ALLOW_OPEN=1 显式放行",
+    "未配置鉴权：请设置 PA_AUTH_SECRET（可用 openssl rand -hex 32 生成）启用登录鉴权；" +
+      "如果确定允许能访问该地址的所有人免登录使用，可设置 PA_ALLOW_OPEN=1",
   );
 }
 
@@ -89,14 +89,14 @@ app.get("/healthz", (c) => c.json({ ok: true }));
 const configuredOrigins = [new URL(config.baseUrl).origin, ...config.allowedOrigins];
 const originGuard: MiddlewareHandler<AppEnv> = async (c, next) => {
   const origin = c.req.header("Origin");
-  // 原生 MCP/CLI 请求通常不带 Origin；带 Origin 的浏览器请求必须在服务端真拒绝，不能只靠 CORS。
+  // 原生 MCP/CLI 请求通常不带 Origin；浏览器请求带 Origin，必须在服务端拒绝未允许的来源，CORS 挡不住请求本身。
   if (origin && !isAllowedOrigin(origin, configuredOrigins)) {
     return c.json({ error: "不允许的请求来源" }, 403);
   }
   return next();
 };
 
-// 浏览器内宿主（调试宿主、inspector）跨源访问需要 CORS；Origin 守门与 CORS 共用同一白名单。
+// 浏览器里的宿主（调试宿主、inspector）跨源访问需要 CORS；Origin 检查和 CORS 使用同一份白名单。
 const localCors = cors({
   origin: (origin) => (isAllowedOrigin(origin, configuredOrigins) ? origin : undefined),
   allowHeaders: ["Content-Type", "Authorization", "Mcp-Protocol-Version", "Mcp-Session-Id"],
@@ -124,7 +124,7 @@ if (config.authSecret) {
   const enabledAuth = auth;
 
   app.on(["GET", "POST"], "/api/auth/*", (c) => enabledAuth.handler(c.req.raw));
-  // 根路径发现端点：部分客户端不解析 WWW-Authenticate，直接探测 /.well-known（MCP 规范要求）
+  // 根路径的发现端点（MCP 规范要求）：部分客户端不解析 WWW-Authenticate，直接请求 /.well-known
   app.get("/.well-known/oauth-authorization-server", (c) =>
     oAuthDiscoveryMetadata(enabledAuth)(c.req.raw),
   );
@@ -150,7 +150,7 @@ if (config.authSecret) {
     c.header("Cache-Control", "no-store");
     return c.html(await loginHtml());
   });
-  // 父 app 的 strict 路由不覆盖子应用，显式归一化尾斜杠。
+  // 父 app 的 strict 路由设置对子应用不生效，这里显式处理尾斜杠。
   app.get("/dashboard/", (c) => c.redirect("/dashboard"));
   app.route(
     "/dashboard",
@@ -180,16 +180,16 @@ if (config.authSecret) {
   );
 }
 
-// token（OAuth 或 API key）只带 userId，每请求回查 email、角色与授权范围，不缓存：
-// 管理员的调整即时生效。两条通道共用此解析并生成同一 Cube securityContext。
+// token（OAuth 或 API key）只带 userId；每个请求都重新查询 email、角色和授权范围，不缓存，
+// 管理员的修改立即生效。两种认证方式共用这一步，生成相同的 Cube securityContext。
 async function resolvePrincipal(a: Auth, userId: string): Promise<Principal> {
   const ctx = await a.$context;
   return resolveBetterAuthPrincipal(ctx.internalAdapter, userId, semanticPackage.access_scope);
 }
 
-// /mcp 鉴权：Bearer 先按 API key 校验（apiKey 插件，key 绑用户），再落 OAuth session。
-// 基座未启用且 PA_ALLOW_OPEN=1 = 对当前可达范围开放。两条通道 caller 均为属主 email。
-// key 同样每请求实时校验，吊销即时生效。
+// /mcp 认证：Bearer token 先按 API key 校验，失败再按 OAuth session 校验。
+// 未配置认证且 PA_ALLOW_OPEN=1 时，对能访问到服务的所有人开放。
+// API key 每个请求都实时校验，吊销立即生效。
 app.use("/mcp", async (c, next) => {
   if (!auth) {
     c.set("principal", LOCAL_PRINCIPAL);
@@ -197,7 +197,7 @@ app.use("/mcp", async (c, next) => {
   }
   const enabledAuth = auth;
   const bearer = c.req.header("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
-  // OAuth access token 也走 Bearer：无此前缀则跳过 verifyApiKey，直接落到下面的 session 校验。
+  // OAuth access token 也用 Bearer 传递：没有 API key 前缀的直接走下面的 session 校验。
   if (bearer?.startsWith(API_KEY_PREFIX)) {
     const verified = await enabledAuth.api
       .verifyApiKey({ body: { key: bearer } })
@@ -216,7 +216,7 @@ app.use("/mcp", async (c, next) => {
     c.set("principal", principal);
     return next();
   }
-  // 未认证响应同时给出受保护资源元数据入口。
+  // 401 响应附带受保护资源元数据的地址。
   return c.json(
     { jsonrpc: "2.0", error: { code: -32001, message: "未授权：需要有效凭证" }, id: null },
     401,
@@ -226,7 +226,7 @@ app.use("/mcp", async (c, next) => {
   );
 });
 
-// Streamable HTTP，stateless：每请求新建 server+transport，无会话状态
+// Streamable HTTP 无状态模式：每个请求新建 server 和 transport
 app.all("/mcp", async (c) => {
   const server = buildServer({ dependencies: serverDependencies, principal: c.get("principal") });
   const transport = new StreamableHTTPTransport({ sessionIdGenerator: undefined });
@@ -234,7 +234,7 @@ app.all("/mcp", async (c) => {
   return transport.handleRequest(c);
 });
 
-// 导出下载重新认证票据所有者，并按当前权限惰性生成 CSV；明细数据不落盘。
+// 导出下载时重新验证票据所有者，按当前权限即时生成 CSV；明细数据不写入磁盘。
 const exportDownload = async (c: Context<AppEnv>) => {
   const ticket = c.req.param("ticket");
   if (!ticket) return c.text("下载链接无效或已过期，请让助手重新生成。", 403);
@@ -261,7 +261,7 @@ const exportDownload = async (c: Context<AppEnv>) => {
       return c.text(`${e.message}，未生成 CSV——请让助手加过滤条件缩小范围后分批导出。`, 413);
     }
     console.error("[pa] export failed:", e);
-    return c.text("导出执行失败（查询已失效或引擎暂不可用），请让助手重新生成链接。", 500);
+    return c.text("导出失败（查询已失效或数据服务暂时不可用），请让助手重新生成链接。", 500);
   }
 };
 app.get("/export/:ticket", exportDownload);

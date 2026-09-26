@@ -22,7 +22,7 @@ const dimension: CatalogMemberPayload = {
 };
 
 describe("report editor member picker", () => {
-  test("候选只消费统一可行性判定给出的不可选原因", () => {
+  test("候选成员的不可选原因取自传入的可行性判定", () => {
     expect(
       pickableMembers([measure], () => "当前时间按年呈现，该指标只支持按月呈现")[0],
     ).toMatchObject({
@@ -32,9 +32,8 @@ describe("report editor member picker", () => {
     expect(pickableMembers([dimension])[0].incompatible).toBe(false);
   });
 
-  // 分节靠服务端当前语义包投影的业务属性组驱动，身份使用公共语义 id：
-  // JSON 形状或归组口径一旦漂移，这条必须炸，而不是静默退回一个「其他」大桶。
-  test("维度按业务属性组分节，事实属性组优先于所属 cube 兜底", () => {
+  // 目录的 dimension_group 格式或归组变化时本用例应失败，而不是让维度全部落进「其他」组。
+  test("维度按业务属性组分组，没有分组的成员归入「其他」", () => {
     const dimension = (
       id: string,
       title: string,
@@ -77,7 +76,7 @@ describe("report editor member picker", () => {
     expect(grouped[0].items.map((item) => item.id)).toEqual(["dimension:job_level_band"]);
   });
 
-  test("指标按指标域分节只为找得到：组序取目录里域的次序，一指标多域取先出现的域", () => {
+  test("指标按指标域分组：组顺序取目录中域的顺序，属于多个域的指标归入先出现的域", () => {
     const m = (id: string, title: string): CatalogMemberPayload => ({
       id,
       kind: "measure",

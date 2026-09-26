@@ -1,7 +1,4 @@
-/**
- * 成员（admin）：列表 / 新建 / 配权（数据角色 + 授权范围）/ 重置密码。
- * 权限边界始终是服务端守卫，隐藏 UI 不构成授权。
- */
+// 权限由服务端校验，界面上隐藏入口不构成授权。
 import { useEffect, useMemo, useState } from "react";
 import { KeyRoundIcon, PlusIcon, ShieldIcon } from "lucide-react";
 import type { AccessScope } from "@contracts/access_scope";
@@ -207,7 +204,6 @@ export function UsersPage({ me }: { me: MePayload }) {
                       </div>
                     </TableCell>
                     <TableCell className="text-pa-muted">{u.email}</TableCell>
-                    {/* 角色是系统给的固定档，与邮箱、授权范围同排普通文本，不摆胶囊。 */}
                     <TableCell className="text-pa-muted">{roleLabel(u.role)}</TableCell>
                     <TableCell className="text-pa-muted">
                       {scopeLabel(u.access_scope, me.access_scope.title)}
@@ -461,7 +457,6 @@ function CreateUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      {/* 表单弹层不分栏、不加宽。 */}
       <DialogPopup className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>新增用户</DialogTitle>

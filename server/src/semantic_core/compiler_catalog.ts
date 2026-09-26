@@ -1,4 +1,4 @@
-/** 含物理绑定的编译器私有目录，不得进入对外契约或持久化身份。 */
+/** 编译器私有目录，含物理绑定，不进入对外契约或持久化数据。 */
 
 import type { MetricDomainId } from "./metric_domain_id.js";
 import type { ReportCalculationKind } from "./report_calculation.js";
@@ -7,53 +7,53 @@ import type { AccessScopeDefinition } from "./access_scope_definition.js";
 import type { MeasureQueryCapabilities } from "./query_feasibility.js";
 import type { MetricTime } from "./time_contract.js";
 
-/** 率指标公式行的分子分母，已解析为中文标题（人读公式不读成员名）。 */
+/** 率指标的分子与分母标题。 */
 export type CompilerCatalogFormula = {
   numerator: string;
   denominator: string;
 };
 
-/** 规范成员在某个视图中的可执行限定名（物理绑定），只存在于编译器目录。 */
+/** 成员在某个执行 View 中的限定名（物理绑定）。 */
 export type CompilerCatalogAvailability = {
   view: string;
   member: string;
-  /** 仅供受保护明细入口使用，不参与普通分析选路。 */
+  /** 只用于明细查询，普通分析不选用该绑定。 */
   detail?: true;
-  /** 该物理绑定具备受保护的底层记录投影；同一语义指标的其他绑定不因此自动获得明细能力。 */
+  /** 该绑定可查询明细记录；同一指标的其他绑定各自声明。 */
   records_available?: true;
 };
 
 type CompilerCatalogMemberBase = {
-  /** 跨视图稳定的语义身份；报告与查询意图只持久化此值。 */
+  /** 跨视图稳定的语义 id；报告与查询意图只存这个值。 */
   id: string;
-  /** 首个可查视图的限定名；仅供编译器选路与对账，不上线。 */
+  /** 第一个可查视图中的限定名，只在编译器内部使用，不对外返回。 */
   name: string;
-  /** 指标的唯一业务归属；维度不声明。业务归属不参与物理选路。 */
+  /** 指标所属的业务指标域，维度没有；不影响执行 View 的选择。 */
   metric_domain_id?: MetricDomainId;
   title: string;
   description: string;
   format?: string;
   ai_context?: string;
-  /** 受限成员按数据权限可见；模型只声明这一种敏感度。 */
+  /** 受限成员按数据权限决定是否可见。 */
   sensitivity?: "restricted";
   dimension_kind?: "categorical" | "overlapping";
   dimension_group?: { id: string; title: string };
   records_available?: true;
-  /** 与当前成员不能同时分组的维度语义 id（已在目录装配阶段按声明视图上下文解析，绝无物理短名）。 */
+  /** 不能与当前成员同时分组的维度语义 id，在目录装配时按声明所在的视图解析。 */
   incompatible_dimensions?: string[];
   /** 可由报告规格引用、但不进入全局指标目录的受控计算能力。 */
   report_calculations?: ReportCalculationKind[];
   formula?: CompilerCatalogFormula;
   relation?: { kind: "structure_share"; numerator_id: string };
-  /** 可查执行 View 及其中的精确成员名（物理绑定），随浏览者权限裁剪。 */
+  /** 可查询该成员的执行 View 及成员限定名，按当前用户权限过滤。 */
   available_in: CompilerCatalogAvailability[];
 };
 
 export type CompilerCatalogMeasure = CompilerCatalogMemberBase & {
   kind: "measure";
-  /** 从物理可用性与语义限制共同推导的公共查询能力。 */
+  /** 由物理可用性和语义限制共同推导。 */
   query_capabilities: MeasureQueryCapabilities;
-  /** 指标的公共时间面：值代表什么时间，用户能选什么时间。 */
+  /** 值对应的时间与用户可选的时间。 */
   time: MetricTime;
 };
 
@@ -63,11 +63,11 @@ export type CompilerCatalogDimension = CompilerCatalogMemberBase & {
 
 export type CompilerCatalogMember = CompilerCatalogMeasure | CompilerCatalogDimension;
 
-/** Cube 执行 View：只承载物理绑定、权限、时间源与层级；业务指标域不在此层。 */
+/** Cube 执行 View 的时间源、比较策略与层级；不含业务指标域。 */
 export type CompilerCatalogView = {
   name: string;
   title: string;
-  /** 内部时间源 key，只在服务端流转（对外投影为业务标签，绝不上线）。 */
+  /** 内部时间源 key，只在服务端使用；对外只显示业务标签。 */
   time_source?: string;
   /** 该时钟允许的相对比较形态。 */
   comparison_policy: TimeComparisonPolicy;
@@ -75,7 +75,7 @@ export type CompilerCatalogView = {
   hierarchies?: string[][];
 };
 
-/** 业务指标域的私有目录投影；只用于发现与导航，不提供物理 View 绑定。 */
+/** 业务指标域，只用于目录发现与导航，不含物理 View 绑定。 */
 export type CompilerCatalogMetricDomain = {
   id: MetricDomainId;
   title: string;

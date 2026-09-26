@@ -35,15 +35,15 @@ function utility(candidate: string): string {
 const NOT_IN_A_CLASS_NAME = /[;"'<{}$`]/;
 
 /**
- * 候选＝字符串字面量里以空白分隔的片段，与 Tailwind 看见的那一份对齐
- * （拼接出来的类名两边都看不见）。
+ * 候选类名取字符串字面量里按空白分隔的片段，与 Tailwind 扫描源码的方式一致
+ * （拼接出来的类名两边都扫描不到）。
  */
 function candidates(text: string): string[] {
   const out = new Set<string>();
   for (const match of text.matchAll(/"([^"\n]*)"|'([^'\n]*)'|`([^`\n]*)`/g)) {
     const literal = match[1] ?? match[2] ?? match[3] ?? "";
     for (const token of literal.split(/\s+/)) {
-      // 样式值不是类名：`--x` 与 `var(--x)` 片段在此排除。
+      // 排除 `--x` 和 `var(--x)` 这类 CSS 变量片段。
       if (token.startsWith("--") || token.startsWith("var(")) continue;
       if (NOT_IN_A_CLASS_NAME.test(token)) continue;
       if (token.length > 1 && /^[\w[!:*&>~.@[\]/-]/.test(token)) out.add(token);

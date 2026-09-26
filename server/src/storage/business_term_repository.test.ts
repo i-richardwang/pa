@@ -5,7 +5,7 @@ import { createBusinessTermRepository } from "./business_term_repository.js";
 import { BusinessTermNotFoundError } from "../ports/business_term_repository.js";
 
 describe("business term repository", () => {
-  test("定义、别名与可选成员作为一个术语聚合保存并立即可读", async () => {
+  test("定义、别名与关联成员作为一个术语保存后立即可读", async () => {
     const db = createTestAppDatabase();
     const repository = createBusinessTermRepository(db);
     const created = await repository.create({
@@ -60,7 +60,7 @@ describe("business term repository", () => {
     db.close();
   });
 
-  test("删除只把术语撤下词典，聚合仍在且可恢复", async () => {
+  test("删除术语只是归档，记录保留且可恢复", async () => {
     const db = createTestAppDatabase();
     const repository = createBusinessTermRepository(db);
     const created = await repository.create({

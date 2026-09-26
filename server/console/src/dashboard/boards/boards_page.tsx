@@ -1,4 +1,3 @@
-/** 删除只对创建者开放；看板码仅在详情页展示。 */
 import { useMemo, useState } from "react";
 import { PackageIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import type { BoardRow } from "@contracts/board_contract";
@@ -64,7 +63,6 @@ const BOARD_SORT: Record<
 export function BoardsPage({ me }: { me: MePayload }) {
   const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
-  /** 归属分面：控制条左半恒有一组档位。 */
   const [owner, setOwner] = useState<"all" | "mine">("all");
   const boardsQuery = useBoards();
   const deleteBoard = useDeleteBoard();
@@ -135,7 +133,7 @@ export function BoardsPage({ me }: { me: MePayload }) {
               </EmptyMedia>
               <EmptyTitle>还没有看板</EmptyTitle>
               <EmptyDescription>
-                新建一个空看板，再去「我的报告」把保存的报告装进来。
+                新建一个空看板，再从「我的报告」把保存的报告加进来。
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>

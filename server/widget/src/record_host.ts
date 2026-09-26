@@ -1,6 +1,6 @@
 /**
- * 名单卡宿主接线：tool input 交付 view_id，toolresult 的私有 `_meta` 交付受控记录投影；
- * 翻页由卡内动作调用 load_records_page 完成。
+ * 名单卡与宿主的连接：view_id 来自工具输入，明细记录来自工具结果的私有 `_meta`；
+ * 翻页时由卡片调用 load_records_page。
  */
 import type { RecordProjectionPayload } from "@records";
 import {
@@ -58,7 +58,7 @@ export async function loadRecordPage(offset: number): Promise<void> {
   if (!viewId || !payload || loading) return;
   const token = requests.begin();
   if (token === null) return;
-  store.set({ loading: true, status: "正在加载名单分页…" });
+  store.set({ loading: true, status: "正在加载名单…" });
   try {
     const result = (await app.callServerTool({
       name: "load_records_page",
@@ -75,7 +75,7 @@ export async function loadRecordPage(offset: number): Promise<void> {
     if (!requests.isCurrent(token)) return;
     store.set({
       loading: false,
-      status: `名单分页加载失败：${error instanceof Error ? error.message : String(error)}`,
+      status: `名单加载失败：${error instanceof Error ? error.message : String(error)}`,
     });
   }
 }

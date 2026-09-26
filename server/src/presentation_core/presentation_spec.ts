@@ -9,7 +9,6 @@ import {
 import { memberShortName } from "../semantic_core/member_name.js";
 import type { ChartDecl } from "./chart_decl.js";
 
-/** 编译后的物理呈现规格：字段绑定已归一，执行器只消费这一份声明。 */
 export type PresentationSpec = ChartDecl;
 
 export function chartContextForView(

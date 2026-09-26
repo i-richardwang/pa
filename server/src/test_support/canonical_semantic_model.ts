@@ -6,7 +6,7 @@ import { memberShortName } from "../semantic_core/member_name.js";
 import { parseKnownTimeSourceId, type TimeSourceRegistry } from "../semantic_core/time_source.js";
 import { TEST_TIME_SOURCE_REGISTRY } from "./semantic_taxonomy.js";
 
-/** 由 CubeView 夹具生成与其一致的能力层，供应用层单测经过完整 canonical 门禁。 */
+/** 根据 CubeView 夹具生成对应的能力层，让应用层单测也经过统一语义模型的完整校验。 */
 export function canonicalModelFixture(
   views: CubeView[],
   taxonomy: SemanticTaxonomy,

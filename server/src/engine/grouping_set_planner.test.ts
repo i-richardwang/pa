@@ -67,7 +67,7 @@ function grouping(base: string[], category: string): GroupingSetsSpec {
 }
 
 describe("grouping-set hierarchy invariants", () => {
-  test("分类维度位于层级中间且下级仍分组时拒绝静默自除", () => {
+  test("分类维度是层级中间级且下级仍参与分组时报错", () => {
     const base = plannedBase([T0, T1]);
     expect(() =>
       planGroupingSets({
@@ -83,7 +83,7 @@ describe("grouping-set hierarchy invariants", () => {
     ).toThrow("分类维度是层级中间级，移除后无法形成更粗的分组集");
   });
 
-  test("移除层级最细级形成真正粗分组时正常规划", () => {
+  test("移除层级最细一级得到更粗的分组集时正常规划", () => {
     const base = plannedBase([T0, T1]);
     const plan = planGroupingSets({
       viewId: "result",
@@ -98,7 +98,7 @@ describe("grouping-set hierarchy invariants", () => {
     expect(plan.legs[0]?.plan.dimensions).toEqual([T0]);
   });
 
-  test("总体腿保留筛选但不因筛选层级成员产生分组", () => {
+  test("总体子查询保留筛选，不因筛选中的层级成员产生分组", () => {
     const filters = [{ member: T1, operator: "equals", values: ["Platform"] }];
     const base = plannedBase([DEPARTMENT], filters);
     const plan = planGroupingSets({
@@ -114,7 +114,7 @@ describe("grouping-set hierarchy invariants", () => {
     expect(plan.legs.find((leg) => leg.id === plan.summary_leg)?.plan.dimensions).toEqual([]);
   });
 
-  test("占比分母沿用基础人群筛选，总体腿沿用展示选择筛选且不会错误合并", () => {
+  test("占比分母使用基础人群筛选，总体子查询使用展示筛选，两者分开执行", () => {
     const baselineFilters = [{ member: STATUS, operator: "equals", values: ["active"] }];
     const selectionFilter = { member: T0, operator: "equals", values: ["Platform"] };
     const base = plannedBase([T0], [...baselineFilters, selectionFilter]);

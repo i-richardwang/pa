@@ -1,6 +1,6 @@
 export type StoredBusinessTerm = {
   id: string;
-  /** 置时间戳即从词典撤下：清单与检索都不再命中；置回 null 即复原。 */
+  /** 非 null 时从词典隐藏，列表和检索都不返回；置回 null 即恢复。 */
   archived_at: string | null;
   canonical_term: string;
   definition: string;

@@ -20,7 +20,7 @@ const rows: (string | number | null)[][] = [
 const measureKeys = new Set(["headcount", "rate"]);
 
 describe("热力着色刻度", () => {
-  test("刻度按指标键各立一把：同键的多列合并取极值，非指标键不立", () => {
+  test("每个指标键单独计算刻度，同键的多列合并取极值，非指标键没有刻度", () => {
     const shading = compileTableShading({ palette: BLUE }, columns, rows, measureKeys);
     expect(shading.scales).toEqual({
       headcount: { min: 20, mid: 60, max: 100 },
@@ -30,7 +30,7 @@ describe("热力着色刻度", () => {
     expect(shading.flipped).toBe(false);
   });
 
-  test("声明阈值逐项覆盖，中点缺省取覆盖后两端的中点", () => {
+  test("声明的阈值逐项覆盖，未声明中点时取两端的中点", () => {
     const shading = compileTableShading(
       { palette: "red_blue", thresholds: { max: 200 } },
       columns,
@@ -40,7 +40,7 @@ describe("热力着色刻度", () => {
     expect(shading.scales.headcount).toEqual({ min: 20, mid: 110, max: 200 });
   });
 
-  test("单个阈值落在数据域外时，自动端点仍包住声明停点", () => {
+  test("单个阈值落在数据范围外时，自动计算的端点仍包含该阈值", () => {
     const lower = compileTableShading(
       { palette: "red_blue", thresholds: { min: 200 } },
       columns,
@@ -58,7 +58,7 @@ describe("热力着色刻度", () => {
     expect(middle.scales.headcount).toEqual({ min: 20, mid: 200, max: 200 });
   });
 
-  test("没有任何数值的键不立刻度", () => {
+  test("没有任何数值的键没有刻度", () => {
     const shading = compileTableShading(
       { palette: BLUE },
       [{ formatKey: "empty" }],
@@ -68,7 +68,7 @@ describe("热力着色刻度", () => {
     expect(shading.scales).toEqual({});
   });
 
-  test("缺省刻度读法取各键刻度的并集，一格数值都没有时为 null", () => {
+  test("默认刻度取各键数据范围的并集，没有数值时为 null", () => {
     expect(shadingDataScale(columns, rows, measureKeys)).toEqual({
       min: 0.1,
       mid: 50.05,
@@ -83,10 +83,10 @@ describe("热力着色刻度", () => {
   });
 });
 
-describe("值→色", () => {
+describe("数值到颜色", () => {
   const mono = compileTableShading({ palette: BLUE }, columns, rows, measureKeys);
 
-  test("单色：值越大越浓，极小 0.05、极大 1；字色随底色对比翻转", () => {
+  test("单色色阶值越大越浓，不透明度从 0.05 到 1，字色按底色对比度切换", () => {
     const low = shadeCell(20, "headcount", mono, false)!;
     const high = shadeCell(100, "headcount", mono, false)!;
     expect(low.background).toMatch(/rgba\(59, 111, 219, 0\.050\)/);
@@ -95,17 +95,17 @@ describe("值→色", () => {
     expect(high.foreground).toBe("inverse");
   });
 
-  test("单色翻转：极大反而最淡", () => {
+  test("单色色阶翻转后最大值最淡", () => {
     const flipped = { ...mono, flipped: true };
     expect(shadeCell(100, "headcount", flipped, false)!.background).toContain("0.050");
   });
 
-  test("单色暗色主题换到该系列色的暗色档", () => {
+  test("单色色阶在暗色主题下使用该系列色的暗色值", () => {
     const dark = shadeCell(100, "headcount", mono, true)!;
     expect(dark.background).toContain("91, 141, 239");
   });
 
-  test("双向：下限、中点、上限各落在三停上，中间线性插值", () => {
+  test("双向色阶的下限、中点、上限对应三段颜色，中间线性插值", () => {
     const diverging = compileTableShading({ palette: "red_blue" }, columns, rows, measureKeys);
     expect(shadeCell(20, "headcount", diverging, false)!.background).toBe("rgb(242, 84, 148)");
     expect(shadeCell(60, "headcount", diverging, false)!.background).toBe("rgb(247, 229, 255)");
@@ -113,7 +113,7 @@ describe("值→色", () => {
     expect(shadeCell(80, "headcount", diverging, false)!.background).toBe("rgb(196, 195, 255)");
   });
 
-  test("刻度外的值贴边不出界；非数、无刻度的键不着色", () => {
+  test("超出刻度的值按端点着色，非数值和无刻度的键不着色", () => {
     expect(shadeCell(1000, "headcount", mono, false)!.background).toContain("1.000");
     expect(shadeCell("研发", "org", mono, false)).toBeUndefined();
     expect(shadeCell(3, "org", mono, false)).toBeUndefined();
@@ -121,7 +121,7 @@ describe("值→色", () => {
   });
 });
 
-describe("随表格模型下发", () => {
+describe("表格模型中的着色", () => {
   const view = {
     id: "result",
     columns: ["hr.org", "hr.year", "hr.headcount"],
@@ -138,7 +138,7 @@ describe("随表格模型下发", () => {
   } as unknown as ViewBlock;
   const titleOf = (column: string) => column;
 
-  test("设置面的缺省读法：指标列的数据极值，总体带不参与，格式一致时沿用", () => {
+  test("设置面板的默认刻度取指标列的数据极值，不含总计行，格式与小数位沿用指标列", () => {
     expect(tableShadingDefaults(view)).toEqual({
       scale: { min: 20, mid: 70, max: 120 },
       format: "number",
@@ -153,7 +153,7 @@ describe("随表格模型下发", () => {
     expect(tableShadingDefaults({ ...view, rows: [] } as unknown as ViewBlock)).toBeNull();
   });
 
-  test("只有 table 声明才带刻度；刻度只算指标列、总体带不参与", () => {
+  test("声明了着色的 table 才带刻度，刻度只算指标列、不含总计行", () => {
     const shaded = compileTableWithStatus(view, titleOf, {
       type: "table",
       shading: { palette: BLUE },
@@ -165,7 +165,7 @@ describe("随表格模型下发", () => {
     expect(plain.table.shading).toBeUndefined();
   });
 
-  test("交叉表的值列沿用度量键，同一指标横跨多列共用一把刻度", () => {
+  test("交叉表的值列沿用度量键，同一指标的多列共用一个刻度", () => {
     const crosstab = compileTableWithStatus(view, titleOf, {
       type: "table",
       tableColumns: [{ kind: "metrics" }, { kind: "time", level: "year" }],

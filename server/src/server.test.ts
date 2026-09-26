@@ -133,7 +133,7 @@ describe("AnalysisSpec", () => {
     ).toThrow(/不能声明 join/);
   });
 
-  test("只有被派生结果引用的查询才强制业务标题，且不允许以内部 id 兜底", () => {
+  test("只有被派生结果引用的查询必须有业务标题，且不能用内部 id 代替", () => {
     expect(() =>
       parseAnalysisSpec({
         views: [
@@ -164,12 +164,12 @@ describe("AnalysisSpec", () => {
     ).not.toThrow();
   });
 
-  test("执行图必须恰好收敛到一个结果，多余顶层字段一律拒绝", () => {
+  test("执行图必须只有一个最终结果，并拒绝多余的顶层字段", () => {
     expect(() =>
       parseAnalysisSpec({
         views: [query("current"), query("previous", "2025-07")],
       }),
-    ).toThrow(/执行图必须恰好收敛到一个结果/);
+    ).toThrow(/执行图必须只有一个最终结果/);
     expect(() => parseAnalysisSpec({ views: [query("current")], outputs: ["current"] })).toThrow(
       /分析规格无效/,
     );
@@ -219,7 +219,7 @@ describe("AnalysisSpec", () => {
   });
 });
 
-test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
+test("MCP 提供全部工具和 Apps 资源", async () => {
   const [
     { Client },
     { InMemoryTransport },
@@ -251,7 +251,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
   const unavailablePivotAnalysisId = "55555555-5555-4555-8555-555555555555";
   const unavailablePivotViewId = "55555555-5555-4555-9555-555555555555";
   const rendered = semanticAnalysisOf({ views: [query("result")] });
-  // 执行器解析出的物理呈现（声明一张 bar 图）：驱动 rerun_analysis 的降级说明。
+  // 执行器解析出的呈现（柱状图），用于测试 rerun_analysis 的降级说明。
   const renderedPresentation = {
     type: "bar" as const,
     x: "organization_name",
@@ -506,8 +506,8 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     expect(SERVER_INSTRUCTIONS).toContain("query_capabilities");
     expect(TOOL_DESCRIPTIONS.run_analysis).toContain("code/details");
     expect(TOOL_DESCRIPTIONS.run_analysis).toContain("错误 JSON");
-    // 客户端只按 input schema 组装参数，把 view 嵌进 analysis 是实测中最常见的错法，
-    // 平级这件事必须写在两个属性的描述里才到得了模型。
+    // 模型最常见的错误是把 view 嵌进 analysis；它只看得到 input schema，
+    // 所以「两者平级」必须写在这两个属性的描述里。
     const runSchema = listed.tools.find((candidate) => candidate.name === "run_analysis")
       ?.inputSchema as { properties: Record<string, { description?: string }> };
     expect(runSchema.properties.analysis.description).toContain("与 view 平级");
@@ -531,23 +531,23 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
     expect(runAnalysisInput).not.toContain('"years_ago"');
     expect(runAnalysisInput).not.toContain('"alignment"');
     expect(runAnalysisInput).not.toContain('"windows"');
-    // 客户端只拿得到这份 JSON Schema：形状表达不出的约束，调用方在本地就无法自愈。
+    // 客户端只拿得到这份 JSON Schema，schema 里表达不了的约束，客户端无法在本地检查。
     const analysisSchema = findJsonObject(tools.run_analysis?.inputSchema, (candidate) => {
       const properties = candidate.properties;
       return typeof properties === "object" && properties !== null && "derived" in properties;
     });
     const analysisProperties = analysisSchema?.properties as JsonObject;
-    // 结果只有一个，所以只有一个查询字段；第二个查询只长在 derived.joined 上。
+    // 只有一个结果，所以只有一个 query 字段；第二个查询只能写在 derived.joined 里。
     expect(Object.keys(analysisProperties).sort()).toEqual(["derived", "query", "title"]);
     expect(analysisSchema?.required).toEqual(["query"]);
     expect(analysisSchema?.additionalProperties).toBe(false);
-    // 查询节点不是联合：客户端报错能落到具体字段，而不是「不匹配任何分支」。
+    // query 不是联合类型，这样客户端报错能指到具体字段，而不是「不匹配任何分支」。
     expect(analysisProperties.query).not.toHaveProperty("anyOf");
     const derivedProperties = (analysisProperties.derived as JsonObject).properties as JsonObject;
     const joinedSchema = derivedProperties.joined as JsonObject;
-    // 第二个查询与它的关联合同同生共死：joined 三个键一起必填。
+    // joined 的三个键（query、on、how）必须同时提供。
     expect((joinedSchema.required as string[]).sort()).toEqual(["how", "on", "query"]);
-    // 来源角色是闭集：写错来源名在客户端本地就能判定。
+    // 来源角色是枚举，写错来源名在客户端本地就能发现。
     const operandSchema = findJsonObject(tools.run_analysis?.inputSchema, (candidate) => {
       const properties = candidate.properties;
       return (
@@ -710,7 +710,7 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
         {
           result_view_id: "result",
           kind: "empty_result",
-          note: expect.stringContaining("结果为空"),
+          note: expect.stringContaining("没有返回数据"),
         },
       ],
     });
@@ -773,13 +773,13 @@ test("MCP 暴露完整工具面和首版 Apps 资源", async () => {
         view: { type: "table" },
       },
     });
-    // 并列查询在工具协议层就被拒：这层的文案也必须指路，服务端根本收不到这次调用。
+    // 多个并列查询在 MCP 协议层就被拒绝，请求到不了服务端，所以这里的错误信息也要说明正确写法。
     expect(invalidAnalysis).not.toHaveProperty("structuredContent");
     expect(invalidAnalysis).toMatchObject({ isError: true });
     expect(JSON.stringify(invalidAnalysis)).toContain("query.measures");
     expect(JSON.stringify(invalidAnalysis)).toContain("derived.joined");
 
-    // 形状之内、语义之外的错法仍由服务端拒绝，并保持 isError + JSON 错误信封。
+    // 格式正确但语义错误的请求由服务端拒绝，返回 isError 和 JSON 格式的错误。
     const danglingSource = await client.callTool({
       name: "run_analysis",
       arguments: {

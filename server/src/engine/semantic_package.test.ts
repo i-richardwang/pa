@@ -25,7 +25,7 @@ test("模型路径不能离开包目录", async () => {
   await expect(loadSemanticPackage(root)).rejects.toThrow("不得离开包目录");
 });
 
-test("缺少模型目录或重复身份时 fail-closed", async () => {
+test("缺少模型目录或 id 重复时加载报错", async () => {
   const root = await mkdtemp(join(tmpdir(), "pa-semantic-package-"));
   const manifest = await readFile(
     join(configuredSemanticPackageDir({}), "semantic_package.yml"),

@@ -1,6 +1,6 @@
 /**
- * 单语言边界门禁：物理 Cube 绑定与选路只能活在服务端编译器目录。
- * 浏览器与对外公共契约不得依赖 CompilerCatalog 或任何编译器选路模块——它们只说语义。
+ * 物理 Cube 绑定和选路只存在于服务端编译器目录（CompilerCatalog）。
+ * 浏览器代码和对外公共契约只使用语义 id，不依赖 CompilerCatalog 或编译器选路模块。
  */
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -28,7 +28,7 @@ const buildCatalogDocument = (views: CubeView[]) =>
     title: "测试数据范围",
   });
 
-/** 编译器内务：只应在服务端编译边界内流转，绝不进浏览器或公共契约。 */
+/** 编译器内部模块：只在服务端使用，不能被浏览器代码或公共契约导入。 */
 const FORBIDDEN = [
   "query_intent",
   "semantic_analysis_compiler",
@@ -38,7 +38,7 @@ const FORBIDDEN = [
 
 const importsForbidden = (source: string): string[] =>
   FORBIDDEN.filter((specifier) => {
-    // 只看 import/export ... from "…<specifier>…"，避免命中注释或普通字符串。
+    // 只匹配 import/export ... from 语句，不匹配注释或普通字符串。
     const pattern = new RegExp(`(?:import|export)[^;]*from\\s*["'][^"']*${specifier}[^"']*["']`);
     return pattern.test(source);
   });
@@ -55,8 +55,8 @@ function tsFiles(dir: string): string[] {
 const CONSOLE_SRC = join(import.meta.dir, "../console/src");
 const CONTRACT = join(import.meta.dir, "contracts/catalog_contract.ts");
 
-describe("单语言边界门禁", () => {
-  it("探测器抓得住违规、放得过语义导入（存活自检）", () => {
+describe("编译器目录不外泄", () => {
+  it("匹配规则能识别违规导入，且不误报语义模块导入", () => {
     expect(
       importsForbidden(`import { planQueryIntent } from "../semantic_core/query_intent.js";`),
     ).toEqual(["query_intent"]);
@@ -69,7 +69,7 @@ describe("单语言边界门禁", () => {
     ).toEqual([]);
   });
 
-  it("console/src 不导入任何编译器内务模块", () => {
+  it("console/src 不导入编译器内部模块", () => {
     const offenders = tsFiles(CONSOLE_SRC).flatMap((file) => {
       const hits = importsForbidden(readFileSync(file, "utf8"));
       return hits.length ? [`${file}: ${hits.join(", ")}`] : [];
@@ -82,7 +82,7 @@ describe("单语言边界门禁", () => {
   });
 });
 
-/** 最小语义/物理双投影夹具；语义 id = 成员类型 + 规范短名。 */
+/** 最小夹具，同时带语义和物理信息；语义 id 由成员类型加标准短名组成。 */
 const DOCUMENT: CatalogDocument = {
   access_scope: { id: "test_scope", title: "测试数据范围" },
   observation_scopes: ["统计口径：测试"],
@@ -108,7 +108,7 @@ const DOCUMENT: CatalogDocument = {
           value_type: "number",
           description: "月末在职",
           time: { contract: { aggregation: "last", window: "selected" }, basis: "bucket_end" },
-          // 模型按物理短名声明互斥维度；投影必须归一为语义 id。
+          // 模型用物理短名声明互斥维度，公开目录里必须转换成语义 id。
           incompatible_dimensions: ["organization_name"],
         },
       ],
@@ -142,7 +142,7 @@ const DOCUMENT: CatalogDocument = {
 const HEADCOUNT_ID = "measure:active_employee_count";
 const ORG_ID = "dimension:organization_name";
 
-describe("单语言物理绑定不上线", () => {
+describe("公开目录不包含物理绑定", () => {
   it("对外 SemanticCatalog 的成员无物理绑定，指标域保留稳定 id", () => {
     const semantic = toSemanticCatalog(DOCUMENT);
     for (const member of [...semantic.measures, ...semantic.dimensions]) {
@@ -156,21 +156,21 @@ describe("单语言物理绑定不上线", () => {
       expect(topic).not.toHaveProperty("time_source");
       expect(topic.time_context_title).toBe("人员数据");
     }
-    // 客户端只消费正向能力；物理负向规则在目录装配时已折叠。
+    // 客户端只拿到可用维度列表；互斥维度规则在组装目录时已经应用。
     expect(semantic.measures[0]?.query_capabilities?.dimension_ids).not.toContain(ORG_ID);
     const wire = JSON.stringify(semantic);
     expect(wire).not.toContain("hc_col");
     expect(wire).not.toContain('"time_source":"workforce"');
   });
 
-  it("公共时间上下文是业务标签数组，内部 source key 去重后不上线", () => {
+  it("公开的时间上下文是去重后的业务标题数组，不含内部 source key", () => {
     const context: TimeContext = {
       dataAsOf: "2026-06",
       sources: {
         workforce: { actualThrough: "2026-06", availableThrough: "2026-07" },
       },
     };
-    // 两个视图共用同一 source，去重为一项。
+    // 两个视图使用同一个时间源，结果只有一项。
     const out = publicTimeContext(
       [{ time_source: "workforce" }, { time_source: "workforce" }],
       context,
@@ -197,7 +197,7 @@ describe("单语言物理绑定不上线", () => {
     ).toThrow("未登记的时间来源");
   });
 
-  it("编译产出的语义路由只讲业务血缘，键集合全等", () => {
+  it("编译出的路由只包含状态和语义视图 id", () => {
     const compiled = compileAnalysisView(toCompilerCatalog(DOCUMENT), {
       analysis: parseAnalysisDefinition({
         query: {
@@ -211,14 +211,13 @@ describe("单语言物理绑定不上线", () => {
     });
     const route = compiled.routes.find((r) => r.result_view_id === "query");
     expect(route?.status).toBe("direct");
-    // 全等而非排除：直查血缘只有状态与语义视图 id。
     expect(Object.keys(route!).sort()).toEqual(["result_view_id", "status"]);
     expect(JSON.stringify(compiled.routes)).not.toContain("employee_and_key_talent");
   });
 });
 
-describe("语义解析 fail-closed", () => {
-  it("物理成员名解析失败，语义 id 正常", () => {
+describe("按语义 id 解析成员", () => {
+  it("用物理成员名解析不到成员，用语义 id 可以", () => {
     const compiler = toCompilerCatalog(DOCUMENT);
     expect(catalogMember(compiler, HEADCOUNT_ID, "measure")?.id).toBe(HEADCOUNT_ID);
     expect(catalogMember(compiler, ORG_ID, "dimension")?.id).toBe(ORG_ID);
@@ -231,21 +230,21 @@ describe("语义解析 fail-closed", () => {
     expect(catalogMember(compiler, "hc_col", "measure")).toBeUndefined();
   });
 
-  it("编译器目录仍保留物理绑定供服务端选路", () => {
+  it("编译器目录保留物理绑定，供服务端选路", () => {
     const compiler = toCompilerCatalog(DOCUMENT);
     const active_employee_count = catalogMember(compiler, HEADCOUNT_ID, "measure");
     expect(active_employee_count?.available_in[0]?.member).toBe(
       "employee_and_key_talent.active_employee_count",
     );
     expect(active_employee_count?.available_in[0]?.view).toBe("employee_and_key_talent");
-    // 业务词典只教学，不参与选路。
+    // 业务术语只用于说明，不参与选路。
     expect(compiler).not.toHaveProperty("business_terms");
   });
 });
 
 const CALIBRE = "统计范围：测试。";
 
-/** 从原始 Cube view 造夹具（走 buildCatalogDocument 真实装配路径，互斥维度从 meta 提取）。 */
+/** 用原始 Cube view 构造夹具，经过真实的 buildCatalogDocument 组装，互斥维度从 meta 读取。 */
 function fixtureView(name: string, _rank: number, over: Partial<CubeView>): CubeView {
   const { meta, ...rest } = over;
   return {
@@ -301,7 +300,7 @@ const planMeasure = (
   },
 });
 
-describe("互斥维度按共享语义身份解析（fail-closed，无名称关联）", () => {
+describe("互斥维度按语义身份解析，不按名称匹配，解析不到就报错", () => {
   const collisionViews = (wfRank: number, hcRank: number): CubeView[] => [
     fixtureView("wf", wfRank, { dimensions: [orgDim("wf"), deptDim("wf", "部门")] }),
     fixtureView("hc", hcRank, {
@@ -329,7 +328,7 @@ describe("互斥维度按共享语义身份解析（fail-closed，无名称关�
     expect(planForward.incompatible_dimensions).toEqual(planSwapped.incompatible_dimensions);
   });
 
-  it("聚焦 View 声明未投影的互斥维度时装配失败", () => {
+  it("View 声明的互斥维度不在目录里时组装失败", () => {
     const views = [
       fixtureView("hc", 1, {
         dimensions: [orgDim("hc")],
@@ -339,8 +338,8 @@ describe("互斥维度按共享语义身份解析（fail-closed，无名称关�
     expect(() => toCompilerCatalog(buildCatalogDocument(views))).toThrow("未知的互斥维度");
   });
 
-  it("多命中（歧义）目录装配失败", () => {
-    // 两个不同维度的 name 短名与 aliasMember 短名交叉塌成同一 token department_name
+  it("匹配到多个维度（有歧义）时目录组装失败", () => {
+    // 两个不同维度的 name 短名和 aliasMember 短名都是 department_name
     const ambiguous = fixtureView("hc", 1, {
       dimensions: [
         {
@@ -383,7 +382,7 @@ describe("互斥维度按共享语义身份解析（fail-closed，无名称关�
     );
   });
 
-  it("同一规范短名声明为不同语义时目录装配失败", () => {
+  it("同一个标准短名被声明成不同语义时目录组装失败", () => {
     const views = [
       fixtureView("wf", 1, { dimensions: [deptDim("wf", "部门")] }),
       fixtureView("hc", 2, { dimensions: [deptDim("hc", "另一类部门")] }),
@@ -395,7 +394,7 @@ describe("互斥维度按共享语义身份解析（fail-closed，无名称关�
   });
 });
 
-describe("公共 catalog 检索不接受物理成员语言", () => {
+describe("公开目录检索不接受物理成员名", () => {
   const fixture = fixtureView("fact_x", 1, {
     title: "人员场景",
     meta: {
@@ -419,7 +418,7 @@ describe("公共 catalog 检索不接受物理成员语言", () => {
   });
   const document = buildCatalogDocument([fixture]);
 
-  it("业务标题命中，物理 view 名 / 限定成员名 / 裸短名一律进 unmatched_terms", () => {
+  it("业务标题能匹配；物理 view 名、带前缀的成员名和短名都进入 unmatched_terms", () => {
     expect(searchCatalogDocument(document, ["在职人数"]).measures.map((m) => m.title)).toContain(
       "在职人数",
     );
@@ -433,7 +432,7 @@ describe("公共 catalog 检索不接受物理成员语言", () => {
     ]);
   });
 
-  it("业务域同义词来自全局语义分类，而非物理 View 名兼容", () => {
+  it("指标域同义词来自语义分类，不来自物理 View 名", () => {
     const hit = searchCatalogDocument(document, ["人员规模"]);
     expect(hit.matched_terms).toContain("人员规模");
     expect(hit.measures.map((m) => m.title)).toContain("在职人数");

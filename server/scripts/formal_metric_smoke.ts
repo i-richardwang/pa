@@ -1,4 +1,4 @@
-/** 对当前语义包登记的全部正式指标执行通用 Planner 与真实 Cube 冒烟。 */
+/** 对当前语义包登记的每个正式指标，用 Planner 规划并在真实 Cube 上执行一次，确认能返回数值。 */
 import { createFormalMetricEvalRuntime } from "./formal_metric_eval_runtime.js";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -16,5 +16,5 @@ for (const metric of semanticPackage.formal_metrics) {
 }
 
 console.log(
-  `${semanticPackage.id} 正式指标 Planner 冒烟通过（${semanticPackage.formal_metrics.length} 项）`,
+  `${semanticPackage.id} 正式指标检查通过（${semanticPackage.formal_metrics.length} 项）`,
 );

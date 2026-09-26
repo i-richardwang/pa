@@ -103,7 +103,7 @@ describe("拒绝文案", () => {
     ).toMatch(/引用的视图 missing 不存在/);
   });
 
-  test("查询语义护栏给出可行动修正方向", () => {
+  test("查询语义校验的错误信息给出具体的修改方法", () => {
     const cases = [
       () =>
         planTimeQuery(
@@ -154,7 +154,7 @@ describe("拒绝文案", () => {
    * 每条用例都来自真实会话里 Agent 走进的死路：文案要么指向唯一正确的改法，
    * 要么点名当前可用的取值。反向断言保证合法写法不被这些护栏误伤。
    */
-  test("Agent 走过的死路各自有唯一出口", () => {
+  test("Agent 常见的错误写法，错误信息都指明具体改法", () => {
     const query = {
       measures: ["measure:active_employee_count"],
       time: { window: { kind: "current_month" as const } },
@@ -213,7 +213,7 @@ describe("拒绝文案", () => {
     ).not.toThrow();
   });
 
-  test("零可见视图明确归因授权", () => {
+  test("没有可见视图时，错误信息指明是权限问题", () => {
     const message = errorMessage(() => observationScopes([]));
     expect(message).toMatch(/没有可见数据视图.*查询参数无需修改.*管理员/);
   });

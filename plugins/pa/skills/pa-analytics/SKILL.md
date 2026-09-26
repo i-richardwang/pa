@@ -5,7 +5,7 @@ description: 查询 PA 组织与人才数据；用于人员规模、流动、编
 
 # PA 人才分析
 
-Catalog、工具 schema 和查询结果是当前部署的事实源。使用它们提供的成员、参数形状、时间语义和错误信息；
+以当前部署的 Catalog、工具 schema 和查询结果为准。使用它们提供的成员、参数格式、时间语义和错误信息；
 不要根据示例、指标名称或过去的查询经验补充口径。
 
 ## 基本流程
@@ -25,7 +25,7 @@ Catalog、工具 schema 和查询结果是当前部署的事实源。使用它�
    行结构或业务问题不同才拆成多次调用。优先使用正式指标，不能拆查组件后复刻已有公式。
 5. 根据结果的 `time`、`column_time_basis`、`totals`、`data_as_of`、`time_context`、
    `observation_scopes` 和 `display_notes` 解释结果。`query_notes` 只帮助正确查询，不向用户逐条复述。
-6. 保留成功响应的 `analysis_id` 与 `view_id`。工具面提供 `show_analysis` 时，用 `view_id` 打开结果卡；
+6. 保留成功响应的 `analysis_id` 与 `view_id`。当前客户端提供 `show_analysis` 时，用 `view_id` 打开结果卡；
    用户要求解读时再补充结论。
 
 ## 判断原则

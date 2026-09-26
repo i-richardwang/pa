@@ -1,9 +1,6 @@
 import type { AccessScope } from "../contracts/access_scope.js";
 
-/**
- * Cube 查询引擎端口：领域与应用层只依赖这里的稳定产品契约。
- * HTTP、JWT、缓存、重试和原始响应归一属于外部适配器实现，不进入本模块。
- */
+// HTTP、JWT、缓存、重试和原始响应归一化在适配器中实现，不放进本端口。
 
 export class CubeGatewayError extends Error {
   override name = "CubeGatewayError";
@@ -27,7 +24,7 @@ export interface CubeMember {
   title: string;
   shortTitle?: string;
   description?: string;
-  /** /v1/meta 中度量恒为 number（值类型）；聚合类型看 aggType。 */
+  /** Cube /v1/meta 中度量的 type 固定为 number；聚合类型见 aggType。 */
   type: string;
   /** Cube /meta 的度量聚合类型（count/countDistinct/sum/number…）。 */
   aggType?: string;
@@ -64,14 +61,14 @@ export interface CubeFilterCondition {
   values?: string[];
 }
 
-/** 布尔组合过滤只在服务端内部查询使用，对外查询面仍是扁平条件。 */
+/** 布尔组合过滤只用于服务端内部查询；对外查询只接受扁平条件。 */
 export type CubeFilter = CubeFilterCondition | { or: CubeFilter[] } | { and: CubeFilter[] };
 
 export interface CubeTimeDimension {
   dimension: string;
   granularity?: "month" | "year";
   dateRange?: [string, string];
-  /** 同期多窗按数组顺序逐窗执行。 */
+  /** 多个对比期间按数组顺序逐个执行。 */
   compareDateRange?: [string, string][];
 }
 
@@ -100,9 +97,9 @@ export type TimeSourceContext = {
 };
 
 export type TimeContext = {
-  /** 当前语义包各时间源汇合后的业务截至月，保留为回答级 data_as_of。 */
+  /** 当前语义包各时间源合并后的业务截止月，作为回答的 data_as_of。 */
   dataAsOf: string;
-  /** view.meta.time_source 指向这里的时钟。 */
+  /** 键为 view.meta.time_source 的取值。 */
   sources: Record<string, TimeSourceContext>;
 };
 

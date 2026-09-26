@@ -1,4 +1,3 @@
-/** 使用统计的数据层测试：聚合、分页来源、时间窗和重放取源。 */
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
@@ -22,7 +21,7 @@ function freshPath() {
   return join(tmpdir(), `pa_usage_stats_test_${runId}_${seq}.db`);
 }
 
-/** 经写入方落一批代表性日志：分析成功（带 title）、换呈现重跑、目录零命中/命中、分析报错 */
+/** 写入分析成功（带 title）、重跑、目录命中与未命中、分析报错各一类日志 */
 async function seed(path: string) {
   const usage = createUsage(createTestAppDatabase(path));
   await usage.log({
@@ -78,7 +77,7 @@ describe("usage_stats", () => {
     expect((await stats.unanswered(30)).zero_hits).toEqual([]);
   });
 
-  test("overview：tool × outcome 聚合与调用者排行", async () => {
+  test("overview 按 tool × outcome 聚合并给出调用者排行", async () => {
     const path = freshPath();
     await seed(path);
     const { cells, callers, days } = await createUsageStats(createTestAppDatabase(path)).overview(
@@ -97,7 +96,7 @@ describe("usage_stats", () => {
     ]);
   });
 
-  test("titles：只取成功且带 title 的分析执行（含换呈现重跑），时间倒序", async () => {
+  test("titles 只返回成功且带 title 的分析执行（含重跑），按时间倒序", async () => {
     const path = freshPath();
     await seed(path);
     const { rows } = await createUsageStats(createTestAppDatabase(path)).titles(30, 20, 0);
@@ -105,17 +104,16 @@ describe("usage_stats", () => {
     expect(rows[1].row_count).toBe(7);
   });
 
-  test("mine：按 caller 锁定本人、只取成功带 title 的分析执行，不含他人", async () => {
+  test("mine 只返回该 caller 成功且带 title 的分析执行", async () => {
     const path = freshPath();
     await seed(path);
     const stats = createUsageStats(createTestAppDatabase(path));
     const alice = await stats.mine("alice", 30, 20, 0);
     expect(alice.rows.map((r) => r.title)).toEqual(["研发部在职人数趋势", "全公司各职级人员结构"]);
-    // bob 只有 catalog 与一条 run_analysis 报错（无 title），本人记录为空
     expect((await stats.mine("bob", 30, 20, 0)).rows).toEqual([]);
   });
 
-  test("mine：使用记录独立保留，缺少有效 View 身份时不提供重放入口", async () => {
+  test("mine 在 Analysis 已删除时保留使用记录，analysis_id 返回 null", async () => {
     const path = freshPath();
     const db = createTestAppDatabase(path);
     const repository = createAnalysisRepository(db);
@@ -144,7 +142,7 @@ describe("usage_stats", () => {
     expect((await stats.mine("alice", 30, 20, 0)).rows[0]?.analysis_id).toBeNull();
   });
 
-  test("unanswered：部分命中的购物单仍逐项聚合缺口与报错", async () => {
+  test("unanswered 对部分命中的目录请求逐项聚合未命中词，并聚合报错", async () => {
     const path = freshPath();
     await seed(path);
     const { zero_hits, errors } = await createUsageStats(createTestAppDatabase(path)).unanswered(
@@ -156,7 +154,7 @@ describe("usage_stats", () => {
     expect(errors[0]).toMatchObject({ tool: "run_analysis", error: "Cube 'x' not found", n: 1 });
   });
 
-  test("unanswered：feedback 报错聚合带最近一条用户原问", async () => {
+  test("unanswered 的 feedback 报错聚合附带最近一条提问原文", async () => {
     const path = freshPath();
     const db = createTestAppDatabase(path);
     const usage = createUsage(db);
@@ -176,7 +174,7 @@ describe("usage_stats", () => {
     });
   });
 
-  test("时间窗过滤：窗口外的旧日志不计入", async () => {
+  test("时间窗之外的日志不计入统计", async () => {
     const path = freshPath();
     await seed(path);
     const old = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString();

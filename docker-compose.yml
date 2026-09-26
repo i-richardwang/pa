@@ -26,10 +26,9 @@ services:
       PA_CUBE_REQUEST_TIMEOUT_MS: ${PA_CUBE_REQUEST_TIMEOUT_MS:-}
       PORT: 8788
       PA_BIND_HOST: ${PA_BIND_HOST:-0.0.0.0}
-      # 鉴权基座（Better Auth）：设置 PA_AUTH_SECRET 即启用 OAuth 与 API key 两条接入通道；
-      # 公网部署时 PA_BASE_URL 改为对外 HTTPS 地址
+      # 设置 PA_AUTH_SECRET 后启用 OAuth 与 API key 鉴权；公网部署时 PA_BASE_URL 改为对外 HTTPS 地址
       PA_AUTH_SECRET: ${PA_AUTH_SECRET:-}
-      # 鉴权 fail-closed：基座未配置时服务拒绝启动；PA_ALLOW_OPEN=1 显式接受当前可达范围无鉴权
+      # PA_AUTH_SECRET 为空时服务拒绝启动，除非 PA_ALLOW_OPEN=1 明确接受无鉴权访问
       PA_ALLOW_OPEN: ${PA_ALLOW_OPEN:-}
       PA_ALLOWED_ORIGINS: ${PA_ALLOWED_ORIGINS:-}
       PA_BASE_URL: ${PA_BASE_URL:-http://127.0.0.1:8788}
@@ -48,7 +47,7 @@ services:
       - cube
     restart: unless-stopped
 
-  # Seed 与 server 在同一容器侧写入 app.db，保持 SQLite WAL 写者协调在同一内核内。
+  # seed 必须和 server 一样在容器内写 app.db：宿主与容器之间不共享 SQLite WAL 协调。
   seed:
     build:
       context: ./server

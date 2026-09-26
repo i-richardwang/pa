@@ -1,4 +1,4 @@
-/** 语义包声明与 Cube 编译执行面的进程级装配结果。 */
+/** 进程级语义模型：语义包声明与 Cube 编译结果的装配。 */
 import type { CompilerCatalog } from "../semantic_core/compiler_catalog.js";
 import type { SemanticModelCatalog } from "../semantic_core/semantic_model_catalog.js";
 import type { SemanticTaxonomy } from "../semantic_core/semantic_taxonomy.js";
@@ -248,7 +248,7 @@ function assertVisibleView(view: CubeView): void {
   assertUnique(members, `成员（${view.name}）`);
 }
 
-/** 将 Cube access policy 的成员可见性投影到 canonical 执行面。 */
+/** 将 Cube access policy 的成员可见性投影到 canonical 视图。 */
 export function projectAuthorizedSemanticViews(
   canonical: CanonicalSemanticModel,
   visibleViews: CubeView[],
@@ -274,8 +274,8 @@ export function projectAuthorizedSemanticViews(
 }
 
 /**
- * 把 Cube access policy 的结果作为纯可见性遮罩叠加到 canonical model。
- * 标题、说明、分类、时间合同、公式和记录能力一律取 canonical model；未知公开成员 fail-closed。
+ * 把 Cube access policy 的结果只作为可见性遮罩叠加到 canonical model：标题、说明、分类、时间合同、
+ * 公式和记录能力都取自 canonical model；/meta 出现 canonical model 中没有的成员时报错。
  */
 export function authorizeCanonicalSemanticModel(
   canonical: CanonicalSemanticModel,

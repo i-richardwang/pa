@@ -5,7 +5,7 @@ import type * as React from "react";
 import { cn } from "@/lib/utils";
 import { LoadingMark } from "pa-result-view";
 
-/** `icon` 是壳那一圈（整圆），`icon-sm` / `icon-xs` 落在内容里（基准圆角）。 */
+/** `icon` 用于应用外框和浮层边框上的按钮（整圆）；`icon-sm` / `icon-xs` 用于内容区内（基准圆角）。 */
 export const buttonVariants = cva(
   "pa-focus relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-1.5 whitespace-nowrap border font-medium text-sm pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 disabled:pointer-events-none not-data-loading:disabled:text-pa-disabled-fg data-loading:select-none data-loading:text-transparent [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:-mx-0.5 [&_svg]:shrink-0",
   {

@@ -28,7 +28,7 @@ import { TablePager } from "../kit/table_pager";
 
 const TOOL_LABELS: Record<string, string> = {
   catalog: "目录检索",
-  values_of: "真实值",
+  values_of: "维度取值",
   run_analysis: "运行分析",
   rerun_analysis: "重新呈现",
   show_analysis: "展示分析",
@@ -44,7 +44,7 @@ const TOOL_LABELS: Record<string, string> = {
 const USAGE_FACETS: ReadonlyArray<{ value: UsageFacet; label: string; hash: string }> = [
   { value: "titles", label: "业务问题", hash: usageHash("titles") },
   { value: "stats", label: "调用统计", hash: usageHash("stats") },
-  { value: "unanswered", label: "未答信号", hash: usageHash("unanswered") },
+  { value: "unanswered", label: "未解决的问题", hash: usageHash("unanswered") },
 ];
 
 export function UsagePage({ facet }: { facet: UsageFacet }) {
@@ -59,7 +59,7 @@ export function UsagePage({ facet }: { facet: UsageFacet }) {
   return (
     <ListPageBody>
       <ListControlBar
-        left={<ListFacets label="看哪一批" options={USAGE_FACETS} value={facet} />}
+        left={<ListFacets label="视图" options={USAGE_FACETS} value={facet} />}
         right={
           <DaysRangeChips
             days={days}
@@ -130,7 +130,7 @@ function toolLabel(tool: string): string {
   return TOOL_LABELS[tool] ?? tool;
 }
 
-/** 分面只有一段表时不发段名。 */
+/** 分面只有一张表时不传 title。 */
 function TableSection({
   title,
   description,
@@ -155,7 +155,7 @@ function VolumeCard({ overview }: { overview: UsageOverviewPayload }) {
   return (
     <TableSection title="调用量" description="按工具 × 结果聚合">
       {overview.cells.length === 0 ? (
-        <EmptyPanel text="窗口内暂无调用" />
+        <EmptyPanel text="所选时间范围内暂无调用" />
       ) : (
         <Table>
           <TableHeader>
@@ -171,7 +171,7 @@ function VolumeCard({ overview }: { overview: UsageOverviewPayload }) {
               <TableRow key={`${c.tool}-${c.outcome}`}>
                 <TableCell>{toolLabel(c.tool)}</TableCell>
                 <TableCell>
-                  {/* 「成功」是常态枚举值走中性片；只有「报错」才配彩色状态徽标。 */}
+                  {/* 成功用中性徽标，只有报错用彩色状态徽标。 */}
                   {c.outcome === "ok" ? <Badge>成功</Badge> : <Badge variant="error">报错</Badge>}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{c.n}</TableCell>
@@ -189,7 +189,7 @@ function CallersCard({ overview }: { overview: UsageOverviewPayload }) {
   return (
     <TableSection title="调用者" description="API key 用户或 OAuth 账号">
       {overview.callers.length === 0 ? (
-        <EmptyPanel text="窗口内暂无调用" />
+        <EmptyPanel text="所选时间范围内暂无调用" />
       ) : (
         <Table>
           <TableHeader>
@@ -226,9 +226,9 @@ function TitlesCard({
   onOffset: (offset: number) => void;
 }) {
   return (
-    <TableSection description="分析规格声明的问题原文">
+    <TableSection description="查询时填写的问题原文">
       {titles.rows.length === 0 ? (
-        <EmptyPanel text="窗口内无带标题的查询——检查 agent 是否按 skill 指引传 title" />
+        <EmptyPanel text="所选时间范围内没有带问题原文的查询。如果一直为空，请检查 Agent 是否按 Skill 说明传入 title" />
       ) : (
         <Table>
           <TableHeader>
@@ -262,9 +262,12 @@ function TitlesCard({
 
 function ZeroHitsCard({ unanswered }: { unanswered: UnansweredPayload }) {
   return (
-    <TableSection title="零命中检索" description="搜过但目录里没有的词——目录缺口信号">
+    <TableSection
+      title="零命中检索"
+      description="搜索过但目录中没有匹配结果的词，可能是目录缺少的内容"
+    >
       {unanswered.zero_hits.length === 0 ? (
-        <EmptyPanel text="窗口内无零命中检索" />
+        <EmptyPanel text="所选时间范围内没有零命中的检索" />
       ) : (
         <Table>
           <TableHeader>
@@ -293,16 +296,16 @@ function ZeroHitsCard({ unanswered }: { unanswered: UnansweredPayload }) {
 
 function ErrorsCard({ unanswered }: { unanswered: UnansweredPayload }) {
   return (
-    <TableSection title="报错调用" description="按报错文本聚合——目录外成员名等未答信号">
+    <TableSection title="报错调用" description="按报错文本汇总，例如引用了目录中不存在的指标或维度">
       {unanswered.errors.length === 0 ? (
-        <EmptyPanel text="窗口内无报错" />
+        <EmptyPanel text="所选时间范围内没有报错" />
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-20">工具</TableHead>
               <TableHead>报错</TableHead>
-              <TableHead className="w-56">原问</TableHead>
+              <TableHead className="w-56">原始问题</TableHead>
               <TableHead className="w-16 text-right">次数</TableHead>
               <TableHead className="w-28 text-right">最近出现</TableHead>
             </TableRow>

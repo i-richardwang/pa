@@ -1,4 +1,3 @@
-/** /dashboard/api 取数：未登录统一回登录页（带回跳），报错透出服务端 error 文案 */
 import type { z } from "zod";
 import { PUBLIC_ERROR_RESPONSE_SCHEMA, type PublicErrorCode } from "@contracts/error_contract";
 
@@ -70,7 +69,7 @@ export async function parseJsonResponse<T>(res: Response, schema: JsonSchema<T>)
   try {
     body = await res.json();
   } catch {
-    throw new ApiError(res.ok ? 502 : res.status, `服务端返回无法解析（${res.status}）`);
+    throw new ApiError(res.ok ? 502 : res.status, `服务器返回的内容无法解析（${res.status}）`);
   }
   if (!res.ok) {
     const parsedError = PUBLIC_ERROR_RESPONSE_SCHEMA.safeParse(body);
@@ -80,7 +79,7 @@ export async function parseJsonResponse<T>(res: Response, schema: JsonSchema<T>)
   }
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
-    console.error("[pa] Dashboard API 响应不符合契约", parsed.error.issues);
+    console.error("[pa] Dashboard API 响应格式与接口定义不符", parsed.error.issues);
     throw new ApiError(502, "服务端返回的数据格式异常，请刷新后重试");
   }
   return parsed.data;
@@ -88,13 +87,13 @@ export async function parseJsonResponse<T>(res: Response, schema: JsonSchema<T>)
 
 const request = parseJsonResponse;
 
-/** 已登录整页跳转由 getJson 处理，401 在此不作为可展示错误。 */
+/** 401 已在 parseJsonResponse 里整页跳转登录，不显示为错误。 */
 export function errorText(error: unknown): string | null {
   if (!error || (error instanceof ApiError && error.status === 401)) return null;
   return error instanceof Error ? error.message : String(error);
 }
 
-/** 控制台时间戳的唯一拼法：本地时区、年月日时分、数字等宽。 */
+/** 控制台所有时间戳都用这个函数格式化。 */
 export function formatAt(at: string | Date | null | undefined): string {
   if (!at) return "—";
   return new Date(at).toLocaleString("zh-CN", {

@@ -1,10 +1,9 @@
 /**
  * 报告 / 分析工作台的编辑会话。
  *
- * 播种代际 = 会话键 × 放弃次数：只有换会话与显式重播种（放弃改动）推进代际，
- * 查询 refetch 换了 `seed` 的引用不算；飞行中的运行结果回来时代际不符即作废。
- *
- * 规格与结果是两条腿：种子只管规格，结果字节另走 `savedReplay` 后到即可。
+ * `epoch` = 会话键 + 放弃改动次数（`generation`）：只有切换会话和放弃改动会重新载入种子规格，查询 refetch
+ * 换了 `seed` 引用不会。运行返回时 `epoch` 已变化的，丢弃其结果。种子只提供规格，已保存结果由
+ * `savedReplay` 单独传入，可能晚于种子到达。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -36,7 +35,7 @@ export type AnalysisEditorSeed = {
   view_preferences?: ViewPreferences;
 
   hasSavedResult: boolean;
-  /** 只有当前用户自有 View 才能直接被报告引用；看板分叉不提供该字段。 */
+  /** 只有当前用户自己的 View 才能直接被报告引用；从看板分叉时不提供。 */
   ownedViewId?: string;
 };
 
@@ -51,7 +50,7 @@ type AnalysisEditSessionInput = {
   savedReplay?: ReplayPayload | null;
   target: AnalysisEditorTarget;
   catalog: CatalogPayload | null;
-  /** 新建与另存产生新报告后的去向由宿主页裁决；保存只负责落库与落定基线。 */
+  /** 新建或另存出新报告后跳转到哪里由调用页面决定。 */
   onCreated: (report: { id: string; name: string }) => void;
 };
 
@@ -65,7 +64,7 @@ export function useAnalysisEditSession({
 }: AnalysisEditSessionInput) {
   const queryClient = useQueryClient();
   const [draft, setDraftState] = useState<AnalysisEditState | null>(null);
-  /** 草稿的同步镜像：离开守卫在被问到时读它，答案不落后于刚落库/刚弃稿的那一拍。 */
+  /** 草稿的同步副本：离开守卫读它，保存或放弃后立即反映最新状态，不等重新渲染。 */
   const draftRef = useRef<AnalysisEditState | null>(null);
   const setDraft = useCallback<typeof setDraftState>((next) => {
     draftRef.current = typeof next === "function" ? next(draftRef.current) : next;
@@ -78,7 +77,7 @@ export function useAnalysisEditSession({
   const [generation, setGeneration] = useState(0);
   const generationRef = useRef(generation);
   const epoch = `${sessionKey}#${generation}`;
-  /** 同步可读的当前代际：放弃改动即刻推进，飞行中的结果据此作废。 */
+  /** 同步可读的当前 generation：放弃改动时立即更新，用于丢弃进行中运行的结果。 */
   const liveEpoch = useRef(epoch);
   liveEpoch.current = epoch;
   const sown = useRef<string | null>(null);
@@ -131,10 +130,7 @@ export function useAnalysisEditSession({
     return activeReplay.presentation_notes ?? [];
   }, [draft, activeReplay]);
 
-  /**
-   * 把草稿跑到服务端并落为当前预览；返回新 View 身份。
-   * 规格未变时沿用当前结果只铸 View，规格变了才创建 Run。
-   */
+  /** 在服务端运行草稿并设为当前预览，返回新 View id；分析规格未变时复用当前结果只新建 View。 */
   async function run(current: AnalysisEditState): Promise<string | null> {
     const started = liveEpoch.current;
     try {
@@ -169,7 +165,7 @@ export function useAnalysisEditSession({
     return true;
   }
 
-  /** 弃稿即刻生效：先扔掉草稿再推代际，重新播种由代际那条效果接手。 */
+  /** 先清空草稿再递增 generation，由上面的 effect 重新载入种子规格。 */
   function discard() {
     generationRef.current += 1;
     liveEpoch.current = `${sessionKey}#${generationRef.current}`;
@@ -177,7 +173,7 @@ export function useAnalysisEditSession({
     setGeneration(generationRef.current);
   }
 
-  /** 可保存的 View 身份：未改动用自有 View，预览已是当前草稿用预览，否则现跑一次。 */
+  /** 保存用的 View id：未改动时用自己的 View，预览与草稿一致时用预览，否则重新运行。 */
   async function materialize(current: AnalysisEditState): Promise<string | null> {
     if (!canExecute(current)) return null;
     if (!hasAnalysisChanges(current) && !hasViewChanges(current) && seed?.ownedViewId) {
@@ -241,8 +237,8 @@ export function useAnalysisEditSession({
   }
 
   /**
-   * 落定：屏上草稿已落库，即刻成为新基线——离开守卫据此不再认为有工作会丢。
-   * 原地更新才推进乐观锁基线；新建与另存的落库对象不是 `target`，其基线保持不动。
+   * 保存后把当前草稿设为新基线，离开守卫随之不再拦截。
+   * 只有原地更新才更新乐观锁 revision；新建和另存保存的不是 `target`，revision 不变。
    */
   function settle(revision?: number) {
     setDraft((current) => (current ? settleSaved(current) : current));

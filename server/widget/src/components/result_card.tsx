@@ -1,10 +1,7 @@
 /**
- * 结果卡外壳：MCP widget 专属容器；控制台查看面使用整页裸铺——
- * 只负责卡片视觉外框与空/等待态，内容栈全部交给 ViewRenderer。
- * 视觉结构：白面 + 发丝描边，无常驻投影；
- * 卡缘即容器缘，无外圈衬垫；标题与口径常驻内联（答数态口径必须撞脸）；
- * 卡片视觉自足，资源声明不要宿主边框（prefersBorder: false）。
- * inline 模式不做内部滚动（宿主设计规范），行数超限引导全屏。
+ * MCP widget 的结果卡片：只负责外框和空状态、等待状态，内容交给 ViewRenderer。
+ * 边框由卡片自己画，资源声明 prefersBorder: false。
+ * inline 模式下卡内不滚动（宿主设计规范），行数过多时引导用户全屏查看。
  */
 import { LoadingMark, type CardActions, ViewRenderer } from "pa-result-view";
 import type { PresentationBlock } from "@charts";
@@ -19,13 +16,12 @@ export function ResultCard({
   actions,
 }: {
   payload: QueryPayload | null;
-  /** 服务端确定性编译的完整呈现块。 */
   presentation: PresentationBlock | null;
   /** payload 为空时显示的状态文案 */
   status: string;
-  /** true = 等待结果中（出加载标记而非状态文案） */
+  /** 为 true 时表示正在等待结果，显示加载标记而不是状态文案 */
   waiting: boolean;
-  /** 宿主展示模式是全屏：卡面限宽居中，表格放开全量行 */
+  /** 宿主处于全屏模式：卡片限宽居中，表格显示全部行 */
   fullscreen: boolean;
   actions: CardActions;
 }) {

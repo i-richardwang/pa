@@ -15,20 +15,20 @@ const rows = (count: number) =>
 const card = (model: ReadoutModel, props: Partial<Parameters<typeof ReadoutCard>[0]> = {}) =>
   renderToStaticMarkup(<ReadoutCard model={model} dark={false} {...props} />);
 
-test("壳只取令牌源那一张玻璃面，模糊降一档，卡片不自带底色与投影", () => {
+test("读数卡使用共享浮层背景和卡片档模糊，不另加底色和阴影", () => {
   const html = card({ header: "2026-07", rows: rows(2) });
   expect(html).toContain("pa-popup-surface pa-popup-surface-card");
   expect(html).not.toContain("bg-pa-glass");
   expect(html).not.toContain("shadow-");
 });
 
-test("单读数排成值大名小，多系列排成名左值右", () => {
+test("只有一个读数时值大、名称小；多个系列时名称在左、值在右", () => {
   const sole = card({ header: "2026-07", rows: rows(1) });
-  // 值 18px 主行 + 名次行：只有一个数时先读到的是数
+  // 值用 18px 显示在第一行，名称在第二行
   expect(sole).toContain("text-lg");
   expect(sole).toContain("text-pa-faint");
   expect(sole).not.toContain("min-content");
-  // 点跟着值那一档落下来，与逐行那一档不同高
+  // 色点下移得更多，与大号数值的第一行对齐，与多系列行的色点位置不同
   expect(sole).toContain(chartMarkerClass("lead"));
 
   const many = card({ header: "2026-07", rows: rows(2) });
@@ -38,35 +38,35 @@ test("单读数排成值大名小，多系列排成名左值右", () => {
   expect(many).toContain(chartMarkerClass("row"));
 });
 
-test("行数按 17 行一栏横向分档，至多四栏，栏宽随栏数成档", () => {
+test("每栏 17 行，最多四栏，卡片宽度随栏数变化", () => {
   const columnsOf = (count: number) =>
     card({ header: "2026-07", rows: rows(count) }).match(/grid-cols-(\d)\b/)?.[1] ?? "1";
   expect(columnsOf(17)).toBe("1");
   expect(columnsOf(18)).toBe("2");
   expect(columnsOf(35)).toBe("3");
-  // 封顶：再多也不横着长，否则卡片宽过画布
+  // 最多四栏，否则卡片会比绘图区还宽
   expect(columnsOf(200)).toBe("4");
 
   expect(card({ header: "", rows: rows(2) })).toContain("max-w-[300px]");
   expect(card({ header: "", rows: rows(18) })).toContain("max-w-[500px]");
 });
 
-test("抬头空着就不占那一行", () => {
+test("没有标题时不渲染标题行", () => {
   expect(card({ header: "", rows: rows(2) })).not.toContain("pt-3");
 });
 
-test("占比与差值同占值下方那一行，恒中性色", () => {
+test("占比和差值显示在值下方，使用中性色", () => {
   const html = card({
     header: "2026-07",
     rows: [{ series: 0, color: "#3b6fdb", name: "2025 年", value: "1,000", delta: "-200" }],
   });
   expect(html).toContain("-200");
-  // 差值染色会把流失类指标读反：卡内只有中性那一档
+  // 按涨跌着色会让离职类指标的含义看反，所以统一用中性色
   expect(html).not.toContain("text-pa-success");
   expect(html).not.toContain("text-pa-danger");
 });
 
-test("钉住才出关闭钮，也才画得出可点的行", () => {
+test("只有钉住后才显示关闭按钮和可点击的行", () => {
   const model: ReadoutModel = {
     header: "2026-07",
     rows: [
@@ -83,7 +83,7 @@ test("钉住才出关闭钮，也才画得出可点的行", () => {
   expect(pinned).toContain("cursor-pointer");
 });
 
-test("没有下钻投影的行不画成可点的样子", () => {
+test("没有明细的行不显示为可点击", () => {
   const html = card(
     { header: "2026-07", rows: [{ series: 0, name: "占比", value: "62.0%" }] },
     { pinned: true, onRowClick: () => {} },
@@ -91,7 +91,7 @@ test("没有下钻投影的行不画成可点的样子", () => {
   expect(html).not.toContain("cursor-pointer");
 });
 
-test("宿主说这一格开不出明细，行就不画成可点的样子", () => {
+test("宿主判定无法查看明细时，行不显示为可点击", () => {
   const model: ReadoutModel = {
     header: "2026-07",
     rows: [
@@ -100,6 +100,6 @@ test("宿主说这一格开不出明细，行就不画成可点的样子", () =>
   };
   const props = { pinned: true, onRowClick: () => {} };
   expect(card(model, { ...props, canOpenRow: () => true })).toContain("cursor-pointer");
-  // 画成可点却点不开，比不给这一下更难读
+  // 看起来可点击却打不开明细，会误导用户
   expect(card(model, { ...props, canOpenRow: () => false })).not.toContain("cursor-pointer");
 });

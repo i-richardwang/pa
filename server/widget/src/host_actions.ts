@@ -1,6 +1,6 @@
 /**
- * 宿主下载能力协商：只有宿主明确声明标准下载能力且结果带 resource_link 时，
- * 才向结果卡注入导出动作；外链导航不是文件下载退路。
+ * 只有宿主声明支持标准文件下载、且结果带 resource_link 时，结果卡才提供导出操作；
+ * 不用打开外链代替下载。
  */
 import type {
   McpUiDownloadFileRequest,
@@ -28,7 +28,7 @@ export async function deliverExport(
   host: ExportHost,
   resource: ExportResourceLink | undefined,
 ): Promise<void> {
-  if (!resource) throw new Error("查询结果没有提供可下载的 MCP ResourceLink。");
+  if (!resource) throw new Error("查询结果没有提供下载链接。");
   const result = await host.downloadFile({ contents: [resource] });
-  if (result.isError) throw new Error("宿主拒绝或取消了文件下载。");
+  if (result.isError) throw new Error("下载被拒绝或已取消。");
 }

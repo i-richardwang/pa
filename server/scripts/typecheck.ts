@@ -1,24 +1,24 @@
 /**
- * 类型门禁：每一份 tsconfig 过一遍 tsc，清单由 `git ls-files` 现取，不抄进 package.json。
+ * 对仓库里每一份 tsconfig 运行 tsc 类型检查，清单每次由 `git ls-files` 取得，不写进 package.json。
  *
- * 编译器走本包 `node_modules/.bin/tsc`：`bunx tsc` 在没有 node_modules 的目录下会去
- * npm 现拉一个大版本不同的编译器。仓库根按本文件位置算，不问 git：pre-commit 会设
- * `GIT_DIR`，此时 `rev-parse --show-toplevel` 返回的是当前目录而非仓库根。
+ * 使用本包的 `node_modules/.bin/tsc`：在没有 node_modules 的目录下，`bunx tsc` 会从 npm
+ * 临时下载一个大版本不同的编译器。仓库根目录按本文件位置计算：pre-commit 会设置 `GIT_DIR`，
+ * 这时 `rev-parse --show-toplevel` 返回的是当前目录而不是仓库根。
  *
- * 分两面（`--tests` 取用例面）：pre-commit 只跑源码面，两面合起来即全部 tsconfig。
+ * 加 `--tests` 时只检查 tsconfig.test.json，不加时检查其余 tsconfig；pre-commit 只运行不加参数的那组。
  */
 import { $ } from "bun";
 
 const tests = process.argv.includes("--tests");
 const tsc = Bun.fileURLToPath(new URL("../node_modules/.bin/tsc", import.meta.url));
 const root = Bun.fileURLToPath(new URL("../..", import.meta.url));
-const pattern = "*tsconfig*.json"; // 变量传入，免得 bun shell 先把它当本地 glob 展开
+const pattern = "*tsconfig*.json"; // 用变量传入，避免 bun shell 把它当作本地 glob 展开
 const all = (await $`git ls-files ${pattern}`.cwd(root).text())
   .split("\n")
   .map((line) => line.trim())
   .filter(Boolean);
 
-if (all.length === 0) throw new Error("仓库里一份 tsconfig 都没找到：门禁的覆盖面已经归零");
+if (all.length === 0) throw new Error("没有找到任何 tsconfig，检查范围为空");
 
 const projects = all.filter((path) => path.endsWith("tsconfig.test.json") === tests);
 console.log(`typecheck${tests ? ":tests" : ""} → ${projects.join(" ")}`);

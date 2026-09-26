@@ -23,7 +23,7 @@ import type { PresentationSpec } from "../presentation_core/presentation_spec.js
 import { derivedFormulaSummaries, queryFingerprint } from "../engine/query_fingerprint.js";
 import type { AuthorizedAnalysisPlan } from "./semantic_planning_service.js";
 
-/** Run 只消费编译工件，不认识持久化身份。 */
+/** 执行只接收编译结果，不接触持久化的 Analysis/View 身份。 */
 type ExecuteAnalysis = (planned: AuthorizedAnalysisPlan) => Promise<QueryRunResult>;
 
 type PlanAnalysisView = (
@@ -39,7 +39,7 @@ export type MaterializedAnalysisView = OwnedAnalysisView & {
   record_projection_bindings: RecordProjectionBindings;
 };
 
-/** 一次瞬态 Run 的结果；数据库只保存其 analysis/view 引用，不保存此对象。 */
+/** 数据库只保存 analysis/view 引用，不保存执行结果本身。 */
 export type ExecutedAnalysis = QueryRunResult & {
   analysis_id: string;
   view_id: string;
@@ -61,10 +61,7 @@ export function createAnalysisService(deps: {
   plan: PlanAnalysisView;
   usage: Pick<UsageService, "log">;
 }) {
-  /**
-   * 工具边界的唯一观察点：解析、规划、执行、落身份都在里面，
-   * 定义被拒同样留下一条 error 记录——否则最常见的失败在使用日志里查无此事。
-   */
+  /** 工具调用的解析、规划、执行和保存都在这里包裹执行；定义校验失败也要写入一条 error 使用记录。 */
   async function observed(
     input: {
       principal: Principal;

@@ -1,7 +1,4 @@
-/**
- * 全局键位：⌘/Ctrl+K 命令面板、⌘/Ctrl+. 与官方 ⌘/Ctrl+B 折叠侧栏、? 快捷键一览、Esc 收起工作台右栏。
- * 侧栏开合恒由用户手动决定，偏好记 localStorage。
- */
+/** ⌘/Ctrl+B 由侧栏组件自带处理；侧栏开合只由用户手动切换，偏好存在 localStorage。 */
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIcon,
@@ -155,7 +152,7 @@ export function DashboardShell({
   route: RouteKey;
   navigate: (r: RouteKey) => void;
   onSignOut: () => void;
-  /** 清单骨架：titlebar 恒显页名 + 可选「+ 新建」。详情/表单页勿开。 */
+  /** 清单页布局：标题栏始终显示页名。详情页和表单页不开启。 */
   listChrome?: boolean;
   mainSurface?: MainSurface;
   settingsOpen?: boolean;
@@ -168,7 +165,7 @@ export function DashboardShell({
   const [open, setOpenState] = useState(() => localStorage.getItem(NAV_OPEN_KEY) !== "0");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  /** 跳转面从任何地方都能用 ⌘K 打开，没有触发件可认；归还目标见 `useOpenerFocus`。 */
+  /** 命令面板没有触发按钮，关闭后的焦点目标由 `useOpenerFocus` 在打开时记录。 */
   const paletteFocus = useOpenerFocus();
 
   function openPalette(next: boolean) {
@@ -201,7 +198,7 @@ export function DashboardShell({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // paletteOpen 进依赖：⌘K 要按当前开合状态翻转，读的不能是注册那一刻的旧值。
+    // paletteOpen 放进依赖：⌘K 要按当前开合状态切换，不能读到注册时的旧值。
   }, [open, paletteOpen]);
 
   const title = routeTitle(route, items);
@@ -254,9 +251,7 @@ export function DashboardShell({
   );
 }
 
-/**
- * 听在 document 捕获阶段：Sheet 原语没有触发件，不接管 Esc，也不保证事件冒得出来。
- */
+/** 在 document 捕获阶段监听：没有 Trigger 的 Sheet 不处理 Esc，也不保证事件冒泡出来。 */
 function useStageAsideEscape(
   aside: StageAside | null,
   rootRef: React.RefObject<HTMLElement | null>,
@@ -292,7 +287,7 @@ function StageAsideSheet({
       }}
     >
       <SheetPopup
-        aria-label={aside.face === "profile" ? "档案" : "配置"}
+        aria-label={aside.face === "profile" ? "详情" : "配置"}
         className="h-[85svh] overflow-hidden rounded-t-xl"
         finalFocus={finalFocus}
         ref={popupRef}
@@ -306,8 +301,8 @@ function StageAsideSheet({
 }
 
 /**
- * 树形必须在右栏显隐间保持稳定：改走 Fragment 会让左列整段 remount，
- * 工作台 `useState`（含配置栏开合）被重置。
+ * 右栏显隐时组件树结构要保持不变：改用 Fragment 会让左列整段重新挂载，
+ * 重置工作台的 `useState`（含配置栏开合）。
  */
 function MainColumn({
   open,
@@ -363,9 +358,7 @@ function MainColumn({
   );
 }
 
-/**
- * 三种载荷同高（`Titlebar` 基线）：换一档矮条会让页内容随侧栏开合上下跳。
- */
+/** 三种标题栏内容都用 `Titlebar` 的高度，否则页面内容会随侧栏开合上下跳动。 */
 function ShellTitlebar({
   open,
   listChrome,
@@ -379,9 +372,7 @@ function ShellTitlebar({
 }) {
   const detailCrumb = useDetailCrumb();
   const isMobile = useIsMobile();
-  /**
-   * 窄屏恒亮导航入口：`open` 是桌面展开偏好，拿它当判据会让窄屏无从进入导航。
-   */
+  /** 窄屏始终显示导航入口：`open` 是桌面端的展开偏好，不适用于窄屏。 */
   const showTrigger = !open || isMobile;
   const showBar = listChrome || !!detailCrumb || showTrigger;
   if (!showBar) return null;

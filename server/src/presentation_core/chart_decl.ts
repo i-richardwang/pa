@@ -14,9 +14,7 @@ export const TABLE_AXIS_SCHEMA = z.discriminatedUnion("kind", [
 
 export type TableAxis = z.infer<typeof TABLE_AXIS_SCHEMA>;
 
-/**
- * 交叉表的列轴声明，从外到内。行轴是执行结果中未进入列轴的维度与时间轴。
- */
+/** 交叉表的列轴，从外到内；行轴由执行结果中未进入列轴的维度和时间轴组成。 */
 export const TABLE_COLUMNS_DECL_SCHEMA = z.array(TABLE_AXIS_SCHEMA);
 
 export const SERIES_DISPLAY_SCHEMA = z
@@ -36,10 +34,7 @@ const SERIES = z.array(MEMBER).min(1);
 const DISPLAY = z.record(MEMBER, SERIES_DISPLAY_SCHEMA);
 const VALUE_LABELS = z.enum(["main", "all"]);
 
-/**
- * 编译后的公共呈现声明；这是服务端与浏览器之间唯一的运行时合同。
- * 通道按图型判别：哪个通道属于哪个图型出自这份形状本身，不靠另一套规则复述。
- */
+/** 编译后的公共呈现声明，服务端与浏览器之间按这份结构传递。 */
 export const CHART_DECL_SCHEMA = z
   .discriminatedUnion("type", [
     z
@@ -78,23 +73,21 @@ export const CHART_DECL_SCHEMA = z
   ])
   .superRefine((decl, context) => {
     if (decl.type !== "line" && decl.type !== "bar") return;
-    // 跨通道的约束只有两条：拆分通道占掉了系列的来源，值通道就只剩一个位置（因而也没有副轴）；
-    // 两把尺子不共享系列。
     if (decl.groupBy && (decl.y.length !== 1 || decl.y2)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `${decl.type} 呈现声明拆分通道时值通道只容一个系列`,
+        message: `${decl.type} 图使用拆分维度时只能有一个指标`,
       });
     }
     if (decl.y2?.some((member) => decl.y.includes(member))) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `${decl.type} 呈现声明的同一系列不能同时在主轴与副轴`,
+        message: `${decl.type} 图中同一指标不能同时放在主轴和副轴`,
       });
     }
   });
 
 export type ChartDecl = z.infer<typeof CHART_DECL_SCHEMA>;
 export type ChartTypeOf<T extends ChartDecl["type"]> = Extract<ChartDecl, { type: T }>;
-/** 落在绘图区的图型；table 与 kpi 不在其中。 */
+/** 在绘图区中绘制的图型。 */
 export type PlottedDeclType = Extract<ChartDecl["type"], "line" | "bar" | "pie">;

@@ -96,7 +96,7 @@ const tableReplay: ReplayPayload = {
   },
 };
 
-/** 折线呈现才会渲染「系列」节；拿表格呈现去验节题重名等于没验。呈现类型取自草稿规格。 */
+/** 只有折线呈现渲染「系列」节，检查节标题重名要用折线草稿；呈现类型取自草稿规格。 */
 const lineDraft = (): AnalysisEditState => {
   const draft = draftFixture();
   return {
@@ -146,7 +146,7 @@ const render = (
     />,
   );
 
-test("四个内容态时间栏都在场，且住在结果区内", () => {
+test("结果、预览中、空结果、错误四种状态都显示时间栏，且位于结果区之后", () => {
   const states: [string, string][] = [
     ["结果", render({ activeReplay: tableReplay })],
     ["预览等待", render({ previewing: true })],
@@ -161,13 +161,13 @@ test("四个内容态时间栏都在场，且住在结果区内", () => {
   }
 });
 
-test("草稿未落地（载入中）不渲染时间栏——没有可编辑的时间意图就不摆控件", () => {
+test("草稿载入中不渲染时间栏", () => {
   const markup = render({ draft: null });
   expect(markup).not.toContain('aria-label="观察时间"');
   expect(markup).toContain('data-slot="chart-stage-footer"');
 });
 
-test("题名副行只显示观察窗口", () => {
+test("标题下的副标题只显示观察窗口", () => {
   const timed = setDraftTime(
     draftFixture(),
     {
@@ -193,7 +193,7 @@ test("结果加载中不显示空态提示", () => {
   expect(render({})).toContain("还没有结果");
 });
 
-test("配置栏在草稿落地前就已在场：栏是壳的一列，不是结果的附属物", () => {
+test("草稿载入前配置栏已渲染并显示加载标记", () => {
   const markup = renderToStaticMarkup(
     <ReportInspector catalog={catalog} onCollapse={() => {}} session={session({ draft: null })} />,
   );
@@ -220,7 +220,7 @@ test("同一栏里没有两个同名节题", () => {
   expect([...new Set(titles)]).toHaveLength(titles.length);
 });
 
-/** 带明细绑定与 revision 的已保存重放：明细能力的最小成立条件。 */
+/** 带明细绑定和 revision 的已保存结果，是开放明细的最低条件。 */
 const projectableReplay = (): ReplayPayload => ({
   ...tableReplay,
   revision: 3,
@@ -240,7 +240,7 @@ const projectableReplay = (): ReplayPayload => ({
   },
 });
 
-test("明细能力由来源派生：有来源的保存重放态可点开数字，来源 none 与草稿态都不可", () => {
+test("有明细来源且显示已保存结果时数字可点开明细，来源为 none 或草稿状态时不可", () => {
   const saved: Partial<AnalysisEditSession> = {
     activeReplay: projectableReplay(),
     showingSavedReplay: true,
@@ -257,7 +257,7 @@ test("明细能力由来源派生：有来源的保存重放态可点开数字�
   ).not.toContain("查看明细");
 });
 
-test("配置栏顶带有名称，图型顺序先图后表且表格在第四槽", () => {
+test("配置栏标题栏显示名称，图型按折线、柱状、指标卡、表格、饼图排列", () => {
   const markup = renderToStaticMarkup(
     <ReportInspector
       catalog={catalog}

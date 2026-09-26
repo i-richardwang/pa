@@ -94,7 +94,7 @@ export function registerRecordTools(
       inputSchema: {
         view_id: z.string().uuid().describe("当前名单卡的 view_id"),
         metric_id: z.string().describe("当前名单卡的语义指标 id"),
-        data_as_of: z.string().describe("当前名单卡的数据截至月份，用于识别翻页期间的数据刷新"),
+        data_as_of: z.string().describe("当前名单卡的数据截至月份，用于发现翻页期间数据是否已更新"),
         offset: z.number().int().nonnegative().max(49_999),
         limit: z.number().int().min(1).max(100).default(20),
       },

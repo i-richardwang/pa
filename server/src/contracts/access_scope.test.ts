@@ -7,7 +7,7 @@ import {
 } from "./access_scope.js";
 
 describe("access scope contract", () => {
-  test("限定值在领域边界去空白、去重并保持顺序", () => {
+  test("限定值去除首尾空白、去重并保持顺序", () => {
     expect(
       ACCESS_SCOPE_SCHEMA.parse({
         kind: "limited",
@@ -16,7 +16,7 @@ describe("access scope contract", () => {
     ).toEqual({ kind: "limited", values: ["North", "West"] });
   });
 
-  test("持久化只接受绑定当前授权身份的结构化值", () => {
+  test("存储值只在是结构化 JSON 且 scope_id 与当前一致时生效", () => {
     expect(parseStoredAccessScope('{"scope_id":"region","kind":"all"}', "region")).toEqual({
       kind: "all",
     });
@@ -39,7 +39,7 @@ describe("access scope contract", () => {
     });
   });
 
-  test("持久化绑定稳定授权身份，Cube 过滤值保持业务无关", () => {
+  test("序列化时写入 scope_id，Cube 过滤值只含授权值本身", () => {
     const scope = { kind: "limited" as const, values: ["North"] };
     expect(serializeAccessScope(scope, "region")).toBe(
       '{"scope_id":"region","kind":"limited","values":["North"]}',

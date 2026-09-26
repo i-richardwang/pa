@@ -86,16 +86,15 @@ import {
 
 type GridBreakpoint = "lg" | "sm";
 
-// lg 是唯一可写入持久化的布局；sm 由 lg 派生为单列且不回写。
+// 只保存 lg 布局；sm 由 lg 派生为单列，不写回。
 const GRID_COLS: Record<GridBreakpoint, number> = { lg: BOARD_GRID_COLUMNS, sm: 1 };
-// 间距单源在 tile_sizing。
 const GRID_BREAKPOINTS: Record<GridBreakpoint, number> = { lg: MOBILE_BREAKPOINT + 1, sm: 0 };
 const GRID_MARGINS: Record<GridBreakpoint, readonly [number, number]> = {
   lg: GRID_MARGIN,
   sm: MOBILE_GRID_MARGIN,
 };
 const GRID_CONTAINER_PADDING: readonly [number, number] = [0, 0];
-// 编辑态整卡可拖；交互元素（浮出操作面板与一切控件）豁免。
+// 编辑时整张卡可拖动，操作面板和控件除外。
 const DRAG_CANCEL = "[data-dontdrag], button, a, input, textarea, select";
 
 function deriveRowHeight(canvasWidth: number | undefined): number {
@@ -130,12 +129,12 @@ export function BoardPage({
 }: {
   me: MePayload;
   id: string;
-  /** 板级时间覆盖（来自 hash `?t=`）；驱动查看态瓦片重放，编辑态只作设置入口。 */
+  /** 看板级时间覆盖（来自 hash 的 `?t=`）；查看时用于重放瓦片，编辑时只显示设置入口。 */
   timeOverride?: TimeIntent | null;
 }) {
   const [draft, setDraft] = useState<BoardEditState | null>(null);
   const [fromAnalysisOpen, setFromAnalysisOpen] = useState(false);
-  /** 选记录面没有触发件；归还目标见 `useOpenerFocus`。 */
+  /** 该对话框没有触发按钮，关闭后的焦点由 useOpenerFocus 归还。 */
   const fromAnalysisFocus = useOpenerFocus();
 
   function openFromAnalysis(next: boolean) {
@@ -149,7 +148,7 @@ export function BoardPage({
   const [renameDraft, setRenameDraft] = useState("");
   const [recordProjectionRequest, setRecordProjectionRequest] =
     useState<RecordProjectionDialogRequest | null>(null);
-  // 离开确认的 promise resolver：useLeaveBlocker 拦截导航时挂起，用户抉择后兑现
+  // 离开确认的 resolver：useLeaveBlocker 拦截导航时挂起，用户选择后 resolve
   const leaveResolve = useRef<((ok: boolean) => void) | null>(null);
   const { ref: canvasRef, size: canvasSize } = useElementSize<HTMLDivElement>();
   const rowHeight = deriveRowHeight(canvasSize?.width);
@@ -425,7 +424,7 @@ export function BoardPage({
                       const canMoveUp = orderIdx > 0;
                       const canMoveDown = orderIdx >= 0 && orderIdx < readingOrder.length - 1;
                       return (
-                        // 不设 overflow-hidden：浮出操作面板要越过卡缘；内容裁切归 TileShell 卡面
+                        // 不加 overflow-hidden：操作面板需要超出卡片边缘，内容裁切由 TileShell 负责
                         <div key={tile.tile_id} className="min-h-0 min-w-0">
                           {tile.kind === "text" ? (
                             <TextTile

@@ -1,7 +1,6 @@
 /**
- * 口径说明：唯一结果的用户可见口径，派生结果的来源与公式也算一条。
- * **只有答数态挂它**——口径常驻内联、默认收起、可展开（QueryNotesDetails）；
- * 看板瓦片与控制台整页都不挂。
+ * 口径说明：结果的用户可见口径；派生结果的来源和公式也作为一条。
+ * 只在结果卡中显示，默认收起、可展开（QueryNotesDetails）；看板瓦片和控制台整页不显示。
  */
 import { useState } from "react";
 import { ChevronDownIcon } from "lucide-react";

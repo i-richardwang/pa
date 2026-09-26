@@ -216,7 +216,7 @@ export function queryFeasibilityIssueMessage(issue: QueryFeasibilityIssue): stri
         "请移除该维度，或改选支持该维度的指标"
       );
     case "query_dimensions_unavailable":
-      return `没有一个当前可见的执行来源能够承载维度「${issue.dimension_titles.join("、")}」`;
+      return `当前可用的数据来源都不能同时支持维度「${issue.dimension_titles.join("、")}」；请去掉其中部分维度`;
     case "query_sort_dimension_missing":
       return `分组最大项数所作用的维度「${issue.dimension_title}」不在查询分组中`;
     case "query_grouping_requirement_unsatisfied":

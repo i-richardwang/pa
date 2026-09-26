@@ -1,4 +1,3 @@
-/** 列格式只认 column_formats 显式声明，不按列名猜测。 */
 import { describe, expect, test } from "bun:test";
 import { readdir, readFile } from "node:fs/promises";
 import {
@@ -14,7 +13,7 @@ import {
   toNumber,
 } from "./view_format.js";
 
-describe("percent 呈现契约", () => {
+describe("百分比格式", () => {
   test("显式 percent 把 0–1 原始比率展示为百分数，默认一位小数", () => {
     expect(formatCell(0.0428, "metric", "percent")).toBe("4.3%");
     expect(formatSeriesValue(0.0428, "percent")).toBe("4.3%");
@@ -22,7 +21,7 @@ describe("percent 呈现契约", () => {
     expect(formatTick(0.04, "percent")).toBe("4%");
   });
 
-  test("列声明的小数位压过默认：调研结果按整数百分比报", () => {
+  test("列声明的小数位覆盖默认值，调研结果显示为整数百分比", () => {
     expect(formatCell(0.2349, "survey_score", "percent", 0)).toBe("23%");
     expect(formatCell(-0.046, "survey_score", "percent", 0)).toBe("-5%");
     expect(formatSeriesValue(0.2349, "percent", 0)).toBe("23%");
@@ -43,7 +42,7 @@ describe("percent 呈现契约", () => {
     ).toBe(true);
   });
 
-  test("无声明的列不按列名猜格式：按普通数值展示", () => {
+  test("未声明格式的列按普通数值展示，不按列名推断", () => {
     expect(isRateColumn("ytd_primary_event_rate")).toBe(false);
     expect(formatCell(4.28, "exchange_rate")).toBe("4.3");
     expect(formatCell(4.28, "exchange_rate", "number", 2)).toBe("4.28");
@@ -51,7 +50,7 @@ describe("percent 呈现契约", () => {
   });
 });
 
-test("结果呈现层不另写空值占位符", async () => {
+test("结果呈现代码的空值占位符都通过 cellLabel 生成", async () => {
   const dirs = ["./", "../../result_view/src/components/"];
   const files = (
     await Promise.all(
@@ -64,29 +63,29 @@ test("结果呈现层不另写空值占位符", async () => {
       ),
     )
   ).flat();
-  expect(files.length, "扫描一个文件都没找到——路径大概挪了").toBeGreaterThan(5);
+  expect(files.length, "没有扫描到任何文件，请检查扫描路径").toBeGreaterThan(5);
 
   const HAND_ROLLED = /(?:\?\?|\|\|)\s*["']—["']/g;
-  expect('String(cell ?? "—")'.match(HAND_ROLLED), "探测器失灵").not.toBeNull();
-  expect("cellLabel(cell)".match(HAND_ROLLED), "探测器把单源调用也当成手写").toBeNull();
+  expect('String(cell ?? "—")'.match(HAND_ROLLED), "匹配规则应能识别手写的空值占位").not.toBeNull();
+  expect("cellLabel(cell)".match(HAND_ROLLED), "匹配规则不应命中 cellLabel 调用").toBeNull();
 
   const offenders: string[] = [];
   for (const file of files) {
     if (file.pathname.endsWith("view_format.ts")) continue;
     if ((await readFile(file, "utf8")).match(HAND_ROLLED)) offenders.push(file.pathname);
   }
-  expect(offenders, "改调 cellLabel：占位符与分组键必须同源").toEqual([]);
+  expect(offenders, "请改用 cellLabel，空值占位符和分组键要用同一实现").toEqual([]);
 });
 
 describe("单元格与排序", () => {
-  test("数值串转数、空值出占位符", () => {
+  test("数值字符串转成数字，空值显示占位符", () => {
     expect(toNumber("834")).toBe(834);
     expect(toNumber("")).toBeNull();
     expect(formatCell(null, "active_employee_count")).toBe("—");
     expect(formatCell(12345, "active_employee_count")).toBe("12,345");
   });
 
-  test("维度取值的空、空串与纯空白同出一个占位符", () => {
+  test("维度取值为空、空串或纯空白时显示同一个占位符", () => {
     expect(cellLabel(null)).toBe("—");
     expect(cellLabel("")).toBe("—");
     expect(cellLabel("   ")).toBe("—");
@@ -101,7 +100,7 @@ describe("单元格与排序", () => {
     expect(formatCell("2026", "test_people_metrics.year")).toBe("2026");
   });
 
-  test("排序：数值按数值、字符串按 locale、null 恒沉底", () => {
+  test("排序时数值按大小、字符串按 locale，null 排在最后", () => {
     expect(compareCells("12", "9")).toBeGreaterThan(0);
     expect(compareCells(null, 1)).toBeGreaterThan(0);
     expect(compareCells("阿", null)).toBeLessThan(0);

@@ -28,7 +28,7 @@ export type PickableMember = {
   canonical_name: string;
   incompatible: boolean;
   incompatible_reason?: string;
-  /** 图标位的记号；不给就按度量 / 维度出实心 / 空心菱形。非目录条目（构成占比）用它自报身份。 */
+  /** 行首图标；不传时度量用实心菱形、维度用空心菱形。非目录条目（如构成占比）用它指定图标。 */
   icon?: ReactNode;
 };
 
@@ -88,8 +88,8 @@ export function pickableMembers(
 }
 
 /**
- * 指标 id → 指标域标题。从属关系只由域那一头说（目录契约），一个指标出现在多个域时取先出现的域；
- * 组序即目录里域的次序，与指标页同一套导航次序。
+ * 指标 id → 指标域标题。归属以域的 measure_ids 为准，一个指标属于多个域时取先出现的域；
+ * 分组顺序即目录中域的顺序，与指标页一致。
  */
 export function metricDomainTitles(domains: readonly MetricDomainPayload[]): Map<string, string> {
   const titles = new Map<string, string>();
@@ -124,7 +124,7 @@ export function groupMembers(
     else ungrouped.push(member);
   }
   for (const member of ungrouped) push(UNGROUPED_LABEL, member);
-  // 维度组序取成员首次出现（属性组无全局次序）；指标域有目录次序，按它排，兜底桶恒末位。
+  // 维度组按成员首次出现排序（属性组没有全局顺序）；指标域按目录顺序；「其他」组排最后。
   const rank = (label: string) => {
     const index = measureOrder.indexOf(label);
     if (label === UNGROUPED_LABEL) return Number.MAX_SAFE_INTEGER;
@@ -136,7 +136,7 @@ export function groupMembers(
     .map(({ group }) => group);
 }
 
-/** 一行成员。不可选的原因进可及名，鼠标另给 Tooltip。 */
+/** 不可选的原因写进可访问名称，鼠标悬停时另用 Tooltip 显示。 */
 function MemberItem({
   member,
   chosen,
@@ -154,7 +154,7 @@ function MemberItem({
   const detail = member.description.trim();
   const item = (
     <AutocompleteItem
-      // 不可选的行仍须可悬停（理由在 Tooltip）。
+      // 不可选的行也要响应悬停，才能显示 Tooltip 里的原因。
       className={state ? "data-disabled:pointer-events-auto" : undefined}
       disabled={Boolean(state)}
       onClick={() => onPick(member)}
@@ -194,9 +194,9 @@ export function MemberPopover({
   selected?: string[];
   emptyLabel?: string;
   candidateIssue?: (member: CatalogMemberPayload) => string | undefined;
-  /** 非目录条目（如构成占比）与目录成员共用同一份行与不可选理由；无第二个添加入口。 */
+  /** 非目录条目（如构成占比），与目录成员使用同样的行和不可选原因。 */
   extras?: MemberGroup;
-  /** 指标域清单（目录契约）：指标行按它分节；不给就不分节。 */
+  /** 指标域列表：指标按它分组；不传则不分组。 */
   metricDomains?: readonly MetricDomainPayload[];
   onPick: (member: PickableMember) => void;
 }) {
@@ -213,7 +213,7 @@ export function MemberPopover({
   const chosen = new Set(selected ?? []);
 
   return (
-    // 英文成员名也参与命中——它是与 Agent 应答对账的锚点，用户会照着它搜。
+    // 搜索也匹配成员 id，用户会照 Agent 回复里的 id 搜索。
     <Autocomplete
       filter={(member, input) =>
         contains((member as PickableMember).title, input) ||
@@ -232,7 +232,7 @@ export function MemberPopover({
       <AutocompleteTrigger render={trigger} />
       <AutocompletePopup width="picker">
         <AutocompleteSearch aria-label="搜索字段" placeholder="搜索指标或维度" />
-        {/* Empty 的根必须常挂着，读屏靠它播报结果条数的变化；变的只是它的孩子。 */}
+        {/* AutocompleteEmpty 须始终挂载，读屏依靠它播报结果数量的变化。 */}
         <AutocompleteEmpty>{emptyLabel}</AutocompleteEmpty>
         <AutocompleteList>
           {(group: MemberGroup) => (

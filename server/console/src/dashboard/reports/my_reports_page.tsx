@@ -77,7 +77,7 @@ export function MyReportsPage({ facet }: { facet: ReportsFacet }) {
   return (
     <ListPageBody>
       <ListControlBar
-        left={<ListFacets label="看哪一批" options={REPORTS_FACETS} value={facet} />}
+        left={<ListFacets label="视图" options={REPORTS_FACETS} value={facet} />}
         right={
           <>
             {facet === "history" && (
@@ -106,7 +106,6 @@ export function MyReportsPage({ facet }: { facet: ReportsFacet }) {
   );
 }
 
-/** 归档面与在架面共用一张表：差别只在取哪一批、行上给哪一个动作。 */
 function ReportsList({ archived, query }: { archived: boolean; query: string }) {
   const activeQuery = useReportsList(!archived);
   const archivedQuery = useArchivedReportsList(archived);

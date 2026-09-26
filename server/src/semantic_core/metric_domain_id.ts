@@ -1,4 +1,4 @@
-/** 指标域的公共语义身份；与 Cube View name 分离，物理模型重命名不改变消费协议。 */
+/** 指标域的公开语义 id，独立于 Cube View name，物理模型重命名不影响它。 */
 export const METRIC_DOMAIN_ID_PATTERN = /^metric_domain:[a-z][a-z0-9_]*$/;
 
 export type MetricDomainId = `metric_domain:${string}`;

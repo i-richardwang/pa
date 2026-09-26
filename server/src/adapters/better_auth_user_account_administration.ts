@@ -51,7 +51,7 @@ const userAccount = (user: BetterAuthUser, definition: AccessScopeDefinition): U
   banned: user.banned === true,
 });
 
-/** Better Auth 的用户协议与持久化字段只在此适配器转换为结构化账号合同。 */
+/** Better Auth 的用户数据只在这里转换成账号结构，其他模块不直接读取 Better Auth 的字段。 */
 export function createBetterAuthUserAccountAdministration(
   auth: Auth,
   definition: AccessScopeDefinition,

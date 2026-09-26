@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { CELL_SCHEMA } from "../semantic_core/query_payload.js";
 
-/** 交互式名单只允许浏览前五万行；更大结果必须先缩小分析筛选范围。 */
+/** 明细名单最多浏览前 50,000 行。 */
 export const RECORD_PROJECTION_MAX_ROWS = 50_000;
 
-/** 个体记录只经 MCP App 私有元数据通道交付，不进入模型可见的结构化结果。 */
+/** 个人明细只放在 MCP App 私有元数据里，不进入模型可见的结构化结果。 */
 export const RECORD_PROJECTION_META_KEY = "ai.pa/record-projection";
 
 export type RecordProjectionViewBinding = {

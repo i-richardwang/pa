@@ -22,7 +22,7 @@ function cartesian(
 const count = (name: string, values: (number | null)[], extra: Partial<ChartLegendItem> = {}) =>
   ({ name, color: "#3b6fdb", format: "number", values, axis: 0, ...extra }) as ChartLegendItem;
 
-test("抬头取类目名，逐单元成行，格式与位数随单元声明", () => {
+test("标题取类目名，每个系列一行，格式和小数位按系列声明", () => {
   const chart = cartesian([
     count("在职人数", [1200, 45]),
     {
@@ -44,12 +44,12 @@ test("抬头取类目名，逐单元成行，格式与位数随单元声明", ()
   expect(readoutModel(chart, 1).rows[0].value).toBe("45");
 });
 
-test("空格读破折号，不印 0 也不省略这一行", () => {
+test("空值显示破折号，不显示 0，也不省略该行", () => {
   const chart = cartesian([count("在职人数", [null, 45])]);
   expect(readoutModel(chart, 0).rows[0].value).toBe("—");
 });
 
-test("结构占比随卡附一行，只在这一格有占比时出现", () => {
+test("有构成占比时在卡片末尾加一行占比", () => {
   const chart = cartesian([count("在职人数", [1200, 45])], {
     share: { title: "占比", values: [0.62, null] },
   });
@@ -57,7 +57,7 @@ test("结构占比随卡附一行，只在这一格有占比时出现", () => {
   expect(readoutModel(chart, 1).rows).toHaveLength(1);
 });
 
-test("同期叠加只展示服务端交付的变化值：量为相对变化率，率为百分点", () => {
+test("对照差值只显示服务端给出的值：数量指标为变化率，比率指标为百分点", () => {
   const overlay = (format: "number" | "percent", values: number[][], comparisonValues: number[]) =>
     cartesian([
       { name: "2026 年", color: "#3b6fdb", format, values: values[0], axis: 0 },
@@ -86,7 +86,7 @@ test("同期叠加只展示服务端交付的变化值：量为相对变化率�
     ),
     0,
   );
-  // 主期没有对照；对照期附带“主期较该期”的服务端变化值。
+  // 主期系列没有差值；对照期系列带服务端计算的「主期相对该期」的变化值。
   expect(counts.rows[0].delta).toBeUndefined();
   expect(counts.rows[1].delta).toBe("+20.0%");
 
@@ -116,7 +116,7 @@ test("同期叠加只展示服务端交付的变化值：量为相对变化率�
   expect(down.rows[1].delta).toBe("-16.7%");
 });
 
-test("对照期缺一头就不给差值：只有一个数时减不出变化", () => {
+test("对照期缺少数值时不显示差值", () => {
   const chart = cartesian([
     count("2026 年", [null, 45]),
     count("2025 年", [1000, 60], {
@@ -127,7 +127,7 @@ test("对照期缺一头就不给差值：只有一个数时减不出变化", ()
   expect(readoutModel(chart, 0).rows[1].delta).toBeUndefined();
 });
 
-test("饼图一卡列齐全部切片，各带占比，抬头是度量名；指到哪一片都是同一张表", () => {
+test("饼图读数卡列出全部扇区及其占比，标题为指标名，与指针所在扇区无关", () => {
   const chart: ViewChart = {
     form: "pie",
     height: 300,
@@ -149,11 +149,11 @@ test("饼图一卡列齐全部切片，各带占比，抬头是度量名；指�
   ];
   expect(readoutModel(chart, 1)).toEqual({ header: "在职人数", rows });
   expect(readoutModel(chart, 0)).toEqual({ header: "在职人数", rows });
-  // 读数条的占比列与卡内占比是同一份算术
+  // 图例的占比与读数卡的占比来自同一个计算
   expect(legendShares(chart.model)).toEqual(["60.0%", "40.0%"]);
 });
 
-test("行带得出下钻投影：钉住后点行开的就是这一格", () => {
+test("每行带有对应的明细坐标，钉住后点击行查看该数据点的明细", () => {
   const chart = cartesian([count("在职人数", [1200, 45])], {
     records: { points: [[{ row: 7, column: "hr.active_employee_count" }, null]] },
   });
@@ -161,6 +161,6 @@ test("行带得出下钻投影：钉住后点行开的就是这一格", () => {
     row: 7,
     column: "hr.active_employee_count",
   });
-  // 没有投影的格不可点，卡片据此不画成可点的样子
+  // 没有明细的数据点不带坐标，卡片据此不显示为可点击
   expect(readoutModel(chart, 1).rows[0].point).toBeUndefined();
 });

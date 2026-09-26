@@ -8,26 +8,26 @@ const BAR: Record<LoadingMarkSize, { width: number; height: number; gap: number;
     small: { width: 2, height: 11, gap: 2, radius: 2 },
   };
 
-/** 深浅两套由 `--pa-fg` 自己翻面。 */
+/** 深色模式由 `--pa-fg` 变量自动切换。 */
 const INK = "color-mix(in srgb, var(--pa-fg) 20%, transparent)";
 
 const DELAYS = ["-0.1s", "-0.2s", "-0.3s", "-0.4s"] as const;
 
 type LoadingMarkProps = {
-  /** 窄场地（看板瓦片、行内）用 `small`。 */
+  /** 空间较小时（看板瓦片、行内）用 `small`。 */
   size?: LoadingMarkSize;
-  /** 宿主给的场地尺寸（`py-16`、`h-64`、`min-h-svh`）；本件自己不定高。 */
+  /** 由宿主指定区域尺寸（如 `py-16`、`h-64`、`min-h-svh`），组件本身不设高度。 */
   className?: string;
 } & (
   | {
-      /** 住在会说话的宿主里（钮的 loading 态）：不认领状态区、字色随宿主。 */
+      /** 放在自带可访问名称的元素里（如按钮的 loading 态）：不作为状态区域，颜色继承宿主。 */
       decorative: true;
-      /** 装饰档没有名字可挂：宿主自己会念，这里再挂就是念第二遍。 */
+      /** 装饰模式不设 label：宿主已有可访问名称，再设会被读屏器读两遍。 */
       label?: never;
     }
   | {
       decorative?: false;
-      /** 状态区读给读屏的名字：等的是别的事情时改写（工作台预览＝「正在预览」）。 */
+      /** 读屏器读出的状态名称；等待的不是普通加载时改写（如工作台预览用「正在预览」）。 */
       label?: string;
     }
 );
@@ -64,7 +64,6 @@ export function LoadingMark({
     </div>
   );
 
-  // 装饰档与状态档是两种语义，各自写全一套：读屏器读到的是元素身份，不是一组条件属性。
   if (decorative) {
     return (
       <div aria-hidden="true" className={shell} data-slot="loading-mark">

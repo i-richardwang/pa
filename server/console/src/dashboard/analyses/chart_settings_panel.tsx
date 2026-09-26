@@ -1,4 +1,4 @@
-/** 成员名恒经 makeTitleOf 翻成中文标题后才上屏。 */
+/** 成员 id 经目录或 makeTitleOf 转成中文标题后再显示。 */
 import { useId, useState } from "react";
 import {
   ArrowLeftToLineIcon,
@@ -63,7 +63,6 @@ import {
 import { PRESENTATION_TYPE_LABELS } from "./presentation_labels";
 import { TableShadingSettings } from "./table_shading_settings";
 
-/** 图型全集即标签表的键：形态名只在标签表登记一次。 */
 type Form = keyof typeof PRESENTATION_TYPE_LABELS;
 
 const FORM_ICONS: Record<Form, React.ReactNode> = {
@@ -74,15 +73,14 @@ const FORM_ICONS: Record<Form, React.ReactNode> = {
   pie: <ChartPieIcon />,
 };
 
-/** 图型排序按读图优先级：走势、比较、读数、明细，再到构成。 */
+/** 图型按读图优先级排序：走势、比较、读数、明细、构成。 */
 const FORM_ORDER: readonly Form[] = ["line", "bar", "kpi", "table", "pie"];
 
-/** 不可选时说清卡在哪一关；事实出自 formAvailability，这里只写给人看的话。 */
 function unavailableText(availability: FormAvailability, label: string): string {
-  if (availability.state !== "channels_unmet") return `当前结果的形态不支持${label}`;
+  if (availability.state !== "channels_unmet") return `当前结果无法用${label}显示`;
   return availability.measures === 0
     ? `${label}至少需要一个指标`
-    : `${label}的通道装不下当前结果的 ${availability.dimensions} 个维度`;
+    : `${label}无法同时展示当前结果的 ${availability.dimensions} 个维度`;
 }
 
 const SERIES_FORM_ITEMS = { line: "折线", bar: "柱形" };
@@ -90,11 +88,11 @@ const SHADING_STYLE_ITEMS = { none: "不着色", values: "数值与颜色", colo
 
 const GHOST_SELECT_TRIGGER = "w-auto justify-end";
 
-const SUMMARY_TOOLTIP = "总体保留当前筛选与时间粒度，并由数据模型去掉业务分组后重新计算。";
+const SUMMARY_TOOLTIP = "总体沿用当前的筛选和时间粒度，去掉分组后重新计算。";
 
 const ROWS_CONTENT_CLASS = "px-0 md:px-0";
 
-/** `items` 同时是闭合态取值表与下拉面的行，每个标签只写一次。 */
+/** `items` 同时供 SelectValue 显示已选标签和渲染下拉选项。 */
 function SelectRow<K extends string>({
   label,
   items,
@@ -411,19 +409,16 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
       ? []
       : (chart.series ?? measures.filter((member) => !secondarySeries.includes(member)));
   const annotations = chart.type === "bar" ? (chart.annotations ?? []) : [];
-  // 拆分与堆叠只属于声明了这两个通道的图型；收窄一次，后面的读写都用它。
   const splittable = chart.type === "line" || chart.type === "bar" ? chart : null;
   const stackable = chart.type === "bar" ? chart : null;
   const groupBy = splittable?.group_by;
   const series = draft.view_preferences.series ?? {};
-  // 「显示」的各项各有各的前提；全不成立时**整节不出现**，不留一个空节题。
-  // 拆分通道的取值不是偏好而是装箱的结果：余数维度必须上通道，所以没有「不拆分」；
-  // 候选只有一个即无可选之事，不出选择器。
+  // 剩余维度必须占用拆分通道，因此没有「不拆分」选项；只有一个候选时不显示选择器。
   const splitOptions = splittable ? splitCandidates(splittable.type, { dimensions, measures }) : [];
   const canSplitSeries = splitOptions.length > 1;
-  // 饼图的扇区归属即取值，没有逐系列样式；此时指标行只留「上不上轴」。
+  // 拆分系列后系列由维度取值决定，不提供逐指标的样式设置。
   const canStyleSeries = splittable !== null && !groupBy;
-  // 系列落在哪把尺子上以编译结果为准（没声明副轴时分侧出自量纲）；预览落后于草稿时只能读声明。
+  // 系列所在坐标轴以编译结果为准（未声明副轴时按量纲分侧）；预览落后于草稿时只读声明。
   const previewChart = "chart" in replay.presentation ? replay.presentation.chart : null;
   const legendOf = (member: string) =>
     previewChart?.model.legend.find((item) => item.name === titleOf(member));
@@ -441,7 +436,6 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   const leftCount = plotted.filter((member) => axisOf(member) === 0).length;
   const secondaryPossible =
     splittable !== null && !groupBy && chartChannels(splittable.type).scales === 2;
-  // 开了副轴才分组列出；一把尺子时就是一张清单，未上轴的指标恒在最后。
   const seriesGroups: { axis: 0 | 1 | null; caption?: string; members: string[] }[] = dual
     ? [
         { axis: 0, caption: "左轴", members: plotted.filter((member) => axisOf(member) === 0) },
@@ -464,7 +458,7 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
   const updateStyle = (next: AnalysisEditState["view_preferences"]) =>
     onChange(setViewPreferences(draft, next));
 
-  /** 写回两把尺子上的系列；副轴清空即不再声明，让分侧回到量纲缺省。 */
+  /** 副轴为空时不写 secondary_series，分侧回到按量纲的默认规则。 */
   function setScales(nextY: string[], nextY2: string[]) {
     if (chart.type !== "line" && chart.type !== "bar") return;
     if (!nextY.length) return;
@@ -495,7 +489,7 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
     setScales(next, secondarySeries);
   }
 
-  /** 按当前实际分侧重写两侧：没声明过副轴时右侧成员出自量纲缺省，移轴后一并落成声明。 */
+  /** 按当前实际分侧重写两侧：未声明副轴时右侧成员来自量纲默认分侧，移轴后一并写成显式声明。 */
   function moveAxis(member: string, axis: 0 | 1) {
     const side = (target: 0 | 1) =>
       plotted.filter((item) => item !== member && axisOf(item) === target);
@@ -537,7 +531,7 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
             {group.caption ? <Hint className="px-2 pt-1.5">{group.caption}</Hint> : null}
             {group.members.map((member) => {
               const checked = y.includes(member) || secondarySeries.includes(member);
-              // 色序出自编译期，面板不另算一份。
+              // 默认颜色取自编译结果的图例，面板不另行计算。
               const intent = series[member] ?? {};
               const color = intent.color ?? legendOf(member)?.color;
               const styleable = canStyleSeries && checked;
@@ -604,7 +598,7 @@ export function ChartOptionsPanel({ draft, replay, onChange, catalog }: PanelPro
                       </InspectorRow>
                       <SelectRow
                         items={SERIES_FORM_ITEMS}
-                        label="形态"
+                        label="图形"
                         onValueChange={(value) => setSeriesPreferences(member, { mark: value })}
                         value={
                           intent.mark ??

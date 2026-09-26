@@ -13,7 +13,7 @@ const markup = (actions?: boolean) =>
     </TileShell>,
   );
 
-test("题名高于正文一档、字重更轻——它是瓦片的名字不是格内标注", () => {
+test("瓦片标题字号大于正文，使用中等字重", () => {
   const head = markup().match(/<span class="[^"]*truncate[^"]*"/)?.[0] ?? "";
   expect(head).toContain("text-base");
   expect(head).toContain("font-medium");
@@ -24,28 +24,26 @@ test("题名高于正文一档、字重更轻——它是瓦片的名字不是�
 const px = (cls: string, prefix: string) =>
   Number(new RegExp(`\\b${prefix}-(\\d+)\\b`).exec(cls)?.[1] ?? Number.NaN) * 4;
 
-test("题头与正文共用同一圈衬垫，缝不窄于内衬", () => {
+test("标题栏与正文水平内边距相同，瓦片间距不小于内边距", () => {
   const html = markup();
   const header = html.match(/<header class="([^"]*)"/)?.[1] ?? "";
   const body = html.match(/<div class="([^"]*flex-1 flex-col[^"]*)"/)?.[1] ?? "";
-  // 一圈衬垫，两处引用：题名与正文落在同一条竖线上
-  expect(px(header, "px"), "题头衬垫没量到").toBeGreaterThan(0);
+  expect(px(header, "px"), "没有测到标题栏的水平内边距").toBeGreaterThan(0);
   expect(px(body, "px")).toBe(px(header, "px"));
   expect(GRID_MARGIN[0]).toBeGreaterThanOrEqual(px(body, "px"));
   expect(GRID_MARGIN[1]).toBeGreaterThanOrEqual(px(body, "pb"));
   expect(MOBILE_GRID_MARGIN[1]).toBeGreaterThanOrEqual(px(body, "pb"));
 });
 
-test("题行高度钉死：槽里装什么都不改题名的基线", () => {
+test("标题栏高度固定，不受有无操作按钮影响", () => {
   const header = (actions?: boolean) => markup(actions).match(/<header class="([^"]*)"/)?.[1] ?? "";
-  expect(header(), "题头没找到，下面几条落空").not.toBe("");
-  // 有槽无槽同一串类：高度是常量，不由内容撑
+  expect(header(), "没有找到标题栏").not.toBe("");
   expect(header(true)).toBe(header());
   expect(header()).toContain("h-12");
   expect(header()).not.toMatch(/\b(?:py|pt|pb)-/);
 });
 
-test("动作槽恒占位但不撑高题行——查看态 hover 才显形", () => {
+test("查看时操作按钮在悬停后显示", () => {
   const html = markup(true);
   expect(html).toContain("group-hover:opacity-100");
   expect(markup()).not.toContain("group-hover:opacity-100");

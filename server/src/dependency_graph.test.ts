@@ -1,4 +1,4 @@
-/** 生产模块依赖图：用 TypeScript 解析与解析器配置守护零循环和端口方向。 */
+/** 用 TypeScript 模块解析检查生产代码的依赖图：没有循环依赖，端口依赖方向正确。 */
 import { expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -187,7 +187,7 @@ test("前端宿主只通过 result_view 公开包复用结果视图", () => {
   expect(publicConsumers).toContain("server/widget/src/components/result_card.tsx");
 });
 
-test("源码核心包保持 semantic → presentation → contracts 单向装配", () => {
+test("源码核心包按 semantic → presentation → contracts 单向依赖", () => {
   const semanticRoot = join(SERVER, "src", "semantic_core");
   const presentationRoot = join(SERVER, "src", "presentation_core");
   const contractsRoot = join(SERVER, "src", "contracts");
@@ -286,7 +286,7 @@ test("storage adapters 不反向重导出 ports 或 contracts", () => {
   expect(violations).toEqual([]);
 });
 
-test("Agent MCP 投影只引用可公开领域合同，不引用作者偏好或执行工件", () => {
+test("MCP 输出只引用可公开的领域合同，不引用作者偏好或执行计划", () => {
   const subjects = [
     "analysis_tools.ts",
     "analysis_result.ts",

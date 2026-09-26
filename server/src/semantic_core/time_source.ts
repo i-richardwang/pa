@@ -1,4 +1,4 @@
-/** 时间源是语义包声明的数据时钟，不携带任何业务域身份。 */
+/** 时间源是语义包声明的数据时钟，与业务指标域无关。 */
 export type TimeSourceRole = "actual" | "plan";
 export type TimeComparisonPolicy = "calendar" | "explicit_only";
 
@@ -7,7 +7,7 @@ export type TimeSourceDefinition = {
   title: string;
   role: TimeSourceRole;
   primary: boolean;
-  /** 计划时钟引用其实际基准；实际时钟规范化为引用自身。 */
+  /** 计划时钟指向对应的实际时钟；实际时钟指向自身。 */
   reference_source: string;
   comparison_policy: TimeComparisonPolicy;
 };
@@ -24,9 +24,6 @@ export type TimeSourceInput = Omit<TimeSourceDefinition, "reference_source"> & {
 
 const TIME_SOURCE_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
-/**
- * 把语义包声明装配为 fail-closed 注册表，验证唯一身份、唯一主时钟和计划到实际的基准关系。
- */
 export function buildTimeSourceRegistry(inputs: readonly TimeSourceInput[]): TimeSourceRegistry {
   if (!inputs.length) throw new Error("语义包至少需要一个时间来源");
   const definitions = inputs.map((input) => {
@@ -84,7 +81,7 @@ export function timeSourceDefinition(
   return definition;
 }
 
-/** 内部时间源 id → 语义包业务标题；未知 id fail-closed，绝不回显执行标识。 */
+/** 返回时间源的业务标题；未知 id 直接报错，不回显内部 id。 */
 export function timeSourceLabel(registry: TimeSourceRegistry, id: string): string {
   return timeSourceDefinition(registry, id).title;
 }

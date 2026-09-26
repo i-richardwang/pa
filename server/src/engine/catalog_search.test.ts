@@ -31,7 +31,7 @@ const view = {
 const noFallback = new Set<string>();
 
 describe("rankMembers", () => {
-  test("多概念检索：每个概念各自领回匹配成员", () => {
+  test("检索多个词时，每个词分别返回匹配的成员", () => {
     const hit = rankMembers(["事件率", "主要", "对照"], members, noFallback);
     const titles = hit.map((m) => m.title);
     expect(titles).toContain("YTD主要事件率");
@@ -45,7 +45,7 @@ describe("rankMembers", () => {
     expect(hit[0].title).toBe("YTD主要事件率");
   });
 
-  test("购物单语义：不同概念的成员并列返回", () => {
+  test("不同词匹配到的成员一起返回", () => {
     const hit = rankMembers(["在职", "次要", "事件"], members, noFallback);
     const titles = hit.map((m) => m.title);
     expect(titles).toContain("在职人数");
@@ -53,20 +53,20 @@ describe("rankMembers", () => {
     expect(titles).toContain("YTD事件数");
   });
 
-  test("零命中成员剔除、同分保持目录原序", () => {
+  test("没有命中的成员被排除，得分相同时保持目录顺序", () => {
     const hit = rankMembers(["ytd"], members, noFallback);
     expect(hit).toHaveLength(5);
     expect(hit[0].title).toBe("YTD次要事件数");
     expect(hit.map((m) => m.title)).not.toContain("在职人数");
   });
 
-  test("全无命中得空数组", () => {
+  test("全部没有命中时返回空数组", () => {
     expect(rankMembers(["技能矩阵"], members, noFallback)).toHaveLength(0);
   });
 });
 
-describe("分层匹配：description 是口径契约不是检索键", () => {
-  test("name/title 已命中的词不经 description 扩散", () => {
+describe("分层匹配：description 只在 name/title 都未命中时参与检索", () => {
+  test("已在 name/title 命中的词不再用 description 匹配", () => {
     const tokens = ["在职", "次要", "事件", "组织"];
     const fallback = memberFallbackTokens(tokens, [view]);
     const titles = rankMembers(tokens, members, fallback).map((m) => m.title);
@@ -77,7 +77,7 @@ describe("分层匹配：description 是口径契约不是检索键", () => {
     expect(titles).toContain("YTD事件率");
   });
 
-  test("全局零命中的词降级用 description 补召回（只存在于口径说明的概念不失联）", () => {
+  test("所有成员的 name/title 都没有命中的词，改用 description 匹配", () => {
     const tokens = ["长期合同", "事件率"];
     const fallback = memberFallbackTokens(tokens, [view]);
     expect(fallback.has("长期合同")).toBe(true);
@@ -87,19 +87,19 @@ describe("分层匹配：description 是口径契约不是检索键", () => {
     expect(titles).toContain("YTD事件率");
   });
 
-  test("兜底判定是逐词全局的：词在任一成员 name/title 命中即不进兜底集", () => {
+  test("按词判断是否改用 description：只要任一成员的 name/title 命中，该词就不用 description 匹配", () => {
     const fallback = memberFallbackTokens(["在职", "长期合同", "远程办公"], [view]);
     expect([...fallback].sort()).toEqual(["长期合同", "远程办公"].sort());
   });
 
-  test("memberHit：description 仅对兜底词开放", () => {
+  test("memberHit：只有改用 description 的词才匹配 description", () => {
     const contractType = members[8];
     expect(memberHit("长期合同", contractType, false)).toBe(false);
     expect(memberHit("长期合同", contractType, true)).toBe(true);
     expect(memberHit("合同", contractType, false)).toBe(true);
   });
 
-  test("ai_context 让业务范围写法发现权威维度，但不参与普通宽检索", () => {
+  test("name/title 都未命中时，ai_context 里的业务写法也能匹配到对应维度；普通检索不使用 ai_context", () => {
     const categoryBand = {
       ...member("employee.category_band", "分类层级", "记录在统计时点所属的分类层级。"),
       ai_context: "Level A+ 至 Level D+ 按等级及以上理解，例如 Level C+ 选择 Level C 和 Level D。",

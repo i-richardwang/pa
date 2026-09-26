@@ -308,7 +308,7 @@ test("分组构成占比、总体与基础查询共享一次解析的单月签�
       };
     },
     loadMulti: async () => {
-      throw new Error("单月时间签名不应产生多窗口查询");
+      throw new Error("单月查询不应产生多窗口查询");
     },
   } as unknown as CubeGateway;
   const service = createQueryExecutionService({
@@ -707,7 +707,7 @@ test("Top-N 先按选择粒度排名，再展开选中分组的完整展示粒�
   expect(result.fullRowViewBlock.selection_scope?.selected_count).toBe(2);
 });
 
-test("年度连续区间把端点、YTD 与流量指标自动拆腿后按组织和年份完整组合", async () => {
+test("跨年连续期间把期末值、YTD 和流量指标拆成多个子查询，再按组织和年份完整合并", async () => {
   const calls: CubeQuery[] = [];
   const dimensions = {
     "test_people_metrics.organization_name": {
@@ -1056,7 +1056,7 @@ function totalsCube(calls: CubeQuery[], cellOf: (query: CubeQuery, measure: stri
   } as unknown as CubeGateway;
 }
 
-test("合计位按各指标的求值基准写实覆盖期间，执行腿与声明同源", async () => {
+test("合计按各指标的求值基准标明实际覆盖期间，执行时使用的期间与声明一致", async () => {
   const calls: CubeQuery[] = [];
   const values: Record<string, number> = {
     "test_people_metrics.active_employee_count": 100,

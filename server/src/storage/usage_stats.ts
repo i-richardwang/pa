@@ -1,4 +1,3 @@
-/** usage_log 的只读统计层，与写入器共享同一 app.db 连接。 */
 import type { SqliteDatabase } from "../sqlite.js";
 import { ANALYSIS_RETENTION_DAYS } from "../ports/analysis_repository.js";
 import type { UsageStatistics } from "../ports/usage_statistics.js";
@@ -44,7 +43,7 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
     return { days, cells, callers };
   }
 
-  /** 分析清单只计创建 Analysis/View 身份的执行；重放消费既有身份，不算新的业务提问。 */
+  /** 只统计新建 Analysis/View 的执行，重放既有视图不计入。 */
   async function titles(days: number, limit: number, offset: number): Promise<UsageTitlesPayload> {
     const where = `at >= ? AND tool IN ('run_analysis', 'rerun_analysis') AND outcome = 'ok' AND title IS NOT NULL`;
     const rows = db
@@ -68,10 +67,7 @@ export function createUsageStats(db: SqliteDatabase): UsageStatistics {
     };
   }
 
-  /**
-   * 本人分析记录：只取成功且带 title 的分析执行（口径同 titles）。
-   * caller 出自 Principal 而非调用方入参，等值过滤即锁定到单个身份。
-   */
+  /** 统计范围同 titles；caller 须取自 Principal，不能来自调用方入参。 */
   async function mine(
     caller: string,
     days: number,

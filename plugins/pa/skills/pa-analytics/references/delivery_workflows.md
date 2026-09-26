@@ -5,7 +5,7 @@
 - `show_analysis` 只打开已有 `view_id`，不重新查询。成功打开后，回复确认已打开，并仅补充必要口径、
   限制或异常；用户要求解读时再给结论。
 - 只改变图型时，用 `rerun_analysis(analysis_id, view)` 产生新的不可变 View，并继续使用新的 `view_id`。
-- 修改指标、维度、筛选或时间时，先用 `load_analysis_result(view_id)` 取得 canonical `analysis` 和
+- 修改指标、维度、筛选或时间时，先用 `load_analysis_result(view_id)` 取得服务端保存的完整 `analysis` 和
   `view_intent`，只改用户要求的部分，再调用 `run_analysis`。
 
 ## 受控人员记录
@@ -25,7 +25,7 @@
 - 只有用户要求保存、分享或复用时才调用 `save_report`。
 - `find_report` 返回报告当前的 `analysis_id` 与 `view_id`。只要展示时直接调用 `show_analysis`。
 - 改变呈现时先用 `rerun_analysis` 产生新 View，再用 `update_report` 替换报告的 `view_id`。
-- 改变数据问题时执行 `load_analysis_result` → 修改 canonical `analysis` → `run_analysis` →
+- 改变数据问题时执行 `load_analysis_result` → 修改取回的 `analysis` → `run_analysis` →
   `update_report`。报告不复制分析定义或 View。
 - 更新时使用最近一次读取到的 `if_revision`；发生冲突后重新读取，不覆盖并发修改。
 

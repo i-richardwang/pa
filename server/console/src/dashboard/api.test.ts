@@ -4,7 +4,7 @@ import { ApiError, parseJsonResponse, postJson } from "./api";
 
 const PAYLOAD = z.object({ value: z.string() }).strict();
 
-test("Dashboard API 成功响应必须通过运行时契约", async () => {
+test("Dashboard API 成功响应按 schema 校验，不符合时报 502", async () => {
   await expect(
     parseJsonResponse(
       new Response(JSON.stringify({ value: "ok" }), {
@@ -29,7 +29,7 @@ test("Dashboard API 成功响应必须通过运行时契约", async () => {
   }
 });
 
-test("Dashboard API 错误响应保留业务文案，非 JSON 应答明确归因", async () => {
+test("Dashboard API 错误响应保留服务端错误文案，非 JSON 响应报无法解析", async () => {
   await expect(
     parseJsonResponse(
       new Response(
@@ -51,7 +51,7 @@ test("Dashboard API 错误响应保留业务文案，非 JSON 应答明确归因
 
   await expect(
     parseJsonResponse(new Response("bad gateway", { status: 502 }), PAYLOAD),
-  ).rejects.toMatchObject({ status: 502, message: "服务端返回无法解析（502）" });
+  ).rejects.toMatchObject({ status: 502, message: "服务器返回的内容无法解析（502）" });
 });
 
 test("可取消请求把 AbortSignal 传到 fetch 边界", async () => {

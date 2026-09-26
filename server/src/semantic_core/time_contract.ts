@@ -114,7 +114,7 @@ const timeCutoff = (time: TimeInput) => ("cutoff" in time ? time.cutoff : undefi
 
 const SERIES_GRAIN_FIELD = z
   .enum(SERIES_GRAINS)
-  .describe("期间按年还是按月成序列；整段合计恒由结果的合计位给出，不在这里表达");
+  .describe("期间按年还是按月输出序列；整段合计由结果的 totals 提供，不在这里指定");
 
 export const TIME_WINDOW_INPUT = z.discriminatedUnion("kind", [
   z
@@ -607,7 +607,7 @@ export const TIME_CAPABILITIES_INPUT = z
     year_scoped: z
       .literal(true)
       .optional()
-      .describe("指标按日历年归零（年初累计族）；跨日历年的窗口没有单一合计"),
+      .describe("指标每年一月重新累计（年初累计类指标）；跨日历年的期间没有单一合计"),
     comparison: z.literal("explicit_only").optional().describe("指标只允许显式自定义对照期间"),
   })
   .strict();

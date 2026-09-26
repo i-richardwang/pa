@@ -62,27 +62,27 @@ const render = (props: Partial<ViewRendererProps> & { payload?: QueryPayload }) 
   );
 };
 
-/** 去掉标签与空白，只留可读文本——比较两个容器时要比的是数据，不是 chrome。 */
+/** 去掉 HTML 标签和多余空白，只保留可读文本。 */
 const text = (html: string) =>
   html
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
-/** 表体单元格的文本序列：数据内容的最小充分表示（剥掉截断包装等格内标签）。 */
+/** 表体各单元格的文本（去掉单元格内的包装标签），用于比较数据内容。 */
 const cells = (html: string) => {
   const body = html.slice(html.indexOf("<tbody"));
   return [...body.matchAll(/<td[^>]*>(.*?)<\/td>/g)].map((m) => m[1].replace(/<[^>]*>/g, ""));
 };
 
-test("三个宿主场景各自的 chrome 取舍就是 VIEW_SCENES 表本身", () => {
+test("三个宿主场景的显示设置各不相同，均来自 VIEW_SCENES", () => {
   const shapes = Object.values(VIEW_SCENES).map(
     (t) => `${t.title}${t.scopeBand}${t.inlineChrome}${t.cellPad}`,
   );
   expect(new Set(shapes).size).toBe(3);
 });
 
-test("两个宿主渲染同一份载荷：数据内容逐格一致，差别只在 chrome", () => {
+test("结果卡和瓦片渲染同一份结果时，单元格内容一致，只有外围元素不同", () => {
   const same = payload();
   const card = render({ payload: same, scene: "card" });
   const tile = render({ payload: same, scene: "tile" });
@@ -90,14 +90,14 @@ test("两个宿主渲染同一份载荷：数据内容逐格一致，差别只�
   expect(cells(card)).toEqual(["研发", "120", "市场", "45"]);
   expect(cells(tile)).toEqual(cells(card));
 
-  // chrome 才是两者的差别：答数态挂标题与常驻口径带，概览态都不挂
+  // 结果卡显示标题和口径说明栏，瓦片不显示
   expect(text(card)).toContain("各组织在职人数");
   expect(text(card)).toContain("口径：在职含试用期");
   expect(text(tile)).not.toContain("各组织在职人数");
   expect(text(tile)).not.toContain("口径：在职含试用期");
 });
 
-test("查看面旗标：数据与答数态逐格一致；标题归页头，元信息归框外底栏", () => {
+test("整页场景的单元格与结果卡一致；标题由页头显示，行数和数据截至时间由页面底栏显示", () => {
   const same = payload();
   const page = render({ payload: same, scene: "page" });
   expect(cells(page)).toEqual(cells(render({ payload: same, scene: "card" })));
@@ -106,23 +106,23 @@ test("查看面旗标：数据与答数态逐格一致；标题归页头，元�
   expect(text(page)).not.toContain("数据截至");
   expect(text(page)).not.toContain("口径：在职含试用期");
   expect(page).not.toContain(VIEW_SCENES.page.countBar);
-  // fill：高度取容器，表格转为自带内滚
+  // fill 场景高度取容器高度，表格内部滚动
   expect(page).toContain("overflow-auto");
 });
 
-test("瓦片态不渲染标题带与口径带；两者都不吃掉数据", () => {
+test("瓦片不显示标题栏和口径说明栏，数据内容不受影响", () => {
   const card = render({ scene: "card" });
   const tile = render({ scene: "tile" });
   expect(cells(tile)).toEqual(cells(card));
-  // 答数态自带标题与新鲜度副行，概览态整条让位给瓦片题条
+  // 结果卡显示标题和数据截至时间，瓦片由自己的标题栏显示
   expect(text(card)).toContain("数据截至");
   expect(text(tile)).not.toContain("数据截至");
-  // 行数条属于表格内容而非 chrome：两种容器都陈述行数
+  // 行数栏属于表格，两种场景都显示
   expect(text(card)).toContain("共 2 行");
   expect(text(tile)).toContain("共 2 行");
 });
 
-test("fill 只改布局类，不改内容：表格转为自带内滚", () => {
+test("fill 只改变布局，不改变内容：表格改为内部滚动", () => {
   const fixed = render({ scene: "card", allRows: true });
   const filled = render({ scene: "tile" });
   expect(cells(filled)).toEqual(cells(fixed));
@@ -130,16 +130,16 @@ test("fill 只改布局类，不改内容：表格转为自带内滚", () => {
   expect(fixed).not.toContain("overflow-auto");
 });
 
-test("唯一结果直接铺开，不产生结果切换导航", () => {
+test("只有一个结果时直接显示，不显示结果切换导航", () => {
   const html = render({ payload: payload({ view: view({ view_title: "在职" }) }) });
   expect(html).not.toContain('role="tablist"');
   expect(cells(html)).toEqual(["研发", "120", "市场", "45"]);
 });
 
-/** 指标卡标签块的类名签名（kpis.tsx）：位置断言据此定位，不与页面其他次级灰文字混淆 */
+/** 指标卡标签的 className（见 kpis.tsx），用于定位标签，避免与页面上其他灰色文字混淆 */
 const KPI_LABEL = "mb-2 text-pa-muted text-xs leading-4";
 
-test("KPI：双居中大数、单指标无标签、多指标标签在值上方", () => {
+test("指标卡：数值水平垂直居中；单个指标不显示标签，多个指标时标签在数值上方", () => {
   const kpiView = (columns: string[], row: (number | null)[]) =>
     view({ columns, rows: [row], row_count: 1 });
   const singlePayload = payload({ view: kpiView(["hr.active_employee_count"], [120]) });
@@ -148,14 +148,14 @@ test("KPI：双居中大数、单指标无标签、多指标标签在值上方",
     presentation: compilePresentationBlock(singlePayload.view, KPI_DECL),
     scene: "tile",
   });
-  // 值的排印签名：字号按容器分档（不量、不内联 style），等宽数字，格宽由父容器均分
+  // 数值字号按容器宽度分档（用容器查询，不内联 style），使用等宽数字，宽度由父容器均分
   expect(single).toContain("@container");
   expect(single).toContain("flex-1");
   expect(single).toContain("text-[24px]");
   expect(single).toContain("@sm:text-[48px]");
   expect(single).toContain("tabular-nums");
   expect(single).not.toContain("font-size:");
-  // 单指标不出标签（标题在容器题头）
+  // 单个指标不显示标签（标题由容器显示）
   expect(single).not.toContain(KPI_LABEL);
 
   const multiPayload = payload({
@@ -170,9 +170,9 @@ test("KPI：双居中大数、单指标无标签、多指标标签在值上方",
   expect(multi.indexOf(KPI_LABEL)).toBeLessThan(multi.indexOf("120"));
 });
 
-test("底栏是页面 chrome：任何 scene 的内容栈都不渲染它，行数与时间栏都归宿主摆", () => {
+test("页面底栏不属于结果内容：任何场景都不渲染它，行数和时间栏由宿主放在底栏里", () => {
   const leading = <span data-testid="time-bar-probe">时间栏占位</span>;
-  // 内容栈没有底栏这个槽——三个场景一律不出行数陈述，也无从接住时间栏
+  // 三个场景的结果内容都不包含底栏，也不渲染时间栏
   for (const scene of ["card", "tile", "page"] as const) {
     expect(render({ scene })).not.toContain("time-bar-probe");
   }
@@ -187,45 +187,43 @@ test("底栏是页面 chrome：任何 scene 的内容栈都不渲染它，行数
   expect(footer).toContain("time-bar-probe");
   const footerText = footer.replace(/<[^>]*>/g, " ");
   expect(footerText).toContain("共 2 行");
-  // 数据截至归时间栏的 Tooltip：底栏与常驻时间栏挨着，两处都报时间会被读成互相矛盾
+  // 数据截至时间由时间栏的 Tooltip 显示；底栏紧挨时间栏，两处都显示时间容易让人以为不一致
   expect(footerText).not.toContain("数据截至");
 });
 
-test("底栏外壳可独立渲染：无结果的宿主态用它承接同一条时间栏，几何与真底栏一致", () => {
+test("底栏外框可以单独渲染：没有结果时宿主用它放置时间栏，尺寸与有结果时的底栏一致", () => {
   const html = renderToStaticMarkup(
     <PageFooterBand leading={<span data-testid="time-bar-probe">时间栏占位</span>} />,
   );
   expect(html).toContain("time-bar-probe");
-  // 底栏通栏，不吃结果框的 inset
+  // 底栏占满宽度，不使用结果区域的内边距
   for (const cls of ["border-t", "py-3", "px-3"]) {
     expect(html).toContain(cls);
   }
   expect(html).not.toContain("px-4");
 });
 
-test("空态与错误态同规：给定高度的场景里居中，撑内容的场景里只给呼吸", () => {
+test("空状态和错误状态：固定高度的场景中垂直居中，按内容定高的场景中只加上下留白", () => {
   const empty = { rows: [], row_count: 0 };
   const filled = render({ payload: payload({ view: view(empty) }), scene: "tile" });
   const card = render({ payload: payload({ view: view(empty) }), scene: "card" });
-  expect(text(filled), "空态那句话没了，下面几条落空").toContain("没有找到符合这些条件的数据");
+  expect(text(filled), "缺少空状态提示文字").toContain("没有找到符合这些条件的数据");
 
   const box = (html: string) => html.match(/<div class="flex flex-col[^"]*"/)?.[0] ?? "";
-  expect(box(filled), "瓦片的空态贴在了正文顶端").toContain("justify-center");
+  expect(box(filled), "瓦片中的空状态应垂直居中").toContain("justify-center");
   expect(box(filled)).toContain("flex-1");
-  // 答数卡高度由内容撑，没有可居中的余量：那一档靠 emptyPad 给呼吸
-  expect(box(card), "答数卡里没有余量可居中，不该写 justify-center").not.toContain(
-    "justify-center",
-  );
+  // 结果卡高度由内容决定，没有多余空间可以居中，只用 emptyPad 加留白
+  expect(box(card), "结果卡中的空状态不应垂直居中").not.toContain("justify-center");
   expect(box(card)).toContain(VIEW_SCENES.card.emptyPad);
 });
 
-test("空结果不出空表壳，给一句人话", () => {
+test("空结果不渲染空表格，只显示一句说明", () => {
   const html = render({ payload: payload({ view: view({ rows: [], row_count: 0 }) }) });
   expect(html).not.toContain("<tbody>");
   expect(text(html)).toContain("没有找到符合这些条件的数据");
 });
 
-/** 带整窗合计与对照的时间序列结果：整窗读数的完整素材。 */
+/** 带整段合计和对照期的时间序列结果。 */
 function totalsPayload(): QueryPayload {
   const columns = ["hr.year", "hr.month", "hr.turnover_count"];
   return payload({
@@ -267,14 +265,14 @@ function totalsPayload(): QueryPayload {
   });
 }
 
-test("图与表之上不摆读数条：整窗合计只属于指标卡这一位", () => {
+test("图表和表格上方不显示整段合计，整段合计只在指标卡中显示", () => {
   const same = totalsPayload();
   const presentation = compilePresentationBlock(same.view, TABLE_DECL);
   const page = render({ payload: same, presentation, scene: "page" });
   const card = render({ payload: same, presentation, scene: "card" });
   const tile = render({ payload: same, presentation, scene: "tile" });
 
-  // 三个宿主一致地不出整窗读数；同一份数据仍逐格在册，读数经悬停浮层给出
+  // 三个场景都不显示整段合计；单元格数据保持一致
   for (const html of [page, card, tile]) {
     expect(text(html)).not.toContain("2026年1—2月");
     expect(text(html)).not.toContain("较2025年");
@@ -282,18 +280,18 @@ test("图与表之上不摆读数条：整窗合计只属于指标卡这一位",
   expect(cells(card)).toEqual(cells(page));
 });
 
-test("指标卡是整窗读数的唯一形态：大数读整窗合计而非某一行", () => {
+test("指标卡显示整段合计，而不是某一行的值", () => {
   const same = totalsPayload();
   const kpi = compilePresentationBlock(same.view, KPI_DECL);
   expect(kpi.type).toBe("kpi");
   const page = render({ payload: same, presentation: kpi, scene: "page" });
-  // 大数读的是整窗合计而非某一行（末月 12 不出现），且期间与差值只出现一次
+  // 显示的是整段合计而非最后一个月的值（12 不出现），期间和差值各只出现一次
   expect(text(page)).toContain("22");
   expect(text(page)).not.toContain("12");
   expect(text(page).match(/2026年1—2月/g)).toHaveLength(1);
 });
 
-test("空结果的查看面只有空态：不摆一排破折号", () => {
+test("空结果只显示空状态，不显示一排破折号", () => {
   const empty = totalsPayload();
   const emptyView = { ...empty.view, rows: [], row_count: 0 };
   const page = render({
@@ -305,7 +303,7 @@ test("空结果的查看面只有空态：不摆一排破折号", () => {
   expect(text(page)).not.toContain("2026年1—2月");
 });
 
-test("整窗读数随形态在场：同一份数据声明为表看不到期间，声明为指标卡才读得到", () => {
+test("同一份数据声明为表格时不显示整段期间，声明为指标卡时才显示", () => {
   const columns = ["hr.active_employee_count"];
   const single = payload({
     view: view({
@@ -343,14 +341,14 @@ test("整窗读数随形态在场：同一份数据声明为表看不到期间�
   expect(text(kpi)).toContain("2026年8月");
 });
 
-test("答数态题名是这张卡的名字：字号高于正文一档、字重反而更轻", () => {
+test("结果卡标题字号比正文大一档，字重为 medium 而非 semibold", () => {
   const title = render({ scene: "card" }).match(/<h2\s[^>]*>/)?.[0] ?? "";
   expect(title).toContain("text-base");
   expect(title).toContain("font-medium");
   expect(title).not.toContain("font-semibold");
 });
 
-/** 调用方标题与服务端结构式的组合：标题说意图、副标题说事实。 */
+/** 调用方标题与服务端生成的结构标题的组合：调用方标题作主标题，结构标题作副标题。 */
 const structured = payload({
   view: view({
     columns: ["hr.job_level_band", "hr.active_employee_count"],
@@ -362,21 +360,21 @@ const structured = payload({
   }),
 });
 
-test("调用方声明的标题优先，结构式降为副标题锚点", () => {
+test("有调用方标题时优先显示，结构标题作为副标题", () => {
   const html = render({ payload: { ...structured, title: "Aurora Labs 各职级人员结构" } });
   expect(html).toContain("<h2");
   expect(text(html)).toContain("Aurora Labs 各职级人员结构");
   expect(text(html)).toContain("active_employee_count · 按job_level_band · 数据截至");
 });
 
-test("未声明标题时退结构式，无副标题", () => {
+test("没有调用方标题时用结构标题作主标题，不显示副标题", () => {
   const { title: _declared, ...untitled } = structured;
   const html = render({ payload: untitled });
   expect(html.match(/<h2[^>]*>(.*?)<\/h2>/)?.[1]).toBe("active_employee_count · 按job_level_band");
   expect(text(html)).not.toContain("按job_level_band · 数据截至");
 });
 
-test("结构派生不出任何一段时退通用标题，副标题只剩新鲜度", () => {
+test("无法生成结构标题时使用通用标题，副标题只显示数据截至时间", () => {
   const bare = payload({
     view: view({ columns: ["hr.organization_name"], rows: [["研发"]], row_count: 1 }),
   });

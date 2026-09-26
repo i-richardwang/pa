@@ -1,4 +1,4 @@
-/** Canonical 执行目录及其服务端/公开投影。公开投影不含物理成员绑定。 */
+/** 合并后的语义目录，以及它的编译器投影和公开投影；公开投影不含物理成员绑定。 */
 import { hitCount, memberFallbackTokens, memberHit, rankMembers } from "./catalog_search.js";
 import type {
   PublicCatalogDimension,
@@ -55,11 +55,11 @@ export type CatalogMember = {
   description: string;
   format?: string;
   ai_context?: string;
-  /** 受限成员按数据权限可见；模型只声明这一种敏感度。 */
+  /** 受限成员是否可见由数据权限决定。 */
   sensitivity?: "restricted";
   dimension_kind?: DimensionKind;
   dimension_group?: { id: string; title: string };
-  /** 指标的时间面：合同与由它解析出的求值基准；只有指标有，不手写。 */
+  /** 指标的时间合同及由它解析出的求值基准，仅指标有此字段。 */
   time?: MetricTimeResolution;
   calculation_role?: string;
   components?: CatalogComponents;
@@ -246,7 +246,7 @@ function resolveMetricTimes(views: CubeView[]): ReadonlyMap<string, MetricTimeRe
       members.set(member.name, member);
     }
   }
-  // 公开指标必须有合同；内部零件只在自己声明了合同时受同一守卫，否则只作为组件被引用。
+  // 公开指标必须有时间合同；内部指标只在自己声明了合同时参与解析和校验，否则只作为组件被引用。
   const contracted = views.flatMap((view) => [
     ...view.measures,
     ...(view.internalMeasures ?? []).filter((member) => member.meta?.time_contract !== undefined),
@@ -274,7 +274,7 @@ function requiredMetricTime(
   member: CubeMember,
 ): MetricTimeResolution {
   const time = times.get(member.name);
-  if (!time) throw new Error(`指标「${member.title}」缺少已解析的时间面`);
+  if (!time) throw new Error(`指标「${member.title}」缺少已解析的时间信息`);
   return time;
 }
 
@@ -385,10 +385,7 @@ function viewDimensionResolvers(document: CatalogDocument): Map<string, Map<stri
   return byView;
 }
 
-/**
- * 在声明成员所属视图内把互斥维度引用解析为语义维度 id 集合。
- * 零命中（引用不是本视图维度）、多命中（歧义）均在目录装配阶段抛错——不静默丢弃，不做全局短名猜测。
- */
+/** 在声明成员所属视图内把互斥维度引用解析为语义维度 id；引用不是本视图维度或命中多个维度时抛错。 */
 function resolveIncompatibleInView(
   view: string,
   references: string[],
@@ -580,7 +577,7 @@ function compilerMember(
     titles.get(component) ?? titles.get(memberShortName(component));
   const identified = (component: string) =>
     ids.get(component) ?? shortIds.get(memberShortName(component));
-  // 内部零件没有公开名称时省略公式行，避免回退到物理成员名。
+  // 内部组件没有公开标题时省略公式，避免用物理成员名代替。
   const formula = member.components
     ? {
         numerator: named(member.components.numerator),

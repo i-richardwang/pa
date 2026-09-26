@@ -1,7 +1,4 @@
-/**
- * 导出短票据只持久化查询计划、所有者与时效，不存 CSV、名单或权限快照。
- * 读取时重新认证所有者，并按其当前权限执行。
- */
+// 票据只存查询计划、所有者与过期时间；下载时按所有者的当前权限重新执行。
 import { randomBytes } from "node:crypto";
 import type {
   ExportTicketClaims,

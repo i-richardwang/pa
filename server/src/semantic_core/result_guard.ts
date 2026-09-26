@@ -1,4 +1,4 @@
-/** 聚合后结果保护合同；保护规则只依赖正式指标，不依赖任何业务数据类型。 */
+/** 聚合后的结果保护规则；support_measure 引用正式指标。 */
 export type MinimumSupportResultGuard = {
   kind: "minimum_support";
   support_measure: string;

@@ -1,7 +1,4 @@
-/**
- * 人类作者的视觉偏好：只决定同一份聚合结果怎么画。
- * 属 Web 创作面，不进入 Agent MCP schema。
- */
+/** Web 报表编辑器里的视觉偏好，只影响同一份聚合结果的画法；不进入 Agent MCP schema。 */
 import { z } from "zod";
 import { ViewIntentError, type SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
 
@@ -24,11 +21,11 @@ export const SERIES_PREFERENCES_INPUT = z
 
 export type SeriesPreferences = z.infer<typeof SERIES_PREFERENCES_INPUT>;
 
-/** 双向色阶名（下限→中点→上限的三停色带）；三停取值归 `table_shading.ts`。 */
+/** 双向色阶名（下限→中点→上限三段颜色）；各段颜色定义在 `table_shading.ts`。 */
 export const SHADING_PALETTE_NAMES = ["traffic_lights", "red_blue", "viridis", "magma"] as const;
 export type ShadingPaletteName = (typeof SHADING_PALETTE_NAMES)[number];
 
-/** 表格热力着色：视觉色阶与印数偏好，不承担业务阈值或指标口径。 */
+/** 表格热力着色：色阶和是否显示数值，不承载业务阈值或指标口径。 */
 export const TABLE_SHADING_PREFERENCES_INPUT = z
   .object({
     palette: z.union([
@@ -103,7 +100,7 @@ export function parseViewPreferences(value: unknown): ViewPreferences {
   };
 }
 
-/** 形态级合法性守卫；成员是否属于结果由语义编译器在绑定时继续校验。 */
+/** 按图型校验偏好；成员是否属于结果由语义编译器在绑定时校验。 */
 export function validateViewPreferences(
   intent: SemanticViewIntent,
   value: unknown,
@@ -117,19 +114,19 @@ export function validateViewPreferences(
     return preferences;
   }
   if (preferences.table_shading !== undefined) {
-    throw new ViewIntentError("表格热力着色只支持 table 呈现");
+    throw new ViewIntentError("热力着色只支持 table 图型");
   }
   if (intent.type === "kpi" || intent.type === "pie") {
     if (hasSeries || preferences.value_labels !== undefined) {
-      throw new ViewIntentError(`${intent.type} 呈现不接受系列视觉偏好`);
+      throw new ViewIntentError(`${intent.type} 图不支持系列设置`);
     }
     return preferences;
   }
   if (intent.group_by && hasSeries) {
-    throw new ViewIntentError("拆分系列由分类值动态产生，不能声明固定指标系列偏好");
+    throw new ViewIntentError("使用拆分维度时系列由分类值生成，不能为指标单独设置系列样式");
   }
   if (intent.group_by && preferences.value_labels === "main") {
-    throw new ViewIntentError("拆分系列没有主系列；数值标签请改用 all 或删除");
+    throw new ViewIntentError("使用拆分维度时没有主系列；数值标签请改为 all 或去掉");
   }
   return preferences;
 }

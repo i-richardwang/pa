@@ -49,7 +49,7 @@ function chart(
 
 const gridOf = (option: Record<string, unknown>) => option.grid as Record<string, number | boolean>;
 
-test("plot 留白按宿主场景取档：结果卡、整页、瓦片各一行", () => {
+test("绘图区留白按宿主场景（结果卡、整页、瓦片）取值", () => {
   expect(PLOT_PADDING.tile.left).toBeLessThan(PLOT_PADDING.card.left);
   expect(PLOT_PADDING.tile.bottom).not.toBe(PLOT_PADDING.card.bottom);
 
@@ -67,25 +67,29 @@ test("plot 留白按宿主场景取档：结果卡、整页、瓦片各一行", 
   expect(tile.left).toBe(PLOT_PADDING.tile.left);
   expect(tile.bottom).toBe(PLOT_PADDING.tile.bottom);
 
-  // 换档只动留白与框，不碰 grid 的其余声明——含「值轴刻度进框、框缘不随标签浮动」那一位
+  // 切换场景只改变留白和边框，grid 的其他设置保持不变
   expect(page.containLabel).toBe(false);
 });
 
-test("形态自己那一栏叠在场景留白之上，grid 与 DOM 那层框读同一道算式", () => {
+test("图形自身的左侧留白叠加在场景留白之上，grid 与 DOM 边框使用同一个矩形", () => {
   const bars = { ...chart(), plot_gutter: { left: 120 } };
   for (const scene of ["card", "tile", "page"] as const) {
     const rect = plotRect(bars, scene);
-    expect(rect.left, `${scene} 档的类目栏没叠进绘图区`).toBe(PLOT_PADDING[scene].left + 120);
+    expect(rect.left, `${scene} 场景的分类轴标签区没有计入绘图区`).toBe(
+      PLOT_PADDING[scene].left + 120,
+    );
     expect(gridOf(renderOption(bars, state({ scene })))).toMatchObject(rect);
     expect(plotRect(chart(), scene).left).toBe(PLOT_PADDING[scene].left);
   }
 });
 
-test("值标签的框内余量只缩数据区：grid 加余量、场地框不动", () => {
+test("数值标签的留白只缩小数据区：grid 加上留白，绘图区边框不动", () => {
   const labeled = { ...chart(), plot_inset: { top: 22, right: 48 } };
   for (const scene of ["card", "tile", "page"] as const) {
     const frame = plotRect(labeled, scene);
-    expect(frame.top, `${scene} 档的框不随标签开关移动`).toBe(PLOT_PADDING[scene].top);
+    expect(frame.top, `${scene} 场景的边框位置不应受数值标签开关影响`).toBe(
+      PLOT_PADDING[scene].top,
+    );
     expect(frame.right).toBe(PLOT_PADDING[scene].right);
     const grid = gridRect(labeled, scene);
     expect(grid.top).toBe(frame.top + 22);
@@ -94,7 +98,7 @@ test("值标签的框内余量只缩数据区：grid 加余量、场地框不动
   }
 });
 
-test("密度读取数据区尺寸，不把轴栏与场景留白算成可用空间", () => {
+test("标签密度按数据区尺寸计算，不包括坐标轴和场景留白", () => {
   const labeled = { ...chart(), plot_gutter: { left: 80 }, plot_inset: { right: 40 } };
   const rect = gridRect(labeled, "page");
   expect(plotSize(labeled, "page", { width: 500, height: 300 })).toEqual({
@@ -107,15 +111,16 @@ test("绘图区边框由 DOM 绘制，grid 不重复画框", () => {
   expect(PLOT_FRAME.tile).not.toBe(PLOT_FRAME.page);
   for (const scene of ["card", "tile", "page"] as const) {
     const grid = gridOf(renderOption(chart(), state({ scene })));
-    expect(grid, `${scene} 档的 grid 又画了一遍框，会与 DOM 那层叠成双框`).not.toHaveProperty(
-      "show",
-    );
+    expect(
+      grid,
+      `${scene} 场景的 echarts grid 不应再画边框，否则会和 DOM 边框重叠`,
+    ).not.toHaveProperty("show");
     expect(grid).not.toHaveProperty("backgroundColor");
     expect(grid).not.toHaveProperty("borderColor");
   }
 });
 
-test("值轴档数随绘图区尺度走：每 80px 一档、夹在 2–10；尺寸未知时不动编译期那个数", () => {
+test("数值轴刻度数随绘图区尺寸变化：每 80px 一个，限制在 2–10；尺寸未知时保留编译时的值", () => {
   const ticks = (viewport: { width: number; height: number }) =>
     (renderOption(chart(), state({ viewport })).yAxis as { splitNumber?: number }).splitNumber;
   expect(ticks({ width: 0, height: 0 })).toBeUndefined();
@@ -125,7 +130,7 @@ test("值轴档数随绘图区尺度走：每 80px 一档、夹在 2–10；尺�
   expect(ticks({ width: 400, height: 2000 })).toBe(10);
 });
 
-test("折线圆点密度走 showSymbol：每点摊不到 12px 就藏起来，只在指针命中时现出", () => {
+test("每个点宽度不足 12px 时关闭折线圆点（showSymbol），只在指针悬停时显示", () => {
   const line = chart(
     [{ type: "line", name: "在职人数", data: Array(20).fill(1), showSymbol: true }],
     { legend: [item("在职人数", Array(20).fill(1))] },
@@ -154,7 +159,7 @@ const areaOf = (chart: ViewChart, dark: boolean) =>
   (renderOption(chart, state({ dark })).series as { areaStyle: Record<string, unknown> }[])[0]
     .areaStyle;
 
-test("面积渐变在渲染端按已翻转的色现拼，自顶 5% 淡出到 70%", () => {
+test("面积渐变在深色替换后按系列色生成，从顶部 5% 不透明度渐变到 70% 处透明", () => {
   const light = areaOf(areaLineChart("#3b6fdb"), false);
   expect(light.color).toEqual({
     type: "linear",
@@ -167,14 +172,14 @@ test("面积渐变在渲染端按已翻转的色现拼，自顶 5% 淡出到 70%
       { offset: 0.7, color: "rgba(59, 111, 219, 0)" },
     ],
   });
-  // 暗色下取的必须是翻转后的系列色——渐变里的 rgba 查不到映射表，先翻转再拼是唯一顺序
+  // 深色模式下必须使用替换后的系列色：渐变里的 rgba 无法再通过颜色映射表替换
   const dark = areaOf(areaLineChart("#3b6fdb"), true).color as {
     colorStops: { color: string }[];
   };
   expect(dark.colorStops[0].color).toBe("rgba(91, 141, 239, 0.05)");
 });
 
-test("解析不了的自定义色退成平涂，不留一块实色", () => {
+test("无法解析的自定义颜色改用低不透明度平涂", () => {
   const area = areaOf(areaLineChart("var(--brand)"), false);
   expect(area.color).toBe("var(--brand)");
   expect(area.opacity).toBe(0.05);
@@ -182,7 +187,7 @@ test("解析不了的自定义色退成平涂，不留一块实色", () => {
 
 type Formatter = (params: { value?: unknown; dataIndex?: number }) => string;
 
-test("刻度与值标签都按单元声明的小数位报数：整数百分比就是整数", () => {
+test("刻度和数值标签都使用系列声明的小数位", () => {
   const percent = (decimals?: number) =>
     chart([{ type: "bar", name: "组织推荐指数", data: [0.2349], label: { show: true } }], {
       legend: [
@@ -200,7 +205,7 @@ test("刻度与值标签都按单元声明的小数位报数：整数百分比�
   const series = (option.series as { label: { formatter: Formatter } }[])[0];
   expect(series.label.formatter({ value: 0.2349 })).toBe("23%");
 
-  // 没声明位数就走默认一位
+  // 未声明小数位时默认一位
   const plain = renderOption(percent(), state());
   expect(
     (plain.yAxis as { axisLabel: { formatter: (value: number) => string } }).axisLabel.formatter(
@@ -209,11 +214,11 @@ test("刻度与值标签都按单元声明的小数位报数：整数百分比�
   ).toBe("22.5%");
 });
 
-test("焦点现出的那条也带格式化器：此刻不印数的系列同样配齐格式与步距", () => {
+test("当前不显示标签的系列也配置格式化函数，聚焦时显示的标签格式正确", () => {
   const two = chart(
     [
       { type: "line", name: "在职人数", data: [10, 20], label: { show: true } },
-      // 「仅主指标」档：形制配齐、此刻不印；焦点落在它身上才现出来
+      // 「仅主指标」模式：该系列配置了标签但不显示，聚焦时才显示
       { type: "line", name: "离职率", data: [0.0234, 0.0312], label: { show: false } },
     ],
     {
@@ -236,7 +241,7 @@ test("焦点现出的那条也带格式化器：此刻不印数的系列同样�
   expect(focused.label.formatter({ value: 0.0312, dataIndex: 1 })).toBe("3%");
 });
 
-test("值标签密度守卫：局促时按步距挑桶印数且恒印末点，充裕时逐点印", () => {
+test("空间不足时数值标签按间隔显示并始终显示最后一个点，空间充足时每个点都显示", () => {
   const three = (type: "line" | "bar") =>
     chart([{ type, name: "在职人数", data: [10, 20, 30], label: { show: true } }], {
       categories: ["1月", "2月", "3月"],
@@ -248,18 +253,18 @@ test("值标签密度守卫：局促时按步距挑桶印数且恒印末点，�
       renderOption(c, state({ viewport: { width: plotWidth + rect.left + rect.right, height: 0 } }))
         .series as { label: { formatter: Formatter } }[]
     )[0].label.formatter;
-  // 3 点：120px 充裕（每点 40 > 37.33，逐点）；90px 局促（每点 30，步距 ceil(50/30)=2 → 0、末点）
+  // 3 个点：120px 时每点 40 > 37.33，全部显示；90px 时每点 30，间隔 ceil(50/30)=2，显示第 0 个和最后一个
   const wide = run(three("line"), 120);
   expect(wide({ value: 20, dataIndex: 1 })).toBe("20");
   const sparse = run(three("line"), 90);
   expect(sparse({ value: 10, dataIndex: 0 })).toBe("10");
   expect(sparse({ value: 20, dataIndex: 1 })).toBe("");
   expect(sparse({ value: 30, dataIndex: 2 })).toBe("30");
-  // 柱按底片宽定步距：底片 26+4=30 > 每列 20 → 步距 2
+  // 柱形图按标签宽度算间隔：标签 26+4=30 > 每列 20，间隔为 2
   const barSparse = run(three("bar"), 60);
   expect(barSparse({ value: 20, dataIndex: 1 })).toBe("");
   expect(barSparse({ value: 30, dataIndex: 2 })).toBe("30");
-  // 横排（y 轴类目）一行一格不会横向挤：逐格印
+  // 横向条形图（类目在 y 轴）不会横向拥挤，每个都显示
   const horizontal: ViewChart = {
     ...three("bar"),
     option: {
@@ -276,7 +281,7 @@ test("值标签密度守卫：局促时按步距挑桶印数且恒印末点，�
   expect((unlabeled.series as { label?: unknown }[])[0].label).toBeUndefined();
 });
 
-test("钉住期间指针交出鼠标驱动；饼图没有指针可交", () => {
+test("钉住期间轴指针不再跟随鼠标；饼图没有轴指针", () => {
   const tooltip = (c: ViewChart, pinned: number | null) =>
     renderOption(c, state({ pinned })).tooltip as { triggerOn?: string } | undefined;
   expect(tooltip(chart(), null)?.triggerOn).toBe("mousemove|click");

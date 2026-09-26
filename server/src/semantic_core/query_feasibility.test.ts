@@ -59,7 +59,7 @@ const view = (overrides: Partial<SemanticQueryView> = {}): SemanticQueryView => 
 });
 
 describe("semantic query feasibility", () => {
-  test("分组与筛选消费同一份正向维度能力，排序先要求已选分组", () => {
+  test("分组和筛选使用同一份可用维度列表；排序维度必须已在分组中", () => {
     expect(
       queryFeasibilityIssue(
         catalog,
@@ -170,7 +170,7 @@ describe("semantic query feasibility", () => {
     });
   });
 
-  test("指标所需的可变分组是正向能力，不等到物理查询才发现恒为 100%", () => {
+  test("指标需要的可变分组在可行性检查时就判断，不等到执行时才发现占比总是 100%", () => {
     expect(queryFeasibilityIssue(catalog, view({ measures: [SHARE], dimensions: [] }))).toEqual({
       code: "query_grouping_requirement_unsatisfied",
       measure_id: SHARE,
@@ -218,7 +218,7 @@ describe("semantic query feasibility", () => {
     });
   });
 
-  test("候选只为相对当前草稿新增的冲突负责", () => {
+  test("候选项只报告相对当前草稿新增的冲突", () => {
     const current = view({
       measures: [RESTRICTED],
       time: {

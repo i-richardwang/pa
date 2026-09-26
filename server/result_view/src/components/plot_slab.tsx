@@ -1,6 +1,6 @@
 /**
- * 图与表共用的场地层；`rect` 那一路与 echarts grid 读同一道算式（`plotRect`），
- * 调用方须给 `relative` 父盒。
+ * 图和表共用的绘图区域层。传 `rect` 时与 echarts grid 使用同一个矩形（`plotRect`），
+ * 此时父元素须为 `relative`。
  */
 import type { ReactNode } from "react";
 import {

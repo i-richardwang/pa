@@ -15,7 +15,7 @@ const reportTile = (tileId = randomUUID()) => ({
 });
 
 describe("board mutation contract", () => {
-  test("名称在协议边界归一，写入瓦片不接受读取投影字段", () => {
+  test("名称去除首尾空白，写入瓦片不接受报告名等只读字段", () => {
     expect(CREATE_BOARD_BODY.parse({ name: " 人委会看板 " })).toEqual({ name: "人委会看板" });
     expect(
       UPDATE_BOARD_BODY.safeParse({
@@ -25,7 +25,7 @@ describe("board mutation contract", () => {
     ).toBe(false);
   });
 
-  test("统一校验 UUID、网格范围、重复身份与瓦片上限", () => {
+  test("校验 UUID、网格范围、重复 tile_id 与瓦片数量上限", () => {
     expect(
       BOARD_MUTATION_TILES_SCHEMA.safeParse([{ ...reportTile(), tile_id: "bad" }]).success,
     ).toBe(false);

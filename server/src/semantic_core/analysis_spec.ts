@@ -18,8 +18,8 @@ export const QUERY_FIELDS = {
         .object({
           member: z.string().describe("过滤维度成员全名"),
           /**
-           * 物理算子全集，比客户语言宽：`contains` 供维度取值检索，`set` / `notSet` 供指标
-           * 计算的空值腿与明细投影。这些是引擎自己编出来的谓词，不由语义面透出。
+           * `contains` 用于维度候选值检索，`set` / `notSet` 用于指标计算的空值子查询和明细投影；
+           * 这些算子只由引擎内部生成，不对语义层公开。
            */
           operator: z.enum([
             "equals",
@@ -51,15 +51,15 @@ export const TOP_N_SELECTION_INPUT = z
     type: z.literal("top_n"),
     dimensions: z.array(z.string().min(1)).min(1).describe("实际参与选择的物理分组维度"),
     by: z.string().min(1).describe("用于分组排名的物理度量成员，或按名称排序的目标维度"),
-    window: z.literal("anchor").describe("主范围的最新逻辑输出桶"),
-    count: z.number().int().positive().max(1000).describe("要选择的完整业务分组数量"),
+    window: z.literal("anchor").describe("按主期间最后一个时间桶的数值排名"),
+    count: z.number().int().positive().max(1000).describe("选取的分组数量"),
     direction: z.enum(["asc", "desc"]).describe("排名指标从低到高或从高到低"),
   })
   .strict();
 
 export type TopNSelectionSpec = z.infer<typeof TOP_N_SELECTION_INPUT>;
 
-/** 两层 summary 面向同一批消费者，口径说明单源在此。 */
+/** 两层 summary 共用这条口径说明。 */
 export const GRAND_TOTAL_DESCRIPTION = "保留筛选与时间粒度，移除业务分组后由模型重新聚合";
 
 export const SUMMARY_INPUT = z
@@ -133,7 +133,7 @@ export const GROUPING_SETS_INPUT = z
 export type GroupingSetsSpec = z.infer<typeof GROUPING_SETS_INPUT>;
 export type GroupingShareCalculationSpec = NonNullable<GroupingSetsSpec["calculations"]>[number];
 
-/** 报告计算的内部结果列只由稳定计算 id 派生；业务标题不参与寻址。 */
+/** 报告计算的结果列名只由计算 id 派生，不使用业务标题。 */
 export function calculationColumnName(id: string): string {
   return id.replace(":", "_");
 }
@@ -337,7 +337,6 @@ export function isDerivedViewSpec(view: AnalysisViewSpec): view is DerivedViewSp
   return "from" in view;
 }
 
-/** 派生列在结果中的列名：携带列可用 as 改名，缺省沿用来源列名；表达式列恒以 as 命名。 */
 export function derivedColumnName(column: DerivedColumnInput): string {
   return "col" in column ? (column.as ?? column.col) : column.as;
 }

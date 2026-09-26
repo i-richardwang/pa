@@ -4,7 +4,7 @@ import { formatSeriesValue } from "../../../src/presentation_core/view_format.js
 
 type RankRow = { label: string; value: number | null; share: number | null };
 
-/** 模型里的类目、唯一那条系列的取值与占比按行拼起来；条长的归一在渲染时按最大值算 */
+/** 把类目、唯一系列的值和占比按行组合；条形长度在渲染时按最大值归一化。 */
 function rankRows(chart: ViewChart): RankRow[] {
   const { categories, legend, share } = chart.model;
   return categories.map((label, i) => ({
@@ -23,7 +23,7 @@ export function RankRows({
   chart: ViewChart;
   dark: boolean;
   onPointClick?: (point: { row: number; column: string }) => void;
-  /** 该格能不能开明细：不能开就不画成可点的样子，缺省即有投影就能开。 */
+  /** 该数据点能否查看明细，决定是否显示为可点击；不传时有明细定义即可点击。 */
   canOpenPoint?: (point: { row: number; column: string }) => boolean;
 }) {
   const rows = rankRows(chart);
@@ -53,7 +53,7 @@ export function RankRows({
             >
               {row.label}
             </span>
-            {/* 条只是形：可点的是值那一格，条不认领语义 */}
+            {/* 条形只作展示，可点击的是右侧数值 */}
             <span className="min-w-0 flex-1">
               <span
                 aria-hidden="true"

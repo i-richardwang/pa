@@ -1,10 +1,10 @@
 /**
- * 度量计算边界不变式（tripwire，非完备证明）：
- * - Cube 负责单事实聚合与事实内 multi-stage；
- * - metric_calculator 只执行正式指标图声明的跨事实节点；
- * - transform 只执行查询工件显式声明的结果级标量表达式；
- * - grouping_set_executor 只执行同一查询视图内已规划的粗细分组广播；
- * - 其余服务、MCP adapter 与前端不得自行实现度量算术。
+ * 源码扫描：指标计算只发生在指定位置（基于文本匹配，不能证明完全没有例外）。
+ * - Cube 负责单张事实表内的汇总和 multi-stage 计算；
+ * - metric_calculator 只计算正式指标依赖图里的跨事实表指标；
+ * - transform 只计算查询里显式声明的结果级表达式；
+ * - grouping_set_executor 只负责把粗粒度分组结果填回细粒度分组行；
+ * - 其他服务、MCP adapter 和前端不做指标运算。
  */
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
@@ -30,24 +30,21 @@ const rowArithmetic = (text: string): string[] =>
         ? [`${index + 1}: ${line.trim()}`]
         : [],
     );
-/** 查询工件标量变换的唯一执行点。 */
 const TRANSFORM = "engine/transform.ts";
-/** 正式指标图节点的唯一计算点。 */
 const METRIC_CALCULATOR = "engine/metric_calculator.ts";
-/** 同一查询视图内 grouping-set 广播的唯一计算点。 */
 const GROUPING_SET_EXECUTOR = "engine/grouping_set_executor.ts";
 const isTransform = (file: string) => file === TRANSFORM;
 const isMetricCalculator = (file: string) => file === METRIC_CALCULATOR;
 const isGroupingSetExecutor = (file: string) => file === GROUPING_SET_EXECUTOR;
 
 describe("度量计算边界", () => {
-  test("占比只由正式模型或受控报告规格声明，MCP 壳内不实现派生", () => {
-    expect(derivesShare("function derive_share() {}"), "探针必须能发现占比派生").toBe(true);
-    expect(derivesShare("function render() {}"), "探针不得误报普通函数").toBe(false);
+  test("占比只能由正式模型或报告规格声明，其他代码不自行计算占比", () => {
+    expect(derivesShare("function derive_share() {}"), "匹配规则应能发现占比计算").toBe(true);
+    expect(derivesShare("function render() {}"), "匹配规则误报了普通函数").toBe(false);
     for (const { file, text } of sources.filter(
       ({ file }) => !isTransform(file) && !isMetricCalculator(file) && !isGroupingSetExecutor(file),
     )) {
-      expect(derivesShare(text), `${file} 在壳内派生占比`).toBe(false);
+      expect(derivesShare(text), `${file} 自行计算了占比`).toBe(false);
     }
     const semanticSpec = sources.find(
       ({ file }) => file === "semantic_core/semantic_analysis.ts",
@@ -55,7 +52,7 @@ describe("度量计算边界", () => {
     expect(semanticSpec).toContain('z.literal("percent_of_total")');
   });
 
-  test("源码无典型的「行值转数 × 除法/累加」形态", () => {
+  test("源码里没有把行值转成数字后相除或累加的写法", () => {
     expect(rowArithmetic("const ratio = Number(row.x) / Number(row.y)")).toHaveLength(1);
     expect(rowArithmetic("const value = Number(row.x)")).toEqual([]);
     const offending: string[] = [];
@@ -67,7 +64,7 @@ describe("度量计算边界", () => {
     expect(offending).toEqual([]);
   });
 
-  test("派生 AST 与 grouping-set 广播各有唯一执行点", () => {
+  test("派生表达式和 grouping-set 填充各自只在一个文件里执行", () => {
     const transform = sources.find(({ file }) => isTransform(file))?.text ?? "";
     const groupingSet = sources.find(({ file }) => isGroupingSetExecutor(file))?.text ?? "";
     expect(transform).toContain("function evaluate(");
@@ -81,7 +78,7 @@ describe("度量计算边界", () => {
     }
   });
 
-  test("正式指标 Planner、Calculator 与 Executor 各自只承担一种职责", () => {
+  test("正式指标的 Planner、Calculator 和 Executor 职责互不重叠", () => {
     const planner = sources.find(({ file }) => file === "engine/metric_planner.ts")?.text ?? "";
     const calculator = sources.find(({ file }) => isMetricCalculator(file))?.text ?? "";
     const executor = sources.find(({ file }) => file === "engine/metric_executor.ts")?.text ?? "";
@@ -96,7 +93,7 @@ describe("度量计算边界", () => {
     expect(executor).not.toContain("numerator / denominator");
   });
 
-  test("时间交付列由执行签名产生并在交付边界合入", () => {
+  test("结果里的时间列由执行计划生成，在返回结果时合并", () => {
     const pipeline =
       sources.find(({ file }) => file === "application/query_pipeline.ts")?.text ?? "";
     const execution =
@@ -109,7 +106,7 @@ describe("度量计算边界", () => {
     expect(pipeline).toContain("deliveredResult.resolvedDeliveryColumns");
   });
 
-  test("递归扫描覆盖引擎、服务、存储与共享契约目录", () => {
+  test("扫描范围覆盖引擎、服务、存储和共享契约目录", () => {
     const files = new Set(sources.map(({ file }) => file));
     expect(files).toContain(TRANSFORM);
     expect(files).toContain("engine/metric_planner.ts");

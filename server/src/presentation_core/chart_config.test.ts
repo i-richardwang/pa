@@ -585,7 +585,7 @@ describe("分类条形", () => {
     // 中文长标签进框就压在条上，只能留在框外；栏宽仍归服务端算定，框才画得出来
     expect((chart.option.grid as { containLabel: boolean }).containLabel).toBe(false);
     const gutter = chart.plot_gutter?.left ?? 0;
-    expect(gutter, "类目栏没算出宽度，框会盖住标签").toBeGreaterThan(0);
+    expect(gutter, "分类轴标签宽度未计算，边框会盖住标签").toBeGreaterThan(0);
     const yLabel = (chart.option.yAxis as { axisLabel: Record<string, unknown> }).axisLabel;
     expect(yLabel.inside).toBeUndefined();
     // 放不下就截断——不截断的话栏宽是估的、框缘却是定的，两者迟早对不上
@@ -602,7 +602,7 @@ describe("分类条形", () => {
       ),
       { type: "line", y: ["active_employee_count"] },
     );
-    if (!trend) throw new Error("对照的折线没编译出来");
+    if (!trend) throw new Error("对照期折线未生成");
     const trendY = (trend.option.yAxis as { axisLabel: Record<string, unknown> }[])[0].axisLabel;
     expect(trendY.inside).toBe(true);
     expect((trend.option.grid as { containLabel: boolean }).containLabel).toBe(false);
@@ -1468,15 +1468,15 @@ test("每种形态一律照同一道取色式置灰：折线、双轴、分类�
   ];
 
   for (const [name, chart] of forms) {
-    if (!chart) throw new Error(`${name}没编译出来，下面全部落空`);
+    if (!chart) throw new Error(`${name} 未生成图表`);
     const legend = pa(chart).legend;
-    expect(legend.length, `${name}应有两条以上图例才谈得上焦点`).toBeGreaterThan(1);
+    expect(legend.length, `${name} 需要至少两个图例项才能测试聚焦`).toBeGreaterThan(1);
     const patch = focusPatch(chart, 0);
     const [self, other] = (patch.series ?? patch.color) as unknown[];
-    expect(JSON.stringify(other), `${name}的落选没换成失焦色`).toContain(
+    expect(JSON.stringify(other), `${name} 未聚焦的系列没有换成失焦色`).toContain(
       CHART_CHROME.blurred.light,
     );
-    expect(JSON.stringify(self), `${name}的焦点被一起置灰了`).not.toContain(
+    expect(JSON.stringify(self), `${name} 聚焦的系列也被置灰了`).not.toContain(
       CHART_CHROME.blurred.light,
     );
   }

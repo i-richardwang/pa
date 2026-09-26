@@ -1,4 +1,4 @@
-/** 把一个语义查询视图展开为共享业务时间签名的 grouping sets。 */
+/** 把一个语义查询视图展开为共享业务时间的 grouping sets。 */
 import {
   calculationColumnName,
   type GroupingSetsSpec,
@@ -119,7 +119,7 @@ function requestKey(request: LegRequest, businessTime: BusinessTimeResolution): 
 function assertSemanticBinding(request: LegRequest): void {
   const bound = request.dimensions.map((member) => memberSemanticId("dimension", member));
   if (!same(canonicalGroupingSet(bound), canonicalGroupingSet(request.grouping_set))) {
-    throw new Error(`分组腿 ${request.key} 的语义分组集与物理维度绑定不一致`);
+    throw new Error(`分组子查询 ${request.key} 的语义分组集与物理维度绑定不一致`);
   }
 }
 
@@ -194,7 +194,7 @@ export function planGroupingSets(input: {
       ) ||
       !sameFilterLineage(current.filter_lineage, request.filter_lineage)
     ) {
-      throw new Error("分组腿合并前提失效：分组集或筛选血缘不一致");
+      throw new Error("分组子查询合并前提失效：分组集或筛选条件来源不一致");
     }
     current.measures = [...new Set([...current.measures, ...request.measures])];
     current.aliases.push(request.key);
@@ -218,10 +218,10 @@ export function planGroupingSets(input: {
     ).query;
     const plan = planMetricQueryWithPlanning(query, timePlanning, views, timeView);
     if (!same(plan.dimensions, query.dimensions ?? [])) {
-      throw new Error(`分组腿 ${id} 的层级补全键没有被 Metric Planner 原样保留`);
+      throw new Error(`分组子查询 ${id} 的层级补全键没有被 Metric Planner 原样保留`);
     }
     if (!same(plan.business_time, basePlan.business_time)) {
-      throw new Error("分组腿的业务时间签名与基础分组集不一致");
+      throw new Error("分组子查询的业务时间与基础分组集不一致");
     }
     return {
       id,
@@ -233,22 +233,22 @@ export function planGroupingSets(input: {
   const basePhysicalGrouping = new Set(basePlan.dimensions);
   for (const leg of legs) {
     if (leg.plan.dimensions.some((dimension) => !basePhysicalGrouping.has(dimension))) {
-      throw new Error(`分组腿 ${leg.id} 的层级补全结果不是基础物理分组的子集`);
+      throw new Error(`分组子查询 ${leg.id} 的层级补全结果不是基础物理分组的子集`);
     }
   }
 
   const calculations = (grouping?.calculations ?? []).map(
     (calculation): GroupingShareCalculation => {
       const denominatorLeg = aliasToLeg.get(calculation.id);
-      if (!denominatorLeg) throw new Error(`计算「${calculation.title}」缺少粗分组腿`);
+      if (!denominatorLeg) throw new Error(`计算「${calculation.title}」缺少粗粒度分组子查询`);
       const leg = legs.find((candidate) => candidate.id === denominatorLeg);
-      if (!leg) throw new Error(`计算「${calculation.title}」引用了不存在的粗分组腿`);
+      if (!leg) throw new Error(`计算「${calculation.title}」引用了不存在的粗粒度分组子查询`);
       if (!sameFilterLineage(leg.filter_lineage, baselineFilterLineage)) {
-        throw new Error(`计算「${calculation.title}」的两侧筛选血缘不一致`);
+        throw new Error(`计算「${calculation.title}」的两侧筛选条件来源不一致`);
       }
       assertSubset(leg.signature.grouping_set, baseSignature.grouping_set, calculation.title);
       if (!same(leg.signature.business_time, baseSignature.business_time)) {
-        throw new Error(`计算「${calculation.title}」的两侧业务时间签名不一致`);
+        throw new Error(`计算「${calculation.title}」的两侧业务时间不一致`);
       }
       const category = grouping?.base.find(
         (dimension) => dimension.id === calculation.category_dimension,
@@ -276,9 +276,9 @@ export function planGroupingSets(input: {
   const summaryLegId = aliasToLeg.get("summary");
   if (summaryLegId) {
     const summaryLeg = legs.find((leg) => leg.id === summaryLegId);
-    if (!summaryLeg) throw new Error("总体分组腿不存在");
+    if (!summaryLeg) throw new Error("总计子查询不存在");
     if (summaryLeg.plan.dimensions.length) {
-      throw new Error("总体分组腿必须移除全部业务分组维度");
+      throw new Error("总计子查询必须移除全部业务分组维度");
     }
   }
   return {

@@ -21,7 +21,7 @@ function names(db: SqliteDatabase, table: string): string[] {
 }
 
 describe("app database", () => {
-  test("空库建立最终结构、结构印记与连接 pragma", async () => {
+  test("空库建立完整结构、写入结构印记并设置连接 pragma", async () => {
     const db = await openAppDatabase(path("empty"));
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -144,7 +144,7 @@ describe("app database", () => {
     reopened.close();
   });
 
-  test("非空库的结构印记不匹配时 fail-closed 并保持原结构", () => {
+  test("非空库结构印记不匹配时拒绝打开且不改动原结构", () => {
     const db = new Database(path("mismatch")) as unknown as SqliteDatabase;
     db.exec("CREATE TABLE usage_log (id INTEGER PRIMARY KEY)");
     expect(() => initializeAppDatabase(db)).toThrow("请以空库重建后再启动");
@@ -154,7 +154,7 @@ describe("app database", () => {
     db.close();
   });
 
-  test("结构印记随 DDL 的结构变化而变，随排版变化而不变", () => {
+  test("结构印记随表、列变化而变，不随空白排版变化", () => {
     const ddl = "CREATE TABLE t (id TEXT PRIMARY KEY);";
     expect(schemaStampOf(ddl)).not.toBe(schemaStampOf(`${ddl}\nCREATE TABLE u (id TEXT);`));
     expect(schemaStampOf(ddl)).not.toBe(schemaStampOf("CREATE TABLE t (id INTEGER PRIMARY KEY);"));
@@ -162,7 +162,7 @@ describe("app database", () => {
     expect(APP_SCHEMA_STAMP).toBeGreaterThan(0);
   });
 
-  test("其他 DDL 即使带有自己的结构印记也 fail-closed", () => {
+  test("带有其他 DDL 结构印记的库拒绝打开", () => {
     const db = new Database(path("other-shape")) as unknown as SqliteDatabase;
     const otherDdl = "CREATE TABLE value_alias (id TEXT PRIMARY KEY, term TEXT NOT NULL);";
     db.exec(otherDdl);
@@ -171,7 +171,7 @@ describe("app database", () => {
     db.close();
   });
 
-  test("事务 helper 原子回滚，报告历史依附报告生命周期", async () => {
+  test("事务出错时整体回滚；删除报告级联删除其历史版本，保留 Analysis", async () => {
     const db = await openAppDatabase(path("transaction"));
     expect(() =>
       inTransaction(db, () => {

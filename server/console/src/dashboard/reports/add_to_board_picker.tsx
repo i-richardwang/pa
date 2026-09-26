@@ -17,7 +17,7 @@ import { useAddReportToBoard, useBoards, useCreateBoard } from "../dashboard_que
 import { HeaderTextAction } from "../layout/view_chrome";
 import { boardHash, navigateTo } from "../router";
 
-/** 文档 + 加号图标：lucide 里没有对位，手绘一份。 */
+/** 文档加号图标：lucide 没有对应图标。 */
 function AddToBoardIcon() {
   return (
     <svg
@@ -128,7 +128,7 @@ export function AddToBoardAction({ reportId }: { reportId: string }) {
           </HeaderTextAction>
         </div>
         <AutocompleteSearch aria-label="搜索看板" placeholder="搜索" />
-        {/* Empty 的根必须常挂着，读屏靠它播报结果条数的变化；变的只是它的孩子。 */}
+        {/* Empty 根节点需一直渲染，读屏器靠它播报结果数量的变化。 */}
         <AutocompleteEmpty>
           {rows === null ? (
             <LoadingMark size="small" />

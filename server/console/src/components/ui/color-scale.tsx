@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 
-/** 停点出自编译层 `shadingStops`，件本身不调色。 */
+/** 色阶停点由 `shadingStops` 计算后传入，本组件不生成颜色。 */
 export function ColorScale({
   stops,
   vertical = false,

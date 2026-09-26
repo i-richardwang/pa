@@ -1,4 +1,3 @@
-/** 权限裁剪后的指标目录、检索和名录值查询服务。 */
 import {
   browseCatalogDocument,
   searchCatalogDocument,
@@ -35,7 +34,7 @@ import type { BusinessTermRegistry } from "./business_term_registry.js";
 import type { CubeSecurityContext, TimeContext } from "../ports/cube_gateway.js";
 import { InvalidRequestError, UnavailableError } from "./errors.js";
 
-/** 用户入口只暴露稳定的可恢复状态；完整模型装配诊断保留在 cause 与服务端日志中。 */
+/** 用户只看到可重试提示；模型装配的完整诊断保留在 cause 和服务端日志中。 */
 export class SemanticModelUnavailableError extends UnavailableError {
   constructor(cause: unknown) {
     super("数据模型暂时不可用，请稍后重试", cause);
@@ -73,17 +72,14 @@ export type CatalogService = {
   ): Promise<CatalogDimensionValues>;
 };
 
-/**
- * 业务术语在应用层与模型目录汇合：目录文档和编译器目录始终不承载运行时术语，
- * 可选相关成员只扩大本次发现结果，不改变查询编译与执行。
- */
+/** 业务术语的相关成员只扩大本次检索结果，不写入目录文档和编译器目录，也不影响查询编译与执行。 */
 export function createCatalogService(deps: {
   cube: Pick<CubeGateway, "meta" | "load" | "timeContext">;
   canonical: CanonicalSemanticModel;
   businessTerms: Pick<BusinessTermRegistry, "resolve">;
 }): CatalogService {
   const model = async (principal: Principal) => {
-    // 授权错误本身是可行动的用户信息，不属于模型故障，须在诊断遮罩之外抛出。
+    // cubeSecurityContext 的授权错误要原样返回给用户，所以放在 try 之外。
     const context = cubeSecurityContext(principal);
     try {
       const views = await deps.cube.meta(context);
@@ -184,14 +180,14 @@ export function createCatalogService(deps: {
 
     async dimensionValues(principal, memberId, contains) {
       const { context, views, compiler } = await model(principal);
-      // 入参只接受语义 member id；服务端解析成物理绑定后翻值，物理成员名从不上线。
+      // 入参是语义 member id，在服务端解析成物理成员后查询候选值；响应不包含物理成员名。
       const semantic = catalogMember(compiler, memberId, "dimension");
       if (!semantic) {
         throw new InvalidRequestError(`维度 ${memberId} 不在当前目录中`);
       }
       const physical = semantic.available_in[0]?.member;
       if (!physical) {
-        throw new InvalidRequestError(`维度「${semantic.title}」当前没有可翻值的数据来源`);
+        throw new InvalidRequestError(`维度「${semantic.title}」当前没有可以查询取值的数据来源`);
       }
       let dimension: ReturnType<typeof findSearchableDimension>;
       try {

@@ -2,7 +2,7 @@ import { memberViewName } from "../semantic_core/member_name.js";
 import type { CubeMember } from "../ports/cube_gateway.js";
 import type { StructureShare } from "../semantic_core/query_payload.js";
 
-/** 把模型成员关系映射为当前 view 的输出列关系；未同查分子时不生成呈现配对。 */
+/** 分子不在同一查询中时不生成配对。 */
 export function structureSharesOf(
   memberKeys: string[],
   columns: string[],

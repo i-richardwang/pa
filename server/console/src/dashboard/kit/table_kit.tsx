@@ -33,7 +33,6 @@ export function ListFacets<T extends string>({
 
 const DAYS_RANGES = [7, 30, 90] as const;
 
-/** 恒有一档选中。 */
 export function DaysRangeChips({
   days,
   onDays,
@@ -42,7 +41,7 @@ export function DaysRangeChips({
   onDays: (days: number) => void;
 }): React.ReactElement {
   return (
-    <ListSegmentGroup label="时间窗">
+    <ListSegmentGroup label="时间范围">
       {DAYS_RANGES.map((r) => (
         <ListSegment key={r} onClick={() => onDays(r)} selected={days === r}>
           近 {r} 天
@@ -98,7 +97,7 @@ export function RowMenu({
 export type SortDir = "asc" | "desc";
 export type SortState<K extends string> = { key: K; dir: SortDir } | null;
 
-/** accessors 必须是模块级常量（稳定引用），否则每帧重排。 */
+/** accessors 须是稳定引用（如模块级常量），否则每次渲染都会重新排序。 */
 export function useTableSort<T, K extends string>(
   rows: readonly T[] | undefined,
   accessors: Record<K, (row: T) => string | number | null | undefined>,

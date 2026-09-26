@@ -3,11 +3,11 @@ import type { ReplayPayload } from "@contracts/replay_contract";
 import type { ReportDetail } from "@contracts/report_contract";
 import { reportKeys, revisionsConsistent, runDraft } from "./editor_queries";
 
-test("重放键位不含 revision：含了它就得等详情落地才发得出去，白串一跳", () => {
+test("重放的查询键只含报告 id，不含 revision", () => {
   expect(reportKeys.detail("r1")).toEqual(["report", "r1"]);
   expect(reportKeys.replay("r1")).toEqual(["report_replay", "r1"]);
   expect(reportKeys.revisions("r1")).toEqual(["report_revisions", "r1"]);
-  // 键位只认 id：同一份报告的重放在任何版本下都是同一个键，保存后的换新由 resetQueries 办
+  // 同一份报告各版本共用一个键，保存后由 useUpdateReport 的 resetQueries 刷新
   expect(reportKeys.replay("r1")).toHaveLength(2);
   expect(reportKeys.replay("r1")).not.toEqual(reportKeys.replay("r2"));
 });
@@ -15,24 +15,24 @@ test("重放键位不含 revision：含了它就得等详情落地才发得出�
 const report = (revision: number) => ({ revision }) as ReportDetail;
 const replay = (revision: number | undefined) => ({ revision }) as ReplayPayload;
 
-test("重放版本与报告详情一致时对账通过", () => {
+test("重放与报告详情 revision 一致时校验通过", () => {
   expect(revisionsConsistent(report(4), replay(4))).toBe(true);
 });
 
-test("两次取数跨版本时对账失败，触发拉回最新详情", () => {
+test("重放与报告详情 revision 不一致时校验失败", () => {
   expect(revisionsConsistent(report(4), replay(5))).toBe(false);
 });
 
-test("临时预览无 revision，不参与报告版本对账", () => {
+test("临时预览没有 revision，校验视为通过", () => {
   expect(revisionsConsistent(report(4), replay(undefined))).toBe(true);
 });
 
-test("预览结果按会话键位存放：换会话即换键，同会话两次预览共用一键", () => {
+test("预览结果的查询键按会话区分", () => {
   expect(reportKeys.draftPreview("report:r1")).toEqual(["draft_preview", "report:r1"]);
   expect(reportKeys.draftPreview("report:r1")).not.toEqual(reportKeys.draftPreview("analysis:a1"));
 });
 
-/** 铸新 View 的身份换新有两处（顶层与 payload），必须同改。 */
+/** 新建 View 时顶层和 payload 两处 id 都要更新。 */
 const BASE_IDS = { analysis: "a0000000-0000-4000-8000-000000000000", view: "v0000000" };
 const NEXT_IDS = {
   analysis: "11111111-1111-4111-8111-111111111111",
@@ -94,7 +94,7 @@ function stubMaterialize(renderDecl: unknown = TABLE_DECL): {
   return { calls, restore };
 }
 
-test("沿用基线时只铸新 View：身份两处同时换新，旧的一处都不留", async () => {
+test("沿用基线时只新建 View，顶层和 payload 的 id 都换成新的", async () => {
   const stub = stubMaterialize();
   try {
     const base = baseReplay();
@@ -115,7 +115,7 @@ test("沿用基线时只铸新 View：身份两处同时换新，旧的一处都
   }
 });
 
-test("沿用基线时结果行不重取，呈现按新声明重编，上一版的降级说明不跟过来", async () => {
+test("沿用基线时不重新取结果行，呈现按新声明重新编译，不保留上一版的降级说明", async () => {
   const stub = stubMaterialize();
   try {
     const base = baseReplay();
@@ -138,7 +138,7 @@ test("沿用基线时结果行不重取，呈现按新声明重编，上一版�
   }
 });
 
-test("只改呈现也重算降级说明：结果撑不起新声明时，本地重编同样给出说明", async () => {
+test("只改呈现且结果不支持新声明时，在本地生成降级说明", async () => {
   const stub = stubMaterialize({ type: "line", y: ["active_employee_count"] });
   try {
     const base = baseReplay();
@@ -153,7 +153,7 @@ test("只改呈现也重算降级说明：结果撑不起新声明时，本地�
       {
         result_view_id: "result",
         kind: "unsupported_shape",
-        note: "查询已成功，但当前结果形态不支持声明的呈现，本次已按表格呈现。",
+        note: "查询成功，但当前结果无法用设定的图表显示，已改用表格显示。",
       },
     ]);
   } finally {
@@ -161,7 +161,7 @@ test("只改呈现也重算降级说明：结果撑不起新声明时，本地�
   }
 });
 
-test("规格已变时走创建 Run 的那条路，不铸 View", async () => {
+test("规格已变时创建新 Run，不单独新建 View", async () => {
   const stub = stubMaterialize();
   try {
     await expect(

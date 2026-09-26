@@ -1,4 +1,4 @@
-/** 把语义分析编译为物理执行工件的唯一边界。 */
+/** 把语义分析编译为物理执行计划与呈现声明。 */
 import { memberShortName } from "../semantic_core/member_name.js";
 import {
   isDerivedViewSpec,
@@ -61,10 +61,7 @@ import { planMetricRecordProjection } from "../semantic_core/record_projection_p
 import { projectPresentation } from "../presentation_core/presentation_projection.js";
 import type { ChartDecl } from "../presentation_core/chart_decl.js";
 
-/**
- * 结果血缘（对外）：只讲业务事实——单来源直查 / 跨来源组合（来源标题 + 关联键） / 不可行原因。
- * 产物只含 status、result_view_id、sources.title、join_keys 与 reason；物理视图选路是编译器内务，不进入产物。
- */
+/** 对外公开的结果来源：单来源直查、跨来源组合（来源标题与关联键）或不可行原因；不含物理视图名。 */
 export type SemanticRoute =
   | {
       status: "direct";
@@ -79,7 +76,7 @@ export type SemanticRoute =
   | { status: "incompatible"; result_view_id: string; reason: string };
 
 export type CompiledAnalysisView = {
-  /** 私有执行计划：计算节点与唯一结果已解析必填，交付路径消费此结构或其投影。 */
+  /** 内部执行计划，计算节点与结果视图均已解析；不直接对外返回。 */
   plan: ExecutionPlan;
   presentation: PresentationSpec;
   /** 面向 Web 渲染的公共列声明；不含物理成员名。 */
@@ -148,7 +145,7 @@ function routesForPlans(roles: string[], plans: QueryIntentPlan[]): SemanticRout
   });
 }
 
-/** 派生结果的来源血缘：来源查询视图的标题 + join 关联键，供 ⓘ「结果来源」呈现。 */
+/** 派生结果的来源：各来源查询的标题与 join 关联键。 */
 function routeForDerived(
   catalog: CompilerCatalog,
   definition: AnalysisDefinition,
@@ -227,7 +224,6 @@ function memberForIntent(
 ): CompilerCatalogMember {
   const allowed = kind === "measure" ? (intent.measures ?? []) : (intent.dimensions ?? []);
   if (!allowed.includes(reference)) {
-    // 拒绝要带上「当前有什么」和「跨类型引用」的判断，否则调用方只能猜。
     const crossKind = (kind === "measure" ? intent.dimensions : intent.measures)?.includes(
       reference,
     );
@@ -302,7 +298,7 @@ function compileBoundChart(
       const relation = relationOf(id);
       return !(relation?.kind === "structure_share" && queried.includes(relation.numerator_id));
     });
-  if (!series.length) throw new ViewIntentError(`${chart.type} 呈现至少需要一个主系列`);
+  if (!series.length) throw new ViewIntentError(`${chart.type} 图至少需要一个指标`);
   const plotted = [...series, ...secondary];
   const annotations = chart.type === "bar" ? (chart.annotations ?? []) : [];
   if (annotations.some((id) => series.includes(id))) {
@@ -331,7 +327,9 @@ function compileBoundChart(
     ? Object.fromEntries(
         Object.entries(style.series).map(([id, value]) => {
           if (!plotted.includes(id)) {
-            throw new ViewIntentError(`系列视觉设置引用的指标「${titleOf(id)}」不在当前系列中`);
+            throw new ViewIntentError(
+              `系列设置（series）引用的指标「${titleOf(id)}」不在当前图表的指标中`,
+            );
           }
           return [
             bind(id, "measure"),
@@ -350,7 +348,7 @@ function compileBoundChart(
   const seriesChannels = {
     y,
     ...(secondary.length ? { y2: secondary.map((id) => bind(id, "measure")) } : {}),
-    // 空数组不是「没有」：辅助标注通道在场即说明主系列已由这里裁定过，呈现层据此不再推断。
+    // 为空也要输出：呈现层见到 annotations 字段就不再自行推断辅助标注。
     annotations: annotations.map((id) => bind(id, "measure")),
     ...(chart.group_by ? { group_by: bind(chart.group_by, "dimension") } : {}),
     ...(display ? { display } : {}),
@@ -492,7 +490,7 @@ function compileDerivedChart(chart: SemanticViewIntent, style: ViewPreferences):
     const plotted = [...chart.series, ...(secondary ?? [])];
     const unknown = Object.keys(style.series).find((id) => !plotted.includes(id));
     if (unknown) {
-      throw new ViewIntentError(`系列视觉设置引用的派生列「${unknown}」不在当前系列中`);
+      throw new ViewIntentError(`系列设置（series）引用的派生列「${unknown}」不在当前图表的指标中`);
     }
   }
   if (chart.type === "pie") {
@@ -569,7 +567,7 @@ function groupingShareCalculations(
   });
 }
 
-/** 在当前身份可见 catalog 上编译可执行工件。 */
+/** catalog 须是当前用户可见的目录。 */
 export function compileAnalysisView(
   catalog: CompilerCatalog,
   input: { analysis: AnalysisDefinition; view: SemanticViewIntent },
@@ -595,7 +593,7 @@ export function compileAnalysisView(
     (plan): plan is Extract<QueryIntentPlan, { status: "direct" }> => plan.status === "direct",
   );
   const queryById = new Map(directPlans.map((item) => [item.query.id, item.query]));
-  // 查询计划的 query.id 恒等于其意图 id；上面的 fail-closed 已保证每个意图都有 direct 计划。
+  // query.id 等于意图 id；不可行计划已在上面抛错，每个意图都有 direct 计划。
   const planByIntent = new Map(directPlans.map((item) => [item.query.id, item]));
   const physicalViews: Array<QueryViewSpec | DerivedViewSpec> = sources.map(({ role, query }) => {
     const plan = planByIntent.get(role);

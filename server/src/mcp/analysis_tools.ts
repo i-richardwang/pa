@@ -60,7 +60,7 @@ export function registerAnalysisTools(
   server.registerTool(
     "rerun_analysis",
     {
-      title: "重新呈现分析",
+      title: "重新运行分析",
       description: TOOL_DESCRIPTIONS.rerun_analysis,
       inputSchema: {
         analysis_id: z.string().uuid().describe("run_analysis 返回的 analysis_id"),

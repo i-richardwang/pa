@@ -1,4 +1,4 @@
-/** OAuth 授权流未登录时重定向至此，登录后由 authClient 的 redirect 插件跳回授权端点续流。 */
+/** OAuth 授权时未登录的用户会被重定向到这里；登录后 authClient 的 redirect 插件跳回授权端点继续授权。 */
 import {
   useEffect,
   useId,
@@ -17,7 +17,7 @@ import { authClient } from "./auth_client";
 
 type LoginView = "gate" | "password";
 
-/** 回跳参数按 URL 解析取同源：前缀判断挡不住 \ 与制表符被浏览器归一化成 //host。 */
+/** redirect 参数用 URL 解析并校验同源：只判断前缀不够，浏览器会把 \ 和制表符规范化成 //host。 */
 function safeRedirect(): string | null {
   const raw = new URLSearchParams(window.location.search).get("redirect");
   if (!raw) return null;
@@ -259,7 +259,7 @@ export function LoginPage() {
       setPending(false);
       return;
     }
-    // 有挂起授权流时插件即将整页跳转，保持 pending 态
+    // 有未完成的授权流程时，插件马上会整页跳转，这里保持 pending 状态
     if (!data?.url) {
       const target = safeRedirect();
       if (target) {

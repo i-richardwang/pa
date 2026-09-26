@@ -1,7 +1,6 @@
 /**
- * 模型层以 Cube 原生 hierarchies 声明层级（随 /v1/meta 暴露）。查询引用层级某一级、
- * 其上级既不在分组维度也无单值 equals 过滤时，把缺失上级加入分组维度——否则同名下级
- * 会跨上级静默加总。
+ * 查询引用了层级中的某一级，而其上级既不在分组中、也没有单值 equals 过滤时，把上级加入分组；
+ * 否则同名下级会跨上级合并。
  */
 import type { CubeFilterCondition, CubeQuery, CubeView } from "../ports/cube_gateway.js";
 import { completeHierarchyDimensions } from "../semantic_core/hierarchy_completion.js";
@@ -15,7 +14,7 @@ export interface CompletedQuery {
   added: { member: string; children: string[] }[];
 }
 
-/** 补全判定（纯函数）：chains 为各层级链的成员名列表（从粗到细） */
+/** chains 为各层级的成员名列表，从粗到细。 */
 export function completeWithChains(
   query: CubeQuery,
   chains: string[][],
@@ -37,10 +36,7 @@ export function completeHierarchy(query: CubeQuery, views: CubeView[]): Complete
   return completeWithChains(query, chains);
 }
 
-/**
- * grouping set 的筛选只约束层级，不声明结果分组。这样空分组保持总体，粗分组也不会因
- * 沿用基础查询筛选而被补回已经移除的分类维度。
- */
+/** grouping set 的筛选只约束层级，不决定结果分组：空分组保持总体，粗分组不会因筛选加回已移除的维度。 */
 export function completeGroupingSetHierarchy(query: CubeQuery, views: CubeView[]): CompletedQuery {
   const chains = views
     .flatMap((view) => view.hierarchies ?? [])

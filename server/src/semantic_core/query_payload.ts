@@ -48,7 +48,7 @@ const RESULT_TIME_SCHEMA = z
     coordinates: z
       .array(RESULT_TIME_COORDINATE_SCHEMA)
       .min(1)
-      .describe("服务端最终解析的主期间与对比期间；第一项恒为 primary"),
+      .describe("服务端最终解析的主期间与对比期间；第一项是 primary"),
     buckets: z.array(RESULT_TIME_BUCKET_SCHEMA).min(1),
   })
   .strict()
@@ -80,7 +80,7 @@ const TOP_N_SELECTION_SCOPE_SCHEMA = z
     by: z.string().describe("公共排名字段 id；可以是指标或分组维度名称"),
     window: z
       .enum(["anchor", "all"])
-      .describe("anchor 按主范围最新逻辑输出桶排名；all 按分组名称跨全部时间桶去重排序"),
+      .describe("anchor 按主期间最后一个时间桶的数值排名；all 按分组名称在全部时间桶中去重排序"),
     direction: z.enum(["asc", "desc"]),
     requested_count: z.number().int().positive(),
     selected_count: z.number().int().nonnegative(),
@@ -107,16 +107,13 @@ const SUMMARY_BLOCK_SCHEMA = z
 /** 整窗合计由查询独立求值，不得从可能截断的明细序列重算。 */
 const TOTAL_PERIOD_SCHEMA = z
   .object({
-    from: z
-      .string()
-      .regex(MONTH)
-      .describe("该值实际覆盖的起始月；由本列的求值基准在这个坐标上展开"),
+    from: z.string().regex(MONTH).describe("该值实际覆盖的起始月，由本列的求值基准和时间坐标决定"),
     to: z.string().regex(MONTH),
     value: z.number().finite().nullable(),
     degraded: z
       .literal(true)
       .optional()
-      .describe("按月定义的指标在跨月坐标上没有合计，已退到终点当月求值"),
+      .describe("按月定义的指标在跨月期间没有整段合计，改为取终点月的值"),
   })
   .strict();
 const TOTALS_BLOCK_SCHEMA = z
@@ -192,9 +189,9 @@ export const VIEW_BLOCK_SCHEMA = z
       .record(METRIC_VALUE_BASIS_INPUT)
       .optional()
       .describe(
-        "每个指标列的业务求值基准：这一列的数覆盖每个时间桶里的哪一段。" +
-          "与 time.buckets 合起来就是该列每格的真实期间，也是 totals 各期间的来源，不需要按标题猜。" +
-          "直查结果逐个指标列声明；派生结果只有搬运列有基准，算式列的期间由 provenance 表达",
+        "每个指标列的求值基准：这一列的值覆盖每个时间桶里的哪一段。" +
+          "与 time.buckets 一起确定每个单元格的实际期间，totals 的期间也由它决定。" +
+          "直接查询的结果每个指标列都有；派生结果只有直接取自来源的列有，公式列的期间见 provenance",
       ),
     structure_shares: z
       .array(STRUCTURE_SHARE_SCHEMA)
@@ -203,10 +200,10 @@ export const VIEW_BLOCK_SCHEMA = z
       .describe("模型声明的结构占比与分子列关系"),
     rows: z.array(ROW_SCHEMA).describe("数据行；结果较多时可能仅为头部样本"),
     summary: SUMMARY_BLOCK_SCHEMA.optional().describe(
-      "独立于明细行的模型重算总体；保留时间粒度，不参与明细排序、截断与记录投影",
+      "由模型重新计算的总计行，与明细行分开；保留时间粒度，不参与明细排序、截断和明细查看",
     ),
     totals: TOTALS_BLOCK_SCHEMA.optional().describe(
-      "各指标在各时间坐标上的整窗合计；不含分组，也不保留时间粒度",
+      "各指标在每个时间坐标上的整段合计；不分组，也不按时间粒度拆分",
     ),
     row_count: z.number().int().nonnegative().describe("本次交付的真实行数"),
     has_more: z.boolean().optional().describe("结果中是否仍有更多分组"),
@@ -347,7 +344,7 @@ export const VIEW_BLOCK_SCHEMA = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["totals"],
-          message: "整窗合计必须随已解析的业务时间轴一同交付",
+          message: "整段合计必须与业务时间轴一起返回",
         });
       }
       const seen = new Set<string>();
@@ -356,14 +353,14 @@ export const VIEW_BLOCK_SCHEMA = z
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["totals", "metrics", index, "column"],
-            message: "整窗合计只能针对本结果的指标列",
+            message: "整段合计只能针对本结果的指标列",
           });
         }
         if (seen.has(metric.column)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["totals", "metrics", index, "column"],
-            message: "同一指标列不能有多份整窗合计",
+            message: "同一指标列不能有多份整段合计",
           });
         }
         seen.add(metric.column);
@@ -372,7 +369,7 @@ export const VIEW_BLOCK_SCHEMA = z
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["totals", "metrics", index, "periods"],
-            message: "整窗合计的期间必须与主/对比期间一一对应",
+            message: "整段合计的期间必须与主期间、对比期间一一对应",
           });
           return;
         }
@@ -385,7 +382,7 @@ export const VIEW_BLOCK_SCHEMA = z
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
               path: ["totals", "metrics", index, "periods", periodIndex],
-              message: `整窗合计的期间必须与求值基准一致：${basis} 在 ${coordinate.from}~${coordinate.to} 上应为 ${expected.from}~${expected.to}`,
+              message: `整段合计的期间必须与求值基准一致：${basis} 在 ${coordinate.from}~${coordinate.to} 上应为 ${expected.from}~${expected.to}`,
             });
           }
         });
@@ -463,11 +460,11 @@ export const QUERY_PAYLOAD_OUTPUT = {
   analysis_id: z.string().optional().describe("本次结果使用的不可变分析定义身份"),
   view_id: z.string().optional().describe("本次结果使用的不可变呈现视图身份"),
   title: z.string().optional().describe("回显调用方声明的卡片标题"),
-  view: VIEW_BLOCK_SCHEMA.describe("唯一用户可见结果；计算中间结果不进入公共载荷"),
+  view: VIEW_BLOCK_SCHEMA.describe("用户可见的结果；中间计算结果不返回"),
   observation_scopes: z.array(z.string()),
   data_as_of: z.string(),
   time_context: PUBLIC_TIME_CONTEXT_SCHEMA,
-  capabilities: OUTPUT_CAPABILITIES_SCHEMA.optional().describe("唯一结果的能力声明（如导出）"),
+  capabilities: OUTPUT_CAPABILITIES_SCHEMA.optional().describe("结果支持的操作（如导出）"),
 } satisfies z.ZodRawShape;
 
 export const QUERY_PAYLOAD_SCHEMA = z.object(QUERY_PAYLOAD_OUTPUT).strict();

@@ -68,8 +68,8 @@ const load = (data: ResolvedMetricLoad["data"]): ResolvedMetricLoad => ({
   annotation: { measures: {}, dimensions: {} },
 });
 
-describe("grouping-set broadcast", () => {
-  test("执行入口再次拒绝与基础结果不一致的业务时间签名", () => {
+describe("grouping-set 执行", () => {
+  test("执行时业务时间与基础结果不一致则报错", () => {
     const mismatched: ResolvedGroupingSetPlan = {
       ...PLAN,
       legs: PLAN.legs.map((leg) => ({
@@ -81,11 +81,11 @@ describe("grouping-set broadcast", () => {
       })),
     };
     expect(() => applyGroupingSets(mismatched, load([]), new Map())).toThrow(
-      "执行时间签名与基础分组集不一致",
+      "执行时的业务时间与基础分组集不一致",
     );
   });
 
-  test("执行入口再次拒绝不是基础分组语义子集的粗腿", () => {
+  test("执行时粗分组集不是基础分组集的语义子集则报错", () => {
     const mismatched: ResolvedGroupingSetPlan = {
       ...PLAN,
       legs: PLAN.legs.map((leg) => ({
@@ -98,7 +98,7 @@ describe("grouping-set broadcast", () => {
     );
   });
 
-  test("执行入口再次拒绝层级补全后不再更粗的物理分组", () => {
+  test("执行时层级补全后的物理分组不比基础分组更粗则报错", () => {
     const mismatched: ResolvedGroupingSetPlan = {
       ...PLAN,
       legs: PLAN.legs.map((leg) => ({ ...leg, plan: metricPlan([ORG, LEVEL]) })),
@@ -108,7 +108,7 @@ describe("grouping-set broadcast", () => {
     ).toThrow("执行物理分组没有形成真子集");
   });
 
-  test("粗分组行缺失或重复均拒绝整件结果", () => {
+  test("粗分组结果行缺失或重复时整个结果报错", () => {
     const base = load([{ [ORG]: "甲", [LEVEL]: "Band B", [MEASURE]: 10 }]);
     expect(() => applyGroupingSets(PLAN, base, new Map([["grouping_set_1", load([])]]))).toThrow(
       "缺少对应的粗分组结果行",
@@ -130,7 +130,7 @@ describe("grouping-set broadcast", () => {
     ).toThrow("粗分组集在规范结果键上出现重复行");
   });
 
-  test("缺少结果键或指标列不能冒充业务空值", () => {
+  test("缺少结果键或指标列时报错，不当作空值处理", () => {
     expect(() =>
       applyGroupingSets(
         PLAN,
@@ -147,7 +147,7 @@ describe("grouping-set broadcast", () => {
     ).toThrow(`分母缺少指标列 ${MEASURE}`);
   });
 
-  test("空值传播、零分母为空，不提供 missing 口径旋钮", () => {
+  test("分子为空或分母为零时占比为空", () => {
     const base = load([
       { [ORG]: "甲", [LEVEL]: "Band B", [MEASURE]: null },
       { [ORG]: "乙", [LEVEL]: "Band C", [MEASURE]: 0 },
@@ -172,7 +172,7 @@ describe("grouping-set broadcast", () => {
     ]);
   });
 
-  test("总体行的构成占比由总体腿自身派生为 100%，空值和零保持为空", () => {
+  test("总体行的构成占比为 100%，总体值为空或零时占比为空", () => {
     const summaryLeg = {
       id: "grouping_set_2",
       signature: signature([]),

@@ -1,6 +1,6 @@
 /**
- * 从当前语义包的 YAML 声明生成 Demo 能力地图参考夹具；模型调整后重跑。
- * 该夹具只供纯前端与投影漂移测试。
+ * 根据当前语义包的 YAML 生成 Demo 能力地图的参考数据文件，修改模型后需要重新运行。
+ * 这个文件只用于前端测试和能力地图投影的一致性测试。
  */
 import { writeFile } from "node:fs/promises";
 import { projectDataCapabilityMap } from "../src/presentation_core/data_capability_map.js";

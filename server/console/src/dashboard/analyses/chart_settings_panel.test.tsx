@@ -82,7 +82,7 @@ const replay: ReplayPayload = {
 
 const textOf = (html: string) => html.replace(/<[^>]+>/g, "|");
 
-test("纯月度无分类结果：面板行列与编译器同一条规则（月份在行、年份在列）", () => {
+test("只有月度时间、没有分类的结果，面板行列与编译器一致：月份在行，年份在列", () => {
   const server = resolveTableLayout(rawView, detectRoles(rawView));
   expect(server).toEqual({
     rows: [{ kind: "time", level: "month" }],

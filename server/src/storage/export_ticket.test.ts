@@ -72,7 +72,7 @@ function fixture(now = Date.UTC(2026, 6, 14)) {
 }
 
 describe("导出短票据", () => {
-  test("随机短 id 不携带 caller/query，解析后完整还原", async () => {
+  test("票据 id 随机生成、不含 caller 或查询内容，解析后还原完整计划", async () => {
     const { store } = fixture();
     const plan = metricPlan({
       measures: ["test_people_metrics.active_employee_count"],
@@ -100,7 +100,7 @@ describe("导出短票据", () => {
     expect(await store.resolve(ticket.id)).toBeNull();
   });
 
-  test("持久化查询即使是合法 JSON，也必须满足完整查询结构", async () => {
+  test("持久化的查询是合法 JSON 但结构不完整时解析返回空", async () => {
     const { store, db } = fixture();
     const ticket = await store.create(
       metricPlan({ measures: ["test_people_metrics.active_employee_count"] }),

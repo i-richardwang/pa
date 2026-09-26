@@ -81,7 +81,7 @@ function fixture(): CubeView {
 }
 
 describe("指标记录投影契约", () => {
-  test("技术明细面一次声明记录集并校验引用完整性", () => {
+  test("明细 View 统一声明记录集，并校验引用完整", () => {
     expect(recordSetsOf(fixture()).get("employee")).toEqual({
       title: "员工记录",
       description: "构成指标结果的员工记录。",
@@ -149,7 +149,7 @@ describe("指标记录投影契约", () => {
     ).toBeNull();
   });
 
-  test("契约缺失、目标错误、循环和时间口径漂移在目录装配前失败", () => {
+  test("契约缺失、目标错误、循环或时间口径不一致时，在装配目录前报错", () => {
     const missingSet = fixture();
     missingSet.measures[0].meta = {
       ...records({ kind: "self" }),

@@ -11,9 +11,8 @@ import {
 } from "./record_projection_request";
 
 /**
- * 已保存重放的来源身份。明细能力随它派生：服务端只按访问路径授权
- * （自有报告 / 看板成员），来源即请求目标。没有明细端点的宿主
- * （空白草稿、分析回放）显式声明 `none`——缺能力必须是声明，不是遗漏。
+ * 已保存报告的来源，决定明细请求发往哪个端点（服务端按访问路径授权：自有报告或看板成员）。
+ * 没有明细端点的页面（空白草稿、分析回放）传 `none`。
  */
 export type RecordProjectionSource =
   | { kind: "report"; reportId: string }
@@ -34,8 +33,7 @@ export function useRecordProjection({
   disabled,
   onRequest,
 }: RecordProjectionInput): ViewRendererProps["records"] {
-  // 摊平成原始值再进 useMemo：调用方多在渲染中现造 source 字面量，按引用比较会让
-  // 返回值每帧换身份。
+  // 先展开成原始值再作为 useMemo 依赖：调用方通常在渲染时新建 source 对象。
   const reportId = source.kind === "none" ? null : source.reportId;
   const boardId = source.kind === "board" ? source.boardId : null;
   const timeOverride = source.kind === "board" ? (source.timeOverride ?? null) : null;
@@ -62,7 +60,7 @@ export function useRecordProjection({
           toastManager.add({
             type: "error",
             title: "无法查看明细",
-            description: "当前格子的时间或分组坐标不完整，请刷新后重试。",
+            description: "当前单元格的时间或分组信息不完整，请刷新后重试。",
           });
           return;
         }

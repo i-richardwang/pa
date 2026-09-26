@@ -24,7 +24,7 @@ describe("export capability", () => {
     ).toBe("only");
   });
 
-  test("唯一结果是派生节点时不可回退导出内部执行腿", () => {
+  test("结果是派生视图时不支持导出，不改为导出它的来源查询", () => {
     const spec: AnalysisSpec = {
       views: [
         query("source"),
@@ -41,7 +41,7 @@ describe("export capability", () => {
     expect(exportableOutput(plan)).toBeUndefined();
   });
 
-  test("grouping-set 报告计算不可退化为缺少计算列的底层导出", () => {
+  test("含 grouping-set 报告计算的结果不支持导出，不导出缺少计算列的底层数据", () => {
     const view = {
       ...query("shares"),
       dimensions: ["test_people_metrics.organization_name"],
@@ -71,7 +71,7 @@ describe("export capability", () => {
   test("多个独立终点不是合法执行图", () => {
     expect(() =>
       planExecution({ views: [query("first"), query("second")] }, { delivery: "identity" }),
-    ).toThrow(/执行图必须恰好收敛到一个结果/);
+    ).toThrow(/执行图必须只有一个最终结果/);
   });
 });
 

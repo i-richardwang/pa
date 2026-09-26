@@ -10,7 +10,7 @@ export type BoardRecord = {
   name: string;
   tiles: StoredTile[];
   created_by: string;
-  /** 置时间戳即从清单撤下，置回 null 即复原；记录与瓦片不销毁。 */
+  /** 非 null 时从清单隐藏，置回 null 即恢复；记录与瓦片不删除。 */
   archived_at: string | null;
   revision: number;
   created_at: string;
@@ -27,7 +27,7 @@ export class BoardConflictError extends Error {
 export type BoardRepository = {
   create(name: string, createdBy: string): Promise<BoardRecord>;
   get(id: string): Promise<BoardRecord | null>;
-  /** `all` 只给播种这类需要连已删除的一起认领的场合；界面恒取 active。 */
+  /** `all` 包含已归档看板，供种子脚本按名称匹配已有记录；界面使用 active。 */
   list(scope?: "active" | "all"): Promise<BoardRecord[]>;
   update(
     id: string,

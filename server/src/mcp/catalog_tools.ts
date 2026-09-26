@@ -60,11 +60,11 @@ export function registerCatalogTools(
   server.registerTool(
     "values_of",
     {
-      title: "列举维度真实值",
+      title: "列出维度取值",
       description: TOOL_DESCRIPTIONS.values_of,
       inputSchema: {
-        dimension: z.string().min(1).describe("catalog 返回的可搜索分类维度语义 id"),
-        contains: z.string().min(1).max(100).optional().describe("可选的值子串"),
+        dimension: z.string().min(1).describe("catalog 返回的分类维度 id"),
+        contains: z.string().min(1).max(100).optional().describe("可选，只返回包含该文字的取值"),
       },
       outputSchema: VALUES_OUTPUT,
       annotations: READ_ONLY_ANNOTATIONS,

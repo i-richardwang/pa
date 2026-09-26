@@ -8,13 +8,13 @@ import {
   requestFullscreen,
 } from "./host_shell.js";
 
-test("状态仓：状态合并、订阅者按次通知、清空后不再通知", () => {
+test("状态存储合并部分更新", () => {
   const store = createHostStore({ ...HOST_SHELL_INITIAL, payload: null as string | null });
   store.set({ payload: "p" });
   expect(store.get()).toEqual({ displayMode: "inline", canFullscreen: false, payload: "p" });
 });
 
-test("宿主上下文只改它给了的那几样；没给的保留", () => {
+test("宿主上下文只更新它提供的字段，其余字段保持不变", () => {
   const store = createHostStore({ ...HOST_SHELL_INITIAL });
   applyHostContext(store, undefined);
   expect(store.get()).toEqual(HOST_SHELL_INITIAL);
@@ -24,7 +24,7 @@ test("宿主上下文只改它给了的那几样；没给的保留", () => {
   expect(store.get()).toEqual({ displayMode: "fullscreen", canFullscreen: true });
 });
 
-test("全屏请求先按响应落状态；宿主不给全屏就明确失败", async () => {
+test("全屏请求先按宿主响应更新状态；宿主未切到全屏时抛错", async () => {
   const store = createHostStore({ ...HOST_SHELL_INITIAL, canFullscreen: true });
   const app = (mode: string) => ({ requestDisplayMode: async () => ({ mode }) }) as unknown as App;
   await requestFullscreen(app("fullscreen"), store);
@@ -33,7 +33,7 @@ test("全屏请求先按响应落状态；宿主不给全屏就明确失败", as
   expect(store.get().displayMode).toBe("inline");
 });
 
-test("连接失败的措辞带上原因", () => {
-  expect(connectFailure(new Error("timeout"))).toBe("无法连接 MCP Widget 宿主：timeout");
-  expect(connectFailure("boom")).toBe("无法连接 MCP Widget 宿主：boom");
+test("连接失败提示包含错误原因", () => {
+  expect(connectFailure(new Error("timeout"))).toBe("无法连接到 MCP 客户端：timeout");
+  expect(connectFailure("boom")).toBe("无法连接到 MCP 客户端：boom");
 });

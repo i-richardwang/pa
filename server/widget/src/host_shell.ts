@@ -1,14 +1,13 @@
 /**
- * MCP Widget 宿主的公共壳：两张卡（结果卡、名单卡）各有自己的载荷与工具调用，
- * 但状态仓、App 握手、宿主上下文（明暗与展示模式）、全屏请求与连接失败的措辞是同一套。
- * 本文件只放这一套；载荷相关的状态字段与工具名留在各自的 host。
+ * 结果卡和名单卡共用的宿主逻辑：状态存储、App 握手、宿主上下文（深浅色与展示模式）、
+ * 全屏请求和连接失败提示。载荷字段和工具名放在各自的 host 文件里。
  */
 import { App, applyDocumentTheme } from "@modelcontextprotocol/ext-apps";
 import type { McpUiHostContext } from "@modelcontextprotocol/ext-apps";
 import { useSyncExternalStore } from "react";
 import { PRODUCT_VERSION, RESULT_WIDGET_NAME } from "@product";
 
-/** 每张卡的状态都带的宿主面：展示模式与能否全屏由宿主上下文给。 */
+/** 每张卡片状态都包含的宿主字段，取值来自宿主上下文。 */
 export type HostShellState = {
   displayMode: string;
   canFullscreen: boolean;
@@ -19,7 +18,7 @@ export const HOST_SHELL_INITIAL: HostShellState = { displayMode: "inline", canFu
 export type HostStore<S> = {
   get: () => S;
   set: (patch: Partial<S>) => void;
-  /** React 侧订阅：useSyncExternalStore 绑定到这一个仓。 */
+  /** 供 React 组件订阅（useSyncExternalStore）。 */
   use: () => S;
   /** 宿主关闭视图时清空订阅。 */
   clear: () => void;
@@ -43,7 +42,7 @@ export function createHostStore<S>(initial: S): HostStore<S> {
   };
 }
 
-/** 两张卡都声明 inline 与 fullscreen 两档展示模式；名单卡在产品名后缀 `-records`。 */
+/** 两张卡都声明 inline 和 fullscreen 两种展示模式；名单卡的名称带 `-records` 后缀。 */
 export function createHostApp(nameSuffix = ""): App {
   return new App(
     { name: `${RESULT_WIDGET_NAME}${nameSuffix}`, version: PRODUCT_VERSION },
@@ -51,7 +50,7 @@ export function createHostApp(nameSuffix = ""): App {
   );
 }
 
-/** 只随宿主明暗，不吃宿主调色变量（applyHostStyleVariables）；配色定义见 styles.css 头注。 */
+/** 只跟随宿主的深浅色，不使用宿主的调色变量（applyHostStyleVariables）。 */
 export function applyHostContext<S extends HostShellState>(
   store: HostStore<S>,
   ctx: McpUiHostContext | undefined,
@@ -72,11 +71,11 @@ export async function requestFullscreen<S extends HostShellState>(
   store: HostStore<S>,
 ): Promise<void> {
   const result = await app.requestDisplayMode({ mode: "fullscreen" });
-  // 宽松宿主可能漏发 hostcontextchanged，故先应用响应
+  // 部分宿主不会发送 hostcontextchanged，所以先按响应更新
   store.set({ displayMode: result.mode } as Partial<S>);
-  if (result.mode !== "fullscreen") throw new Error("宿主未切换到全屏模式。");
+  if (result.mode !== "fullscreen") throw new Error("无法切换到全屏。");
 }
 
 export function connectFailure(error: unknown): string {
-  return `无法连接 MCP Widget 宿主：${error instanceof Error ? error.message : String(error)}`;
+  return `无法连接到 MCP 客户端：${error instanceof Error ? error.message : String(error)}`;
 }

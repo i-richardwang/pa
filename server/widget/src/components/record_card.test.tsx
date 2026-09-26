@@ -34,14 +34,14 @@ const render = (override: Partial<RecordProjectionPayload> = {}) =>
     />,
   );
 
-test("表头是标注不是内容：不加粗且弱于格内文字", () => {
+test("表头不加粗，文字颜色比单元格浅", () => {
   const head = render().match(/<th\s[^>]*>/)?.[0] ?? "";
   expect(head).toContain("font-normal");
   expect(head).toContain("text-pa-faint");
   expect(head).not.toContain("font-medium");
 });
 
-test("行线只在行顶，末行不封口", () => {
+test("行分隔线只画在每行顶部，最后一行下方没有边框", () => {
   const table = render().match(/<table[\s\S]*?<\/table>/)?.[0] ?? "";
   const rows = table.match(/<tr class="[^"]*"/g) ?? [];
   expect(rows.length).toBe(payload.rows.length);
@@ -49,7 +49,7 @@ test("行线只在行顶，末行不封口", () => {
   expect(table).not.toContain("border-b");
 });
 
-test("名单不分字色档：每格同取本色，不右对齐", () => {
+test("所有单元格使用同一文字颜色且左对齐", () => {
   const cells = render().match(/<td[^>]*>/g) ?? [];
   expect(cells.length).toBe(4);
   for (const cell of cells) {
@@ -59,7 +59,7 @@ test("名单不分字色档：每格同取本色，不右对齐", () => {
   }
 });
 
-test("题名是这张卡的名字：字号高于正文一档、字重反而更轻", () => {
+test("卡片标题比正文大一号，使用 medium 字重", () => {
   const title = render().match(/<h2\s[^>]*>/)?.[0] ?? "";
   expect(title).toContain("text-base");
   expect(title).toContain("font-medium");

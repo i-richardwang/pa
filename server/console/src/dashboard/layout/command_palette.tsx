@@ -1,4 +1,4 @@
-/** 全局命令面板：侧栏搜索与 ⌘K 共用这一个面。 */
+/** 全局命令面板，侧栏搜索和 ⌘K 共用。 */
 import { useEffect, useMemo, useState } from "react";
 import { LoadingMark } from "pa-result-view";
 import {
@@ -47,14 +47,14 @@ export function CommandPalette({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 关掉后焦点还给谁：这一面没有触发件，由开它的那一处交代（见 shell）。 */
+  /** 面板没有触发按钮，关闭后的焦点目标由打开它的调用方（shell）传入。 */
   finalFocus?: CommandFinalFocus;
   navItems: readonly NavEntry[];
   navigate: (r: RouteKey) => void;
   onOpenSettings: () => void;
 }) {
   const [q, setQ] = useState("");
-  // 首开拉取并缓存本次会话；任一数据源失败只缺该分组（isError → 空组），面板保持可用不整体失败。
+  // 打开时才取数；某个数据源失败时只让该分组为空，面板其余部分照常可用。
   const boardsQuery = useBoards(open);
   const reportsQuery = useReportsList(open);
   const analysesQuery = useMyAnalyses(90, 30, 0, open);
@@ -168,7 +168,7 @@ export function CommandPalette({
       case "analysis":
         navigateTo(analysisHash(item.id));
         break;
-      // 每类成员落在自己那张清单上，搜索词随行。
+      // 跳到对应清单页，并预填搜索词。
       case "member":
         prefillCatalogSearch(item.title);
         navigate(item.memberKind === "dimension" ? "dimensions" : "metrics");
@@ -197,7 +197,6 @@ export function CommandPalette({
           itemToStringValue={(it: unknown) => itemText(it as PaletteItem)}
         >
           <CommandInput placeholder="跳转至" />
-          {/* 空态只有输入行 + 脚注；有查询字才展开结果区 */}
           {!idle ? (
             <CommandPanel>
               <CommandEmpty>

@@ -12,7 +12,7 @@ const FORBIDDEN = [
   },
 ];
 
-/** 内联 style 绕开编译产物，只能在源码上查。 */
+/** 内联 style 不经过 Tailwind 编译，只能扫描源码检查。 */
 const INLINE_STYLE = /style=\{\{[^}]*\}\}/g;
 const FOREIGN_INLINE_VAR = /var\(\s*--(?!pa-)[\w-]+/g;
 function foreignInlineVars(source: string): string[] {
@@ -93,14 +93,16 @@ const sliderFace = (source: string): string[] =>
     [...match[0].matchAll(/\bbg-[a-z0-9-]+/g)].map((bg) => bg[0]),
   );
 
-test("分段控件的选中面出自面料令牌，不是手写色", async () => {
+test("分段控件的选中背景使用设计令牌，不手写颜色", async () => {
   expect(sliderFace('"pointer-events-none absolute left-0 bg-pa-surface"')).toEqual([
     "bg-pa-surface",
   ]);
   expect(sliderFace('className="pointer-events-none absolute inset-0"')).toEqual([]);
 
   const source = await readFile(new URL(SLIDER_FACE_FILE, import.meta.url), "utf8");
-  expect(sliderFace(source), "分段控件的罩层没找到，本用例失去着力点").toEqual(["bg-pa-selected"]);
+  expect(sliderFace(source), "没有找到分段控件的选中背景层，这条检查已经不起作用").toEqual([
+    "bg-pa-selected",
+  ]);
 });
 
 const RENDER_STACKS = [

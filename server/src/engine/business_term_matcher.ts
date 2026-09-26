@@ -1,4 +1,3 @@
-/** 业务术语的确定性文本匹配；只解析语言，不生成查询。 */
 export type MatchableBusinessTerm = {
   id: string;
   canonical_term: string;
@@ -11,7 +10,7 @@ export type BusinessTermMatch = {
   term_ids: string[];
 };
 
-/** 大小写、全半角与连续空白不构成不同术语；`+` 等业务符号必须保留。 */
+/** 大小写、全半角与连续空白视为相同；`+` 等业务符号保留。 */
 export function normalizeBusinessTerm(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase().replace(/\s+/g, " ").trim();
 }
@@ -19,7 +18,7 @@ export function normalizeBusinessTerm(value: string): string {
 const labelsOf = (term: MatchableBusinessTerm): string[] => [term.canonical_term, ...term.aliases];
 
 /**
- * 精确标签优先；否则只允许输入包含完整标签并取最长标签，禁止反向包含。
+ * 优先精确匹配；否则取输入中包含的最长完整标签，输入只是标签一部分时不匹配。
  * 单字标签只做精确匹配。
  */
 export function matchBusinessTerms(

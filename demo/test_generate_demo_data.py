@@ -339,7 +339,7 @@ class DemoDataTest(unittest.TestCase):
             (root / "current").mkdir()
             version = root / "versions" / "demo_v1_2026_07"
             version.mkdir(parents=True)
-            with self.assertRaisesRegex(RuntimeError, "必须是可原子替换的软链接"):
+            with self.assertRaisesRegex(RuntimeError, "必须是软链接"):
                 publish_current(root, version)
 
 

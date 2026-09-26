@@ -90,7 +90,7 @@ const presentQueryIssue = (
   message: queryFeasibilityIssueMessage(issue),
 });
 
-/** 当前草稿的执行阻断及其唯一时间解析；服务端仍在权威规划后复验。 */
+/** 返回草稿无法执行的原因和时间解析结果；服务端规划时会再校验一次。 */
 export function analysisReadiness(
   draft: Pick<AnalysisEditState, "analysis">,
   catalog: CatalogPayload,
@@ -118,7 +118,7 @@ export function analysisReadiness(
   return { issues, time };
 }
 
-/** 运行期降级不得改写编辑基线；用户改动须重新预览后保存。 */
+/** 编辑基线取种子规格，不受运行时图表降级影响；有改动时须重新预览才能保存。 */
 export function beginAnalysisEdit(
   seed: {
     name: string;
@@ -257,7 +257,7 @@ export function semanticViewContext(
   return { measures, dimensions };
 }
 
-/** 结构占比是分子指标的辅助标注，不占值通道；只有柱状读它，派生视图没有口径关系可查。 */
+/** 结构占比作为分子指标的辅助标注，不占用值通道；仅柱状图使用，派生视图查不到口径关系。 */
 function shareAnnotations(
   type: SemanticViewIntent["type"],
   view: SemanticAnalysisView,
@@ -308,7 +308,7 @@ function normalizeViewIntent(
 ): SemanticViewIntent {
   const { measures, dimensions } = semanticViewContext(view, catalog);
   if (chart.type === "table") {
-    // time 是条件列轴优先序；结果是否实际带时间成员由已解析时间签名裁决。
+    // 列轴里的 time 始终保留，结果是否实际带时间列由结果里解析后的时间信息决定。
     const columns = chart.columns?.filter((axis) => {
       if (axis === "time") return true;
       if (axis === "metrics") return measures.length > 0;
@@ -371,8 +371,7 @@ function normalizeViewPreferences(
   if (intent.group_by) {
     return style.value_labels === "all" ? { value_labels: "all" } : {};
   }
-  // 省略 series 表示“使用该结果的默认指标通道”，不是空集合；此时保留已有偏好，
-  // 由服务端编译器用实际结果成员做最终 fail-closed 绑定。
+  // 省略 series 表示使用结果的默认指标，此时保留全部系列偏好，由服务端编译器按实际结果成员校验。
   const selected = intent.series
     ? new Set([...intent.series, ...(intent.secondary_series ?? [])])
     : null;
@@ -434,18 +433,12 @@ export function setSemanticQueryView(
   };
 }
 
-/**
- * 编辑器只处理直接交付的查询：声明了 derived 即整体只读（null）——
- * 时间栏与 Inspector 对「可编辑」的判定不允许分叉。
- */
+/** 声明了 derived 的分析整体只读，返回 null；时间栏和右栏共用此函数判断能否编辑。 */
 export function semanticEditableQuery(analysis: AnalysisDefinition): SemanticQueryView | null {
   return analysis.derived ? null : analysis.query;
 }
 
-/**
- * 视图的时间能力：选中指标能力卡的并集——任一指标带某位即整视图带该位，
- * 与编译器「任一指标命中即拒绝」的逐指标断言同语义。
- */
+/** 视图的时间能力取所选指标时间约束的并集，与编译器逐指标拒绝的规则一致。 */
 export function timeCapabilitiesOf(
   view: SemanticQueryView,
   catalog: CatalogPayload,
@@ -465,7 +458,7 @@ export function setDraftTime(
   return setSemanticQueryView(draft, { ...view, time }, catalog);
 }
 
-/** 删除查询成员时原子清理依赖它的分组排序；筛选是独立人群约束，不随分组列删除。 */
+/** 删除成员时同时清理引用它的分组排序和计算；筛选是独立的人群条件，不随分组维度删除。 */
 export function removeSemanticQueryMember(
   view: SemanticQueryView,
   member: string,
@@ -488,10 +481,7 @@ export function removeSemanticQueryMember(
   };
 }
 
-/**
- * 分组维度就地换绑：位次不动，指着它的分组排序跟着改指新维度；
- * 换成已在查询里的维度即为删除。
- */
+/** 替换分组维度时位置不变，引用它的分组排序改指新维度；新维度已在查询中时等同删除原维度。 */
 export function replaceSemanticQueryDimension(
   view: SemanticQueryView,
   member: string,
@@ -514,8 +504,8 @@ export function replaceSemanticQueryDimension(
 }
 
 /**
- * 切图型时的默认绑定：取结果侧那一次装箱的候选（就是让这个图型可选的同一份），
- * 再翻回语义成员名。结果缺席或翻不回来时退到声明侧装箱。
+ * 切换图型时的默认绑定取自按结果做的通道分配（与判断该图型是否可选的是同一次分配），再映射回语义成员；
+ * 没有结果或无法映射时，改按声明的成员分配。
  */
 export function defaultSemanticViewIntent(
   draft: AnalysisEditState,
@@ -550,7 +540,7 @@ export function defaultSemanticViewIntent(
       catalog,
     );
   }
-  // 结果侧装箱是最终判据：只有一个取值的维度无法拆分系列。
+  // 以按结果做的通道分配为准：只有一个取值的维度不能用来拆分系列。
   const annotations = shareAnnotations(type, view, catalog, series);
   return chartIntent(type, {
     ...(category ? { category } : {}),

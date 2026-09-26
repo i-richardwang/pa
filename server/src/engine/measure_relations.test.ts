@@ -26,7 +26,7 @@ const members: CubeMember[] = [
 ];
 
 describe("结构占比指标关系映射", () => {
-  test("支持同一视图多组关系及短名/全名组件", () => {
+  test("同一视图可有多组占比关系，组件可写短名或全名", () => {
     expect(
       structureSharesOf(
         ["v.level", "v.hires", "v.hire_mix", "v.leavers", "v.leave_mix"],
@@ -39,7 +39,7 @@ describe("结构占比指标关系映射", () => {
     ]);
   });
 
-  test("未同查分子或未声明结构角色时不生成关系", () => {
+  test("分子不在同一查询中或未声明 structure_share 时不生成关系", () => {
     expect(structureSharesOf(["v.hire_mix"], ["hire_mix"], members)).toEqual([]);
     expect(structureSharesOf(["v.hires"], ["hires"], members)).toEqual([]);
   });

@@ -30,13 +30,13 @@ export function registerFeedbackTool(
           .string()
           .min(1)
           .max(FEEDBACK_LIMITS.detail)
-          .describe("缺什么、已尝试什么、为何现有目录无法满足"),
+          .describe("缺少什么、已经尝试过什么、为什么现有目录无法满足"),
       },
       outputSchema: {
         id: z.number().int().positive().describe("本次反馈记录编号"),
         topic_key: z.string().describe("同类反馈的聚合主题编号"),
         status: z.literal("open").describe("待管理员审核"),
-        message: z.string().describe("反馈与正式生效边界说明"),
+        message: z.string().describe("提交结果说明：反馈不会直接改变指标或口径"),
       },
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },

@@ -1,4 +1,4 @@
-/** 列角色缺省按名推：year/month 是时间，全数值列是度量，其余是维度；要改就显式给 roles。 */
+/** 未传 roles 时按列推断角色：year/month 为时间，全为数值的列为度量，其余为维度。 */
 import type { ColumnFormat, ViewBlock } from "../semantic_core/query_payload.js";
 
 export type Cell = string | number | null;

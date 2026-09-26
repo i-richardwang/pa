@@ -1,6 +1,6 @@
 interface:
   display_name: "PA 人才数据查询"
-  short_description: "查询人才指标与受控名单，遵循时间和安全护栏"
+  short_description: "查询人才指标与受权限控制的人员名单，遵守时间口径和数据安全规则"
   default_prompt: "使用 $pa-analytics 按组织查看本月在职人数与离职率。"
 
 dependencies:

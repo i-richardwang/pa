@@ -1,7 +1,7 @@
 /**
- * 图表声明与交付结果的绑定层：编译器按图型定形的声明在这里对着结果视图核对成员、
- * 归一为载荷列短名，并补齐只有看到结果才知道的缺省（指标列轴补位、唯一维度的分类轴）。
- * 不进入 MCP 或持久化合同，也不参与分析指纹内容哈希。
+ * 图表声明与结果视图的绑定：核对成员是否在结果里，列名换成载荷列短名，
+ * 并补齐要看到结果才能确定的默认值（指标列轴、唯一维度作分类轴）。
+ * 不进入 MCP 或持久化合同，也不参与分析指纹的内容哈希。
  */
 import { memberShortName } from "../semantic_core/member_name.js";
 import { ViewIntentError } from "../semantic_core/semantic_analysis.js";
@@ -13,10 +13,7 @@ export type { TableAxis } from "./chart_decl.js";
 type ValueLabels = "main" | "all";
 type Display = Record<string, SeriesDisplay>;
 
-/**
- * 编译器产出的图表声明：通道按图型定形，哪个通道属于哪个图型出自这份形状本身，
- * 绑定层只核对成员。成员名还是编译期的绑定结果，尚未对着交付视图核对。
- */
+/** 编译器产出的图表声明，成员名尚未对照结果视图核对。 */
 export type UnboundChart =
   | { type: "table"; columns?: string[]; shading?: TableShadingPreferences }
   | { type: "kpi" }
@@ -42,7 +39,7 @@ export type UnboundChart =
     }
   | { type: "pie"; x?: string; y?: string[] };
 
-/** 校验呈现声明所需的分析视图切面。 */
+/** 校验呈现声明用到的分析视图度量与维度。 */
 export type ChartSpecContext = {
   measures?: string[];
   dimensions?: string[];
@@ -53,7 +50,7 @@ function resolveMember(name: string, pool: string[]): string | undefined {
   return pool.find((member) => memberShortName(member) === key);
 }
 
-/** 通道引用的成员必须是这次查询交付的成员；归一为载荷列短名。 */
+/** 通道引用的成员必须在这次查询的结果里；返回载荷列短名。 */
 function boundMember(channel: string, name: string, pool: string[]): string {
   const resolved = resolveMember(name, pool);
   if (!resolved) throw new ViewIntentError(`${channel}的「${name}」不在这次查询的结果里`);
@@ -65,7 +62,7 @@ const tableFieldAxis = (member: string): TableAxis => ({
   column: memberShortName(member),
 });
 
-/** 声明的列轴归一：指标轴自动补位，非法声明抛错。行轴不在此裁决——它是结果的余数。 */
+/** 归一化列轴：未声明指标轴时自动补上，非法声明报错；行轴由结果中其余的列组成，不在这里处理。 */
 export function normalizeTableColumns(
   columns: string[] | undefined,
   spec: ChartSpecContext,
@@ -75,7 +72,8 @@ export function normalizeTableColumns(
   const measures = spec.measures ?? [];
   const columnAxes: TableAxis[] = columns.map((axis) => {
     if (axis === "metrics") {
-      if (!measures.length) throw new ViewIntentError("列轴放指标时这次查询必须查了指标");
+      if (!measures.length)
+        throw new ViewIntentError("列轴包含 metrics 时，查询必须至少包含一个指标");
       return { kind: "metrics" };
     }
     if (axis === "time") return { kind: "time", level: "bucket" };
@@ -85,7 +83,7 @@ export function normalizeTableColumns(
     }
     return tableFieldAxis(resolved);
   });
-  // 语义层已去过重；两个语义维度绑到同一列时只有这里看得见。
+  // 语义层已去重；两个语义维度绑定到同一列的情况只能在这里发现。
   const axisKeys = columnAxes.map((axis) =>
     axis.kind === "field" ? `field:${memberShortName(axis.column)}` : axis.kind,
   );
@@ -99,7 +97,7 @@ export function normalizeTableColumns(
   return columnAxes;
 }
 
-/** 输出时间轴的成员名（与 time_plan 的 raw time 成员一致）；接受全名或短名 */
+/** 输出时间轴的成员名，须与 time_plan 的原始时间成员一致；全名和短名都识别 */
 const TIME_AXIS_PARTS = ["year", "month", "period_month"];
 const isTimeAxisRef = (name: string) => TIME_AXIS_PARTS.includes(memberShortName(name));
 
@@ -126,11 +124,11 @@ export function bindChartDecl(chart: UnboundChart, spec: ChartSpecContext): Char
   const y2 =
     chart.type === "pie" || chart.y2 === undefined
       ? undefined
-      : chart.y2.map((name) => boundMember("副轴系列", name, measures));
+      : chart.y2.map((name) => boundMember("副轴指标（y2）", name, measures));
   const y = (chart.y ?? measures.filter((name) => !y2?.includes(memberShortName(name)))).map(
-    (name) => boundMember("值通道", name, measures),
+    (name) => boundMember("指标（y）", name, measures),
   );
-  if (!y.length) throw new ViewIntentError(`${chart.type} 呈现至少需要一个指标`);
+  if (!y.length) throw new ViewIntentError(`${chart.type} 图至少需要一个指标`);
   if (y2?.some((name) => y.includes(name))) {
     throw new ViewIntentError("同一指标不能同时在主轴与副轴");
   }
@@ -153,7 +151,7 @@ export function bindChartDecl(chart: UnboundChart, spec: ChartSpecContext): Char
 
   const groupBy = chart.group_by !== undefined ? dimension("拆分维度", chart.group_by) : undefined;
   if (groupBy !== undefined && (y.length > 1 || y2)) {
-    throw new ViewIntentError("按维度拆系列时只能画一个指标；请把值通道收窄到一个，或去掉拆分");
+    throw new ViewIntentError("使用拆分维度时只能有一个指标；请只保留一个指标，或去掉拆分维度");
   }
   const annotations = chart.annotations?.map((name) => boundMember("辅助标注", name, measures));
   if (annotations?.some((name) => y.includes(name))) {
@@ -164,7 +162,7 @@ export function bindChartDecl(chart: UnboundChart, spec: ChartSpecContext): Char
       ? undefined
       : Object.fromEntries(
           Object.entries(chart.display).map(([name, value]) => [
-            boundMember("系列视觉设置", name, measures),
+            boundMember("系列设置（series）", name, measures),
             value,
           ]),
         );
@@ -191,7 +189,7 @@ export function bindChartDecl(chart: UnboundChart, spec: ChartSpecContext): Char
   };
 }
 
-/** 分类轴是 bar/pie 的必备通道；只剩一个候选维度时不必声明。 */
+/** bar/pie 必须有分类轴；只有一个候选维度时可以不声明。 */
 function categoryAxis(
   declared: string | undefined,
   dimensions: string[],

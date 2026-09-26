@@ -30,10 +30,7 @@ function toOrderTuples(order: OrderInput): CubeQuery["order"] {
   return order?.map(({ member, direction }): [string, "asc" | "desc"] => [member, direction]);
 }
 
-/**
- * 执行单个查询视图：授权、层级补全、时间规划、Cube 投影、序数归位与列式编码。
- * 受控记录字段不属于公开查询面，只能经 Record Projection 端点投影。
- */
+/** 受控记录字段不在公开查询中，只能通过 Record Projection 端点返回。 */
 async function executeView(
   deps: QueryExecutionDependencies,
   ctx: {
@@ -142,7 +139,7 @@ async function executeView(
     new Map(
       groupingPlan.legs.map((leg, index) => {
         const load = groupingLoads[index];
-        if (!load) throw new Error(`分组腿 ${leg.id} 未返回执行结果`);
+        if (!load) throw new Error(`分组子查询 ${leg.id} 未返回结果`);
         return [leg.id, load];
       }),
     ),

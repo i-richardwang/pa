@@ -1,9 +1,4 @@
-/**
- * 整窗合计的唯一供给点：值恒由 grain=total 的无分组腿独立求得，不对已返回序列加总或取末。
- *
- * 求值期间先由指标的业务求值基准解出，再按期间分腿——执行用的期间与结果声明的期间因此
- * 是同一个对象，不会出现「数值取终点、声明写整窗」。
- */
+/** 整段合计只在这里计算：用一条不分组的 grain=total 子查询单独求值，不对已返回的序列求和或取末值。 */
 import type {
   CubeGateway,
   CubeMember,
@@ -22,10 +17,7 @@ import { totalPeriodOf, type TimeInput, type TotalPeriod } from "../semantic_cor
 
 export type MetricTotals = { member: string; periods: TotalPeriodValue[] };
 
-/**
- * 腿的物理形态由求值基准决定：时点与年初累计都在截止月份上求值，期间指标才发整段范围。
- * 降级的按月指标同样只在终点当月成立。
- */
+/** 时点与年初累计指标、降级为按月的指标按截止月份求值，期间指标按整段范围求值。 */
 function legTime(time: MetricTimeResolution, period: TotalPeriod): TimeInput {
   return period.degraded || physicalForm(time.basis) === "endpoint"
     ? { cutoff: period.to, grain: "total" }
@@ -48,7 +40,7 @@ function totalValue(raw: unknown): number | null {
 
 export async function computeMetricTotals(input: {
   cube: Pick<CubeGateway, "load" | "loadMulti">;
-  /** 已完成层级补全的查询；合计只取其筛选条件与指标，分组与排序一律不带。 */
+  /** 已完成层级补全的查询；合计只使用其中的筛选条件和指标，不带分组和排序。 */
   query: CubeQuery;
   context: TimeContext;
   views: CubeView[];

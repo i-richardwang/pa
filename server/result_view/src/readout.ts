@@ -1,21 +1,21 @@
 /**
- * 指针落格 → 读数行：行只出自 `chart.model` 的图例单元，不碰 echarts option。
- * 占比与对照变化均由服务端编译；浏览器只格式化和渲染。
+ * 把指针所在的数据点转成读数行。行只来自 `chart.model` 的图例项，不读 echarts option。
+ * 占比和对照差值都由服务端计算，浏览器只负责格式化。
  */
 import type { ChartModel, ViewChart } from "../../src/presentation_core/chart_config.js";
 import { formatSeriesValue, formatSignedDelta } from "../../src/presentation_core/view_format.js";
 
 export type ReadoutRow = {
-  /** 该行对应的图例单元序号（系列或切片）：行悬停据此驱动聚焦；占比注释那一行没有单元 */
+  /** 该行对应的图例项序号（系列或扇区），悬停该行时据此聚焦；占比行没有对应图例项 */
   series?: number;
   color?: string;
   name: string;
   value: string;
-  /** 随行的次要读数（占比），落在值下方那一行 */
+  /** 次要读数（占比），显示在值的下方 */
   secondary?: string;
-  /** 相对对照单元的差值（同期叠加），与占比同占次要那一行 */
+  /** 相对对照期的差值，与占比一起显示在值的下方 */
   delta?: string;
-  /** 该行在原始结果里的格：钉住后点行即下钻；无投影的行不可点 */
+  /** 该行在原始结果中的单元格；钉住后点击该行查看明细，没有明细的行不可点击 */
   point?: { row: number; column: string };
 };
 
@@ -32,7 +32,7 @@ export function legendShares(model: ChartModel): (string | null)[] {
   );
 }
 
-/** 饼图一张卡列全部切片：没有「落在哪一格」的区分，指到哪一片都是同一张结构表。 */
+/** 饼图的读数卡列出全部扇区，无论指针在哪个扇区上，内容都相同。 */
 function sliceModel(model: ChartModel): ReadoutModel {
   const shares = legendShares(model);
   return {

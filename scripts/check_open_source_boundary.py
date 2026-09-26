@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""Fail closed when a Git tree contains data artifacts, local configuration, or secrets."""
+"""Exit non-zero if any tracked or unignored file is a data artifact, local configuration, or contains a secret."""
 
 from __future__ import annotations
 

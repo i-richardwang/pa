@@ -31,16 +31,16 @@ export type ExecutedViewResult = {
   block: EngineViewBlock;
   sampleForModel: boolean;
   sourceSemantics?: DerivedSourceSemantics;
-  /** 由已解析结果签名产生的运行时公共列身份。 */
+  /** 按执行结果解析出的公共列 id，覆盖 plan.output.columns 中的同名映射。 */
   resolvedDeliveryColumns?: Record<string, string>;
   exportPlan?: MetricQueryPlan;
 };
 
 export type QueryRunResult = {
   payload: QueryPayload;
-  /** 唯一结果的完整行块（模型样本收窄前）。 */
+  /** 未按模型样本截断的完整行块。 */
   fullRowViewBlock: ViewBlock;
-  /** 唯一结果的必填呈现声明，已投影为公共结果列。 */
+  /** 呈现声明，列引用已换成公共列 id。 */
   decl: ChartDecl;
   fullRows?: FullRowsBlock;
   exportResource?: ExportResourceLink;
@@ -70,7 +70,7 @@ function requiredPublicColumnId(
 ): string {
   const id = publicColumnId(delivery, internal);
   if (!id) {
-    throw new Error(`交付结果 ${outputId} 的执行列 ${internal} 缺少公共语义身份`);
+    throw new Error(`结果 ${outputId} 的内部列 ${internal} 没有对应的公开语义 id`);
   }
   return id;
 }
@@ -82,7 +82,7 @@ function projectNotes(notes: EngineViewBlock["query_notes"] | undefined, deliver
   }));
 }
 
-/** 执行结果只在交付边界投影一次；物理成员名不得进入 QueryPayload。 */
+/** 把执行列名换成公共列 id；QueryPayload 中不能出现物理成员名。 */
 function projectOutputBlock(
   block: EngineViewBlock,
   delivery: OutputDelivery,
@@ -90,7 +90,7 @@ function projectOutputBlock(
 ): ViewBlock {
   const columns = block.columns.map((column) => requiredPublicColumnId(delivery, column, outputId));
   if (new Set(columns).size !== columns.length) {
-    throw new Error(`交付结果 ${outputId} 的公共列身份发生冲突`);
+    throw new Error(`结果 ${outputId} 中有多列对应同一个公开语义 id`);
   }
   const projectRecord = <T>(
     record: Record<string, T> | undefined,
@@ -135,7 +135,7 @@ function projectOutputBlock(
       }
     : undefined;
   if (block.derived && !delivery.provenance) {
-    throw new Error(`派生交付结果 ${outputId} 缺少来源与关联键信息`);
+    throw new Error(`派生结果 ${outputId} 缺少来源和关联键信息`);
   }
   return {
     id: block.id,
@@ -200,7 +200,7 @@ export async function runQueryPipeline(
   const summarySources = new Set(
     outputSpec.summary ? (isDerivedViewSpec(outputSpec) ? outputSpec.from : [outputSpec.id]) : [],
   );
-  // 合计位只属于交付结果；派生结果没有整窗合计。
+  // 只有交付视图计算合计；交付视图是派生视图时没有合计。
   const queryResults = await Promise.all(
     queryEntries.map(({ spec }) =>
       deps.executeView(
@@ -260,10 +260,10 @@ export async function runQueryPipeline(
     data_as_of: context.dataAsOf,
     time_context: publicTimeContext(timeSourced(queriedViews), context, timeSources),
   };
-  // 内部执行腿全部算过但不进交付面，也不序列化给模型。
+  // 中间视图只参与计算，不进入交付结果，也不发给模型。
   const outputId = plan.output.id;
   const deliveredResult = resultById.get(outputId);
-  if (!deliveredResult) throw new Error(`交付视图 ${outputId} 未产生执行结果`);
+  if (!deliveredResult) throw new Error(`结果视图 ${outputId} 未产生执行结果`);
   const resolvedOutput = {
     ...plan.output,
     columns: {

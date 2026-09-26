@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { boardReportReplayQueryOptions, dashboardKeys } from "./dashboard_queries";
 
-test("维度取值键位含维度与过滤词，避免跨维度、跨过滤词复用结果", () => {
+test("维度候选值的查询键包含维度和过滤词，不同维度或过滤词不共用结果", () => {
   expect(dashboardKeys.catalog).toEqual(["catalog"]);
   expect(dashboardKeys.me).toEqual(["me"]);
   expect(dashboardKeys.dimensionValues("organization_name", "研发")).toEqual([
@@ -14,7 +14,7 @@ test("维度取值键位含维度与过滤词，避免跨维度、跨过滤词�
   );
 });
 
-test("看板瓦片重放键位随板级时间覆盖分开，取数选项与键位同源", () => {
+test("看板瓦片重放的查询键包含看板级时间覆盖，查询选项使用同一个键", () => {
   const override = {
     window: {
       kind: "trailing" as const,
@@ -40,7 +40,7 @@ test("看板瓦片重放键位随板级时间覆盖分开，取数选项与键�
   );
 });
 
-test("分页与时间窗进入键位，失效用前缀键覆盖所有页", () => {
+test("分页和时间窗进入查询键，前缀键可失效所有页", () => {
   expect(dashboardKeys.feedbackPage(20)).toEqual([...dashboardKeys.feedback, 20]);
   expect(dashboardKeys.usage(30, 0)).toEqual(["usage", 30, 0]);
 });

@@ -198,7 +198,7 @@ const catalog: CompilerCatalog = {
 };
 
 describe("semantic analysis compiler", () => {
-  test("语义分析只接受唯一 TimeIntent", () => {
+  test("time 不符合时间意图结构时分析定义无效", () => {
     const invalid = {
       analysis: {
         views: [{ id: "result", measures: [ACTIVE_EMPLOYEE], time: { cutoff: "2026-07" } }],
@@ -208,7 +208,7 @@ describe("semantic analysis compiler", () => {
     expect(() => parseDefinitionFrom(invalid)).toThrow(/分析定义无效/);
   });
 
-  test("报告构成占比编译为查询视图内部的共享时间 grouping set", () => {
+  test("构成占比编译为同一查询视图内的 grouping set 计算", () => {
     const calculationId = "calculation:active_employee_age_band_share";
     const compiled = compileAnalysisView(catalog, {
       analysis: {
@@ -257,7 +257,7 @@ describe("semantic analysis compiler", () => {
     expect(compiled.routes).toEqual([{ status: "direct", result_view_id: "query" }]);
   });
 
-  test("层级中间级构成占比在物理规划前返回结构化冲突", () => {
+  test("按层级中间级计算构成占比时返回结构化冲突", () => {
     try {
       compileAnalysisView(catalog, {
         analysis: {
@@ -293,7 +293,7 @@ describe("semantic analysis compiler", () => {
     }
   });
 
-  test("维度最大项数编译为层级补全后的私有选择规格，不生成物理行 limit", () => {
+  test("维度最大项数编译为补全上级层级的 top_n 选择，不生成行 limit", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
         query: {
@@ -333,7 +333,7 @@ describe("semantic analysis compiler", () => {
     expect(compiled.plan.nodes[0]).not.toHaveProperty("order");
   });
 
-  test("按名称限制维度项数时，以目标维度自身作为私有排名字段", () => {
+  test("按名称限制维度项数时，以目标维度自身作为排名字段", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
         query: {
@@ -363,7 +363,7 @@ describe("semantic analysis compiler", () => {
     });
   });
 
-  test("聚合语义查询拒绝物理行 limit，排行只能使用 Top-N 分组选择", () => {
+  test("聚合查询拒绝行 limit，排行使用 Top-N 分组选择", () => {
     expect(() =>
       parseDefinitionFrom({
         analysis: {
@@ -379,7 +379,7 @@ describe("semantic analysis compiler", () => {
     ).toThrow(/分析定义无效/);
   });
 
-  test("总体只允许指标与业务分组并存的结果", () => {
+  test("总体行要求结果同时包含指标和业务分组维度", () => {
     expect(() =>
       parseDefinitionFrom({
         analysis: {
@@ -393,7 +393,7 @@ describe("semantic analysis compiler", () => {
     ).toThrow(/总体行只适用于同时包含指标与业务分组维度/);
   });
 
-  test("分组排序只能作用于唯一直接结果，不允许中间查询各自选组", () => {
+  test("派生视图的来源查询不能声明分组排序", () => {
     expect(() =>
       parseDefinitionFrom({
         analysis: {
@@ -418,7 +418,7 @@ describe("semantic analysis compiler", () => {
     ).toThrow(/只能声明在直接交付的查询上/);
   });
 
-  test("公共语义规格对派生来源强制业务标题，独立直查不被额外约束", () => {
+  test("派生视图的来源查询必须有 view_title，单独直查不需要", () => {
     expect(() =>
       parseDefinitionFrom({
         analysis: {
@@ -439,7 +439,7 @@ describe("semantic analysis compiler", () => {
     ).not.toThrow();
   });
 
-  test("ViewIntent 必填：服务端不存在自动判型入口", () => {
+  test("缺少 ViewIntent 时编译失败", () => {
     expect(() =>
       compileAnalysisView(catalog, {
         analysis: parseAnalysisDefinition({
@@ -454,7 +454,7 @@ describe("semantic analysis compiler", () => {
     ).toThrow();
   });
 
-  test("规格外字段一律拒绝", () => {
+  test("拒绝规格外字段", () => {
     expect(() =>
       parseDefinitionFrom({
         analysis: {
@@ -469,7 +469,7 @@ describe("semantic analysis compiler", () => {
     ).toThrow(/分析定义无效/);
   });
 
-  test("KPI 作为显式呈现直接编译，不注入图表通道", () => {
+  test("KPI 呈现编译后不带图表通道", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
         query: {
@@ -499,7 +499,7 @@ describe("semantic analysis compiler", () => {
     });
   });
 
-  test("人类表格热力样式在编译边界合入物理呈现，其他形态拒绝", () => {
+  test("表格热力样式合入呈现，非 table 形态拒绝", () => {
     const shading = { palette: "traffic_lights", flipped: true, thresholds: { mid: 0.5 } };
     const spec = {
       analysis: {
@@ -520,7 +520,7 @@ describe("semantic analysis compiler", () => {
     ).toThrow(/只支持 table/);
   });
 
-  test("副轴系列与主系列一样投影为公共列身份，交付端才对得上结果列", () => {
+  test("副轴系列与主系列一样投影为语义 id", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
         query: { measures: [ACTIVE_EMPLOYEE, YTD_EVENT_RATE], time: JAN_TO_JULY_2026 },
@@ -531,7 +531,7 @@ describe("semantic analysis compiler", () => {
     expect(compiled.render_decl).toMatchObject({ y: [ACTIVE_EMPLOYEE] });
   });
 
-  test("人类系列样式按语义 id 绑定为物理图表设置", () => {
+  test("系列样式按语义 id 绑定为物理列的图表设置", () => {
     const compiled = compileAnalysisView(
       catalog,
       {
@@ -733,7 +733,7 @@ describe("semantic analysis compiler", () => {
     });
   });
 
-  test("组织维度上的人员、离职与编制指标跨指标域原生直查", () => {
+  test("组织维度上的人员、流动与编制指标跨指标域编译为一条直接查询", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
         query: {
@@ -776,7 +776,7 @@ describe("semantic analysis compiler", () => {
     expect(compiled.presentation).toMatchObject({ type: "table" });
   });
 
-  test("人员与编制直查与明细共用单值上级过滤后的有效分组", () => {
+  test("单值上级过滤后，直接查询与明细使用相同的分组维度", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
         query: {
@@ -826,7 +826,7 @@ describe("semantic analysis compiler", () => {
     });
   });
 
-  test("并列查询没有落脚点：拒绝时指向合并与 derived.joined，不指向拆调用", () => {
+  test("并列多个查询时报错，提示合并到 query.measures 或使用 derived.joined", () => {
     const view = {
       measures: [YTD_EVENT_RATE, CURRENT_MONTH_FULFILLMENT_RATE],
       dimensions: [DEPARTMENT],
@@ -834,7 +834,7 @@ describe("semantic analysis compiler", () => {
     };
     try {
       compileAnalysisView(catalog, {
-        // 定义里没有可以并列放查询的字段，越过类型验运行时边界的措辞。
+        // 类型不允许 queries 字段，这里绕过类型检查运行时的错误消息
         analysis: { queries: [view, view] } as unknown as AnalysisDefinition,
         view: { type: "table" },
       });
@@ -876,7 +876,7 @@ describe("semantic analysis compiler", () => {
     });
   });
 
-  test("只选结构占比时它仍是一等柱系列", () => {
+  test("只选结构占比时它作为柱系列", () => {
     const compiled = compileAnalysisView(catalog, {
       analysis: {
         query: {
@@ -913,7 +913,7 @@ describe("semantic analysis compiler", () => {
     });
   });
 
-  test("分子与结构占比不能同时塞进主系列", () => {
+  test("分子与结构占比不能同时作为柱图主系列", () => {
     expect(() =>
       compileAnalysisView(catalog, {
         analysis: {
@@ -1024,7 +1024,7 @@ describe("semantic analysis compiler", () => {
     });
   });
 
-  test("派生视图的 columns 同样只允许 table", () => {
+  test("派生视图的 columns 只允许 table", () => {
     expect(() =>
       compileAnalysisView(catalog, {
         analysis: {
@@ -1043,7 +1043,7 @@ describe("semantic analysis compiler", () => {
             ],
           },
         },
-        // 意图联合已让这个组合不可表达，此处刻意越过类型验运行时边界仍在拦。
+        // 类型已不允许该组合，这里绕过类型检查运行时校验
         view: {
           type: "bar",
           columns: ["org_2"],

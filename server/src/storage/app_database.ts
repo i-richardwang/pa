@@ -2,15 +2,12 @@ import { createHash } from "node:crypto";
 import { openSqlite, type SqliteDatabase } from "../sqlite.js";
 
 /**
- * 结构印记：本文件 DDL 的规范化摘要，开库时写进 `user_version`。
- *
- * 非空库的印记与当前 DDL 不同时，开库立即 fail-closed，由部署方以空库重建。
- *
- * 摘要取自 DDL 源文本并折叠空白：重排版、改缩进不算结构变化，动表、动列、动索引才算。
+ * 结构印记：DDL 源文本折叠空白后的摘要，开库时写进 `user_version`。
+ * 非空库的印记与当前 DDL 不同时拒绝启动，需以空库重建。
  */
 export function schemaStampOf(ddl: string): number {
   const digest = createHash("sha256").update(ddl.replace(/\s+/g, " ").trim()).digest();
-  // user_version 是有符号 32 位；取低 31 位，并避开 0——0 是「空库」的保留含义。
+  // user_version 是有符号 32 位整数，取低 31 位；0 表示空库，因此避开 0。
   return digest.readUInt32BE(0) & 0x7fff_ffff || 1;
 }
 
@@ -31,7 +28,6 @@ function hasUserTables(db: SqliteDatabase): boolean {
   return row !== null && row !== undefined;
 }
 
-/** 自有应用库结构的唯一基线：结构变化直接更新完整 DDL，空库据此建立全部结构。 */
 const SCHEMA_DDL = `
     CREATE TABLE usage_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -180,7 +176,6 @@ const SCHEMA_DDL = `
       ON record_projection_audit (source_kind, source_id, at DESC);
 `;
 
-/** 当前代码的结构印记；运维排错与自检读同一个数。 */
 export const APP_SCHEMA_STAMP = schemaStampOf(SCHEMA_DDL);
 
 function createSchema(db: SqliteDatabase): void {
@@ -199,7 +194,7 @@ function transact(db: SqliteDatabase, body: () => void): void {
   }
 }
 
-/** PA 自有应用库的唯一初始化边界；只接受空库或当前完整结构。 */
+/** 只接受空库或与当前 DDL 印记一致的库。 */
 export function initializeAppDatabase(db: SqliteDatabase): void {
   db.exec("PRAGMA foreign_keys = ON");
   db.exec("PRAGMA busy_timeout = 5000");
@@ -229,7 +224,7 @@ export async function openAppDatabase(path: string): Promise<SqliteDatabase> {
   }
 }
 
-/** 应用库事务体只允许同步 SQLite 操作；外部 I/O 必须在事务开始前完成。 */
+/** 事务体内只能做同步 SQLite 操作，外部 I/O 须在事务开始前完成。 */
 export function inTransaction<T>(db: SqliteDatabase, body: () => T): T {
   db.exec("BEGIN IMMEDIATE");
   try {

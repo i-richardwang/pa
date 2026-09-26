@@ -4,9 +4,9 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
 
-// 单文件内联：页面由服务端整页返回（c.html），免去静态资源路由。
-// singlefile 插件一次只出一个入口，双页面跑两次构建（--mode dashboard 出控制台，
-// 默认出登录页；顺序固定登录页在先，见根 package.json 的 build:console），产物共存于 dist/。
+// 服务端用 c.html 整页返回，资源全部内联进单个 HTML。
+// singlefile 插件每次只构建一个入口：package.json 的 build:console 先构建登录页（清空 dist/），
+// 再用 --mode dashboard 构建控制台，两次顺序不能调换。
 export default defineConfig(({ mode }) => {
   const dashboard = mode === "dashboard";
   return {
@@ -50,8 +50,7 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       target: "es2022",
-      // 复用的结果卡令牌用 light-dark()（与 widget 同源），钉住原生支持基线防 lightningcss
-      // 降级成只认系统 prefers 的媒体查询（见 widget/vite.config.ts 同注）
+      // 令牌使用 light-dark()：基线低于原生支持版本时 lightningcss 会把它降级成只跟随系统 prefers-color-scheme 的媒体查询；与 widget/vite.config.ts 同改
       cssTarget: ["chrome123", "safari17.5", "firefox120"],
       chunkSizeWarningLimit: 2048,
       emptyOutDir: !dashboard,

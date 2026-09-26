@@ -1,4 +1,3 @@
-/** 4xx 一律不重试：未登录整页跳登录先于此在 getJson 内发生。 */
 import { QueryClient } from "@tanstack/react-query";
 import { ApiError } from "./api";
 

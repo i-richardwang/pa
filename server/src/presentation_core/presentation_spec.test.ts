@@ -32,7 +32,7 @@ const analysis = parseAnalysisSpec({
 });
 
 describe("PresentationSpec", () => {
-  test("呈现声明直接绑定唯一结果", () => {
+  test("呈现声明绑定到分析的输出视图", () => {
     expect(
       bindPresentation({ type: "bar", x: "organization_name", y: ["本期人数"] }, analysis),
     ).toEqual({
@@ -42,13 +42,13 @@ describe("PresentationSpec", () => {
     });
   });
 
-  test("派生视图能从来源规格识别搬运度量和维度", () => {
+  test("派生视图按来源视图区分度量列和维度列", () => {
     const context = chartContextForView(analysis.views[1], analysis);
     expect(context.dimensions).toEqual(["organization_name"]);
     expect(context.measures).toEqual(["本期人数", "变化"]);
   });
 
-  test("保存前完整校验交付结果的图表字段绑定", () => {
+  test("图表字段不在输出结果中时报错", () => {
     expect(() => bindPresentation({ type: "bar", x: "missing_dimension" }, analysis)).toThrow(
       /分类轴的「missing_dimension」不在这次查询的结果里/,
     );

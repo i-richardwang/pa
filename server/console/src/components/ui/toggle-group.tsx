@@ -11,7 +11,7 @@ export function ToggleGroup({
   ...props
 }: ToggleGroupPrimitive.Props & { columns: number; bordered?: boolean }): ReactElement {
   const track = useRef<HTMLDivElement>(null);
-  /** `animate` 记的是量之前滑块在不在：首次现身不从别处滑来。 */
+  /** `animate` 表示测量前滑块是否已存在；滑块首次出现时不播放滑动动画。 */
   const [slider, setSlider] = useState<{ width: number; offset: number; animate: boolean }>();
 
   useLayoutEffect(() => {

@@ -98,7 +98,7 @@ function harness(initialTiles: BoardRecord["tiles"] = [], reportAccessError?: Er
 }
 
 describe("board application service", () => {
-  test("载荷期解析报告摘要，repository 只保留引用", async () => {
+  test("读取看板时解析报告名称与呈现类型，repository 只存报告引用", async () => {
     const { service } = harness([
       {
         kind: "report",
@@ -119,7 +119,7 @@ describe("board application service", () => {
     });
   });
 
-  test("重复加入幂等；首次加入以调用方 revision 原子写入并记录业务事件", async () => {
+  test("首次加入报告按调用方 revision 写入并记录事件，重复加入不再写入", async () => {
     const { service, updates, logs } = harness();
     const input = {
       principal: alice,
@@ -148,7 +148,7 @@ describe("board application service", () => {
     expect(logs).toHaveLength(1);
   });
 
-  test("写动作集中执行属主校验，共享重放集中执行成员关系校验", async () => {
+  test("非属主不能修改看板，也不能运行看板之外的报告", async () => {
     const { service, runCalls } = harness();
     await expect(
       service.update(bob, "11111111-1111-4111-8111-111111111111", { name: "越权" }, 1),
@@ -159,7 +159,7 @@ describe("board application service", () => {
     expect(runCalls).toEqual([]);
   });
 
-  test("删除后看板对读写两路都等同不存在，恢复即原样回来", async () => {
+  test("删除后的看板读写都返回不存在，恢复后内容不变", async () => {
     const tile = {
       kind: "report" as const,
       tile_id: "22222222-2222-4222-8222-222222222222",
@@ -193,7 +193,7 @@ describe("board application service", () => {
     await expect(service.restore(bob, id)).rejects.toBeInstanceOf(ForbiddenError);
   });
 
-  test("报告引用归属在应用边界校验，基础设施异常不伪装成输入错误", async () => {
+  test("引用他人报告返回输入错误，存储异常原样抛出", async () => {
     const tile = {
       kind: "report" as const,
       tile_id: "22222222-2222-4222-8222-222222222222",

@@ -1,6 +1,6 @@
 import type { CardActions } from "pa-result-view";
 
-/** 导出走新标签页打开签名链接，不伪装成下载。 */
+/** 导出时在新标签页打开签名链接。 */
 export const BROWSER_CARD_ACTIONS: CardActions = {
   exportAction: {
     kind: "open_link",

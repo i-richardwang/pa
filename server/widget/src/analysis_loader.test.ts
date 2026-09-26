@@ -50,7 +50,7 @@ describe("analysis loader", () => {
     expect(state.calls).toEqual([FIRST_ID]);
   });
 
-  test("view_id 变化后加载当前结果，非当前请求不会阻塞", async () => {
+  test("view_id 变化后加载新结果，不被旧请求阻塞", async () => {
     const state = harness();
     await state.loader.connect();
     state.loader.receive({ view_id: FIRST_ID });
@@ -79,7 +79,7 @@ describe("analysis loader", () => {
     expect(failed.failures).toEqual(["无法加载分析结果：host proxy unavailable"]);
   });
 
-  test("关闭后未完成请求不得回写卡片", async () => {
+  test("关闭后，未完成请求的结果不写入卡片", async () => {
     let resolveResult: ((result: ToolResult) => void) | undefined;
     const state = harness({
       call: () =>

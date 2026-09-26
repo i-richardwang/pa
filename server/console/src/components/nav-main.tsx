@@ -18,7 +18,7 @@ export type NavMainGroup = {
   items: readonly NavMainItem[];
 };
 
-/** 图标另占方槽：选中底色不贴图标边缘。 */
+/** 图标包在单独的方框里，选中背景与图标边缘之间留出空隙。 */
 export function NavMain({
   groups,
   route,

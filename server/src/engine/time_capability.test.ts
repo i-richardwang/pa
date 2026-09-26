@@ -173,7 +173,7 @@ const MEASURES = [
   "measure:ytd_event_rate",
 ];
 
-test("能力卡由模型时间合同推导：按月定义与年初归零各自成位", () => {
+test("时间能力由指标时间合同推导：按月定义和年初累计分别体现在能力中", () => {
   expect(cardOf("measure:active_employee_count")).toEqual({});
   expect(cardOf("measure:turnover_count")).toEqual({});
   expect(cardOf("measure:current_month_turnover_rate")).toEqual({ grain: "month" });
@@ -182,7 +182,7 @@ test("能力卡由模型时间合同推导：按月定义与年初归零各自�
   expect(JSON.stringify(semantic)).not.toContain("time_contract");
 });
 
-test("卡的预测与生产路径的接受/拒绝逐例等价（双向）", () => {
+test("对每种时间组合，能力预测的可用或不可用与实际查询结果一致", () => {
   const predictedRejections: string[] = [];
   const actualRejections: string[] = [];
   for (const measureId of MEASURES) {
@@ -206,7 +206,7 @@ test("卡的预测与生产路径的接受/拒绝逐例等价（双向）", () =
 
 const at = (label: string) => TIMES.find((entry) => entry.label === label)!.time;
 
-test("被拒的正是按月定义指标的越界组合", () => {
+test("被拒绝的只有按月定义指标合并多个月份的组合", () => {
   const failure = planningFailure("measure:current_month_turnover_rate", at("年内期间·按年"));
   expect(failure).toBeInstanceOf(TimeSelectionError);
   expect(failure).toMatchObject({
@@ -221,7 +221,7 @@ test("被拒的正是按月定义指标的越界组合", () => {
   expect(rejection("measure:turnover_count", at("跨年期间·按月"))).toBeUndefined();
 });
 
-test("时间自身冲突在预测与生产路径返回同一结构化 issue", () => {
+test("时间参数自身冲突时，能力预测与实际查询返回相同的结构化错误", () => {
   const time: TimeIntent = {
     window: { kind: "trailing", count: 5, unit: "year", grain: "year" },
     comparison: { kind: "previous_year" },
@@ -242,7 +242,7 @@ test("时间自身冲突在预测与生产路径返回同一结构化 issue", ()
   });
 });
 
-test("年初归零不表现为显示档拒绝，合计位由求值基准写实覆盖期间", () => {
+test("年初累计指标不因输出粒度被拒绝，合计按求值基准标明实际覆盖期间", () => {
   // 跨日历年按年/按月均合法；年初归零只影响合计位的覆盖期间。
   expect(rejection("measure:ytd_event_rate", at("跨年期间·按月"))).toBeUndefined();
   expect(rejection("measure:ytd_event_rate", at("跨年期间·按年"))).toBeUndefined();
@@ -258,7 +258,7 @@ test("年初归零不表现为显示档拒绝，合计位由求值基准写实�
   expect(totalPeriodOf(metricTimeOf("turnover_count"), crossYear)).toEqual(crossYear);
 });
 
-test("年初归零的跨年总计在能力投影与生产路径返回同一结构化 issue", () => {
+test("年初累计指标跨年合并时，能力预测与实际查询返回相同的结构化错误", () => {
   const time = { range: { from: "2025-01", to: "2026-07" }, grain: "total" } as const;
   const selection = resolveTimeSelection(time, LATEST);
   if (selection.status === "invalid") throw new Error(timeSelectionIssueMessage(selection.issue));

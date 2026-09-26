@@ -1,4 +1,4 @@
-/** JSON 值的稳定编码：对象键排序，数组顺序保持，缺席字段不参与。 */
+/** 稳定的 JSON 编码：对象键排序，数组保持顺序，值为 undefined 的字段省略。 */
 export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value !== null && typeof value === "object") {

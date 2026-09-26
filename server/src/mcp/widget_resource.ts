@@ -60,7 +60,7 @@ export function registerWidgetResource({ server }: McpRegistrationContext): void
     "record_projection_view",
     RECORDS_UI_RESOURCE_URI,
     {
-      description: "以受控表格展示构成指标结果的明细记录及其上下文字段。",
+      description: "以表格展示组成指标结果的构成记录及相关字段。",
       _meta: { ui: UI_RESOURCE_META },
     },
     safeMcpResourceHandler("record_projection_view", async () => ({
@@ -72,7 +72,7 @@ export function registerWidgetResource({ server }: McpRegistrationContext): void
           _meta: {
             ui: UI_RESOURCE_META,
             "openai/widgetDescription":
-              "本卡片已呈现用户要求的受控构成记录。回复只需说明记录已打开，" +
+              "本卡片已展示用户要求的构成记录。回复只需说明记录已打开，" +
               "不得复述姓名、工号或其他个体字段。",
             "openai/widgetPrefersBorder": false,
             "openai/widgetCSP": OPENAI_WIDGET_CSP,

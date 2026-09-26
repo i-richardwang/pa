@@ -33,7 +33,7 @@ function text(
   return clean;
 }
 
-/** 只收问题原话与缺口解释：缺什么、已尝试什么、为何现有目录无法满足。 */
+/** ask 是用户问题原话；detail 说明缺什么、已尝试什么、现有目录为何无法满足。 */
 export function normalizeFeedbackInput(input: FeedbackInput): NormalizedFeedbackInput {
   return {
     ask: text("ask", input.ask, true),

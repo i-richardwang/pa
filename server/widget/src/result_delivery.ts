@@ -1,7 +1,6 @@
 /**
- * 工具结果 → 卡片载荷。App 只接受 MCP 的结构化结果通道：structuredContent 与私有 `_meta`
- * 各按契约 schema 解析，content 是面向模型/用户的文本退路，只用来取错误说明，
- * 不承担 iframe 数据协议，也不尝试从宿主包装文本中恢复 JSON。
+ * 把工具结果解析成卡片载荷。数据只从 structuredContent 和私有 `_meta` 读取，各自按契约 schema 解析；
+ * content 是给模型和用户看的文本，只用来取错误说明，不从中解析 JSON。
  */
 import { PRESENTATION_META_KEY, type PresentationBlock } from "@charts";
 import { isPresentationBlock } from "@presentation-guard";
@@ -58,18 +57,18 @@ export function deliverAnalysisResult(result: ToolResult): DeliveredAnalysis {
     return { ok: false, error: firstText(result.content) ?? "查询失败。" };
   }
   if (result.structuredContent === undefined) {
-    return { ok: false, error: "查询结果缺少结构化载荷。" };
+    return { ok: false, error: "查询结果缺少结果数据。" };
   }
   const payload = QUERY_PAYLOAD_SCHEMA.safeParse(result.structuredContent);
   if (!payload.success) {
-    return { ok: false, error: "查询结果不符合结果卡载荷契约。" };
+    return { ok: false, error: "查询结果的数据格式无效。" };
   }
 
-  // 全量行必须与公共载荷同宽：schema 只管形状，宽度对不对要看这一份 payload
+  // schema 只校验形状；全量行的列数还要与本次 payload 的列数一致
   const width = payload.data.view.columns.length;
   const fullRows = FULL_ROWS_BLOCK_SCHEMA.optional().safeParse(result._meta?.[FULL_ROWS_META_KEY]);
   if (!fullRows.success || fullRows.data?.rows.some((row) => row.length !== width)) {
-    return { ok: false, error: "查询结果的全量行数据格式无效。" };
+    return { ok: false, error: "查询结果的完整行数据格式无效。" };
   }
   const resource = EXPORT_RESOURCE_LINK_SCHEMA.optional().safeParse(
     result._meta?.[EXPORT_RESOURCE_META_KEY],
@@ -80,7 +79,7 @@ export function deliverAnalysisResult(result: ToolResult): DeliveredAnalysis {
 
   const presentation = result._meta?.[PRESENTATION_META_KEY];
   if (!isPresentationBlock(presentation)) {
-    return { ok: false, error: "查询结果缺少有效的服务端呈现配置。" };
+    return { ok: false, error: "查询结果缺少图表配置。" };
   }
   return {
     ok: true,
@@ -90,7 +89,7 @@ export function deliverAnalysisResult(result: ToolResult): DeliveredAnalysis {
   };
 }
 
-/** 个体记录只认 App 私有 `_meta`；structuredContent/content 即使出现同名字段也不读取。 */
+/** 逐人记录只从私有 `_meta` 读取；structuredContent 和 content 中即使有同名字段也不读。 */
 export function deliverRecordProjection(result: ToolResult): DeliveredRecords {
   if (result.isError) {
     return { ok: false, error: firstText(result.content) ?? "构成记录加载失败。" };
@@ -100,5 +99,5 @@ export function deliverRecordProjection(result: ToolResult): DeliveredRecords {
   );
   return parsed.success
     ? { ok: true, payload: parsed.data }
-    : { ok: false, error: "构成记录缺少有效的受控记录载荷。" };
+    : { ok: false, error: "构成记录的数据格式无效。" };
 }

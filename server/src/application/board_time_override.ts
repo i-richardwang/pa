@@ -3,10 +3,7 @@ import type { TimeIntent } from "../semantic_core/time_contract.js";
 
 export type BoardTimeOverrideStatus = "applied" | "unsupported";
 
-/**
- * 板级时间覆盖整体替换唯一查询的时间输入；派生结果保持自身口径。
- * Report 重放与 Board Record Projection 共用这里，禁止各自重建时间合成规则。
- */
+/** 看板时间覆盖整体替换查询的时间输入；带派生计算的分析不支持覆盖。报告重放与看板明细都调用这里。 */
 export function applyBoardTimeOverride(
   definition: AnalysisDefinition,
   time: TimeIntent,

@@ -26,13 +26,13 @@ const views = [
 ] satisfies CubeView[];
 
 describe("memberDisplayTitle", () => {
-  test("单个成员也按 shortTitle 去掉 view 前缀", () => {
+  test("有 shortTitle 时直接使用 shortTitle", () => {
     expect(memberDisplayTitle(views, "individual_fixture.employee_name", "人员名单 姓名")).toBe(
       "姓名",
     );
   });
 
-  test("shortTitle 缺失时按所属 view 精确去前缀", () => {
+  test("没有 shortTitle 时去掉所属 view 的标题前缀", () => {
     expect(memberDisplayTitle(views, "individual_fixture.employee_id", "人员名单 工号")).toBe(
       "工号",
     );
@@ -40,7 +40,7 @@ describe("memberDisplayTitle", () => {
 });
 
 describe("showDimensionNote", () => {
-  test("维度默认不进入用户口径，仅显式声明者进入", () => {
+  test("维度只在声明 user_note 时展示口径说明", () => {
     expect(showDimensionNote(views[0].dimensions[0])).toBe(false);
     expect(showDimensionNote(views[0].dimensions[2])).toBe(true);
   });

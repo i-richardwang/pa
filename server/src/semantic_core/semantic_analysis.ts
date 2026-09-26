@@ -122,7 +122,7 @@ export const SEMANTIC_QUERY_VIEW_INPUT = z
       .max(1)
       .optional()
       .describe("报告级受控临时计算；聚合仍由模型查询完成，不注册为正式指标"),
-    summary: SEMANTIC_SUMMARY_INPUT.optional().describe("结果表格的模型重算总体"),
+    summary: SEMANTIC_SUMMARY_INPUT.optional().describe("结果表格的总计行（由模型重新计算）"),
   })
   .strict()
   .superRefine((view, context) => {
@@ -280,7 +280,7 @@ export const SEMANTIC_DERIVED_VIEW_INPUT: z.ZodType<SemanticDerivedView> = z
       .array(z.object({ by: DERIVED_OUTPUT_NAME, direction: z.enum(["asc", "desc"]) }).strict())
       .optional(),
     limit: z.number().int().positive().max(1000).optional(),
-    summary: SEMANTIC_SUMMARY_INPUT.optional().describe("结果表格的模型重算总体"),
+    summary: SEMANTIC_SUMMARY_INPUT.optional().describe("结果表格的总计行（由模型重新计算）"),
   })
   .strict();
 
@@ -314,8 +314,8 @@ const PRESENTATION_SECONDARY_SERIES = z
   .min(1)
   .optional()
   .describe(
-    "画在右轴的指标（第二把尺子）；省略时按量纲自动分侧：量在左、率在右。" +
-      "每侧只容一种量纲；不能与 series 重复；与 group_by 互斥",
+    "画在右侧 Y 轴的指标；省略时按单位自动分配：数量在左、比率在右。" +
+      "每根轴只能放一种单位；不能与 series 重复；与 group_by 互斥",
   );
 const PRESENTATION_CATEGORY = DIMENSION_CHANNEL_FIELD.optional().describe(
   "分类轴维度；直接查询使用 dimensions 中的语义维度 id，只有一个分类维度时可省略",
@@ -347,7 +347,7 @@ export const SEMANTIC_VIEW_INTENT_INPUT = z
       .strict(),
     z
       .object({
-        type: z.literal("line").describe("按月或按年的连续时间趋势；横轴恒为时间"),
+        type: z.literal("line").describe("按月或按年的连续时间趋势；横轴是时间"),
         series: PRESENTATION_SERIES,
         secondary_series: PRESENTATION_SECONDARY_SERIES,
         group_by: PRESENTATION_GROUP_BY,

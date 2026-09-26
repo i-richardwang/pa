@@ -62,7 +62,7 @@ const pivotResult = (rows: ViewBlock["rows"]): QueryRunResult => {
 };
 
 describe("presentation service runtime fallback", () => {
-  test("空结果不伪造图表，说明保留图表声明", () => {
+  test("空结果按表格呈现，并说明结果为空", () => {
     const service = createPresentationService();
     const executed = result([]);
     expect(service.compile(executed)).toMatchObject({ type: "table" });
@@ -70,12 +70,12 @@ describe("presentation service runtime fallback", () => {
       {
         result_view_id: "result",
         kind: "empty_result",
-        note: expect.stringContaining("结果为空"),
+        note: expect.stringContaining("没有返回数据"),
       },
     ]);
   });
 
-  test("非空但形态画不出声明图表时给出降级说明", () => {
+  test("结果形态画不出声明的图表时按表格呈现并附说明", () => {
     const service = createPresentationService();
     const executed = result([
       ["研发", 10],
@@ -86,7 +86,7 @@ describe("presentation service runtime fallback", () => {
       {
         result_view_id: "result",
         kind: "unsupported_shape",
-        note: expect.stringContaining("已按表格呈现"),
+        note: expect.stringContaining("已改用表格显示"),
       },
     ]);
   });
@@ -104,7 +104,7 @@ describe("presentation service runtime fallback", () => {
     expect(service.runtimeFallbacks(executed)).toEqual([]);
   });
 
-  test("列轴生效时无降级说明", () => {
+  test("交叉表列轴生效时不附降级说明", () => {
     const service = createPresentationService();
     const executed = pivotResult([
       ["研发", "本科", 10],
@@ -118,7 +118,7 @@ describe("presentation service runtime fallback", () => {
     expect(service.runtimeFallbacks(executed)).toEqual([]);
   });
 
-  test("列轴坐标重复时明确说明不可用，空结果保留声明", () => {
+  test("列轴坐标重复时说明表格布局未生效，空结果不附说明", () => {
     const service = createPresentationService();
     const degraded = pivotResult([
       ["研发", "本科", 10],

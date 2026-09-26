@@ -57,7 +57,7 @@ test("package and runtime expose one first-release version", async () => {
   expect(packageMetadata.version).toBe(PRODUCT_VERSION);
 });
 
-test("通用 BI 核心不内置 Demo 业务时间源或调研类型", async () => {
+test("通用核心不内置 Demo 的业务时间源或调研类型", async () => {
   const directories = ["semantic_core", "engine", "adapters", "application"];
   const files = (
     await Promise.all(
@@ -107,11 +107,11 @@ test("Better Auth 授权持久化只由用户账号适配器编码", async () =>
   expect(callers).toEqual(["server/src/adapters/better_auth_user_account_administration.ts"]);
 });
 
-test("报告更新动作只有一个领域定义，各呈现面只引用共享子集", async () => {
+test("报告更新操作只在领域层定义一次，各入口只引用其中的子集", async () => {
   const canonical = await readFile(new URL("server/src/contracts/report_action.ts", root), "utf8");
   expect(
     canonical.includes('z.literal("replace_view")'),
-    "检测串已无法命中唯一合法定义，护栏失去检出能力",
+    "匹配字符串找不到 report_action.ts 里的定义，这条检查已经不起作用",
   ).toBe(true);
 
   const productionFiles = (
@@ -157,7 +157,7 @@ test("pa-analytics skill has a single editable fact source in the plugin", async
 
 test("pa-analytics is not also shipped as a standalone .agents skill", async () => {
   const strayEntry = await lstat(new URL(agentsSkillEntry, root)).catch(() => null);
-  expect(strayEntry, `${agentsSkillEntry} 与插件事实源重复分发`).toBeNull();
+  expect(strayEntry, `${agentsSkillEntry} 与插件里的 Skill 重复`).toBeNull();
 });
 
 test("Claude Code skill entry is a symlink, not a copied SKILL.md", async () => {
@@ -197,7 +197,7 @@ function trackedSymlinks(): string[] {
   return entries;
 }
 
-/** Skill 语料 = 入口加全部按需读取件；泄漏类检查一律对整份语料生效，不逐文件列举。 */
+/** Skill 全文：入口文件加所有按需读取的参考文件；泄漏类检查对全文生效。 */
 async function skillCorpus(): Promise<string> {
   const parts = await Promise.all(
     [skillFactSource, skillQueryPatterns, skillDeliveryWorkflows].map((path) =>
@@ -250,8 +250,8 @@ test("pa-analytics instructions do not expose physical model names", async () =>
 test("pa-analytics instructions do not pin a data cutoff", async () => {
   const corpus = await skillCorpus();
   const pinnedCutoff = /"cutoff": "20\d{2}-\d{2}"/;
-  expect(pinnedCutoff.test('"cutoff": "2026-07"'), "探针必须能发现写死的截止月").toBe(true);
-  expect(pinnedCutoff.test('"cutoff": "<YYYY-MM>"'), "探针不得误报占位写法").toBe(false);
+  expect(pinnedCutoff.test('"cutoff": "2026-07"'), "匹配规则应能发现写死的截止月").toBe(true);
+  expect(pinnedCutoff.test('"cutoff": "<YYYY-MM>"'), "匹配规则误报了占位写法").toBe(false);
   expect(corpus).not.toMatch(pinnedCutoff);
 });
 

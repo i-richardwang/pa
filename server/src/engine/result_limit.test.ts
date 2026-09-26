@@ -12,17 +12,17 @@ import {
 } from "./result_limit.js";
 
 describe("resolveLimitOutcome：截断判定", () => {
-  test("未触上限：完整结果，无告警", () => {
+  test("未达到上限时，结果完整且没有提示", () => {
     const r = resolveLimitOutcome(3, 200);
     expect(r).toEqual({ rowCount: 3, hasMore: false });
   });
 
-  test("恰好等于上限：探测负例，不误报还有更多", () => {
+  test("行数恰好等于上限时，不误报还有更多行", () => {
     const r = resolveLimitOutcome(200, 200);
     expect(r).toEqual({ rowCount: 200, hasMore: false });
   });
 
-  test("交付预算触顶：truncated 引导下载/重查", () => {
+  test("达到返回上限时，truncated 提示下载或缩小查询", () => {
     const r = resolveLimitOutcome(2001, 2000);
     expect(r.rowCount).toBe(2000);
     expect(r.hasMore).toBe(true);
@@ -31,12 +31,12 @@ describe("resolveLimitOutcome：截断判定", () => {
   });
 });
 
-describe("聚合两级上限：卡片交付全量 × 模型头部样本", () => {
-  test("上限序关系：模型样本上限低于卡片交付上限（采样才有意义）", () => {
+describe("聚合结果的两级上限：卡片显示全部行，模型只收到前几行样本", () => {
+  test("模型样本的行数上限低于卡片显示上限", () => {
     expect(AGGREGATE_MODEL_ROWS).toBeLessThan(AGGREGATE_CARD_ROWS);
   });
 
-  test("样本注记：以 row_count 为准，防样本合计当总量", () => {
+  test("样本说明提示以 row_count 为准，不要把样本内的合计当总量", () => {
     const note = modelSampleNote(1500);
     expect(note).toContain("1500");
     expect(note).toContain(`前 ${AGGREGATE_MODEL_ROWS} 行样本`);
@@ -44,12 +44,12 @@ describe("聚合两级上限：卡片交付全量 × 模型头部样本", () => 
   });
 });
 
-describe("isBoundedResultComplete：有界执行完整性", () => {
-  test("顶格导出未触引擎上限：完整", () => {
+describe("isBoundedResultComplete：有行数上限的执行是否完整", () => {
+  test("导出未达到引擎行数上限时，结果完整", () => {
     expect(isBoundedResultComplete(12345, 50000)).toBe(true);
   });
 
-  test("顶格导出触引擎上限：完整性不可确认（无法多取探测）", () => {
+  test("导出达到引擎行数上限时，无法确认结果是否完整", () => {
     expect(isBoundedResultComplete(50000, 50000)).toBe(false);
   });
 });

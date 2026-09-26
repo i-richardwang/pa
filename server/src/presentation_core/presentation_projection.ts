@@ -1,4 +1,4 @@
-/** 把物理呈现成员投影为稳定公共列身份；结果数据与呈现声明共用同一交付映射。 */
+/** 呈现声明的列名按交付映射换成公共列名；结果数据用同一份映射。 */
 import { memberShortName } from "../semantic_core/member_name.js";
 import type { OutputDelivery } from "../semantic_core/execution_plan.js";
 import type { ChartDecl } from "./chart_decl.js";
@@ -13,11 +13,10 @@ function requiredPublicColumnId(
   outputId: string,
 ): string {
   const id = publicColumnId(delivery, internal);
-  if (!id) throw new Error(`交付结果 ${outputId} 的执行列 ${internal} 缺少公共语义身份`);
+  if (!id) throw new Error(`结果 ${outputId} 的内部列 ${internal} 没有对应的公开语义 id`);
   return id;
 }
 
-/** 系列侧通道的投影：line 与 bar 共用同一组通道，只有分类轴与堆叠是 bar 独有。 */
 function projectSeriesChannels(
   declaration: Extract<ChartDecl, { type: "line" | "bar" }>,
   project: (column: string) => string,

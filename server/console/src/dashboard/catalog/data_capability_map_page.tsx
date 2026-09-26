@@ -65,15 +65,15 @@ function factsByName(data: DataCapabilityMapData): Map<string, DataCapabilityMap
   return new Map(data.facts.map((fact) => [fact.name, fact]));
 }
 
-/** 该事实被属性组认领的维度：呈现上归属左列属性组，不算作事实本体内容。 */
+/** 事实中已归入属性组的维度：显示在属性组下，不计入事实自身的成员。 */
 function groupedNamesOf(data: DataCapabilityMapData, fact: string): Set<string> {
   return groupedMemberNames(data.dimension_groups, fact);
 }
 
 const LANE_TITLES: Record<LaneKey, string> = {
-  dimensions: "维度构件",
+  dimensions: "维度组",
   metric_domains: "指标域",
-  facts: "事实构件",
+  facts: "数据来源",
 };
 
 const HANDLE_STYLE = {
@@ -87,7 +87,6 @@ const HANDLE_STYLE = {
 
 type CapabilityNodeData = {
   ref: CapabilityNodeRef;
-  /** 节点副行，装配节点时算好：节点件只画自己拿到的数据。 */
   summary: string;
   dimmed: boolean;
   active: boolean;
@@ -108,10 +107,9 @@ function nodeTitle(ref: CapabilityNodeRef): string {
   return ref.topic.title;
 }
 
-/** 摘要只报内容量；全内部成员的构件按技术字段说明。 */
 function nodeSummary(ref: CapabilityNodeRef, data: DataCapabilityMapData): string {
   if (ref.kind === "metric_domain") {
-    return `${ref.topic.metrics.length} 个指标 · ${ref.topic.bindings.length} 个事实`;
+    return `${ref.topic.metrics.length} 个指标 · ${ref.topic.bindings.length} 个数据来源`;
   }
   if (ref.kind === "dimension_group") {
     return `${ref.group.members.length} 个分析维度`;
@@ -229,7 +227,7 @@ const EDGE_TYPES = { capability: CapabilityEdge };
 
 const PRO_OPTIONS = { hideAttribution: true };
 
-/** 首屏取景与「回到全景」同一份参数。 */
+/** 初始视图和「回到全景」共用这组参数。 */
 const MAP_FIT_VIEW = { padding: 0.1 };
 
 function MemberRow({ member }: { member: ListedMember }) {
@@ -273,14 +271,12 @@ function RelationRow({ label, names }: { label: string; names: string[] }) {
   );
 }
 
-/** 该事实被哪些指标域取用。 */
 function domainTitlesOfFact(data: DataCapabilityMapData, fact: string): string[] {
   return data.metric_domains
     .filter((topic) => topic.bindings.some((binding) => binding.fact === fact))
     .map((topic) => topic.title);
 }
 
-/** 该属性组的维度进了哪些指标域的共同维度空间。 */
 function domainTitlesOfGroup(
   data: DataCapabilityMapData,
   group: DataCapabilityMapDimensionGroup,
@@ -312,7 +308,7 @@ function CapabilityProfileCard({
     description = nodeRef.topic.description;
     const factByName = factsByName(capabilityMap);
     relations.push({
-      label: "事实来源",
+      label: "数据来源",
       names: nodeRef.topic.bindings.flatMap((binding) => {
         const title = factByName.get(binding.fact)?.title;
         return title ? [title] : [];
@@ -386,7 +382,7 @@ function DimensionGroupInspectorBody({
   return (
     <>
       <MemberListSection kind="dimension" members={members} title="分析维度" />
-      <InspectorSection collapsible title="事实绑定">
+      <InspectorSection collapsible title="数据来源">
         {group.bindings.flatMap((binding) => {
           const title = factByName.get(binding.fact)?.title;
           if (!title) return [];
@@ -441,7 +437,7 @@ function MetricDomainInspectorBody({
   );
 }
 
-/** 档案由壳渲染在本页树之外，所以它读的地图数据随节点一起以 props 交出去。 */
+/** 右栏渲染在本页组件树之外，地图数据需要通过 props 传入。 */
 function CapabilityInspector({
   nodeRef,
   capabilityMap,
@@ -452,7 +448,7 @@ function CapabilityInspector({
   onClose: () => void;
 }) {
   return (
-    <ProfileAside closeLabel="关闭详情" label="能力档案" onClose={onClose}>
+    <ProfileAside closeLabel="关闭详情" label="详情" onClose={onClose}>
       <CapabilityProfileCard capabilityMap={capabilityMap} nodeRef={nodeRef} />
       {nodeRef.kind === "fact" && (
         <FactInspectorBody capabilityMap={capabilityMap} fact={nodeRef.fact} />
@@ -477,7 +473,6 @@ function MapCameraControls() {
       <Button aria-label="缩小" onClick={() => void zoomOut()} size="icon-sm">
         <MinusIcon aria-hidden="true" />
       </Button>
-      {/* 与首屏取景同一个 padding：两处不一致时，「回到全景」回不到人记得的那一屏 */}
       <Button aria-label="回到全景" onClick={() => void fitView(MAP_FIT_VIEW)} size="icon-sm">
         <ScanIcon aria-hidden="true" />
       </Button>
@@ -569,7 +564,6 @@ function DataCapabilityMapContent({ capabilityMap }: { capabilityMap: DataCapabi
             opacity: highlight && !lit ? 0.15 : 1,
           },
           markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: stroke },
-          // join 边点亮即语义自明，只有 binding 边的内容量值得标注
           data:
             lit && edge.kind === "binding" ? { chip: `${edge.includes} 项内容` } : ({} as const),
         };
@@ -600,7 +594,6 @@ function DataCapabilityMapContent({ capabilityMap }: { capabilityMap: DataCapabi
 
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col", MAIN_CARD_BODY_INSET)}>
-      {/* 半径取 `PLOT_RADIUS`，与图表场地同一个数。 */}
       <div
         className="min-h-0 flex-1 overflow-hidden border border-pa-line"
         style={{ borderRadius: PLOT_RADIUS }}

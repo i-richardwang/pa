@@ -4,7 +4,7 @@
 @import "@fontsource-variable/inter/wght.css";
 @import "../../src/presentation_core/tokens.css";
 
-/* Tailwind 不扫 console 入口之外的工作区，结果视图须显式登记。 */
+/* Tailwind 不扫描 console 目录之外的源码，结果视图与 presentation_core 需显式登记。 */
 @source "../../result_view/src";
 
 @source "../../src/presentation_core";

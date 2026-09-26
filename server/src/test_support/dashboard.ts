@@ -148,7 +148,7 @@ export function semanticAccessStub(principal: Principal): AuthorizedSemanticCont
   };
 }
 
-/** 测试里的执行服务也只接收正式的已授权规划工件。 */
+/** 测试用的执行服务同样只接受已授权的执行计划。 */
 export function authorizeTestAnalysisPlan(input: {
   principal: Principal;
   plan: ExecutionPlan;
@@ -190,7 +190,7 @@ const testExpression = (node: SemanticExprNode): ExprNode => ({
   right: testExpressionOperand(node.right),
 });
 
-/** 语义意图 → 物理声明的测试替身：与编译器同形，但不过 catalog 路由。 */
+/** 把语义意图转成物理声明的测试替身：输出格式与编译器相同，但不经过 catalog 解析。 */
 function stubPresentation(
   declared: SemanticViewIntent,
   preferences: ViewPreferences,
@@ -237,7 +237,7 @@ function stubPresentation(
   };
 }
 
-/** 测试替身里的派生结果编译：与真实编译器同形，只省去 catalog 绑定。 */
+/** 派生结果编译的测试替身：输出格式与真实编译器相同，只省去 catalog 绑定。 */
 function derivedStubView(derived: SemanticDerivedView, semantic: AnalysisDefinition) {
   const { joined, ...rest } = derived;
   return {

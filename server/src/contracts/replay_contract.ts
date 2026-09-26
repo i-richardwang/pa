@@ -32,15 +32,15 @@ export type ReplayPayload = {
   caller: string;
   analysis_id: string;
   view_id: string;
-  /** 报告重放时用于检测版本竞态。 */
+  /** 报告重放时用于检测并发修改。 */
   revision?: number;
   analysis: AnalysisDefinition;
   view: SemanticViewIntent;
-  /** 人类作者视觉偏好；控制台编辑使用，不进入 Agent MCP 结果。 */
+  /** 用户在控制台设置的视觉偏好，不进入 MCP 结果。 */
   view_preferences: ViewPreferences;
   record_projection_bindings: RecordProjectionBindings;
   payload: QueryPayload;
-  /** 本次 Run 的完整聚合行与公共呈现声明；只随 Web 响应存在，不持久化。 */
+  /** 本次运行的完整聚合行与图表声明；只在 Web 响应中返回，不持久化。 */
   render_bundle: RenderBundle;
   presentation: PresentationBlock;
   presentation_notes?: PresentationFallback[];

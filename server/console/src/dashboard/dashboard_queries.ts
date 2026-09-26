@@ -1,7 +1,4 @@
-/**
- * 控制台通用服务端资源取数（报告编辑器族之外）。同一资源收口到一个键位；
- * 缓存只存 api.ts 经 Zod 校验的契约类型。
- */
+/** 控制台服务端资源查询；报告编辑器相关的查询在 editor_queries.ts。 */
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ADD_BOARD_ITEM_PAYLOAD_SCHEMA,
@@ -70,7 +67,7 @@ export const dashboardKeys = {
   analysisReplay: (id: string) => ["analysis_replay", id] as const,
   boards: ["boards"] as const,
   board: (id: string) => ["board", id] as const,
-  /** TanStack 按结构哈希，结构化值可直接进键。 */
+  /** TanStack Query 按结构哈希查询键，对象可以直接放进键。 */
   boardReportReplay: (boardId: string, reportId: string, timeOverride: TimeIntent | null) =>
     ["board_report_replay", boardId, reportId, timeOverride] as const,
   users: ["users"] as const,
@@ -80,10 +77,7 @@ export const dashboardKeys = {
   usage: (days: number, offset: number) => ["usage", days, offset] as const,
 };
 
-/**
- * 清单移除使用乐观更新：动作在点击时发出，界面先撤下对应行；
- * 失败由调用它的 mutation 用 onMutate 存下的快照整份回滚。
- */
+/** 清单移除的乐观更新：先移除对应行，失败时由 mutation 用 onMutate 保存的快照回滚。 */
 export function withoutRow<T extends { rows: Array<{ id: string }> }>(
   payload: T | undefined,
   id: string,
@@ -118,7 +112,6 @@ export function useCapabilityMapQuery(enabled = true) {
   });
 }
 
-/** 管理端写入后同时失效公共与管理缓存；服务端 Catalog 每次解析都读取最新定义。 */
 export function useBusinessTerms(enabled = true) {
   return useQuery({
     queryKey: dashboardKeys.businessTerms,
@@ -135,6 +128,7 @@ export function useAdminBusinessTerms(enabled = true) {
   });
 }
 
+/** 服务端 Catalog 每次解析都读取最新术语，写入后只需失效两份术语缓存。 */
 function useBusinessTermMutation<TInput, TResult>(mutationFn: (input: TInput) => Promise<TResult>) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -200,8 +194,8 @@ export function useRestoreBusinessTerm() {
 }
 
 /**
- * 维度取值现查（同 MCP values_of 路径与分类/个体粒度守卫）：值集合随行权限变，
- * 不缓存（staleTime/gcTime 皆 0）。输入去抖期保留上一批结果（只压暗、不清空）。
+ * 维度候选值与 MCP values_of 走同一接口和粒度校验；结果随行级权限变化，不缓存。
+ * 输入去抖期间保留上一批结果。
  */
 export function useDimensionValues(member: string, contains: string, enabled = true) {
   return useQuery({
@@ -225,7 +219,6 @@ export function useReportsList(enabled = true) {
   });
 }
 
-/** 已归档的报告：归档可逆，恢复入口就在这张清单上。 */
 export function useArchivedReportsList(enabled = true) {
   return useQuery({
     queryKey: dashboardKeys.archivedReports,
@@ -247,7 +240,7 @@ export function useMyAnalyses(days: number, limit: number, offset: number, enabl
   });
 }
 
-/** 按 View 身份以当前浏览者权限重放（结果为当前数据，非当时快照）。 */
+/** 按当前浏览者权限重新执行，返回最新数据。 */
 export function useAnalysisReplay(id: string) {
   return useQuery({
     queryKey: dashboardKeys.analysisReplay(id),
@@ -301,7 +294,7 @@ export function boardReportReplayQueryOptions(
   };
 }
 
-/** 编辑器把这份载荷当会话基线；窗口切回不得在用户无动作时替换它。 */
+/** 编辑器以这份载荷为会话基线，窗口重新聚焦时不能重新取数替换它。 */
 export function useBoardReportReplay(boardId: string, reportId: string) {
   return useQuery({
     ...boardReportReplayQueryOptions(boardId, reportId, null),
@@ -439,7 +432,7 @@ export function useApiKeys() {
 
 export type ApiKeyRow = NonNullable<ReturnType<typeof useApiKeys>["data"]>[number];
 
-/** 签发：完整 key 只在响应里出现一次，由调用方展示。 */
+/** 完整 key 只在创建响应里出现一次，由调用方展示。 */
 export function useCreateApiKey() {
   const queryClient = useQueryClient();
   return useMutation({

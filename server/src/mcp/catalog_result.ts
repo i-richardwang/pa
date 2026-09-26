@@ -40,7 +40,7 @@ const dimension = (source: PublicCatalogDimension) => ({
   ...(source.dimension_kind ? { dimension_kind: source.dimension_kind } : {}),
 });
 
-/** MCP 目录只投影 Agent 查询所需字段；Web 导航字段保留在 PublicCatalogDocument。 */
+/** MCP 目录只输出 Agent 查询需要的字段；Web 导航字段只在 PublicCatalogDocument 中。 */
 export function projectAgentCatalog(source: CatalogQueryPayload): AgentCatalogPayload {
   return CATALOG_OUTPUT_SCHEMA.parse({
     access_scope: source.access_scope,

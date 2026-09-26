@@ -1,4 +1,3 @@
-/** Cube /sql 单窗与多窗原始形态的产品边界归一。 */
 import { describe, expect, spyOn, test } from "bun:test";
 import { decodeJwt } from "jose";
 import {
@@ -56,7 +55,7 @@ const jsonResponse = (body: unknown) =>
     headers: { "Content-Type": "application/json" },
   });
 
-test("通用授权范围只以 data_scope 投影到 Cube JWT", async () => {
+test("数据范围以 data_scope 字段写入 Cube JWT", async () => {
   const authorizations: string[] = [];
   const fetchMock = spyOn(globalThis, "fetch").mockImplementation((async (_input, init) => {
     authorizations.push(new Headers(init?.headers).get("Authorization") ?? "");
@@ -89,7 +88,7 @@ test("通用授权范围只以 data_scope 投影到 Cube JWT", async () => {
   }
 });
 
-test("内部成员只保留在服务端契约解析面", async () => {
+test("内部成员只出现在 internal* 字段，不进公开成员列表", async () => {
   const view = {
     type: "view",
     name: "test_people_metrics",
@@ -135,7 +134,7 @@ test("内部成员只保留在服务端契约解析面", async () => {
   }
 });
 
-test("Cube meta 与 load 的内部结构在 HTTP 边界 fail-closed", async () => {
+test("meta 与 load 应答结构不符合 schema 时抛出网关错误", async () => {
   const fetchMock = spyOn(globalThis, "fetch");
   try {
     fetchMock.mockResolvedValueOnce(
@@ -165,7 +164,7 @@ test("Cube meta 与 load 的内部结构在 HTTP 边界 fail-closed", async () =
   }
 });
 
-test("Cube load 只把通过合同的行与 annotation 交给应用层", async () => {
+test("load 只返回 schema 内的行与 annotation 字段", async () => {
   const fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(
     jsonResponse({
       data: [{ "sales.revenue": 12 }],
@@ -189,7 +188,7 @@ test("Cube load 只把通过合同的行与 annotation 交给应用层", async (
   }
 });
 
-test("单次 Cube HTTP 往返超时后以稳定网关错误结束", async () => {
+test("单次 Cube 请求超时后抛出网关错误", async () => {
   const fetchMock = spyOn(globalThis, "fetch").mockImplementation((async (_input, init) => {
     const signal = init?.signal;
     if (!signal) throw new Error("missing abort signal");
@@ -245,7 +244,7 @@ test("时间上下文拒绝 Cube 返回的非法年月", async () => {
   }
 });
 
-test("非 HR 数据时钟从包注册表和执行 View 元数据解析", () => {
+test("时间来源锚点从语义包注册表和执行 View 元数据解析", () => {
   const metricView = (
     name: string,
     source: "sales_actual" | "sales_plan" | "inventory_count",
@@ -274,7 +273,7 @@ test("非 HR 数据时钟从包注册表和执行 View 元数据解析", () => {
     sales_plan: { view: "plan_execution", measure: "planned_revenue" },
     inventory_count: { view: "inventory_execution", measure: "counted_units" },
   });
-  // 注册表里的非主来源不在当前包模型中出现时，不要求锚点。
+  // 模型中未使用的非主来源不要求锚点
   expect(
     Object.fromEntries(
       resolveTimeSourceAnchors(
@@ -283,7 +282,7 @@ test("非 HR 数据时钟从包注册表和执行 View 元数据解析", () => {
       ),
     ),
   ).toEqual({ sales_actual: { view: "sales_execution", measure: "revenue" } });
-  // 声明了某来源的执行 View 在场却没人给锚点：fail-closed
+  // 执行 View 使用了某来源但没有声明锚点时报错
   expect(() =>
     resolveTimeSourceAnchors(
       [
@@ -296,7 +295,7 @@ test("非 HR 数据时钟从包注册表和执行 View 元数据解析", () => {
       GENERIC_TIME_SOURCES,
     ),
   ).toThrow("sales_plan 缺少唯一时间锚点");
-  // 主时钟恒必须在场
+  // 主来源必须有锚点
   expect(() =>
     resolveTimeSourceAnchors(
       [metricView("plan_execution", "sales_plan", "planned_revenue")],
@@ -306,7 +305,7 @@ test("非 HR 数据时钟从包注册表和执行 View 元数据解析", () => {
 });
 
 describe("normalizeSqlResponse", () => {
-  test("单窗统一返回长度为一的逐窗数组", () => {
+  test("单期间查询返回长度为一的数组", () => {
     const result = normalizeSqlResponse(
       {
         measures: ["test_people_metrics.active_employee_count"],
@@ -329,7 +328,7 @@ describe("normalizeSqlResponse", () => {
     ]);
   });
 
-  test("多窗逐项配对窗口，不泄漏 Cube 包装对象", () => {
+  test("多期间查询逐项配对期间，只返回 SQL 与参数", () => {
     const result = normalizeSqlResponse(
       {
         measures: ["test_people_metrics.ytd_primary_event_rate"],
@@ -355,7 +354,7 @@ describe("normalizeSqlResponse", () => {
     ]);
   });
 
-  test("SQL 缺失或窗口数量不一致时以稳定网关错误拒绝", () => {
+  test("SQL 缺失或期间数量不一致时抛出网关错误", () => {
     expect(() => normalizeSqlResponse({}, { sql: {} })).toThrow("数据引擎暂时不可用");
     expect(() =>
       normalizeSqlResponse(

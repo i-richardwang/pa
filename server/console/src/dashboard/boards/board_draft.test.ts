@@ -72,7 +72,7 @@ describe("board edit state", () => {
     });
   });
 
-  test("上移下移与相邻瓦片对换整格 place", () => {
+  test("上移下移与相邻瓦片交换完整的 place", () => {
     const initial = beginBoardEdit(board);
     const down = moveBoardTile(initial, chartTile.tile_id, "down");
     expect(down.tiles.find((t) => t.tile_id === chartTile.tile_id)?.place).toEqual(textTile.place);

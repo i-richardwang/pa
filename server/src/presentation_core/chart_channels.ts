@@ -56,7 +56,7 @@ export function splitScales(
   };
 }
 
-/** 所有维度必须占用通道；遗留维度会让同一坐标对应多行，而呈现层不得聚合。 */
+/** 每个维度都必须占一个通道：多出的维度会让同一坐标对应多行，呈现层不做聚合。 */
 export function assignChannels(
   type: ChannelForm,
   pool: ChannelPool,

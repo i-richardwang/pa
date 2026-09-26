@@ -1,6 +1,4 @@
-/**
- * 接受只表示认可该缺口值得补；指标、口径与数据范围仍以模型 YAML 的 Git 变更为准。
- */
+// 接受只表示认可这个缺口值得补；指标、口径和数据范围的实际变更以模型 YAML 的 Git 提交为准。
 import { useEffect, useState } from "react";
 import { CheckIcon, XIcon } from "lucide-react";
 import { FEEDBACK_LIMITS, type FeedbackGroup } from "@contracts/feedback_contract";

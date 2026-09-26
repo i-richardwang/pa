@@ -27,7 +27,7 @@ export function SaveReportDialog({
 }: {
   target: SaveReportTarget | null;
   onClose: () => void;
-  /** 保存成功后回传新建报告；看板编辑器据此追加引用瓦片。 */
+  /** 保存成功后返回新建的报告；传入时由调用方负责提示。 */
   onSaved?: (row: ReportRow) => void;
 }) {
   const [name, setName] = useState("");

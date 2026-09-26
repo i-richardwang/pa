@@ -1,7 +1,7 @@
 views:
   - name: q12_survey_response_metrics
     title: Q12调研答卷指标
-    description: 最近一期 Q12 调研的总体、四层、十二项得分及正向作答结构。
+    description: 最近一期 Q12 调研的总体得分、四个层级得分、十二项得分，以及正向和强烈认同的作答项数。
     meta:
       query_surface: metric_source
       time_source: survey

@@ -112,14 +112,14 @@ const CHART_MODEL_SCHEMA = z
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["total"],
-          message: "逐项指针图必须交付总计",
+          message: "饼图类图表必须提供总计",
         });
       }
       if (model.legend.some((item) => item.share === undefined)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["legend"],
-          message: "逐项指针图必须交付每项占比",
+          message: "饼图类图表必须提供每项占比",
         });
       }
     }
@@ -128,7 +128,7 @@ const CHART_MODEL_SCHEMA = z
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["records", "points"],
-          message: "记录投影必须与图例逐项对齐",
+          message: "明细入口必须与图例逐项对齐",
         });
       }
       model.records.points.forEach((points, index) => {
@@ -136,7 +136,7 @@ const CHART_MODEL_SCHEMA = z
           context.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["records", "points", index],
-            message: "记录投影必须与分类逐项对齐",
+            message: "明细入口必须与分类逐项对齐",
           });
         }
       });

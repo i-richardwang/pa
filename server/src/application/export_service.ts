@@ -133,7 +133,7 @@ export function createExportService(deps: {
       const executionPlan = planned.plan;
       const view = exportableOutput(executionPlan);
       if (!view) {
-        throw new Error("该分析结果包含报告计算或派生列，不能按底层直查结果导出");
+        throw new Error("该分析结果包含报告计算或派生列，暂不支持导出");
       }
       const {
         cubeContext,

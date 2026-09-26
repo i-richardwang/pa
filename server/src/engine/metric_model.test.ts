@@ -85,7 +85,7 @@ describe("正式指标模型", () => {
     });
   });
 
-  test("组件不可见时不暴露复合指标，权限沿叶子指标闭合", () => {
+  test("组件不可见时指标视图和明细视图都不暴露复合指标", () => {
     const modeled = applyFormalMetricModel(
       [
         view("employee_leave_metrics", [measure("employee_leave_metrics", "separation_count")]),
@@ -127,7 +127,7 @@ describe("正式指标模型", () => {
     });
   });
 
-  test("受控记录面使用同一正式定义并把率指标下钻绑定到分子记录集", () => {
+  test("明细视图使用同一正式定义，比例指标的下钻绑定到分子记录集", () => {
     const modeled = applyFormalMetricModel(
       [
         view("employee_leave_metrics", [measure("employee_leave_metrics", "separation_count")]),
@@ -152,7 +152,7 @@ describe("正式指标模型", () => {
     });
   });
 
-  test("内部计数与公开成员资格共同装配可用性守卫，并复用到记录面", () => {
+  test("内部计数与公开成员组成可用性守卫指标，明细视图复用同一定义", () => {
     const attrition = view("employee_leave_metrics", []);
     attrition.internalMeasures = [measure("employee_leave_metrics", "guarded_count_raw")];
     const modeled = applyFormalMetricModel(

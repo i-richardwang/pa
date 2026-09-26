@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 
-/** 与 `popover-list.tsx` 不合并：可搜索面的键盘走位出自 Base UI combobox。 */
+/** 可搜索列表的键盘导航依赖 Base UI Autocomplete，因此不复用 `popover-list.tsx`。 */
 export const Autocomplete: typeof AutocompletePrimitive.Root = AutocompletePrimitive.Root;
 
 export function AutocompletePopup({

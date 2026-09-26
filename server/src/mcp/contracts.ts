@@ -15,30 +15,29 @@ import { ACCESS_SCOPE_DEFINITION_SCHEMA } from "../contracts/access_scope.js";
 import { MEASURE_QUERY_CAPABILITIES_SCHEMA } from "../contracts/catalog_contract.js";
 
 export const SERVER_INSTRUCTIONS =
-  "PA 是权限裁剪的封闭查询面。成员只用 catalog 的语义 id，并遵守 query_capabilities、time.constraints 与 report_calculations；先用 catalog(terms) 解析术语，值不确定时用 values_of。" +
-  "术语只供理解，不改写查询；歧义先确认。查询只声明指标、维度与 time，不用标题、物理字段或 SQL，也不补充未要求的范围或比较。" +
-  "构成记录仅用于单结果格、单时间桶且 records_available 的分析，个体行只在受控 App 展示。";
+  "PA 只接受预定义查询，结果按权限过滤。成员只用 catalog 的语义 id，遵守 query_capabilities、time.constraints 与 report_calculations；先用 catalog(terms) 解析术语，值不确定时用 values_of。" +
+  "术语只用于理解，不改写查询；有歧义先确认。查询只声明指标、维度和 time，不用标题、物理字段或 SQL，不擅自加范围或对比。" +
+  "明细记录只用于单结果格、单时间桶且 records_available 的分析，逐人数据只在 PA 记录卡展示。";
 
 export const TOOL_DESCRIPTIONS = {
   catalog:
-    "发现当前调用者可用的 PA 指标、维度与业务术语解释。查数时传 terms 按业务概念筛选；不传 terms 返回全部成员，响应很大，只用于浏览能力面。成员 id 可直接用于分析。",
+    "发现当前调用者可用的 PA 指标、维度与业务术语解释。查数时传 terms 按业务概念筛选；不传 terms 返回全部成员，响应很大，只在需要浏览全部能力时使用。成员 id 可直接用于分析。",
   values_of: "搜索一个分类维度在当前调用者权限范围内的真实值，可按子串收窄。",
   run_analysis:
-    "用 catalog 的语义 id 与呈现意图执行分析；不接受视觉设置、物理字段、SQL 或个体字段。自动规划兼容指标域；成功返回分析结果，失败返回含 code/details 的错误 JSON。",
-  rerun_analysis:
-    "从已有 analysis_id 派生新的不可变 View 并按当前数据重跑；AnalysisDefinition 保持不变。",
-  show_analysis: "为本人已有 view_id 打开交互结果卡；只负责展示，不重新定义或执行分析。",
-  load_analysis_result: "按 view_id 实时加载本人分析定义、呈现意图与当前结果，供 Agent 继续编辑。",
-  load_analysis_card: "按 view_id 实时加载当前聚合结果，仅供 PA 结果卡渲染。",
+    "用 catalog 的语义 id 和呈现意图执行分析；不接受视觉设置、物理字段、SQL 或逐人字段；指标域由服务端自动匹配。成功返回分析结果，失败返回含 code/details 的错误 JSON。",
+  rerun_analysis: "用当前数据重新运行已有的 analysis_id，并生成新的 view_id；分析定义不变。",
+  show_analysis: "为本人已有的 view_id 打开交互结果卡；只负责展示，不修改或重新执行分析。",
+  load_analysis_result: "按 view_id 加载本人的分析定义、呈现意图和当前结果，供 Agent 继续修改。",
+  load_analysis_card: "按 view_id 加载当前结果，仅供 PA 结果卡渲染使用。",
   show_records:
-    "为单结果格、单时间桶的本人分析打开受控构成记录；分类条件应在分析 filters 中表达，不能用 dimensions 展开名单。",
-  load_records_page: "按 view_id 加载受控构成记录分页，仅供 PA 记录卡渲染。",
-  export_result: `从本人不可变 View 对应的分析生成 ${EXPORT_TICKET_TTL_MINUTES} 分钟有效的 CSV 交付。`,
-  save_report: "把本人不可变 View 保存为报告；不重新执行查询。",
-  update_report: "修改本人报告的名称、当前 view_id 指针或归档状态。",
-  find_report: "按名称查找本人未归档报告，返回当前 analysis_id、view_id 与控制台深链。",
+    "打开本人分析里某个结果格的明细记录（需单个结果格、单个时间桶）；筛选人群请写在分析 filters 里，不能用 dimensions 展开名单。",
+  load_records_page: "按 view_id 分页加载明细记录，仅供 PA 记录卡渲染使用。",
+  export_result: `为本人的 view_id 生成 CSV 下载链接，${EXPORT_TICKET_TTL_MINUTES} 分钟内有效。`,
+  save_report: "把本人的 view_id 保存为报告；不重新执行查询。",
+  update_report: "修改本人报告的名称、当前使用的 view_id 或归档状态。",
+  find_report: "按名称查找本人未归档的报告，返回当前的 analysis_id、view_id 和控制台链接。",
   feedback:
-    "在当前目录无法满足用户需求时提报数据能力缺口；不改变本次应答，也不会直接改变指标或口径。",
+    "当前目录满足不了用户需求时，提交数据能力缺口；不影响本次回答，也不会直接修改指标或口径。",
 } as const;
 
 // MCP SDK 通过 _meta 序列化工具安全声明；OAuth 验签由 HTTP transport 边界执行。
@@ -72,41 +71,44 @@ export const OPENAI_WIDGET_CSP = {
 
 const CATALOG_MEMBER_OUTPUT = z
   .object({
-    id: z.string().describe("跨指标域稳定的语义成员标识；分析意图与翻值只引用此值"),
+    id: z.string().describe("稳定的语义成员 id；分析和 values_of 都用它引用成员"),
     title: z.string(),
     description: z.string(),
     format: z
       .enum(COLUMN_FORMATS)
       .optional()
-      .describe("呈现格式；percent 与 percentage_point 的原始值均为 0–1"),
-    ai_context: z.string().optional().describe("仅供 Agent 的成员选择、查询方式与避坑规则"),
+      .describe("显示格式；percent 和 percentage_point 的原始值都是 0–1 的小数"),
+    ai_context: z
+      .string()
+      .optional()
+      .describe("写给 Agent 的说明：何时选用该成员、怎样查询、常见错误"),
     sensitivity: z.literal("restricted").optional(),
   })
   .strict();
 
 const CATALOG_MEASURE_OUTPUT = CATALOG_MEMBER_OUTPUT.extend({
   kind: z.literal("measure"),
-  records_available: z.literal(true).optional().describe("指标结果可投影受控构成记录"),
+  records_available: z.literal(true).optional().describe("可以查看该指标结果的明细记录"),
   query_capabilities: MEASURE_QUERY_CAPABILITIES_SCHEMA.describe(
-    "指标允许使用的维度及其层级；构造分组、筛选、排序和构成占比前必须遵守",
+    "该指标可用的维度及其层级；分组、筛选、排序和构成占比都必须在此范围内",
   ),
   report_calculations: z
     .array(z.literal("percent_of_total"))
     .optional()
-    .describe("该正式指标允许在报告规格中使用的受控临时计算"),
+    .describe("该指标在分析中可以使用的附加计算"),
   formula: z
     .object({ numerator: z.string(), denominator: z.string() })
     .strict()
     .optional()
-    .describe("率指标的分子与分母口径（中文标题）"),
+    .describe("比率指标的分子和分母（中文标题）"),
   relation: z
     .object({ kind: z.literal("structure_share"), numerator_id: z.string() })
     .strict()
     .optional()
-    .describe("指标的机器可读呈现关系；numerator_id 为分子指标的语义 id"),
+    .describe("指标间的关系：structure_share 表示本指标是 numerator_id 所指指标的结构占比"),
   time: METRIC_TIME_INPUT.describe(
-    "指标的时间面：value_basis 说这一列的数覆盖每个时间桶里的哪一段，" +
-      "constraints 说用户能选什么时间；省略 constraints 表示没有额外限制",
+    "指标的时间规则：value_basis 表示指标值覆盖每个时间桶里的哪段时间，" +
+      "constraints 表示可以选择哪些时间；没有 constraints 表示无额外限制",
   ),
 });
 
@@ -115,12 +117,12 @@ const CATALOG_DIMENSION_OUTPUT = CATALOG_MEMBER_OUTPUT.extend({
   dimension_kind: z.enum(["categorical", "overlapping"]).optional(),
 });
 
-/** 数据时间为有序展示数组：每项 title 是语义包提供的业务标签，内部 source key 不上线。 */
+/** 各数据来源的时间范围，按展示顺序排列；title 是语义包提供的业务名称，不输出内部 source key。 */
 export const TIME_CONTEXT_OUTPUT = PUBLIC_TIME_CONTEXT_SCHEMA;
 
 export const CATALOG_OUTPUT = {
   access_scope: ACCESS_SCOPE_DEFINITION_SCHEMA.describe(
-    "当前语义包定义的行级授权维度标题；具体过滤由服务端策略执行",
+    "行级权限所依据的维度（如组织）；实际过滤由服务端执行",
   ),
   observation_scopes: z.array(z.string()),
   data_as_of: z.string().describe("当前结果的数据截至月"),
@@ -128,33 +130,33 @@ export const CATALOG_OUTPUT = {
   metric_domains: z.array(
     z
       .object({
-        id: z.string().describe("稳定指标域 id；仅用于目录导航，不作为查询参数"),
+        id: z.string().describe("指标域 id，只用于目录导航，不作为查询参数"),
         title: z.string().describe("指标域的业务标题"),
         query_contract: z.string().optional(),
         measure_ids: z
           .array(z.string())
-          .describe("本次响应中属于该指标域的指标语义 id；不代表跨域组合兼容性"),
+          .describe("本次响应中属于该指标域的指标 id；不表示它们能与其他指标域的指标组合"),
         dimension_ids: z
           .array(z.string())
-          .describe("本次响应中该指标域可见的维度语义 id；组合兼容性由服务端校验"),
+          .describe("本次响应中该指标域可用的维度 id；能否组合由服务端校验"),
       })
       .strict(),
   ),
   measures: z
     .array(CATALOG_MEASURE_OUTPUT)
-    .describe("全部可见或检索命中的指标，按唯一语义身份返回；用 id 声明分析"),
+    .describe("所有可见或检索命中的指标，每个只出现一次；用 id 声明分析"),
   dimensions: z
     .array(CATALOG_DIMENSION_OUTPUT)
-    .describe("全部可见或检索命中的维度，跨指标域去重；用 id 声明分析"),
-  matched_terms: z.array(z.string()).describe("检索词中已命中目录或词典的词；浏览时为空数组"),
+    .describe("所有可见或检索命中的维度，跨指标域去重；用 id 声明分析"),
+  matched_terms: z.array(z.string()).describe("检索词中命中了目录或业务术语的词；浏览时为空数组"),
   ambiguous_terms: z.array(z.string()).describe("命中多个业务术语含义、需要向用户确认的词"),
   unmatched_terms: z.array(z.string()).describe("检索词中未命中目录或业务术语的词；浏览时为空数组"),
   term_knowledge_status: z
     .enum(["available", "unavailable"])
-    .describe("业务术语库是否可用于本次解析；不可用不等于术语未收录"),
+    .describe("业务术语库本次是否可用；不可用不代表术语没有收录"),
   term_resolutions: z
     .array(BUSINESS_TERM_RESOLUTION_SCHEMA)
-    .describe("业务术语的自含定义、歧义状态与当前调用者可见的相关语义成员"),
+    .describe("业务术语的定义、是否有歧义，以及当前调用者可见的相关成员"),
 };
 export const CATALOG_OUTPUT_SCHEMA = z.object(CATALOG_OUTPUT).strict();
 export type AgentCatalogPayload = z.infer<typeof CATALOG_OUTPUT_SCHEMA>;
@@ -168,8 +170,8 @@ export const VALUES_OUTPUT = {
 
 export const RUN_OUTPUT = {
   ...QUERY_PAYLOAD_OUTPUT,
-  analysis_id: z.string().describe("本次结果使用的不可变分析定义身份"),
-  view_id: z.string().describe("本次结果使用的不可变呈现视图身份"),
+  analysis_id: z.string().describe("本次结果对应的分析定义 id（不可变）"),
+  view_id: z.string().describe("本次结果对应的呈现视图 id（不可变）"),
   presentation_notes: z
     .array(
       z
@@ -181,21 +183,25 @@ export const RUN_OUTPUT = {
         .strict(),
     )
     .optional()
-    .describe("呈现说明：empty_result=结果为空；unsupported_shape=声明形态无法忠实编译"),
+    .describe(
+      "呈现说明：empty_result 表示结果为空；unsupported_shape 表示声明的图型无法如实展示该结果",
+    ),
 };
 export const RUN_OUTPUT_SCHEMA = z.object(RUN_OUTPUT).strict();
 
 export const LOAD_ANALYSIS_OUTPUT = {
   ...RUN_OUTPUT,
   analysis: ANALYSIS_DEFINITION_INPUT.describe(
-    "该 analysis_id 固定的 canonical 分析定义；修改后用 run_analysis 产生新的分析身份",
+    "该 analysis_id 对应的规范化分析定义；修改后用 run_analysis 生成新的 analysis_id",
   ),
-  view_intent: SEMANTIC_VIEW_INTENT_INPUT.describe("该 view_id 固定且 Agent 可编辑的呈现意图"),
+  view_intent: SEMANTIC_VIEW_INTENT_INPUT.describe(
+    "该 view_id 对应的呈现意图，Agent 可以修改后重新提交",
+  ),
 };
 export const LOAD_ANALYSIS_OUTPUT_SCHEMA = z.object(LOAD_ANALYSIS_OUTPUT).strict();
 
 export const SHOW_ANALYSIS_OUTPUT = {
-  view_id: z.string().uuid().describe("结果卡所展示的本人分析视图"),
+  view_id: z.string().uuid().describe("结果卡展示的本人分析视图"),
 };
 
 export const RECORDS_OUTPUT = {

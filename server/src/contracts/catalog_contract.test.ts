@@ -30,7 +30,7 @@ const catalog = {
 };
 
 describe("public catalog contract", () => {
-  test("指标查询能力是必填正向合同，指标专属字段不能落到维度", () => {
+  test("指标必须带 query_capabilities 与 time，维度必须带 dimension_group 且不接受 query_capabilities", () => {
     expect(PUBLIC_CATALOG_DOCUMENT_SCHEMA.safeParse(catalog).success).toBe(true);
     expect(
       PUBLIC_CATALOG_DOCUMENT_SCHEMA.safeParse({
@@ -44,14 +44,12 @@ describe("public catalog contract", () => {
         dimensions: [{ ...catalog.dimensions[0], query_capabilities: { dimension_ids: [] } }],
       }).success,
     ).toBe(false);
-    // 属性组是维度的必填归属：客户端按它归拢与筛选，不自行造桶。
     expect(
       PUBLIC_CATALOG_DOCUMENT_SCHEMA.safeParse({
         ...catalog,
         dimensions: [{ ...catalog.dimensions[0], dimension_group: undefined }],
       }).success,
     ).toBe(false);
-    // 求值基准是指标的必填面：缺了它，消费方就只能按标题猜这个数代表什么时间。
     expect(
       PUBLIC_CATALOG_DOCUMENT_SCHEMA.safeParse({
         ...catalog,

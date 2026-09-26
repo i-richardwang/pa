@@ -26,9 +26,8 @@ export type ViewRendererProps = {
   records?: {
     canOpen: (viewId: string, column: string) => boolean;
     /**
-     * `time` 是被点击读数的真实覆盖期间：指标卡的大数覆盖整窗（或降级后的终点期），
-     * 与任何一行的时间桶都不是同一件事，显式携带才能让名单与读数同一身份；
-     * 省略时按 `row` 的行键定位业务桶（表格格子路径）。
+     * `time` 是被点击数值实际覆盖的期间。指标卡的数值覆盖整段期间（降级时为终点月），与任何一行的
+     * 时间桶都不同，必须显式传入，明细才能与数值对应；不传时按 `row` 的行键定位时间桶（表格单元格）。
      */
     open: (target: {
       viewId: string;
@@ -93,7 +92,7 @@ function ViewBody({
           scene={scene}
           canOpen={(column) => records?.canOpen(view.id, column) ?? false}
           onOpen={(column) => {
-            // 大数的名单沿用它的覆盖期间；派生单行没有期间，退回首行（即唯一一行）的桶。
+            // 指标卡数值的明细使用它的覆盖期间；派生结果的单行没有期间时，使用第一行（也是唯一一行）的时间桶。
             const period = presentation.totals?.metrics.find(
               (metric) => metric.column === column,
             )?.period;

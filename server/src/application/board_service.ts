@@ -27,7 +27,7 @@ import type { UsageService } from "./usage_service.js";
 
 type BoardReportService = Pick<ReportService, "get" | "ensureOwned" | "summary" | "runShared">;
 
-/** 看板用例边界：属主、成员关系、报告引用、版本写入和载荷装配只在这里编排。 */
+/** 看板的属主校验、成员关系、报告引用、版本写入和载荷组装都只在这里处理。 */
 export function createBoardService(deps: {
   boards: BoardRepository;
   reports: BoardReportService;
@@ -104,7 +104,7 @@ export function createBoardService(deps: {
     );
   }
 
-  /** 已删除的看板对读写两路都等同不存在；只有恢复用例可以够到它。 */
+  /** 已归档的看板在读写时按不存在处理，只有 restore 能访问。 */
   async function live(id: string): Promise<BoardRecord> {
     assertId(id);
     const board = await deps.boards.get(id);

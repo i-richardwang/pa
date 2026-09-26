@@ -60,8 +60,8 @@ const reportTile = (reportId: string, p = place(0, 0)) => ({
   report_id: reportId,
   place: p,
 });
-describe("boards 存取", () => {
-  test("建板得稳定随机门牌号，取/列/改/删闭环", async () => {
+describe("board repository", () => {
+  test("新建看板得到随机 uuid，可读取、列出、更新和归档", async () => {
     const { boards, reportIds } = await setup();
     const created = await boards.create("人委会看板", "alice@x");
     expect(BOARD_ID_SCHEMA.safeParse(created.id).success).toBe(true);
@@ -95,7 +95,7 @@ describe("boards 存取", () => {
     expect((await boards.list()).map((row) => row.id)).not.toContain(created.id);
   });
 
-  test("删板只从清单撤下：瓦片与引用的报告都还在，恢复后原样回来", async () => {
+  test("归档看板只从列表移除，瓦片与引用的报告保留，恢复后原样返回", async () => {
     const { boards, reports, reportIds } = await setup();
     const created = await boards.create("看板", "alice@x");
     const tiles = [reportTile(reportIds[0])];
@@ -123,7 +123,7 @@ describe("boards 存取", () => {
     await expect(boards.get(created.id)).rejects.toThrow("board.tiles 不是合法瓦片数组");
   });
 
-  test("并发写入只有一个 revision 能成功，失败方不会覆盖胜者", async () => {
+  test("并发写入同一 revision 时只有一方成功，另一方收到冲突错误", async () => {
     const { path, boards } = await setup(0);
     const competingDb = createTestAppDatabase(path);
     const competing = createBoardRepository(competingDb);

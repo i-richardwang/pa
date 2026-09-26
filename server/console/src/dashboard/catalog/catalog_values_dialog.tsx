@@ -1,7 +1,4 @@
-/**
- * 关键词交给服务端过滤（Cube contains），本地不截值：
- * 截断上限由服务端裁决并随 truncated 文案透出。
- */
+// 关键词由服务端过滤（Cube contains），截断上限也由服务端决定并通过 truncated 文案返回，本地不再截断。
 import { useEffect, useState } from "react";
 import { InboxIcon, SearchIcon } from "lucide-react";
 import { LoadingMark } from "pa-result-view";
@@ -36,7 +33,7 @@ export function CatalogValuesDialog({
           <DialogTitle>{target?.title ?? "维度取值"}</DialogTitle>
           <DialogDescription className="sr-only">搜索可用取值</DialogDescription>
         </DialogHeader>
-        {/* key 锚定维度，确保过滤词与结果不会跨维度复用。 */}
+        {/* 以维度为 key，切换维度时重置过滤词和结果。 */}
         {target && <ValuesBody key={target.member} member={target.member} />}
       </DialogPopup>
     </Dialog>
@@ -47,7 +44,6 @@ function ValuesBody({ member }: { member: string }) {
   const [contains, setContains] = useState("");
   const [query, setQuery] = useState("");
 
-  // 输入防抖：击键不直打 Cube。
   useEffect(() => {
     const timer = setTimeout(() => setQuery(contains.trim()), 300);
     return () => clearTimeout(timer);

@@ -85,7 +85,7 @@ describe("指标的业务求值基准", () => {
     ).toBe("bucket_end");
   });
 
-  test("非月度重算比例混合期间值与时点值组件时 fail-closed", () => {
+  test("非月度重算比例混合期间值与时点值组件时报错", () => {
     const leavers = member("metrics.leavers", { aggregation: "sum", window: "selected" });
     const active_employee_count = member("metrics.active_employee_count", {
       aggregation: "last",
@@ -102,7 +102,7 @@ describe("指标的业务求值基准", () => {
     );
   });
 
-  test("缺失或非法合同不会静默回退", () => {
+  test("合同缺失或无效时报错，不使用默认值", () => {
     const missing = member("metrics.missing");
     const invalid = member("metrics.invalid", { aggregation: "sum", window: "forever" });
 
@@ -110,7 +110,7 @@ describe("指标的业务求值基准", () => {
     expect(() => resolveMetricTime(invalid, memberMap(invalid))).toThrow(/缺少有效的时间聚合合同/);
   });
 
-  test("年初归零与按月定义不能并存：整窗合并的降级期间会自相矛盾", () => {
+  test("年初累计与按月定义不能同时声明", () => {
     const contradictory = member("metrics.contradictory", {
       aggregation: "recompute",
       window: "year_to_date",

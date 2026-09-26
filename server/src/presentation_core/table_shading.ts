@@ -54,7 +54,7 @@ function dataExtents(
 }
 
 function scaleOf(extent: Extent, thresholds: TableShadingPreferences["thresholds"]): ShadingScale {
-  // 自动端点包住数据与已声明的其他停点，色阶恒有序。
+  // 未声明的端点同时包住数据范围和已声明的阈值，保证 min ≤ mid ≤ max。
   const min =
     thresholds?.min ??
     Math.min(extent.min, thresholds?.mid ?? extent.min, thresholds?.max ?? extent.min);
@@ -133,7 +133,7 @@ const SURFACE: Record<"light" | "dark", Rgb> = {
   dark: hexToRgb(TABLE_SHADING_TOKENS.surface.dark),
 };
 
-/** 单色在暗色主题下换到该系列色的暗色档；不在系列表里的十六进制值两档同色。 */
+/** 单色色阶在暗色主题下换用对应系列色的暗色值；不在系列色表里的颜色明暗相同。 */
 function monoBase(palette: string, dark: boolean): Rgb {
   const pair = CHART_SERIES.find(
     (candidate) => candidate.light.toLowerCase() === palette.toLowerCase(),
@@ -195,7 +195,7 @@ export function shadeCell(
   const contrastWithBlack = (l + 0.05) / 0.05;
   const contrastWithWhite = 1.05 / (l + 0.05);
   const inkIsDark = !dark;
-  // 墨色在亮色主题是深字、暗色主题是浅字：选对比更高的那一档
+  // ink 在亮色主题是深色字、暗色主题是浅色字；取对比度更高的一种
   const wantsDarkText = contrastWithBlack >= contrastWithWhite;
   return { background, foreground: wantsDarkText === inkIsDark ? "ink" : "inverse" };
 }

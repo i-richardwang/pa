@@ -1,22 +1,17 @@
 @import "tailwindcss";
-/* 可变字重那一支：静态档会把令牌源写下的 420 / 450 / 520 吸回 400 / 500。 */
+/* 使用可变字重版本：静态字重会把令牌里的 420 / 450 / 520 取整为 400 / 500。 */
 @import "@fontsource-variable/inter/wght.css";
-/* 设计令牌单源：--pa-* 定义与 pa-* 工具类映射都在令牌源里。 */
 @import "../../src/presentation_core/tokens.css";
 
-/* 结果视图是独立工作区，Tailwind 不会从 widget 入口自动发现，显式登记唯一渲染包。 */
+/* result_view 是独立工作区，Tailwind 不会从 widget 入口自动扫描到，需要显式登记。 */
 @source "../../result_view/src";
-/* 呈现编译层也出类名（图例行版式那处配方，见 legendRowClass），同样要登记：
-   不登记时它只在别处碰巧写过同名类时才生效，新类会静默丢失。 */
+/* presentation_core 也生成类名（如 legendRowClass），同样需要登记，否则其中的新类不会被生成。 */
 @source "../../src/presentation_core";
 
 /*
- * 结果卡样式：本文件只负责卡片 chrome 的宿主侧基线（背景、字体），
- * 调色、滚动条、加载标记与减动效基线全部来自共享令牌源；图表视觉由服务端 option 定义。
- * 内容高度经 SDK autoResize 上报、上限钳制在宿主侧。
- * 明暗只随宿主：applyDocumentTheme 翻转 color-scheme 与 data-theme，light-dark()
- * 须原生保留（构建 cssTarget 钉在 chrome123+，见 vite.config.ts）。
- * 排印阶梯同走令牌源：结果视图那批件两个宿主共用，阶梯各留一份就是同一张卡两种字号。
+ * 本文件只设置宿主侧基线（背景、字体）；颜色、字号、滚动条、加载标记和减少动效都来自共享令牌。
+ * 深浅色跟随宿主：applyDocumentTheme 切换 color-scheme 与 data-theme，light-dark() 必须原样保留
+ * （见 vite.config.ts 的 cssTarget）。
  */
 
 html,

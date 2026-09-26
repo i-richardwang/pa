@@ -45,7 +45,7 @@ import type { ReportDocument, ReportService } from "./report_service.js";
 import type { BoardService } from "./board_service.js";
 import type { AnalysisService } from "./analysis_service.js";
 
-/** 可安全原样返回浏览器的业务请求错误；引擎与模型异常由路由统一收口。 */
+/** 消息可原样返回浏览器的请求错误；引擎和模型异常由路由统一处理。 */
 export class RecordProjectionRequestError extends InvalidRequestError {
   override name = "RecordProjectionRequestError";
 }
@@ -159,7 +159,7 @@ async function executeRecordProjection(input: {
     };
   }
 
-  // countDistinct 的分页键只能是实体键；展示字段若参与首段分组，会把同一实体拆成多行。
+  // countDistinct 按实体键分页；第一次查询只按实体键分组，加入展示字段会把同一实体拆成多行。
   const entityKey = qualify(sourceView, records.entityKey);
   const membership = await execute(
     {
@@ -427,7 +427,7 @@ export function createRecordProjectionService(deps: {
     const buckets = resultBuckets(resolution);
     if (resolution.outputGrain !== "total" || buckets.length !== 1) {
       throw new RecordProjectionRequestError(
-        "直接查看名单的分析必须落在一个业务时间桶；请改为当月、单年或期间合计后重试",
+        "查看名单的分析只能对应一个时间段；请改为单月、单年或期间合计后重试",
       );
     }
     const bucket = buckets[0];
@@ -486,7 +486,7 @@ export function createRecordProjectionService(deps: {
       const sourceView = authViews.find((view) => view.name === source.view);
       if (!sourceView) throw new RecordProjectionRequestError("当前身份无权查看该指标的明细");
       const target = resolveRecordProjectionTarget(sourceView, metricBinding.member);
-      if (!target) throw new Error("当前指标的构成记录契约不可用");
+      if (!target) throw new Error("当前指标的构成记录定义不可用");
       const coordinateFilters = coordinateFiltersOf(
         compilerCatalog,
         source.view,

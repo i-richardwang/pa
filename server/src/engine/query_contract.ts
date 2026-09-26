@@ -40,7 +40,7 @@ function singleValueEqualsMembers(filters: CubeFilter[] | undefined): string[] {
       return;
     }
     if ("and" in filter) for (const child of filter.and) visit(child);
-    // OR 中任一腿的单值条件不代表整个查询已把该维度固定为单值。
+    // OR 中任一分支的单值条件不代表整个查询已把该维度固定为单值。
   };
   for (const filter of filters ?? []) visit(filter);
   return members;

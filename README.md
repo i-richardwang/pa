@@ -6,12 +6,12 @@ PA 是一个面向组织与人才数据的语义分析服务。它把人员规�
 
 ## 它展示什么
 
-- 独立宽事实：Cube Core + DuckDB 直接聚合 parquet，不在原始事实之间做运行时 join。
-- 正式指标图：跨事实比率由 TypeScript Planner 拆成查询腿，聚合后对齐并重算。
-- 封闭查询面：MCP adapter 只做协议映射，不开放 SQL，也不接受临时指标定义。
-- 权限先于语义装配：正式指标只有在全部叶子组件对当前身份可见时才进入目录。
-- 同一应用核心，多套语义包：公开 Demo 与私有部署通过相同的声明合同装配，无需维护产品分叉。
-- 分析工件：控制台与 MCP 共用报告、看板、呈现、导出和受控明细能力。
+- 各自独立的宽事实表：Cube Core + DuckDB 直接汇总 parquet，查询时不把不同事实表的原始行连接起来。
+- 正式指标依赖图：跨事实表的比率由 TypeScript Planner 拆成多个单表子查询，各自汇总后对齐并重新计算。
+- 只允许预定义的查询：MCP adapter 只做协议转换，不开放 SQL，也不接受临时定义的指标。
+- 先按权限过滤再组装目录：一个正式指标只有在它的全部基础指标都对当前用户可见时，才出现在目录里。
+- 一套应用代码，多套语义包：公开 Demo 和私有部署使用同样的声明格式，不需要维护产品分支。
+- 分析成果：控制台和 MCP 共用报告、看板、图表呈现、导出和受权限控制的明细查看。
 
 ```mermaid
 flowchart LR
@@ -77,7 +77,7 @@ Compose 不固定容器名；项目名负责隔离容器、网络和服务发现
 应用服务读取同一个 `PA_SEMANTIC_PACKAGE_DIR`。
 
 公开 Demo 的独立本地配置以 [`deploy/local/public.env.example`](./deploy/local/public.env.example)
-为事实源：
+为准：
 
 ```sh
 cp deploy/local/public.env.example .env.public.local
@@ -90,7 +90,7 @@ docker compose --env-file .env.public.local up -d --build
 应用状态目录及端口。原始业务数据不挂载给 Cube；私有数据构建器只把生成后的
 `$PA_SEMANTIC_DATA_DIR/current/*.parquet` 挂载给对应实例。
 
-## 语义包：公开与内部差异的正式边界
+## 语义包：公开版与内部部署的分界
 
 部署只选择一个语义包目录。目录内必须包含：
 
@@ -102,14 +102,14 @@ your_semantic_package/
     └── views/             # 指标执行面与受控记录面
 ```
 
-`semantic_package.yml` 是纯声明文件，不能执行代码。`schema_version: 1` 由包登记授权维度稳定 id 与标题、
-时间源、比较策略、业务分类和正式指标图；每个公开 View 另以 `meta.observation_scope` 声明自己的
-观察对象与纳入范围。加载器会拒绝未知结构、重复身份、无效时间源关系、未登记指标域、缺失模型目录
-和逃逸包目录的路径。
+`semantic_package.yml` 是纯声明文件，不能执行代码。在 `schema_version: 1` 中，它登记用于授权的维度
+（稳定 id 和标题）、时间源、比较策略、业务分类和正式指标依赖图；每个公开 View 另用
+`meta.observation_scope` 说明它观察的对象和纳入范围。加载器会拒绝未知的结构、重复的标识、无效的
+时间源关系、未登记的指标域、缺失的模型目录，以及指向包目录之外的路径。
 
-应用身份只携带结构化的“全部 / 限定值”授权范围，持久化授权绑定当前包的稳定 id；不匹配的包身份
-会 fail-closed。JWT 将它投影为通用 `data_scope: { id, values }`；核心不解释这些
-值是组织、区域、门店还是法人。具体过滤字段与规则只在语义包的 Cube `access_policy` 中声明，控制台和
+用户身份只携带结构化的授权范围（"全部"或"限定的若干值"），保存下来的授权绑定当前语义包的稳定
+id；与当前包不匹配的授权直接拒绝。JWT 把授权范围写成通用的 `data_scope: { id, values }`，应用核心
+不关心这些值代表组织、区域、门店还是法人。具体过滤字段与规则只在语义包的 Cube `access_policy` 中声明，控制台和
 结果注释则使用包内 `access_scope.title` 展示业务名称。
 
 公开版本默认使用 [`demo/`](./demo)。

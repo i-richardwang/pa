@@ -1,7 +1,6 @@
 /**
- * 业务目录的语义消费面契约（对外唯一投影）；只含语义身份与允许公开给已授权 PA 用户的模型字段。
- * Agent 教学字段（ai_context、查询契约）也在白名单内——业务方核对 AI 行为的依据；
- * 成员物理绑定不进此面；指标域只承担业务导航，不要求客户端选择物理查询来源。
+ * 业务目录的对外投影：只含语义 id 和可公开给已授权用户的模型字段（含 ai_context 与查询说明），
+ * 不含成员的物理绑定。
  */
 import { z } from "zod";
 import { ACCESS_SCOPE_DEFINITION_SCHEMA, type AccessScopeDefinition } from "./access_scope.js";
@@ -15,10 +14,7 @@ import type { MeasureQueryCapabilities } from "../semantic_core/query_feasibilit
 
 export type CatalogDimensionKind = "categorical" | "overlapping";
 
-/**
- * 率指标公式的分子分母，已解析为中文标题（人读公式不读成员名）。
- * 两端本身是目录成员时随附其语义 id；内部计算件没有公开身份，那一端只有标题。
- */
+/** 率指标的分子与分母标题；该端是公开目录成员时附带其语义 id，否则只有标题。 */
 export type PublicCatalogFormula = {
   numerator: string;
   denominator: string;
@@ -27,14 +23,14 @@ export type PublicCatalogFormula = {
 };
 
 type PublicCatalogMemberBase = {
-  /** 跨视图稳定的语义身份；报告、查询意图与翻值入口只引用此值。 */
+  /** 跨视图稳定的语义 id；报告、查询意图与维度候选值查询都用它引用成员。 */
   id: string;
   title: string;
   description: string;
   format?: string;
-  /** 模型给 Agent 的选材与避坑规则（meta.ai_context），亮出供人核对 AI 的查询行为。 */
+  /** 模型的 meta.ai_context，公开给用户核对 Agent 的查询方式。 */
   ai_context?: string;
-  /** 受限成员按数据权限可见；模型只声明这一种敏感度。 */
+  /** 受限成员按数据权限决定是否可见。 */
   sensitivity?: "restricted";
 };
 
@@ -42,21 +38,20 @@ export type PublicCatalogMeasure = PublicCatalogMemberBase & {
   kind: "measure";
   /** 指标结果可查看构成记录；具体目标由服务端按指标关系解析。 */
   records_available?: true;
-  /** 指标在查询中的可组合维度与层级。 */
   query_capabilities: MeasureQueryCapabilities;
   /** 该正式指标允许在报告中承载的受控临时计算。 */
   report_calculations?: ReportCalculationKind[];
   formula?: PublicCatalogFormula;
-  /** 指标间的机器可读关系；不用标题或同名猜测。 */
+  /** 结构占比指标与其分子指标的关系。 */
   relation?: { kind: "structure_share"; numerator_id: string };
-  /** 指标的时间面：值代表什么时间（value_basis），以及用户能选什么时间（constraints）。 */
+  /** value_basis 表示值对应的时间，constraints 表示用户可选的时间。 */
   time: MetricTime;
 };
 
 export type PublicCatalogDimension = PublicCatalogMemberBase & {
   kind: "dimension";
   dimension_kind?: CatalogDimensionKind;
-  /** 维度在当前语义包中的业务属性组归属；每个公开维度必属一组，不参与物理选路。 */
+  /** 维度所属的业务属性组，每个公开维度都有；不影响查询来源的选择。 */
   dimension_group: { id: string; title: string };
 };
 
@@ -71,18 +66,17 @@ export function isSearchableCatalogDimension(
   );
 }
 
-/** id 是稳定的目录身份。 */
 export type PublicMetricDomain = {
   id: MetricDomainId;
   title: string;
-  /** Agent 按此说明查询该主题（模型 description）。 */
+  /** 取自模型 description，说明 Agent 应怎样查询该主题。 */
   query_contract?: string;
-  /** 该主题读数对应的数据时间业务标签；内部时间源 key 绝不上线。 */
+  /** 该主题数据时间的业务标签；不暴露内部时间源 key。 */
   time_context_title?: string;
   synonyms: string[];
-  /** 归属本域的指标；成员不反向携带域 id，从属关系只由域这一头说一次。 */
+  /** 归属本域的指标；指标本身不带域 id。 */
   measure_ids: string[];
-  /** 域内全部指标共同可拆的维度，由服务端按物理可用性判定；客户端不自行推断。 */
+  /** 域内全部指标都能拆分的维度，由服务端按物理可用性计算。 */
   dimension_ids: string[];
 };
 
@@ -112,18 +106,18 @@ export type CatalogDimensionValues = {
 
 export const MEASURE_QUERY_CAPABILITIES_SCHEMA: z.ZodType<MeasureQueryCapabilities> = z
   .object({
-    dimension_ids: z.array(z.string()).describe("可用于分组、筛选与排序的维度语义 id"),
+    dimension_ids: z.array(z.string()).describe("可用于分组、筛选和排序的维度 id"),
     hierarchies: z
       .array(z.array(z.string()))
       .optional()
-      .describe("该指标查询空间中的语义层级链，从粗到细"),
+      .describe("该指标可用的维度层级，每条从粗到细排列"),
     grouping: z
       .object({
         minimum_varying_dimensions: z
           .number()
           .int()
           .positive()
-          .describe("指标成立所需的最少非单值分组维度数"),
+          .describe("查询该指标至少需要的分组维度数；筛选成单个值的维度不计入"),
       })
       .strict()
       .optional(),

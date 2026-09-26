@@ -10,7 +10,7 @@ type UsageSpan<Result> = {
   summarize?: (result: Result) => UsageSummary;
 };
 
-/** 使用观察用例：统一工具调用记录与控制台统计读取，transport 不接触日志存储。 */
+/** 工具调用日志的写入与控制台统计读取；transport 层不直接访问日志存储。 */
 export function createUsageService(deps: { log: UsageLog; statistics: UsageStatistics }) {
   const assertAdmin = (principal: Principal) => {
     if (!principal.roles.includes("admin")) throw new ForbiddenError("需要管理员权限");
@@ -57,7 +57,7 @@ export function createUsageService(deps: { log: UsageLog; statistics: UsageStati
         try {
           summary = span.summarize?.(result) ?? {};
         } catch {
-          // 摘要失败不吞成功日志。
+          // 摘要计算失败时仍记录成功日志。
         }
         await log({
           ...base,

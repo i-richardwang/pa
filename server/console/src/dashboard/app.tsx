@@ -1,4 +1,4 @@
-/** 访问边界始终是各端点的服务端守卫，导航按角色分层不构成授权。 */
+/** 导航按角色隐藏只影响显示，访问控制由各端点的服务端校验负责。 */
 import { useState } from "react";
 import { LoadingMark } from "pa-result-view";
 import { authClient } from "../auth_client";
@@ -20,10 +20,7 @@ import { DashboardShell, resolveRoute } from "./layout/shell";
 import { FeedbackPage } from "./admin/feedback_page";
 import { UsagePage } from "./admin/usage_page";
 
-/**
- * 详情页是列表的带参子页：导航高亮与角色守卫都落在对应列表项上；
- * 报告、查询记录与分析详情同属「我的报告」这一个导航项。
- */
+/** 详情页的导航高亮和角色检查按所属列表页计算。 */
 function navKeyOf(route: Route): RouteKey {
   switch (route.page) {
     case "board":

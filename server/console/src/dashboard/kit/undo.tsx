@@ -1,8 +1,7 @@
 /**
- * 移除类操作的回执。动作在用户点下时就已落库，这里只发回执并把逆操作挂在「撤销」上：
- * 回执是界面，不是待办——页面此刻消失也不会丢掉任何一次已发生的移除。
- * AlertDialog 只留给安全敏感操作（API Key 吊销）与放弃未保存的编辑。
- * 悬停 toast 会顺延倒计时（Base UI 悬停暂停）。
+ * 移除类操作的撤销提示。移除在点击时已经保存，toast 只提供「撤销」这个逆操作。
+ * AlertDialog 只用于安全敏感操作（API Key 吊销）和放弃未保存的编辑。
+ * Base UI 在悬停时暂停 toast 倒计时。
  */
 import { toastManager } from "@/components/ui/toast";
 import { ApiError, errorText } from "../api";
@@ -29,7 +28,7 @@ export function toastWithUndo({
   });
 }
 
-/** 写失败的统一提示：401 交给会话层接管，409 给出可执行的下一步。 */
+/** 写操作失败的统一提示：401 交给会话层处理，409 提示刷新后重试。 */
 export function toastMutationFailure(title: string, reason: unknown): void {
   const message = errorText(reason);
   if (message === null) return;

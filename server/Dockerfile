@@ -1,5 +1,4 @@
-# 构建与装依赖用 Bun（快、免 tsx）；生产运行时保持 Node——
-# node:sqlite（Better Auth 存储）、@hono/node-server 均以 Node 为验证基线
+# 构建用 Bun；生产运行时用 Node，node:sqlite（Better Auth 存储）与 @hono/node-server 以 Node 为验证基线
 FROM oven/bun:1.4.0-slim AS build
 WORKDIR /app
 COPY package.json bun.lock ./

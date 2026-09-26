@@ -49,7 +49,7 @@ const members = [
   },
 ];
 describe("demo business term seed", () => {
-  test("空库创建全局术语，重复执行保持幂等", async () => {
+  test("空库时创建全部 Demo 术语，重复执行不会重复创建", async () => {
     const db = createTestAppDatabase();
     const repository = createBusinessTermRepository(db);
     const registry = createBusinessTermRegistry({ repository });
@@ -75,7 +75,7 @@ describe("demo business term seed", () => {
     db.close();
   });
 
-  test("同规范词保留管理员内容，只补齐缺失术语", async () => {
+  test("已有同名术语时保留管理员的版本，只创建缺少的术语", async () => {
     const db = createTestAppDatabase();
     const repository = createBusinessTermRepository(db);
     const registry = createBusinessTermRegistry({ repository });
@@ -102,7 +102,7 @@ describe("demo business term seed", () => {
     db.close();
   });
 
-  test("既有其他术语占用 Demo 叫法时先失败且不写入", async () => {
+  test("Demo 术语的叫法已被其他术语使用时报错，且不写入任何术语", async () => {
     const db = createTestAppDatabase();
     const repository = createBusinessTermRepository(db);
     const registry = createBusinessTermRegistry({ repository });

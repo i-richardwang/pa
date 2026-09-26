@@ -1,10 +1,7 @@
 import type { CubeMember, CubeView } from "../ports/cube_gateway.js";
 import { dimensionKind } from "./model_contract.js";
 
-/**
- * 成员展示名的唯一规范化入口。Cube 的 title 可能带 view 标题前缀，shortTitle 才是
- * 面向用户的成员名；shortTitle 缺失时只剥精确匹配的所属 view 前缀。
- */
+/** Cube 的 title 可能带 view 标题前缀；优先用 shortTitle，缺失时只去掉与所属 view 标题完全匹配的前缀。 */
 export function memberDisplayTitle(
   views: CubeView[],
   memberName: string,
@@ -20,7 +17,7 @@ export function memberDisplayTitle(
   return prefix && title.startsWith(prefix) ? title.slice(prefix.length) : title;
 }
 
-/** 重叠分类恒展示口径说明；其余维度只在模型显式声明时展示。 */
+/** overlapping 维度总是展示口径说明；其他维度只在声明 user_note 时展示。 */
 export function showDimensionNote(member: CubeMember | undefined): boolean {
   return (
     member?.meta?.user_note === true || (member ? dimensionKind(member) === "overlapping" : false)

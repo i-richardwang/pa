@@ -10,7 +10,7 @@ const specWithFilters = (filters: unknown[]) => ({
   },
 });
 
-test("并列查询没有落脚点：拒绝时指向合并与 derived.joined", () => {
+test("并列多个查询时拒绝，并提示合并到同一查询或使用 derived.joined", () => {
   const query = {
     measures: ["measure:active_employee_count"],
     time: { window: { kind: "current_month" } },
@@ -20,7 +20,7 @@ test("并列查询没有落脚点：拒绝时指向合并与 derived.joined", ()
   );
 });
 
-test("第二个查询只能长在 derived.joined 上，并与关联合同同生共死", () => {
+test("第二个查询只能放在 derived.joined 里，且必须和关联条件一起声明", () => {
   const left = {
     view_title: "在职",
     measures: ["measure:active_employee_count"],
@@ -276,7 +276,7 @@ describe("语义呈现意图边界", () => {
     }
   });
 
-  test("图型全集逐个有变体：新增呈现形态不能漏写通道声明", () => {
+  test("每种图型都有对应的通道声明", () => {
     for (const type of PRESENTATION_TYPE_SCHEMA.options) {
       expect(SEMANTIC_VIEW_INTENT_INPUT.safeParse({ type }).success).toBe(true);
     }
@@ -298,7 +298,7 @@ describe("语义呈现意图边界", () => {
     }
   });
 
-  test("副轴系列是值通道的第二把尺子：不与主系列重复，拆分在场时没有它", () => {
+  test("副轴指标不能与主系列重复，使用拆分维度时不能设置副轴", () => {
     const rate = "measure:ytd_primary_event_rate";
     const count = "measure:active_employee_count";
     expect(

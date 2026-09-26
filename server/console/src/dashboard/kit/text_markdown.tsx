@@ -1,8 +1,7 @@
 /**
- * 文本瓦片查看态的 Markdown 渲染：react-markdown + remark-gfm。
- * 看板分享给成员，创建者的 md 在成员浏览器里渲染：开 raw HTML 即对成员的存储型 XSS。
- * react-markdown 默认转义原生 HTML、默认 urlTransform 挡 javascript:，保持默认即安全——不引 rehype-raw。
- * 不 import `@/` 别名，以便 headless 测试直渲。
+ * 文本瓦片的 Markdown 渲染。创建者写的 md 会在其他成员的浏览器里渲染，开启原生 HTML 会造成存储型 XSS：
+ * 保持 react-markdown 默认行为（转义原生 HTML、urlTransform 过滤 javascript:），不要引入 rehype-raw。
+ * 不使用 `@/` 别名导入，便于测试直接渲染。
  */
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";

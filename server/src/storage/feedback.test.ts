@@ -1,4 +1,3 @@
-/** 数据能力缺口反馈：入参校验、聚合键、持久化与审核状态。 */
 import { describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -14,19 +13,19 @@ function freshPath() {
 }
 
 describe("feedback input", () => {
-  test("要求问题原文与缺口解释，两者都去空白", () => {
+  test("ask 与 detail 必填，两者都去除首尾空白", () => {
     expect(
       normalizeFeedbackInput({
         ask: " 能否看加班时长？ ",
         detail: " 当前目录没有加班指标 ",
       }),
     ).toEqual({ ask: "能否看加班时长？", detail: "当前目录没有加班指标" });
-    // 越过类型层的运行时护栏：MCP 入参在协议边界仍可能缺 detail
+    // MCP 入参不经类型检查，运行时仍可能缺 detail
     expect(() => normalizeFeedbackInput({ ask: "问题" } as FeedbackInput)).toThrow("detail");
     expect(() => normalizeFeedbackInput({ ask: " ", detail: "缺口" })).toThrow("ask");
   });
 
-  test("topic_key 按缺口解释归一空白、大小写与全半角，同缺口可聚合", () => {
+  test("topic_key 对 detail 归一空白、大小写与全半角后计算", () => {
     const a = normalizeFeedbackInput({ ask: "A", detail: " 缺少 OT  指标 " });
     const b = normalizeFeedbackInput({ ask: "B", detail: "缺少　ｏｔ 指标" });
     expect(feedbackTopicKey(a)).toBe(feedbackTopicKey(b));
@@ -37,7 +36,7 @@ describe("feedback input", () => {
 });
 
 describe("feedback store", () => {
-  test("每次原话逐行保留，列表按 topic 聚合", async () => {
+  test("每次提交逐行保存，列表按 topic_key 聚合", async () => {
     const store = createFeedbackStore(createTestAppDatabase(freshPath()));
     const input = { ask: "能看工时吗", detail: "缺工时指标" };
     const first = await store.create(normalizeFeedbackInput(input), "alice@x");
@@ -58,7 +57,7 @@ describe("feedback store", () => {
     });
   });
 
-  test("审核按 topic 更新全部历史行；新一次同主题提报会重新打开", async () => {
+  test("审核更新同一 topic_key 的全部行，同主题再次提交后状态重新变为 open", async () => {
     const store = createFeedbackStore(createTestAppDatabase(freshPath()));
     const input = { ask: "能看工时吗", detail: "缺工时指标" };
     const created = await store.create(normalizeFeedbackInput(input), "alice@x");

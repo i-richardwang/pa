@@ -9,8 +9,8 @@ export type AnalysisLoaderPort = {
 };
 
 /**
- * 结果卡的数据加载状态机：tool input 可先于握手到达，重复的 input/result 通知只触发一次加载，
- * view_id 变化后，非当前请求的结果不得覆盖当前卡片。
+ * 结果卡的数据加载：工具输入可能在握手完成前到达；重复的 input/result 通知只触发一次加载；
+ * view_id 变化后，旧请求的结果不能覆盖当前卡片。
  */
 export function createAnalysisLoader(port: AnalysisLoaderPort) {
   let connected = false;

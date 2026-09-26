@@ -1,25 +1,25 @@
 /**
- * chrome 取舍按 scene 查这一张表，不另收布尔参数；场地几何的表在 chart_config
- * （`PLOT_PADDING` / `PLOT_FRAME`），与 echarts grid 同源。
+ * 各宿主场景的显示取舍统一在这张表里查，组件不另加布尔参数。绘图区留白和边框见 chart_config 的
+ * `PLOT_PADDING` / `PLOT_FRAME`，与 echarts grid 共用。
  */
 import type { ViewScene } from "../../src/presentation_core/chart_config.js";
 
 export type { ViewScene };
 
 type SceneTraits = {
-  /** 空态纵向呼吸 */
+  /** 空状态的上下内边距 */
   emptyPad: string;
-  /** 高度取容器而非内容：图表撑满、表格自带内滚、指标卡纵向居中——需容器给定确定高度 */
+  /** 高度取容器高度：图表撑满、表格内部滚动、指标卡垂直居中；需要容器有确定高度 */
   fill: boolean;
   /** 表格全量渲染，不按 INLINE_ROWS 截行 */
   allRows: boolean;
-  /** 载荷派生的标题与副行由渲染器渲染（容器自带标题时关） */
+  /** 由渲染器显示结果自带的标题和副标题；容器自己有标题时关闭 */
   title: boolean;
-  /** 中段内联 chrome：行数条、导出提示行（关掉时由宿主的页面底栏承载） */
+  /** 在结果下方显示行数栏和导出提示；关闭时由宿主页面底栏显示 */
   inlineChrome: boolean;
-  /** 中段常驻口径带（只有答数态挂） */
+  /** 显示常驻的口径说明栏（只在结果卡中显示） */
   scopeBand: boolean;
-  /** 表格明细格内衬：密度由留白分，不动字级、线色与底色 */
+  /** 表格单元格内边距；各场景的密度只通过内边距区分，字号、线色和底色相同 */
   cellPad: string;
   countBar: string;
 };

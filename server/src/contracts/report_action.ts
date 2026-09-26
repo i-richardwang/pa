@@ -21,7 +21,7 @@ export const ARCHIVE_REPORT_ACTION = z.object({ type: z.literal("archive") }).st
 
 export const UNARCHIVE_REPORT_ACTION = z.object({ type: z.literal("unarchive") }).strict();
 
-/** 应用服务的完整领域动作；各呈现面只从这些成员组装自己的公开子集。 */
+/** 报告的全部更新动作；Web 与 MCP 各自从中选取公开子集。 */
 export const REPORT_UPDATE_ACTION = z.discriminatedUnion("type", [
   RENAME_REPORT_ACTION,
   REPLACE_REPORT_VIEW_ACTION,

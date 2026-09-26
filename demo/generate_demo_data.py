@@ -2,7 +2,8 @@
 # requires-python = ">=3.11"
 # dependencies = ["duckdb"]
 # ///
-"""生成确定性、可滚动且满足人员守恒关系的 PA 公开演示数据。"""
+"""生成 PA 公开演示数据：截止月相同时结果完全相同；截止月默认随当前日期推进；
+各部门每月满足「上月人数 + 入职 − 离职 = 本月人数」。"""
 
 from __future__ import annotations
 
@@ -433,7 +434,8 @@ def configured_anchor(today: date | None = None) -> date:
     else:
         anchor = add_months(first_of_month(today or date.today()), -1)
     if anchor < add_months(SIMULATION_START, HISTORY_MONTHS - 1):
-        raise ValueError("Demo 截止月份不足以形成完整五年窗口")
+        earliest = add_months(SIMULATION_START, HISTORY_MONTHS - 1)
+        raise ValueError(f"截止月不能早于 {earliest:%Y-%m}，否则不足五年数据")
     return anchor
 
 
@@ -446,7 +448,7 @@ def output_root() -> Path:
 def publish_current(root: Path, version_dir: Path) -> None:
     current = root / "current"
     if current.exists() and not current.is_symlink():
-        raise RuntimeError(f"{current} 必须是可原子替换的软链接")
+        raise RuntimeError(f"{current} 必须是软链接：生成器通过替换软链接来切换数据版本")
     temporary = root / f".current-{uuid.uuid4().hex}"
     try:
         temporary.symlink_to(os.path.relpath(version_dir, root), target_is_directory=True)
@@ -792,7 +794,7 @@ def simulate(anchor: date) -> tuple[dict[str, list[tuple[object, ...]]], date]:
         if not published:
             continue
         if latest_q12_wave is None:
-            raise RuntimeError("Q12 期次状态缺少可向前承载的历史期次")
+            raise RuntimeError("数据发布期开始前还没有任何 Q12 期次，无法生成调研月度数据")
         wave_date = last_of_month(latest_q12_wave.wave_month)
         for participant in latest_q12_wave.participants:
             employee = participant.employee
@@ -909,9 +911,9 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
             [str(survey_participation)],
         ).fetchone()
         if survey_coverage[:3] != (HISTORY_MONTHS, history_start, anchor):
-            raise RuntimeError(f"Q12 月度状态时间覆盖错误：{survey_coverage}")
+            raise RuntimeError(f"Q12 月度数据的时间覆盖错误：{survey_coverage}")
         if not 9 <= survey_coverage[3] <= 11:
-            raise RuntimeError(f"Q12 五年期次数量不合理：{survey_coverage[3]}")
+            raise RuntimeError(f"五年内的 Q12 期次应为 9 至 11 期，实际为 {survey_coverage[3]} 期")
         duplicate_keys = sum(
             connection.execute(
                 "SELECT count(*) - count(DISTINCT record_key) FROM read_parquet(?)",
@@ -920,13 +922,13 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
             for name in FACT_SCHEMAS
         )
         if duplicate_keys:
-            raise RuntimeError(f"事实记录键重复：{duplicate_keys}")
+            raise RuntimeError(f"record_key 重复的行数：{duplicate_keys}")
         invalid_exposure = connection.execute(
             "SELECT count(*) FROM read_parquet(?) WHERE workforce_exposure <= 0 OR workforce_exposure > 1",
             [str(exposure)],
         ).fetchone()[0]
         if invalid_exposure:
-            raise RuntimeError(f"在职人月暴露值越界：{invalid_exposure}")
+            raise RuntimeError(f"在职人月不在 (0, 1] 范围内的行数：{invalid_exposure}")
         balance_errors = connection.execute(
             """
             WITH closing AS (
@@ -963,13 +965,15 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
             [str(snapshot), str(hires), str(leaves)],
         ).fetchone()[0]
         if balance_errors:
-            raise RuntimeError(f"部门人员守恒校验失败：{balance_errors}")
+            raise RuntimeError(
+                f"本月人数不等于上月人数 + 入职 − 离职的部门月份数：{balance_errors}"
+            )
         invalid_leave_types = connection.execute(
             "SELECT count(*) FROM read_parquet(?) WHERE leave_type NOT IN ('主动离职', '被动离职', '其他离职')",
             [str(leaves)],
         ).fetchone()[0]
         if invalid_leave_types:
-            raise RuntimeError(f"存在未知离职性质：{invalid_leave_types}")
+            raise RuntimeError(f"离职类型不是主动、被动或其他离职的行数：{invalid_leave_types}")
         invalid_survey = connection.execute(
             """
             SELECT count(*) FROM read_parquet(?)
@@ -1063,7 +1067,7 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
             or survey_balance_errors
         ):
             raise RuntimeError(
-                "Q12 数据合同失败："
+                "Q12 数据校验失败（各项为不符合规则的行数）："
                 f"participation={invalid_survey}, responses={invalid_responses}, "
                 f"summary={response_summary_errors}, cohort={wave_cohort_errors}, "
                 f"frozen={frozen_wave_errors}, balance={survey_balance_errors}"
@@ -1072,7 +1076,7 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
             "SELECT count(*) FROM read_parquet(?) WHERE period_month = ?", [str(snapshot), anchor]
         ).fetchone()[0]
         if not 1800 <= current_headcount <= 3200:
-            raise RuntimeError(f"当前 Demo 人数不在设计范围：{current_headcount}")
+            raise RuntimeError(f"截止月在职人数应在 1800 至 3200 之间，实际为 {current_headcount}")
         current_survey = connection.execute(
             """
             SELECT count(*), sum(responded_flag), min(wave_id), max(wave_id)
@@ -1082,7 +1086,9 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
         ).fetchone()
         current_response_rate = current_survey[1] / current_survey[0]
         if not 0.58 <= current_response_rate <= 0.86 or current_survey[2] != current_survey[3]:
-            raise RuntimeError(f"Q12 当前期次或回复率不合理：{current_survey}")
+            raise RuntimeError(
+                f"截止月应只有一个 Q12 期次且回复率在 58% 至 86% 之间，实际为：{current_survey}"
+            )
     return {
         "month_coverage": HISTORY_MONTHS,
         "department_balance": "passed",
@@ -1150,7 +1156,9 @@ def main() -> None:
                 or existing_manifest.read_text(encoding="utf-8") != manifest_text
                 or not intact_files
             ):
-                raise RuntimeError(f"内容指纹对应的版本目录不完整：{target}")
+                raise RuntimeError(
+                    f"同一内容的版本目录已存在，但文件缺失或与本次生成结果不一致：{target}"
+                )
         else:
             os.replace(staging, target)
         publish_current(root, target)

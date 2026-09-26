@@ -17,7 +17,7 @@ const q = (dimensions: string[], order?: CubeQuery["order"]): CubeQuery => ({
 const levels = (rows: Record<string, unknown>[]) => rows.map((r) => r[LEVEL]);
 
 describe("sortByValueOrder", () => {
-  test("声明维度按声明序归位", () => {
+  test("声明了取值顺序的维度按声明顺序排列", () => {
     const data = [
       { [LEVEL]: "Band A", [HC]: 3 },
       { [LEVEL]: "Band D", [HC]: 1 },
@@ -39,7 +39,7 @@ describe("sortByValueOrder", () => {
     expect(levels(r)).toEqual(["Band A", "Band D"]);
   });
 
-  test("未声明取值排在声明值之后、按首现序", () => {
+  test("未声明的取值排在已声明取值之后，按首次出现的顺序", () => {
     const data = [
       { [LEVEL]: "其他", [HC]: 9 },
       { [LEVEL]: "Band B", [HC]: 2 },
@@ -48,7 +48,7 @@ describe("sortByValueOrder", () => {
     expect(levels(sortByValueOrder(data, q([LEVEL]), ORDER))).toEqual(["Band B", "其他", "未分类"]);
   });
 
-  test("前置未声明维度保持引擎分组与相对顺序，声明维度在组内归位", () => {
+  test("排在前面的未声明维度保持引擎返回的顺序，声明了顺序的维度在组内按声明排列", () => {
     const data = [
       { [ORG]: "乙组织", [LEVEL]: "Band B", [HC]: 1 },
       { [ORG]: "乙组织", [LEVEL]: "Band C", [HC]: 2 },
@@ -64,7 +64,7 @@ describe("sortByValueOrder", () => {
     ]);
   });
 
-  test("声明维度靠前时作主序，其后维度稳定", () => {
+  test("声明了顺序的维度排在前面时作为主排序，后面的维度保持稳定", () => {
     const data = [
       { [LEVEL]: "Band B", [CAMPUS]: "社招", [HC]: 1 },
       { [LEVEL]: "Band C", [CAMPUS]: "校招", [HC]: 2 },

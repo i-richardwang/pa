@@ -17,17 +17,17 @@ describe("normalizeCatalogTerms", () => {
     ]);
   });
 
-  test("全空数组拒绝", () => {
+  test("全部为空白的数组被拒绝", () => {
     expect(() => normalizeCatalogTerms([" ", ""])).toThrow("至少提供一个");
   });
 });
 
 describe("normalizeCatalogQuery", () => {
-  test("空入参为目录概览", () => {
+  test("空入参返回目录概览", () => {
     expect(normalizeCatalogQuery({})).toEqual({ mode: "overview" });
   });
 
-  test("terms 为正式检索协议，不切分数组项", () => {
+  test("terms 按数组项检索，不切分项内空格", () => {
     expect(normalizeCatalogQuery({ terms: ["unmatched phrase", "组织"] })).toEqual({
       mode: "search",
       terms: ["unmatched phrase", "组织"],

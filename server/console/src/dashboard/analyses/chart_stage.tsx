@@ -44,7 +44,7 @@ export function ChartStageHeading({
   className,
 }: {
   title: ReactNode;
-  /** 观察窗口一句话（见 `windowSummary`）；无时间意图的宿主不传。 */
+  /** 观察窗口摘要（由 `windowSummary` 生成）；没有时间设置的调用方不传。 */
   sub?: ReactNode;
   extra?: ReactNode;
   className?: string;

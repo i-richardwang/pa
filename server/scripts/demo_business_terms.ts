@@ -53,8 +53,8 @@ const labels_of = (term: Pick<PublicBusinessTerm, "canonical_term" | "aliases">)
 ];
 
 /**
- * Demo 术语是全局内容：空库创建，同规范词已有内容时保留管理员版本。
- * 新内容若会占用其他术语的既有标签则拒绝，避免播种把明确叫法变成歧义。
+ * Demo 术语对所有用户共享：不存在时创建，已有同名术语时保留管理员维护的版本。
+ * 新术语的叫法如果已被其他术语使用就报错，避免同一个叫法对应多个术语。
  */
 export async function seed_demo_business_terms({ registry, members }: Seed_dependencies) {
   const inputs = DEMO_BUSINESS_TERMS.map((term) => BUSINESS_TERM_CONTENT_INPUT.parse(term));
@@ -80,7 +80,7 @@ export async function seed_demo_business_terms({ registry, members }: Seed_depen
     const normalized_canonical = normalizeBusinessTerm(input.canonical_term);
     const same_canonical = existing_by_canonical.get(normalized_canonical) ?? [];
     if (same_canonical.length > 1) {
-      throw new Error(`业务术语“${input.canonical_term}”存在多个同名条目，无法安全播种`);
+      throw new Error(`业务术语“${input.canonical_term}”存在多个同名条目，无法写入 Demo 术语`);
     }
     if (same_canonical.length === 1) {
       preserved.push(same_canonical[0]!);

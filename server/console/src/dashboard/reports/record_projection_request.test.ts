@@ -27,11 +27,11 @@ function view(overrides: Partial<ViewBlock>): ViewBlock {
   };
 }
 
-test("月度格子解析为确定的自然月窗口", () => {
+test("月度单元格解析为对应的自然月", () => {
   expect(recordProjectionTimeCoordinate(view({}), 0)).toEqual({ from: "2026-07", to: "2026-07" });
 });
 
-test("年度格子裁出对应报告窗口；总计格复用已解析窗口而不重算最新月", () => {
+test("年度单元格取对应的报告期间，合计单元格使用已解析的期间", () => {
   expect(
     recordProjectionTimeCoordinate(
       view({
@@ -62,7 +62,7 @@ test("年度格子裁出对应报告窗口；总计格复用已解析窗口而�
   ).toEqual({ from: "2026-01", to: "2026-07" });
 });
 
-test("显式携带的覆盖期间优先于行桶：指标卡的大数下钻用它自己的期间", () => {
+test("显式传入的期间优先于行所在的时间桶，指标卡主数值按自己的期间下钻", () => {
   const monthly = view({
     columns: ["year", "month", "active_employee_count"],
     rows: [
@@ -85,7 +85,7 @@ test("显式携带的覆盖期间优先于行桶：指标卡的大数下钻用�
   expect(recordProjectionTimeCoordinate(monthly, 0)).toEqual({ from: "2025-09", to: "2025-09" });
 });
 
-test("格子坐标只取编译器声明且该行实际存在的分组值，null 原样保留", () => {
+test("单元格坐标只取已声明且该行存在的分组值，null 原样保留", () => {
   const source = view({
     columns: ["organization_name", "department_name", "active_employee_count"],
     rows: [["研发", null, 10]],
@@ -103,7 +103,7 @@ test("格子坐标只取编译器声明且该行实际存在的分组值，null 
   ]);
 });
 
-/** 2024-06 至 2026-07 按年：首桶是部分年，物理执行方式不进入结果契约。 */
+/** 2024-06 至 2026-07 按年分组，第一个时间桶是不完整的年份。 */
 function partialYearView(overrides: Partial<ViewBlock> = {}): ViewBlock {
   return view({
     columns: ["organization_name", "year", "active_employee_count", "turnover_count"],
@@ -132,14 +132,14 @@ function partialYearView(overrides: Partial<ViewBlock> = {}): ViewBlock {
   });
 }
 
-test("按年结果逐行落到自己的桶，部分年保留真实起点，中间年份逐一有解", () => {
+test("按年结果每行对应自己的时间桶，不完整年份保留实际起点", () => {
   const source = partialYearView();
   expect(recordProjectionTimeCoordinate(source, 0)).toEqual({ from: "2024-06", to: "2024-12" });
   expect(recordProjectionTimeCoordinate(source, 1)).toEqual({ from: "2025-01", to: "2025-12" });
   expect(recordProjectionTimeCoordinate(source, 2)).toEqual({ from: "2026-01", to: "2026-07" });
 });
 
-test("行匹配不到唯一桶时不投影记录，不猜时间范围", () => {
+test("行匹配不到唯一时间桶时返回 null，不推测时间范围", () => {
   const missing = partialYearView({
     rows: [["示例组织甲", "2023", 1, 1]],
     row_count: 1,
@@ -158,7 +158,7 @@ test("行匹配不到唯一桶时不投影记录，不猜时间范围", () => {
   expect(recordProjectionTimeCoordinate(ambiguous, 0)).toBeNull();
 });
 
-test("无时间列的结果整份同属一个桶", () => {
+test("没有时间列的结果所有行属于同一个时间桶", () => {
   const total = view({
     columns: ["organization_name", "active_employee_count"],
     rows: [["示例组织甲", 10]],
@@ -171,6 +171,6 @@ test("无时间列的结果整份同属一个桶", () => {
   expect(recordProjectionTimeCoordinate(total, 0)).toEqual({ from: "2026-01", to: "2026-06" });
 });
 
-test("缺少逻辑时间时不回退猜测物理窗口", () => {
+test("结果缺少时间信息时返回 null", () => {
   expect(recordProjectionTimeCoordinate(view({ time: undefined }), 0)).toBeNull();
 });

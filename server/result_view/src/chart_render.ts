@@ -1,6 +1,6 @@
 /**
- * 编译产物 × 渲染状态 → `setOption` 对象。翻色按 CHART_DARK_COLORS 走字面值，
- * 函数与渐变必须在翻色之后注入。
+ * 由编译产物和渲染状态生成 `setOption` 对象。深色模式按 CHART_DARK_COLORS 替换颜色字面值，
+ * 因此格式化函数和渐变必须在替换之后注入。
  */
 import {
   CHART_CHROME,
@@ -18,7 +18,7 @@ import type { ColumnFormat } from "../../src/semantic_core/query_payload.js";
 
 type MutableOption = Record<string, unknown>;
 
-/** `series`、`xAxis` 这些字段单个与数组两种写法都合法，写它们的地方不各归一一遍。 */
+/** echarts 的 `series`、`xAxis` 等字段既可以是对象也可以是数组，统一转成数组。 */
 function asArray(value: unknown): MutableOption[] {
   if (Array.isArray(value)) return value as MutableOption[];
   if (value && typeof value === "object") return [value as MutableOption];
@@ -27,7 +27,7 @@ function asArray(value: unknown): MutableOption[] {
 
 export type Viewport = { width: number; height: number };
 
-/** grid 与 DOM 场地框读同一道算式，两处必须同源。 */
+/** echarts grid 与 DOM 绘图区边框使用同一个矩形，两处必须一致。 */
 export function plotRect(
   chart: ViewChart,
   scene: ViewScene,
@@ -36,7 +36,7 @@ export function plotRect(
   return { ...pad, left: pad.left + (chart.plot_gutter?.left ?? 0) };
 }
 
-/** 数据区 = 场地框 + 框内标签余量：框不因标签开关移动，余量只缩数据区。 */
+/** 数据区 = 绘图区矩形再减去标签留白；开关数值标签时边框不动，只缩小数据区。 */
 export function gridRect(
   chart: ViewChart,
   scene: ViewScene,
@@ -54,10 +54,10 @@ export function plotSize(chart: ViewChart, scene: ViewScene, viewport: Viewport)
   };
 }
 
-/** 折线圆点：每点摊不到 12px 就只在指针命中时现出那一颗（`showSymbol` 的原生语义）。 */
+/** 每个点分到的宽度小于 12px 时关闭折线圆点（echarts `showSymbol`），只在指针悬停时显示。 */
 const SYMBOL_SPACING = 12;
 
-/** 值标签阈值（px）：每点可用宽低于此即按步距挑桶。 */
+/** 数值标签阈值（px）：每个点分到的宽度小于此值时，按间隔隔几个点显示一个标签。 */
 const VALUE_LABEL_SPACING = 37.33;
 const LINE_LABEL_BUDGET = 50;
 const BAR_LABEL_GAP = 4;
@@ -71,7 +71,7 @@ function labelStep(kind: unknown, per: number, widest: number): number {
   return Math.max(1, Math.ceil((widest + BAR_LABEL_GAP) / per));
 }
 
-/** 与读数卡同源的格式与位数；配了标签形制即装，焦点会现出此刻不印的那条。 */
+/** 与读数卡使用相同的格式和小数位；所有配了标签样式的系列都装上，聚焦时可能显示原本不显示标签的系列。 */
 function valueLabelFormatter(
   format: ColumnFormat,
   decimals: number | undefined,
@@ -86,7 +86,7 @@ function valueLabelFormatter(
   };
 }
 
-/** 真系列按 legend 对位：密度、格式化器都只写在这几条上，垫层不碰。 */
+/** 按 legend 顺序对应数据系列；密度和格式化只作用于数据系列，不作用于折线的衬底系列。 */
 function applySeriesDensity(option: MutableOption, model: ChartModel, plotWidth: number): void {
   const series = asArray(option.series);
   const categoryOnX = asArray(option.xAxis)[0]?.type === "category";
@@ -129,7 +129,7 @@ function applyTickDensity(option: MutableOption, plot: Viewport): void {
   ticks(asArray(option.yAxis), plot.height);
 }
 
-/** 值轴刻度：与读数卡同源的格式与位数，率轴按百分比/百分点标单位。 */
+/** 数值轴刻度与读数卡使用相同的格式和小数位，比率轴按百分比或百分点标注单位。 */
 function injectAxisFormatters(option: MutableOption, model: ChartModel): void {
   const inject = (
     axes: MutableOption[],
@@ -198,7 +198,7 @@ function withAlpha(color: string, alpha: number): string | null {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/** 面积渐变在翻色之后现拼；收尽点 70%，铺到底会盖住网格线与零基线。 */
+/** 面积渐变在深色替换之后生成；在 70% 处渐变到透明，铺到底会盖住网格线和零基线。 */
 function injectAreaGradient(option: MutableOption): void {
   for (const series of asArray(option.series)) {
     const area = series.areaStyle as MutableOption | undefined;
@@ -238,13 +238,13 @@ export type RenderState = {
   dark: boolean;
   scene: ViewScene;
   viewport: Viewport;
-  /** 在焦点的图例单元（系列或切片） */
+  /** 当前聚焦的系列或扇区 */
   focused: number | null;
-  /** 钉住的那一格；钉住期间指针不再跟随鼠标 */
+  /** 钉住的数据点；钉住期间指针不再跟随鼠标 */
   pinned: number | null;
 };
 
-/** 必须在翻色之前：焦点色与本色同是亮色原值。 */
+/** 必须在深色替换之前执行：聚焦色和系列色都是浅色模式的原始值。 */
 function applyFocus(option: MutableOption, chart: ViewChart, focused: number | null): void {
   const patch = focusPatch(chart, focused);
   if (patch.color) option.color = patch.color;
@@ -257,8 +257,8 @@ function applyFocus(option: MutableOption, chart: ViewChart, focused: number | n
 }
 
 /**
- * 一次派生出这张图此刻该长的样子。顺序只有一条硬约束：翻色要在注入函数之前——
- * 翻色递归走字面值，函数与渐变对象走不进去；其余各步互不相干。
+ * 生成当前状态下的完整 option。深色替换必须在注入函数和渐变之前：替换只递归处理字面值，
+ * 处理不到函数和渐变对象。其余步骤之间没有顺序要求。
  */
 export function renderOption(chart: ViewChart, state: RenderState): MutableOption {
   const option = structuredClone(chart.option) as MutableOption;

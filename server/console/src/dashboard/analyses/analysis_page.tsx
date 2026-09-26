@@ -1,7 +1,4 @@
-/**
- * 查询记录回放：与报告页同一个工作台，差别只在保存目标是「新建报告」而不是换向已有报告。
- * 名字即题名块里的可编辑标题，保存前改名是同一个动作。
- */
+/** 查询记录回放页：与报告页共用工作台，保存时新建报告。 */
 import { AnalysisWorkbench } from "./analysis_workbench";
 import { errorText } from "../api";
 import { useAnalysisReplay, useCatalogQuery } from "../dashboard_queries";
@@ -37,7 +34,7 @@ export function AnalysisPage({ id }: { id: string }) {
       catalog={catalog}
       crumb={{ href: reportsHistoryHash(), label: "查询记录" }}
       error={error}
-      // 回放按 View 身份取数，没有承载格点明细的报告或看板身份。
+      // 回放只有 View id，没有报告或看板 id，无法查询单元格明细。
       recordSource={{ kind: "none" }}
       saveLabel="存为报告"
       session={edit}

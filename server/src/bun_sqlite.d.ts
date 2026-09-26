@@ -1,7 +1,6 @@
 /**
- * Bun 运行时内置模块的最小声明，供 Node 侧 tsc 通过（本机脚本经 Bun 执行时才会加载）。
- * 不引入 bun-types：其全局声明与 @types/node 存在冲突面，此处只声明用到的成员
- * （构造器给 Better Auth 适配器；exec/prepare 给审计模块，与 node:sqlite 同形）。
+ * bun:sqlite 的最小类型声明，让 Node 侧 tsc 通过（只有经 Bun 运行的本机脚本才会加载它）。
+ * 不引入 bun-types，因为它的全局声明与 @types/node 冲突；这里只声明用到的成员。
  */
 declare module "bun:sqlite" {
   export class Database {

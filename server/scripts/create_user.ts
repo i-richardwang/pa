@@ -1,15 +1,14 @@
 /**
- * 用户开通（管理员在本机执行）：写入与服务同一 SQLite 文件（PA_AUTH_DB，默认 data/auth.db，
- * 相对 server/ 目录）。服务端无自助注册，本脚本是唯一开通入口。
+ * 由管理员在本机创建用户，写入服务使用的同一个 SQLite 文件（PA_AUTH_DB，默认 data/auth.db，
+ * 相对 server/ 目录）。服务没有自助注册，账号只能通过这个脚本创建。
  *
- * 授权口径见 src/engine/cube_security.ts 与 view.access_policy；--data-scope 缺省为空
- * ＝账号可登录但不能查询数据。
+ * 数据权限规则见 src/engine/cube_security.ts 和 view 的 access_policy；不传 --data-scope 时，
+ * 账号可以登录，但查不到任何数据。
  *
- * 经用户账号适配器与 apiKey 插件端点（服务端直调不经 HTTP、无会话要求）；账号创建时同时写入
- * 绑定当前语义包身份的 access_scope。密码散列（scrypt）
- * 与 key 散列（SHA-256）均不依赖 PA_AUTH_SECRET。
- * 注意：容器内服务持有长连接，跨 Docker 挂载边界的新写入对其不可见（virtiofs 缓存），
- * 开通后须 docker compose restart server 生效。
+ * 通过用户账号适配器和 apiKey 插件直接写入（不经过 HTTP，也不需要登录会话），同时保存绑定当前
+ * 语义包的数据权限范围。密码散列（scrypt）和 key 散列（SHA-256）都与 PA_AUTH_SECRET 无关。
+ * 注意：容器内的服务一直打开着数据库，Docker 挂载目录的新写入对它不可见（virtiofs 缓存），
+ * 创建后要执行 docker compose restart server 才生效。
  */
 import { buildAuth, initializeAuthSchema } from "../src/auth.js";
 import { createBetterAuthUserAccountAdministration } from "../src/adapters/better_auth_user_account_administration.js";
@@ -76,8 +75,8 @@ const user = await accounts.create({
   accessScope,
 });
 console.log(
-  `已开通：${user.email}（id=${user.id}，角色=${role}，` +
-    `数据范围=${accessScopeValues.join("、") || "（空：无行权限，待授权）"}）`,
+  `已创建：${user.email}（id=${user.id}，角色=${role}，` +
+    `数据范围=${accessScopeValues.join("、") || "（未设置：可以登录，但查不到数据）"}）`,
 );
 
 if (withKey) {

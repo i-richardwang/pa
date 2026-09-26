@@ -1,7 +1,7 @@
-/** 明暗成对取值：light 为序列化 option 的原值，dark 供渲染端按映射翻转 */
+/** 明暗两套取值：序列化的 option 用 light，渲染端在暗色主题下按映射换成 dark */
 export type TokenPair = { readonly light: string; readonly dark: string };
 
-/** 图表系列色（8 色）：序列化 option 取 light，渲染端按 CHART_DARK_COLORS 翻到 dark */
+/** 图表系列色：序列化的 option 用 light，渲染端按 CHART_DARK_COLORS 换成 dark */
 export const CHART_SERIES: readonly TokenPair[] = [
   { light: "#3b6fdb", dark: "#5b8def" },
   { light: "#e0857a", dark: "#e8998f" },
@@ -14,33 +14,33 @@ export const CHART_SERIES: readonly TokenPair[] = [
 ] as const;
 
 export const CHART_CHROME = {
-  /** 轴刻度 = text-faint */
+  /** 轴刻度，与 --pa-faint 同值 */
   axisText: { light: "#aaaaaa", dark: "#6e6e6e" },
-  /** 数据值标签 = text-muted */
+  /** 数值标签，与 --pa-muted 同值 */
   valueText: { light: "#767676", dark: "#a3a3a3" },
-  /** 双向虚线网格 = line 全浓度 */
+  /** 横纵虚线网格 */
   gridLine: { light: "#e8e8e8", dark: "#2b2b2b" },
-  /** 桶边界分隔线：比横向网格深且细 */
+  /** 时间桶边界的分隔线，颜色比网格线深 */
   gridEdge: { light: "rgba(0, 0, 0, 0.15)", dark: "rgba(255, 255, 255, 0.16)" },
-  /** 图表所在承载面（饼图切缝、需要遮挡时的底色） */
+  /** 图表背景色，也用于饼图切缝和需要遮挡的底色 */
   surface: { light: "#ffffff", dark: "#171717" },
-  /** 值标签底片；描边用承载面色 */
+  /** 数值标签的底色；描边用 surface */
   labelChip: { light: "#f7f7f8", dark: "#232323" },
 
   pointerBand: { light: "rgba(0, 0, 0, 0.04)", dark: "rgba(255, 255, 255, 0.07)" },
-  /** 指针竖虚线（纯折线）= text-muted */
+  /** 纯折线图的指针竖虚线，与 --pa-muted 同值 */
   pointerLine: { light: "#767676", dark: "#a3a3a3" },
 
   blurred: { light: "#dedede", dark: "#3a3a3a" },
 } as const satisfies Record<string, TokenPair>;
 
-/** 数字与拉丁走 Inter，中文走系统栈；与 tokens.css --font-sans 同栈 */
+/** 数字和拉丁字母用 Inter，中文用系统字体；须与 tokens.css 的 --font-sans 一致 */
 export const FONT_FAMILY =
   "'Inter Variable', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif";
 
 /**
- * UI 语义令牌（tokens.css :root 的镜像，供一致性测试对表；恒定色 light=dark）。
- * 键名即 CSS 变量名去 `--pa-` 前缀。
+ * UI 语义令牌，须与 tokens.css :root 同值（design_tokens.test.ts 对照）；明暗不变的令牌 light 与 dark 相同。
+ * 键名是 CSS 变量名去掉 `--pa-` 前缀。
  */
 export const UI_TOKENS: Record<string, TokenPair> = {
   page: { light: "#ffffff", dark: "#0f0f0f" },

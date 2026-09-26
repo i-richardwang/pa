@@ -1,4 +1,4 @@
-/** 为公开虚构数据播种可执行报告、看板与通用业务术语。 */
+/** 基于公开虚构数据写入 Demo 报告、看板和通用业务术语。 */
 import { randomUUID } from "node:crypto";
 import { createBusinessTermRegistry } from "../src/application/business_term_registry.js";
 import { createCatalogService } from "../src/application/catalog_service.js";
@@ -34,7 +34,7 @@ const owner = process.argv[2] ?? "demo@pa.local";
 const dbPath = process.env.PA_APP_DB ?? "data/app.db";
 const semanticPackage = await loadSemanticPackage(configuredSemanticPackageDir());
 if (semanticPackage.id !== "pa_demo") {
-  throw new Error("seed:demo 只对公开 pa_demo 语义包生效，内部包应维护自己的播种适配器");
+  throw new Error("seed:demo 只适用于公开 Demo 包 pa_demo；其他语义包需要自己的初始化脚本");
 }
 
 const visibilityCube = withFormalMetricModel(
@@ -68,7 +68,7 @@ try {
     cube,
     exports: {
       createDelivery: async () => {
-        throw new Error("Demo 播种不创建导出");
+        throw new Error("写入 Demo 数据时不创建导出");
       },
     },
   });
@@ -196,7 +196,8 @@ try {
   for (const demo of demos) {
     const compiled = await planning.plan(principal, demo.analysis, demo.view);
     const result = await execution.execute(compiled);
-    if (!result.fullRowViewBlock.rows.length) throw new Error(`Demo「${demo.name}」实跑零行`);
+    if (!result.fullRowViewBlock.rows.length)
+      throw new Error(`Demo 报告「${demo.name}」执行后没有返回数据`);
     const analysis = await analyses.create(owner, demo.analysis, demo.view);
     const previous = existing.get(demo.name);
     const report = previous
@@ -219,12 +220,12 @@ try {
   ] satisfies [string, Place][];
   const tiles = placements.map(([name, place]) => {
     const reportId = reportIds.get(name);
-    if (!reportId) throw new Error(`看板引用了未播种的报告：${name}`);
+    if (!reportId) throw new Error(`看板引用的报告没有创建：${name}`);
     return { kind: "report" as const, tile_id: randomUUID(), report_id: reportId, place };
   });
   const boards = createBoardRepository(appDb);
   const boardName = "公开 Demo 总览";
-  // 认领含已删除的同名看板：删除可逆，重复播种不该在旁边再造一块。
+  // 同名看板即使已删除也复用：删除可以恢复，重复运行不应再新建一个看板。
   const previousBoard = (await boards.list("all")).find(
     (board) => board.name === boardName && board.created_by === owner,
   );
@@ -236,7 +237,7 @@ try {
     await boards.update(board.id, { tiles }, board.revision);
   }
   console.log(
-    `Demo 就绪：${demos.length} 个报告，业务术语新增 ${terms.created.length} 条、保留 ${terms.preserved.length} 条；数据截止 ${asOf}。`,
+    `Demo 数据已写入：${demos.length} 个报告，业务术语新增 ${terms.created.length} 条、保留 ${terms.preserved.length} 条；数据截止 ${asOf}。`,
   );
 } finally {
   appDb.close();

@@ -9,7 +9,7 @@ import {
 import { principalFromAttributes, type Principal } from "../contracts/principal.js";
 
 describe("Cube securityContext 映射", () => {
-  test("Better Auth 字段统一解析角色与数据范围", () => {
+  test("从 Better Auth 用户字段解析角色与数据范围", () => {
     expect(
       principalFromAttributes(
         {
@@ -41,7 +41,7 @@ describe("Cube securityContext 映射", () => {
     });
   });
 
-  test("已知角色按组织范围映射到唯一策略组", () => {
+  test("数据角色按数据范围映射到一个策略组", () => {
     const full: Principal = {
       email: "admin@example.com",
       roles: ["admin"],
@@ -64,14 +64,14 @@ describe("Cube securityContext 映射", () => {
     });
   });
 
-  test("数据角色只有 user 与 admin，策略组因此只按数据范围分", () => {
+  test("数据角色只有 user 与 admin", () => {
     expect(
       [...DATA_ROLES].sort(),
       "新增了数据角色：cubeSecurityContext 只按数据范围映射策略组，前提是所有数据角色在列权限上等价——新角色若不等价，它拿到的会是别人的列",
     ).toEqual(["admin", "user"]);
   });
 
-  test("多角色不叠加策略，当前等价角色仍只产生一个组", () => {
+  test("多角色账号只映射到一个策略组", () => {
     expect(
       cubeSecurityContext({
         email: "admin@example.com",
@@ -81,7 +81,7 @@ describe("Cube securityContext 映射", () => {
     ).toEqual([CUBE_ACCESS_GROUP.full]);
   });
 
-  test("未知角色与空组织范围 fail-closed", () => {
+  test("没有数据角色或数据范围为空时抛出 AuthzError", () => {
     expect(() =>
       cubeSecurityContext({ email: "x@x", roles: [], accessScope: { kind: "all" } }),
     ).toThrow(AuthzError);
@@ -94,7 +94,7 @@ describe("Cube securityContext 映射", () => {
     ).toThrow(AuthzError);
   });
 
-  test("服务身份与用户策略组分离", () => {
+  test("服务身份使用独立的策略组", () => {
     expect(SERVICE_CUBE_CONTEXT).toEqual({
       subject: "pa-service",
       groups: [CUBE_ACCESS_GROUP.service],

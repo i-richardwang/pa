@@ -1,4 +1,3 @@
-/** 数据能力地图是统一语义目录的只读投影。 */
 import type {
   SemanticCatalogDimensionGroup,
   SemanticCatalogFact,
@@ -43,7 +42,6 @@ const memberSchema = z
   })
   .strict();
 
-/** 浏览器只接受由服务端当前语义包投影出的完整能力地图合同。 */
 export const DATA_CAPABILITY_MAP_SCHEMA = z
   .object({
     facts: z.array(

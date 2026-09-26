@@ -73,19 +73,18 @@ const TERMS: PublicBusinessTerm[] = [
 test("指标能被所属域的别名搜到", () => {
   const bySynonym = filterMeasures(CATALOG, ALL, "Turnover").map((m) => m.id);
   expect(bySynonym).toEqual(["measure:exit_count"]);
-  // 别名只把它自己那个域的指标带出来，不是全表放行。
   expect(filterMeasures(CATALOG, ALL, "Headcount").map((m) => m.id)).toEqual(["measure:headcount"]);
   expect(filterMeasures(CATALOG, ALL, "查无此词")).toEqual([]);
 });
 
-test("指标域筛选与搜索是两个条件，同时成立才留下", () => {
+test("指标同时满足指标域筛选和关键词搜索才保留", () => {
   expect(filterMeasures(CATALOG, "metric_domain:turnover", "").map((m) => m.id)).toEqual([
     "measure:exit_count",
   ]);
   expect(filterMeasures(CATALOG, "metric_domain:turnover", "在职")).toEqual([]);
 });
 
-test("维度页只搜维度：属性组既是筛选器也是命中字段", () => {
+test("维度搜索只返回维度，属性组可用于筛选也可被关键词命中", () => {
   const dimensions = CATALOG.dimensions as PublicCatalogDimension[];
   expect(filterDimensions(dimensions, ALL, "雇佣信息").map((d) => d.id)).toEqual([
     "dimension:work_location",
@@ -93,11 +92,10 @@ test("维度页只搜维度：属性组既是筛选器也是命中字段", () =>
   expect(filterDimensions(dimensions, "group:person", "").map((d) => d.id)).toEqual([
     "dimension:gender",
   ]);
-  // 指标名不在维度页里出现。
   expect(filterDimensions(dimensions, ALL, "离职人数")).toEqual([]);
 });
 
-test("术语按别名命中：黑话是这页存在的理由", () => {
+test("术语可按别名搜到", () => {
   expect(filterTerms(TERMS, "自愿离职").map((t) => t.id)).toEqual(["t1"]);
   expect(filterTerms(TERMS, "在职人数")).toEqual([]);
 });

@@ -1,7 +1,6 @@
 /**
- * 看板存储：一个稳定 uuid 指向一张 24 列网格画布的有序瓦片集。
- * 存储只存引用与坐标，report 瓦片的 name/presentation_type 由 application service 在载荷期解析。
- * created_by 是唯一维护人；查看与重放的共享权限由 application service 按看板成员关系裁决。
+ * 瓦片只存引用与网格坐标，report 瓦片的 name/presentation_type 由 application service 组装载荷时解析。
+ * 查看与重放权限由 application service 判定。
  */
 import { randomUUID } from "node:crypto";
 import { BOARD_MUTATION_TILES_SCHEMA } from "../contracts/board_contract.js";

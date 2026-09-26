@@ -22,7 +22,7 @@ import { useDimensionValues } from "../dashboard_queries";
 
 type Filter = NonNullable<SemanticQueryView["filters"]>[number];
 
-/** 关系名写全「其中之一」：值是多枚，只写「是 / 不是」会读成单值比较。 */
+/** 取值可以有多个，关系文案写「是其中之一」，避免被理解成单值比较。 */
 const RELATION_LABELS: Record<Filter["relation"], string> = {
   one_of: "是其中之一",
   none_of: "不是其中之一",
@@ -30,7 +30,7 @@ const RELATION_LABELS: Record<Filter["relation"], string> = {
 
 const VALUES_CLASS = cn(INSPECTOR_ROW_INDENT_CLASS, "px-2");
 
-/** 已选好取值的条件收起：收的只是改的那套控件，取值照印。 */
+/** 已有取值的条件默认收起：收起的是编辑控件，已选取值仍然显示。 */
 function FilterRow({
   filter,
   title,
@@ -57,7 +57,6 @@ function FilterRow({
   }, [typed]);
 
   const searchable = isSearchableCatalogDimension(member);
-  // 收起时不取维度取值。
   const options = useDimensionValues(memberId, query, searchable && open).data?.values ?? [];
   const candidates = options.filter((value) => !values.includes(value));
 
@@ -157,7 +156,7 @@ function FilterRow({
               aria-label={`${title} 取值`}
               onChange={(event) => setTyped(event.target.value)}
               onKeyDown={(event) => {
-                // 回车收下键入的字面值：名录之外的取值（以及不可检索的维度）只能这样进来。
+                // 回车加入输入的原文：候选列表以外的取值和不可检索维度的取值只能这样加入。
                 if (event.key === "Enter") {
                   event.preventDefault();
                   add(typed);
@@ -172,7 +171,7 @@ function FilterRow({
               <SearchIcon aria-hidden="true" />
             </InputGroupAddon>
           </InputGroup>
-          {/* 列表高度取整行数：切在半行上会让最后那行读成渲染坏了。 */}
+          {/* max-h-42 是整数行的高度，避免最后一行只显示一半。 */}
           <div className="-mx-2 max-h-42 overflow-y-auto">
             {candidates.map((value) => (
               <InspectorRow key={value} label={value} onClick={() => add(value)} />
@@ -193,7 +192,7 @@ function FilterRow({
   );
 }
 
-/** 语义 dimension id → 目录成员（拿中文标题）；filters 只存语义 id，直接按 id 命中。 */
+/** 按语义 dimension id 查目录成员，用于取中文标题。 */
 function filterMeta(catalogDimensions: CatalogMemberPayload[]) {
   return (reference: string) => catalogDimensions.find((item) => item.id === reference);
 }

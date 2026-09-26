@@ -35,7 +35,7 @@ export function TablePager({
   }));
 
   return (
-    // FrameFooter 恒为 justify-end，内层须显式 w-full 才两端分置。
+    // FrameFooter 自带 justify-end，内层需要 w-full 才能两端对齐。
     <FrameFooter className="pt-2">
       <div className="flex w-full items-center justify-between gap-2">
         <div className="flex items-center gap-2 whitespace-nowrap">

@@ -47,7 +47,7 @@ export type RecordProjectionDialogRequest = Omit<
   "offset" | "limit"
 > & {
   target: RecordProjectionDialogTarget;
-  /** 客户端已构造的格点坐标回显；与请求体同源，零服务端往返。 */
+  /** 所点单元格坐标的显示文本，由客户端与请求体一起构造，不需要请求服务端。 */
   display: RecordProjectionCoordinateDisplay;
 };
 
@@ -139,7 +139,6 @@ export function RecordProjectionDialog({
       <Dialog open={request !== null} onOpenChange={(open) => !open && onClose()}>
         <DialogPopup showCloseButton={false} variant="stage">
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden md:h-full">
-            {/* 题条：与报告内 Edit / Explore 同一根基线；分页与关闭住动作槽 */}
             <Titlebar align="between" as="div" className="pr-2.5">
               <span className="truncate text-sm font-medium text-pa-fg">{recordTitle}</span>
               <div className="flex shrink-0 items-center gap-1">
@@ -177,14 +176,14 @@ export function RecordProjectionDialog({
               {data?.data_changed && (
                 <Alert className="mb-3" variant="warning">
                   <AlertDescription>
-                    数据已从结果显示时的截至点更新，以下记录按当前数据重新计算。
+                    结果生成后数据已更新，以下记录按当前数据重新计算。
                   </AlertDescription>
                 </Alert>
               )}
               {data?.limit_reached && (
                 <Alert className="mb-3" variant="warning">
                   <AlertDescription>
-                    记录数量超过交互查看上限；请回到报告添加筛选条件，缩小范围后再查看。
+                    记录数量超过可查看的上限；请回到报告添加筛选条件，缩小范围后再查看。
                   </AlertDescription>
                 </Alert>
               )}
@@ -197,9 +196,9 @@ export function RecordProjectionDialog({
                   <LoadingMark className="py-16" />
                 </div>
               ) : data && !data.rows.length && !data.offset ? (
-                // 零值格可点，空记录集须明说。
+                // 值为零的单元格也能打开，空记录集需要显示提示。
                 <div className="flex min-h-48 items-center justify-center text-sm text-pa-muted">
-                  该口径下没有构成记录。
+                  当前条件下没有构成记录。
                 </div>
               ) : data ? (
                 <Table>

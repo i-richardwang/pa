@@ -107,14 +107,14 @@ const synthetic: DataCapabilityMapData = {
   ],
 };
 
-test("列归属与排序只使用全局维度、业务指标域和宽事实", () => {
+test("三列分别放属性组、指标域和事实，并按绑定数排序", () => {
   const columns = capabilityColumns(synthetic);
   expect(columns.dimensions.map(nodeId)).toEqual(["dimension_group:g1", "dimension_group:g2"]);
   expect(columns.metricDomains.map((domain) => domain.id)).toEqual([
     "metric_domain:scene_b",
     "metric_domain:scene_a",
   ]);
-  // 全内部成员与无业务名的事实都不上图。
+  // 只有内部成员或没有业务名的事实不显示。
   expect(columns.facts.map((fact) => fact.name)).toEqual(["fact_a", "fact_b"]);
 });
 
@@ -128,12 +128,12 @@ test("布局保持维度、指标域、事实三列且同列节点不重叠", ()
   expect(domainX).toBeLessThan(factX);
   const top = positions.get("fact:fact_a");
   const below = positions.get("fact:fact_b");
-  if (!top || !below) throw new Error("布局缺节点");
+  if (!top || !below) throw new Error("布局中缺少节点");
   expect(below.y - top.y).toBeGreaterThanOrEqual(NODE_HEIGHT);
   expect(laneLabels.map((label) => label.key)).toEqual(["dimensions", "metric_domains", "facts"]);
 });
 
-test("边方向区分维度投影与事实来源", () => {
+test("指向属性组的边从左侧连接，指向事实的边从右侧连接", () => {
   const edges = capabilityEdges(synthetic);
   for (const edge of edges.filter((candidate) => candidate.target.includes("dimension_group:"))) {
     expect(edge.sourceHandle).toBe("source-left");
@@ -142,11 +142,11 @@ test("边方向区分维度投影与事实来源", () => {
   const toFact = edges.find((edge) => edge.id === "binding:metric_domain:scene_a->fact_a");
   expect(toFact?.sourceHandle).toBe("source-right");
   expect(toFact?.targetHandle).toBe("target-left");
-  if (toFact?.kind !== "binding") throw new Error("缺少事实绑定边");
+  if (toFact?.kind !== "binding") throw new Error("缺少到数据来源的连线");
   expect(toFact.includes).toBe(1);
 });
 
-test("邻接高亮覆盖指标域投影与事实承载血缘", () => {
+test("选中节点时高亮所有相邻节点", () => {
   const edges = capabilityEdges(synthetic);
   const forDomain = highlightFor(edges, "metric_domain:scene_a");
   expect(forDomain?.nodes).toEqual(
@@ -164,7 +164,7 @@ test("邻接高亮覆盖指标域投影与事实承载血缘", () => {
   expect(highlightFor(edges, null)).toBeNull();
 });
 
-test("无选中只画语义投影，选中事实后补画物理承载血缘", () => {
+test("未选中时只显示 binding 边，选中事实后显示它的 attribute 边", () => {
   const edges = capabilityEdges(synthetic);
   expect(visibleEdges(edges, null).every((edge) => edge.kind === "binding")).toBe(true);
   const forFact = highlightFor(edges, "fact:fact_a");
@@ -173,7 +173,7 @@ test("无选中只画语义投影，选中事实后补画物理承载血缘", ()
   );
 });
 
-test("说不出业务名的成员、部门树不成行，也不退回原名", () => {
+test("没有业务名的成员和部门树不显示，也不用物理名代替", () => {
   const fact = {
     name: "fact_x",
     title: "事实",
@@ -203,7 +203,7 @@ test("说不出业务名的成员、部门树不成行，也不退回原名", ()
   ]);
 });
 
-test("Demo 参考数据可完整布局且成员计数守恒", () => {
+test("Demo 数据能完整布局，且各事实的成员计数与公开成员数一致", () => {
   const data = embedded as unknown as DataCapabilityMapData;
   const columns = capabilityColumns(data);
   const { positions } = layoutCapabilities(columns);

@@ -1,7 +1,3 @@
-/**
- * CatalogDocument 守护：单一装配、跨视图归并、MCP 投影与人类消费面字段白名单。
- * 规范同名身份归并由两个测试主题共用的 active_employee_count 与组织维度承载。
- */
 import { describe, expect, test } from "bun:test";
 import {
   browseCatalogDocument,
@@ -267,11 +263,10 @@ const metaViews: CubeView[] = [
   },
 ];
 
-/** Cube /meta 顺序不作为目录契约；指标域按稳定 id 排序。 */
 const views: CubeView[] = [...metaViews].sort((a, b) => a.name.localeCompare(b.name));
 
 describe("CatalogDocument", () => {
-  test("从权限裁剪后的 views 归一成员与时间源", () => {
+  test("从权限裁剪后的 views 构建成员与时间源", () => {
     const document = buildCatalogDocument(views);
     expect(document.observation_scopes).toEqual(["统计范围：公开虚构数据中的示例员工。"]);
     expect(views[0].name).toBe("employee_attributes_fixture");
@@ -297,7 +292,7 @@ describe("CatalogDocument", () => {
     expect(document.views[2].dimensions[1].dimension_kind).toBe("categorical");
   });
 
-  test("规范同名身份跨事实归并，available_in 载明精确查询绑定", () => {
+  test("同名成员跨视图合并为一个语义身份，available_in 列出每个查询绑定", () => {
     const catalog = canonicalCatalog(buildCatalogDocument(views));
     const activeEmployees = catalog.measures.filter((m) => m.title === "在职人数");
     expect(activeEmployees).toHaveLength(1);
@@ -334,7 +329,7 @@ describe("CatalogDocument", () => {
         member: "test_people_metrics.organization_name",
       },
     ]);
-    // 键集合全等：消费面只有这些字段，任何别的物理血缘或语义身份字段都进不来
+    // 合并后的成员只含以下字段
     expect(Object.keys(activeEmployees[0]).sort()).toEqual([
       "available_in",
       "description",
@@ -370,7 +365,7 @@ describe("CatalogDocument", () => {
     ]);
   });
 
-  test("上线的维度必带业务属性组：缺归属的维度让整份目录出不去", () => {
+  test("维度缺少业务属性组时公开目录构建失败", () => {
     const ungrouped = views.map((view) => ({
       ...view,
       dimensions: view.dimensions.map(({ meta, ...dimension }) => ({
@@ -381,7 +376,7 @@ describe("CatalogDocument", () => {
     expect(() => toSemanticCatalog(buildCatalogDocument(ungrouped))).toThrow(/缺少业务属性组归属/);
   });
 
-  test("敏感度只认「受限」一个词：模型写别的词，目录出不去", () => {
+  test("sensitivity 取 restricted 以外的值时目录构建失败", () => {
     const mislabeled = views.map((view) => ({
       ...view,
       dimensions: view.dimensions.map((dimension) => ({
@@ -392,7 +387,7 @@ describe("CatalogDocument", () => {
     expect(() => buildCatalogDocument(mislabeled)).toThrow(/sensitivity 声明无效/);
   });
 
-  test("人的投影：去重指标、折叠分母零件、公式行翻成中文，且只含白名单", () => {
+  test("公开目录去重指标、隐藏范围分母、公式显示中文标题，且不含物理名", () => {
     const payload = toSemanticCatalog(buildCatalogDocument(views));
     expect(payload.metric_domains.map((topic) => topic.title)).toEqual([
       "人员规模与结构",
@@ -401,7 +396,6 @@ describe("CatalogDocument", () => {
     expect(payload.metric_domains[1]).toMatchObject({ id: "metric_domain:workforce_movement" });
     expect(payload.metric_domains[1]).not.toHaveProperty("name");
     expect(payload.metric_domains[1]).not.toHaveProperty("measures");
-    // 指标域详情承 Agent 查询说明、数据时间业务标签与真实同义词。
     expect(payload.metric_domains[1]).not.toHaveProperty("time_source");
     expect(payload.metric_domains[1]).toMatchObject({
       query_contract: expect.stringContaining("入职、离职"),
@@ -412,9 +406,9 @@ describe("CatalogDocument", () => {
     const titles = payload.measures.map((m) => m.title);
     expect(titles).toContain("在职人数");
     expect(titles.filter((t) => t === "在职人数")).toHaveLength(1);
-    // 分母零件不进主表——它只是引擎侧零件，不是可交付的指标
+    // scope_denominator 指标不单独公开
     expect(titles).not.toContain("在职人数范围合计");
-    // 但其口径仍以中文出现在占比指标的公式行里（折叠不等于口径消失）
+    // 但仍作为占比指标公式的分母显示
     expect(payload.measures.find((m) => m.title === "在职人数占比")?.formula).toEqual({
       numerator: "在职人数",
       numerator_id: "measure:active_employee_count",
@@ -425,7 +419,6 @@ describe("CatalogDocument", () => {
       kind: "structure_share",
       numerator_id: "measure:active_employee_count",
     });
-    // 对外语义成员不含物理绑定；可查视图与限定名只在编译器目录里
     expect(payload.measures.find((m) => m.title === "在职人数")).not.toHaveProperty("available_in");
     expect(payload.measures.find((m) => m.title === "在职人数")).not.toHaveProperty("name");
     expect(payload.measures.find((m) => m.title === "在职人数")?.report_calculations).toEqual([
@@ -437,31 +430,28 @@ describe("CatalogDocument", () => {
       grouping: { minimum_varying_dimensions: 1 },
     });
     expect(payload.dimensions.find((d) => d.title === "组织")?.dimension_kind).toBe("categorical");
-    // Agent 选材与避坑规则随成员亮出，供人核对 AI 的查询行为
     expect(payload.measures.find((m) => m.title === "YTD主要事件率")?.ai_context).toBe(
       "只供 Agent 的时间选择规则",
     );
-    // 查询能力以正向白名单交付，客户端只需计算所选指标的能力交集。
     const deptId = payload.dimensions.find((d) => d.title === "部门")?.id ?? "";
     expect(deptId).toBe("dimension:department_name");
     expect(
       payload.measures.find((m) => m.title === "YTD主要事件率")?.query_capabilities?.dimension_ids,
     ).not.toContain(deptId);
 
-    // 引擎零件仍不跨受众：夹具里真实存在的执行 view 名与限定成员名一个都不上线
     const json = JSON.stringify(payload);
     for (const physical of ["test_people_metrics", "employee_attributes_fixture", "_fact."]) {
       expect(json, physical).not.toContain(physical);
     }
   });
 
-  test("人的投影：指标域带上域内指标与域内可拆维度，客户端不必自行推断", () => {
+  test("公开目录的指标域列出域内指标和可拆分维度", () => {
     const payload = toSemanticCatalog(buildCatalogDocument(views));
     const byId = new Map(payload.metric_domains.map((topic) => [topic.id, topic]));
     const structure = byId.get("metric_domain:workforce_structure")!;
     const movement = byId.get("metric_domain:workforce_movement")!;
 
-    // 从属只由域这一头说：成员不反向携带域 id，域列全本次响应里的指标。
+    // 指标不携带域 id，归属只由指标域的 measure_ids 表达
     expect(payload.measures.every((member) => !("metric_domain_id" in member))).toBe(true);
     const owned = [...structure.measure_ids, ...movement.measure_ids];
     expect(owned).toContain("measure:ytd_primary_event_rate");
@@ -470,7 +460,7 @@ describe("CatalogDocument", () => {
       expect(payload.measures.some((member) => member.id === id)).toBe(true);
     }
 
-    // 可拆维度按物理可用性逐域判定，不是把维度表整个发给每个域。
+    // 可拆分维度按各域指标所在视图逐域判定
     const ids = payload.dimensions.map((member) => member.id);
     expect(structure.dimension_ids).toContain("dimension:classification_source");
     expect(movement.dimension_ids).not.toContain("dimension:classification_source");
@@ -480,7 +470,7 @@ describe("CatalogDocument", () => {
     }
   });
 
-  test("查询能力把物理可用性、负向限制与层级折叠成一份正向语义投影", () => {
+  test("查询能力按维度可用性、互斥维度和层级计算出可用维度与层级", () => {
     const hierarchical = views.map((view) =>
       view.name === "employee_attributes_fixture"
         ? {
@@ -524,7 +514,7 @@ describe("CatalogDocument", () => {
     });
   });
 
-  test("公共目录只投影会约束选择的时间能力，不泄漏内部时间合同", () => {
+  test("公开目录只输出求值基准和时间约束，不输出 time_contract", () => {
     const cardOf = (document: CatalogDocument) =>
       toSemanticCatalog(document).measures.find((member) => member.title === "YTD主要事件率");
     const withGrain = (grain?: "month") => {
@@ -539,7 +529,6 @@ describe("CatalogDocument", () => {
       };
       return cardOf(document);
     };
-    // 年初累计合同 ⇒ 年度归零位；再叠加按月定义 ⇒ 两位并存，各自独立成立。
     expect(withGrain()?.time).toEqual({
       value_basis: "year_start_to_bucket_end",
       constraints: { year_scoped: true },
@@ -549,7 +538,7 @@ describe("CatalogDocument", () => {
       constraints: { grain: "month", year_scoped: true },
     });
     expect(withGrain()).not.toHaveProperty("time_contract");
-    // 求值基准恒在场，限制位只在真有约束时出现——两个问题各答各的。
+    // 没有时间约束时只输出求值基准
     const plain = toSemanticCatalog(buildCatalogDocument(views)).measures.find(
       (member) => member.title.includes("在职人数") && !member.title.includes("YTD"),
     );
@@ -557,7 +546,7 @@ describe("CatalogDocument", () => {
     expect(plain).not.toHaveProperty("time_contract");
   });
 
-  test("明细入口只认指标显式声明的记录选择，未声明指标保持关闭", () => {
+  test("只有声明了 underlying_records 的指标可查看明细", () => {
     const fixture: CubeView = {
       name: "record_projection_fixture",
       title: "明细推导",
@@ -650,7 +639,7 @@ describe("CatalogDocument", () => {
     expect(
       payload.measures.find((measure) => measure.title === "综合得分")?.records_available,
     ).toBeUndefined();
-    // 公式零件在夹具里是短名、成员是限定名，两种写法都须解析为中文。
+    // 公式组件写短名、成员是限定名，两种写法都解析为中文标题
     expect(payload.measures.find((measure) => measure.title === "事件率")?.formula).toEqual({
       numerator: "事件数",
       numerator_id: "measure:events",
@@ -659,7 +648,7 @@ describe("CatalogDocument", () => {
     });
   });
 
-  test("同一指标只有具备底层记录投影的物理绑定可用于明细（编译器目录）", () => {
+  test("编译器目录中只有带记录投影的物理绑定标记 records_available", () => {
     const payload = toCompilerCatalog(buildCatalogDocument(views));
     const active_employee_count = payload.measures.find((measure) => measure.title === "在职人数")!;
     expect(active_employee_count.records_available).toBe(true);
@@ -688,8 +677,8 @@ describe("CatalogDocument", () => {
     expect(() => buildCatalogDocument([invalid])).toThrow("底层记录集配置无效");
   });
 
-  test("装配拒绝解析为年初累计却声明 selected 的合同：声明与求值不得背离", () => {
-    // recompute 的求值继承组件；能力卡读声明字段，背离会让编辑器放行守卫必拒的组合。
+  test("求值按年初累计但合同声明 window: selected 时目录构建失败", () => {
+    // recompute 指标的求值基准继承组件，公开的时间约束读合同声明，两者须一致
     const withRateWindow = (window: "selected" | "year_to_date"): CubeView[] => [
       {
         name: "flow",
@@ -741,8 +730,8 @@ describe("CatalogDocument", () => {
     });
   });
 
-  test("公式行两端都译成中文，译不出就整行不发——绝不拿物理名顶替", () => {
-    // 分母另居一个视图：装配只能按声明它的视图去限定零件名，跨视图那半会一路以短名到底。
+  test("公式分子分母都有中文标题时才输出公式，不用物理名代替", () => {
+    // 分母在另一个视图，组件名按声明视图限定后匹配不到，只能按短名解析
     const rateViews = (denominator: string): CubeView[] => {
       const view = (name: string, measures: CubeView["measures"]): CubeView => ({
         name,
@@ -775,7 +764,7 @@ describe("CatalogDocument", () => {
       return [
         {
           ...leave,
-          // 内部计算件：不可查、不进任何成员面，只在模型里写了个业务名。
+          // 内部计算输入：不可查询，只有业务标题
           internalMeasures: [
             {
               name: "leave.ytd_answered",
@@ -798,26 +787,25 @@ describe("CatalogDocument", () => {
       toSemanticCatalog(buildCatalogDocument(rateViews(denominator))).measures.find(
         (member) => member.title === "YTD事件率",
       );
-    // 跨视图零件只剩短名，仍须解析出中文与语义身份。
     expect(rateOf("ytd_headcount")?.formula).toEqual({
       numerator: "YTD事件数",
       numerator_id: "measure:ytd_event",
       denominator: "YTD月均基数",
       denominator_id: "measure:ytd_headcount",
     });
-    // 内部计算件无公开身份：公式行只出标题，不出 id。
+    // 内部计算输入没有公开 id，公式只带标题
     expect(rateOf("ytd_answered")?.formula).toEqual({
       numerator: "YTD事件数",
       numerator_id: "measure:ytd_event",
       denominator: "YTD答卷人数",
     });
-    // 只有模型里真的没给业务名时才整行不发，而不是印出它的物理名。
+    // 组件没有标题时不输出公式
     const unnamed = rateOf("ytd_unnamed");
     expect(unnamed?.formula).toBeUndefined();
     expect(unnamed?.title).toBe("YTD事件率");
   });
 
-  test("指标域身份属于指标，缺失或误挂到 View 均 fail-closed", () => {
+  test("指标缺少 metric_domain_id 或 View 声明 metric_domain_id 时目录构建失败", () => {
     const missing = structuredClone(metaViews[0]);
     delete missing.measures[0]?.meta?.metric_domain_id;
     expect(() => buildCatalogDocument([missing])).toThrow("metric_domain_id");
@@ -831,7 +819,7 @@ describe("CatalogDocument", () => {
     expect(() => buildCatalogDocument([detail])).toThrow("业务域归属必须声明在指标上");
   });
 
-  test("MCP 浏览与检索同构返回语义成员；检索去重并保留逐词记账", () => {
+  test("MCP 浏览与检索返回相同结构的语义成员；检索去重并记录每个词是否命中", () => {
     const document = buildCatalogDocument(views);
     const browse = browseCatalogDocument(document);
     const overview = browse.metric_domains.find((row) => row.title === "人员流动");
@@ -859,7 +847,7 @@ describe("CatalogDocument", () => {
     expect(result.metric_domains[0]).not.toHaveProperty("view");
 
     const activeEmployees = searchCatalogDocument(document, ["在职人数"]);
-    // 一个指标一份口径全文；Agent 面单语言——语义 id + 教学字段，无物理绑定
+    // 检索结果只含语义 id，不含物理绑定
     expect(activeEmployees.measures.filter((m) => m.title === "在职人数")).toHaveLength(1);
     expect(
       activeEmployees.measures.find((member) => member.title === "在职人数"),
@@ -887,7 +875,7 @@ describe("CatalogDocument", () => {
   });
 });
 
-test("装配不向未声明时间合同的内部辅助度量索要合同", () => {
+test("内部度量未声明时间合同时不报错，公开指标缺少合同时报错", () => {
   const view: CubeView = {
     name: "flow",
     title: "人员流动",

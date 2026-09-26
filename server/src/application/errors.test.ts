@@ -7,7 +7,7 @@ import { ResultLimitExceededError } from "../engine/result_limit.js";
 import { InvalidRequestError, publicApplicationError } from "./errors.js";
 
 describe("application error boundary", () => {
-  test("只公开稳定分类与安全消息", () => {
+  test("应用错误映射为公开的错误码、状态码与消息，内部错误换成通用提示", () => {
     expect(publicApplicationError(new InvalidRequestError("请补齐指标"))).toMatchObject({
       code: "invalid_request",
       message: "请补齐指标",

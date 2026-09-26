@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * 壳自己就是边界，内容区不画框（见 `PLOT_FRAME.tile`）。
- * 拖拽/缩放进行中把它藏起来落在 styles.css 的 `.react-draggable-dragging` 规则上。
+ * 瓦片卡片自带边框，内容区不再画框（对应 `PLOT_FRAME.tile`）。
+ * 拖拽/缩放时隐藏操作按钮的样式在 styles.css 的 `.react-draggable-dragging` 规则里。
  */
 export function TileShell({
   title,

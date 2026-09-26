@@ -1,4 +1,4 @@
-/** 业务时间坐标到 Cube 原生时间查询的唯一编译点。 */
+/** 把业务时间坐标编译为 Cube 原生时间查询；业务时间只在本模块解析，其他模块复用解析结果。 */
 import { z } from "zod";
 import { memberShortName } from "../semantic_core/member_name.js";
 import type {
@@ -42,7 +42,7 @@ export type ResolvedTimeCoordinate = {
 
 export type BusinessTimeResolution = {
   outputGrain: TimeOutputGrain;
-  /** 唯一编译点解析出的业务坐标与其桶；业务时间的事实来源。 */
+  /** 解析后的业务时间坐标及其时间桶。 */
   coordinates: ResolvedTimeCoordinate[];
 };
 
@@ -269,7 +269,7 @@ function timeBounds(query: CubeQuery, context: TimeContext, views: CubeView[]) {
   });
   if (!sources.length) throw new Error("查询缺少可用的数据时间状态");
   return {
-    // 默认时间取所有来源都已具备的最近月份；显式查询上界允许计划域延伸到未来。
+    // 默认截止月取各来源实际数据都已覆盖的月份；显式上界可到计划数据覆盖的未来月份。
     defaultThrough: sources.map((source) => source.actualThrough).sort()[0],
     availableThrough: sources
       .map((source) => source.availableThrough)
@@ -306,7 +306,7 @@ function emitInterval(time: BusinessTimeResolution): TimeEmission {
   };
 }
 
-/** 终点求值按桶终点发射单月窗口；逐月时可合并为整段窗口。 */
+/** 期末值指标按每个时间桶的末月生成单月窗口；截止月或逐月输出时用整段窗口按月分组。 */
 function emitEndpoint(time: BusinessTimeResolution): TimeEmission {
   const perMonthBuckets = time.coordinates[0].kind === "cutoff" || time.outputGrain === "month";
   return {
@@ -367,7 +367,7 @@ function yearsOf(windows: TimeWindow[]): number[] {
 }
 
 function partitionFilter(view: string, years: number[]): CubeFilterCondition {
-  // period_month 由 make_date(year, month, 1) 计算，裸年份谓词用于 parquet pushdown。
+  // period_month 由 make_date(year, month, 1) 计算；另加 year 谓词，让 parquet 读取按年份下推过滤。
   return { member: `${view}.year`, operator: "equals", values: years.map(String) };
 }
 
@@ -390,7 +390,7 @@ export type ResolvedTimePlanning = {
   evalForms: ReadonlyMap<string, TimeEvalForm>;
 };
 
-/** 业务时间的唯一解析入口。 */
+/** 业务时间只通过此函数解析。 */
 export function resolveTimePlanning(
   query: CubeQuery,
   time: TimeInput | undefined,
@@ -425,14 +425,14 @@ function emissionForQuery(query: CubeQuery, planning: ResolvedTimePlanning): Tim
   const forms = new Set(
     (query.measures ?? []).map((measure) => {
       const form = planning.evalForms.get(measure);
-      if (!form) throw new Error(`指标 ${measure} 缺少已解析的时间求值形态`);
+      if (!form) throw new Error(`指标 ${measure} 缺少已解析的时间求值方式`);
       return form;
     }),
   );
   if (!forms.size) forms.add("interval");
   const emissions = [...forms].map((form) => timeEmissionForForm(planning.businessTime, form));
   if (emissions.some((emission) => !sameTimeEmission(emissions[0], emission))) {
-    throw new Error("单条物理查询不能混用不同时间窗口；查询编译器应先拆分物理查询腿");
+    throw new Error("单条物理查询不能混用不同时间窗口；查询编译器应先拆分物理子查询");
   }
   return emissions[0];
 }

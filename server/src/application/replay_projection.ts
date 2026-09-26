@@ -2,7 +2,7 @@ import type { ReplayPayload } from "../contracts/replay_contract.js";
 import type { ExecutedAnalysis } from "./analysis_service.js";
 import type { PresentationService } from "./presentation_service.js";
 
-/** Web 重放的唯一投影边界；MCP 继续使用独立的 Agent 能力投影。 */
+/** Web 重放结果只在这里转换成前端载荷；MCP 使用单独的 Agent 投影。 */
 export function projectReplayPayload(
   presentation: Pick<PresentationService, "compile" | "runtimeFallbacks">,
   executed: ExecutedAnalysis,

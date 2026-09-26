@@ -1,6 +1,3 @@
-/**
- * 看板栅格与瓦片尺寸的参数契约；这些常量由同一尺寸模型消费，漂移即门禁失败。
- */
 import { expect, test } from "bun:test";
 import {
   CELL_ASPECT,
@@ -12,11 +9,10 @@ import {
   TILE_SIZES,
 } from "./tile_sizing";
 
-test("栅格常量：格子几何与瓦片间距同出一处，横纵同值", () => {
-  // 间距判据见 tile_sizing.ts 头注
+test("栅格常量取值固定，瓦片横纵间距相同", () => {
   expect(GRID_MARGIN).toEqual([16, 16]);
   expect(MOBILE_GRID_MARGIN).toEqual([16, 16]);
-  // 格子几何本身不动——它决定坐标语义，改了会让已存看板的 place 换位
+  // 格子几何决定已保存 place 的坐标含义，修改会让已有看板的瓦片错位
   expect(MOBILE_BREAKPOINT).toBe(752);
   expect(MIN_ROW_HEIGHT).toBe(40);
   expect(CELL_ASPECT).toBeCloseTo(10 / 9);

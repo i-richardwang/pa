@@ -2,7 +2,7 @@
   "name": "pa-result-view",
   "private": true,
   "type": "module",
-  "description": "PA 结果视图：供 MCP widget 与控制台共同消费的无宿主渲染包",
+  "description": "PA 结果视图：MCP widget 和控制台共用的结果渲染组件",
   "exports": {
     ".": "./src/index.ts"
   },

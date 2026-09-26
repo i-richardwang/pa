@@ -24,15 +24,15 @@ async function readSources(base: URL): Promise<Array<{ name: string; text: strin
 const STAGE_RAIL_DIVIDER = /\bborder-l-\[0\.5px\]/g;
 const STAGE_RAIL_OWNER = "dashboard/layout/shell.tsx";
 
-test("右栏与主区之间那道线只由壳画一次", async () => {
+test("右侧栏与主区之间的分隔线只在 shell.tsx 里画", async () => {
   const bad = 'className="flex flex-col border-pa-line border-l-[0.5px]"';
   const good = 'className="flex flex-col border-pa-line border-l"';
-  expect([...bad.matchAll(STAGE_RAIL_DIVIDER)], "分界线探测器失灵").toHaveLength(1);
+  expect([...bad.matchAll(STAGE_RAIL_DIVIDER)], "匹配规则没有命中已知的违规样本").toHaveLength(1);
   const other = 'className="md:border-r-[0.5px] border-pa-line border-l"';
-  expect([...good.matchAll(STAGE_RAIL_DIVIDER)], "探测器把整像素的边框也算了进来").toEqual([]);
+  expect([...good.matchAll(STAGE_RAIL_DIVIDER)], "匹配规则误报了 1px 边框").toEqual([]);
   expect(
     [...other.matchAll(STAGE_RAIL_DIVIDER)],
-    "探测器把别处的竖线也算成了这一道（设置页左导航画的是自己的右缘）",
+    "匹配规则误报了其他位置的竖线（如设置页左侧导航自己的右边框）",
   ).toEqual([]);
 
   const sources = await readSources(CONSOLE_SRC);
@@ -40,14 +40,16 @@ test("右栏与主区之间那道线只由壳画一次", async () => {
     0,
   );
   const owner = sources.find(({ name }) => name.endsWith(STAGE_RAIL_OWNER));
-  expect(owner?.text, "壳不再画这道线，本条规则已经落空").toMatch(STAGE_RAIL_DIVIDER);
+  expect(owner?.text, "shell.tsx 里没有找到这条分隔线，这条检查已经不起作用").toMatch(
+    STAGE_RAIL_DIVIDER,
+  );
   STAGE_RAIL_DIVIDER.lastIndex = 0;
 
   for (const { name, text } of sources) {
     if (name.endsWith(STAGE_RAIL_OWNER)) continue;
     expect(
       [...text.matchAll(STAGE_RAIL_DIVIDER)],
-      `console/src/${name} 自己画了半像素分界线；那道线是「列与列之间」，归壳排——两处各画一次会叠成 1px`,
+      `console/src/${name} 自己画了右侧栏分隔线；这条线只由 shell.tsx 画，两处都画会叠成 1px`,
     ).toEqual([]);
   }
 });
@@ -55,7 +57,7 @@ test("右栏与主区之间那道线只由壳画一次", async () => {
 const HAND_ROLLED_ROLE =
   /(?<![[\w-])role=["'](listbox|option|combobox|menu|menubar|menuitem|menuitemcheckbox|menuitemradio|tab|tablist|tabpanel|tree|treeitem|grid|gridcell|dialog|alertdialog|radiogroup|slider|spinbutton)["']/g;
 
-test("interaction roles come from primitives, never hand-written", async () => {
+test("interaction roles are set by primitives, not written at call sites", async () => {
   const bad = '<div role="listbox"><span role="option">A</span></div>';
 
   const good =
@@ -82,7 +84,7 @@ const POPUP_SURFACE_INGREDIENT =
   /\bbg-pa-glass(?:-popover)?\b|\bbackdrop-blur(?:-[a-z0-9[\]()-]+)?\b/g;
 const GLASS_TIERS = ["card", "popup"];
 
-test("the glass surface has exactly one spelling, with its blur tiered in tokens", async () => {
+test("the glass popup surface is defined in one place, with blur levels set in tokens", async () => {
   expect(
     [
       ...'className="bg-pa-glass-popover backdrop-blur-lg bg-pa-glass"'.matchAll(
@@ -154,7 +156,7 @@ function typographyOf(className: string): string[] {
     .sort();
 }
 
-test("the card title has one typographic recipe across all three hosts", async () => {
+test("the card title uses the same typography in all three hosts", async () => {
   expect(
     typographyOf("min-w-0 flex-1 truncate font-medium text-base text-pa-fg"),
     "typography matcher is stale",
@@ -199,7 +201,7 @@ test("the card title has one typographic recipe across all three hosts", async (
 
 const WINDOW_ONLY_WIDTH = /\bWidthProvider\b/g;
 
-test("container width comes from a ResizeObserver, never from a window-only measurer", async () => {
+test("container width is measured with ResizeObserver, not from the window size", async () => {
   expect(
     [..."const G = WidthProvider(Responsive)".matchAll(WINDOW_ONLY_WIDTH)].length,
     "width matcher is stale",
@@ -230,7 +232,7 @@ test("container width comes from a ResizeObserver, never from a window-only meas
 
 const HEADER_ROW_UNDO = /<TableRow\b[^>]*className=["'][^"']*(?:border-t-0|hover:bg-transparent)/g;
 
-test("primitive defaults are corrected in the primitive, not undone per page", async () => {
+test("primitive defaults are changed in the primitive, not overridden per page", async () => {
   const bad = '<TableRow className="border-t-0 hover:bg-transparent">';
   const good = '<TableRow className="cursor-pointer"><TableHead className="w-[60%]" />';
   expect([...bad.matchAll(HEADER_ROW_UNDO)].length, "header-row matcher is stale").toBe(1);
@@ -255,7 +257,7 @@ test("primitive defaults are corrected in the primitive, not undone per page", a
 
 const OFF_VOCAB_GUTTER = /(?<![@\w-])container(?![\w-])/g;
 
-test("the in-card gutter has exactly one spelling", async () => {
+test("the in-card padding is defined in one place", async () => {
   const bad = '<div className="container pt-4" /><div className={cn("container flex")} />';
   const good =
     '<div className="@container flex" /><div data-slot="table-container" /><div data-slot="sidebar-container" /><div className={cn(MAIN_CARD_BODY_INSET)} />';
@@ -348,7 +350,7 @@ test("aria-label is written in the interface's own language", async () => {
 
 const PAGE_WRITTEN_SHEET_WIDTH = /<SheetPopup\b[^>]*\bmax-w-/g;
 
-test("a page never writes the sheet's width", async () => {
+test("pages do not set the sheet width", async () => {
   const bad = '<SheetPopup className="max-w-160">';
   const good = '<SheetPopup>\n<DialogPopup className="max-w-lg">';
   expect([...bad.matchAll(PAGE_WRITTEN_SHEET_WIDTH)], "sheet width matcher is stale").toHaveLength(
@@ -376,7 +378,7 @@ test("a page never writes the sheet's width", async () => {
 const OPTION_ROW = /<InspectorRow\b([\s\S]*?)<\/InspectorRow>/g;
 const SELECT_TRIGGER = /<SelectTrigger\b([^>]*)>/g;
 
-/** 行内下拉的名字来自行标签 `label={<SelectLabel>}` 或自带 `aria-label`。 */
+/** 行内下拉框的可访问名称来自行标签 `label={<SelectLabel>}` 或自身的 `aria-label`。 */
 function unnamedSelectRows(text: string): string[] {
   const bad: string[] = [];
   for (const [block, body] of text.matchAll(OPTION_ROW)) {
@@ -390,25 +392,25 @@ function unnamedSelectRows(text: string): string[] {
   return bad;
 }
 
-test("a settings row names its control, it does not merely sit next to it", async () => {
+test("a settings row provides the accessible name of its control", async () => {
   const BAD = '<InspectorRow label="坐标轴">\n<SelectTrigger />\n</InspectorRow>';
   const GOOD =
     "<InspectorRow label={<SelectLabel>坐标轴</SelectLabel>}>\n<SelectTrigger />\n</InspectorRow>";
   const SELF_NAMED =
     '<InspectorRow label="按组织">\n<SelectTrigger aria-label="算哪个指标的占比" />\n</InspectorRow>';
   const TEXT_ONLY = '<InspectorRow label="类型">\n<span>指标</span>\n</InspectorRow>';
-  expect(unnamedSelectRows(BAD), "探测器失灵").toHaveLength(1);
-  expect(unnamedSelectRows(GOOD), "探测器把自带命名件的那种也当成了裸标签").toEqual([]);
-  expect(unnamedSelectRows(SELF_NAMED), "下拉自己报了名字，本条不该管").toEqual([]);
-  expect(unnamedSelectRows(TEXT_ONLY), "静态文本行没有控件可命名，不该被拦").toEqual([]);
+  expect(unnamedSelectRows(BAD), "匹配规则没有命中已知的违规样本").toHaveLength(1);
+  expect(unnamedSelectRows(GOOD), "匹配规则误报了已用 SelectLabel 命名的行").toEqual([]);
+  expect(unnamedSelectRows(SELF_NAMED), "下拉自带 aria-label 时不应报错").toEqual([]);
+  expect(unnamedSelectRows(TEXT_ONLY), "只有静态文本、没有控件的行不应报错").toEqual([]);
 
   const sources = await readSources(CONSOLE_SRC);
   const rows = sources.filter(({ text }) => text.includes("<InspectorRow"));
-  expect(rows.length, "一处设置行都没扫到，这条规则已经形同虚设").toBeGreaterThan(1);
+  expect(rows.length, "没有扫描到任何设置行，这条检查已经不起作用").toBeGreaterThan(1);
   for (const { name, text } of rows) {
     expect(
       unnamedSelectRows(text),
-      `console/src/${name} 的设置行给下拉配了纯文本标签；改用 <SelectLabel>，否则它念出来是当前值`,
+      `console/src/${name} 的设置行给下拉用了纯文本标签；请改用 <SelectLabel>，否则屏幕阅读器读出的是当前值`,
     ).toEqual([]);
   }
 });
@@ -421,24 +423,29 @@ function unnamedComboTriggers(text: string): string[] {
     .map(([tag]) => tag.replaceAll(/\s+/g, " ").slice(0, 60));
 }
 
-test("a self-drawn combobox trigger carries its own name", async () => {
-  expect(unnamedComboTriggers('<AutocompleteTrigger className="x">'), "探测器失灵").toHaveLength(1);
+test("a custom combobox trigger has its own accessible name", async () => {
+  expect(
+    unnamedComboTriggers('<AutocompleteTrigger className="x">'),
+    "匹配规则没有命中已知的违规样本",
+  ).toHaveLength(1);
   expect(
     unnamedComboTriggers('<AutocompleteTrigger aria-label="添加瓦片" className="x">'),
-    "探测器把写了名字的也算成漏写",
+    "匹配规则误报了已写 aria-label 的触发按钮",
   ).toEqual([]);
   expect(
     unnamedComboTriggers("<AutocompleteTrigger render={trigger} />"),
-    "render= 的名字挂在别处，本条不该管",
+    "用 render= 渲染时名称在别处提供，不应报错",
   ).toEqual([]);
 
   const sources = await readSources(CONSOLE_SRC);
   const hosts = sources.filter(({ text }) => text.includes("<AutocompleteTrigger"));
-  expect(hosts.length, "一处自绘触发件都没扫到，这条规则已经形同虚设").toBeGreaterThan(0);
+  expect(hosts.length, "没有扫描到任何 AutocompleteTrigger，这条检查已经不起作用").toBeGreaterThan(
+    0,
+  );
   for (const { name, text } of hosts) {
     expect(
       unnamedComboTriggers(text),
-      `console/src/${name} 的下拉触发件没有名字；面上那行字给不了它，写 aria-label`,
+      `console/src/${name} 的下拉触发按钮缺少可访问名称；按钮上显示的文字不算，请写 aria-label`,
     ).toEqual([]);
   }
 });
@@ -451,27 +458,32 @@ function popupsWithoutFinalFocus(text: string): string[] {
     .map(([tag]) => tag.replaceAll(/\s+/g, " "));
 }
 
-test("trigger-less command popups say where focus goes back to", async () => {
-  expect(popupsWithoutFinalFocus("<CommandDialogPopup>"), "探测器失灵").toHaveLength(1);
+test("command popups without a trigger declare where focus returns", async () => {
+  expect(
+    popupsWithoutFinalFocus("<CommandDialogPopup>"),
+    "匹配规则没有命中已知的违规样本",
+  ).toHaveLength(1);
   expect(
     popupsWithoutFinalFocus("<CommandDialogPopup finalFocus={opener}>"),
-    "探测器把交代过的那种也算成漏写",
+    "匹配规则误报了已声明 finalFocus 的弹层",
   ).toEqual([]);
 
   const sources = await readSources(CONSOLE_SRC);
   const hosts = sources.filter(({ text }) => text.includes("<CommandDialogPopup"));
-  expect(hosts.length, "命令面壳挪了位置或改了写法，这条规则已经落空").toBeGreaterThan(0);
+  expect(hosts.length, "没有扫描到任何 CommandDialogPopup，这条检查已经不起作用").toBeGreaterThan(
+    0,
+  );
   for (const { name, text } of hosts) {
     expect(
       popupsWithoutFinalFocus(text),
-      `console/src/${name} 没交代 finalFocus；关掉后键盘焦点会落到别处`,
+      `console/src/${name} 没有声明 finalFocus；关闭后键盘焦点会丢失`,
     ).toEqual([]);
   }
 });
 
 const SPIN_USE = /\banimate-spin\b/g;
 
-test("a wait is marked by LoadingMark; nothing spins on its own", async () => {
+test("waiting is shown with LoadingMark, not a standalone spinner", async () => {
   expect(
     [...'className="size-4 animate-spin"'.matchAll(SPIN_USE)],
     "matcher is stale",
@@ -489,7 +501,7 @@ test("a wait is marked by LoadingMark; nothing spins on its own", async () => {
 
 const ALERT_WITH_ICON = /<Alert\b[^>]*>\s*<[A-Z][A-Za-z]*Icon\b/g;
 
-test("an alert brings its own level icon; call sites only bring words", async () => {
+test("alerts render their own level icon; call sites pass only text", async () => {
   expect(
     [...'<Alert variant="error">\n  <CircleAlertIcon />'.matchAll(ALERT_WITH_ICON)],
     "matcher is stale",
@@ -501,7 +513,7 @@ test("an alert brings its own level icon; call sites only bring words", async ()
 
   const sources = await readSources(CONSOLE_SRC);
   const hosts = sources.filter(({ text }) => /<Alert[\s>]/.test(text));
-  expect(hosts.length, "提示条改了写法，这条规则已经落空").toBeGreaterThan(0);
+  expect(hosts.length, "没有扫描到任何 Alert，这条检查已经不起作用").toBeGreaterThan(0);
   for (const { name, text } of hosts) {
     expect(
       [...text.matchAll(ALERT_WITH_ICON)],
@@ -510,46 +522,50 @@ test("an alert brings its own level icon; call sites only bring words", async ()
   }
 });
 
-/** 区域等内容时印出来的话：一行字不是等待标记。 */
+/** 等待内容时显示的加载文字（应改用 LoadingMark）。 */
 const WAITING_WORDS = /(?:正在)?(?:载入|加载)中|正在(?:载入|加载)/g;
 
 const LOADING_MARK_TAG = /<LoadingMark\b[^>]*>/g;
 
-/** 只看会印到界面上的字：注释里提一句、LoadingMark 自己念给读屏的名字都不算。 */
+/** 只检查显示在界面上的文字，不算注释和 LoadingMark 给屏幕阅读器的名称。 */
 function waitingWords(text: string): string[] {
   return [...text.replace(COMMENT, "").replace(LOADING_MARK_TAG, "").matchAll(WAITING_WORDS)].map(
     ([hit]) => hit,
   );
 }
 
-test("region loading renders LoadingMark, never a line of waiting words", async () => {
-  expect(waitingWords('<p className="text-sm">载入中…</p>'), "探测器失灵").toHaveLength(1);
+test("region loading renders LoadingMark instead of loading text", async () => {
+  expect(
+    waitingWords('<p className="text-sm">载入中…</p>'),
+    "匹配规则没有命中已知的违规样本",
+  ).toHaveLength(1);
   expect(
     waitingWords('{pending ? "正在加载数据" : rows}'),
-    "探测器漏掉了表达式里的字",
+    "匹配规则漏掉了表达式里的加载文字",
   ).toHaveLength(1);
-  expect(waitingWords("{pending ? <LoadingMark /> : rows}"), "探测器把标记本身算成了字").toEqual(
-    [],
-  );
+  expect(
+    waitingWords("{pending ? <LoadingMark /> : rows}"),
+    "匹配规则误报了 LoadingMark 本身",
+  ).toEqual([]);
   expect(
     waitingWords('<LoadingMark label="正在载入" />'),
-    "探测器把标记念给读屏的名字算成了界面上的字",
+    "匹配规则误报了 LoadingMark 给屏幕阅读器的名称",
   ).toEqual([]);
-  expect(waitingWords("// 载入中显示的名字\nconst a = 1;"), "探测器把注释也算了进来").toEqual([]);
+  expect(waitingWords("// 载入中显示的名字\nconst a = 1;"), "匹配规则误报了注释").toEqual([]);
   expect(
     waitingWords('<Alert variant="error">加载失败</Alert>'),
-    "探测器把别的加载话术也算了进来",
+    "匹配规则误报了其他含「加载」的文字",
   ).toEqual([]);
 
   const sources = await readSources(CONSOLE_SRC);
   expect(
     sources.some(({ text }) => text.includes("<LoadingMark")),
-    "控制台已无 LoadingMark，规则落空",
+    "控制台里没有找到 LoadingMark，这条检查已经不起作用",
   ).toBe(true);
   for (const { name, text } of sources) {
     expect(
       waitingWords(text),
-      `console/src/${name} 用一行字顶替等待标记；区域等内容印 LoadingMark`,
+      `console/src/${name} 用文字代替了加载标记；区域加载请使用 LoadingMark`,
     ).toEqual([]);
   }
 });
@@ -574,7 +590,7 @@ const BORROWED_FAINT = new RegExp(
 
 const BORROWED_PLACEHOLDER = /(?<![\w-])placeholder:text-pa-(?:faint|muted)\b/g;
 
-test("typography comes from the named steps, never hand-written pixels", async () => {
+test("font sizes use the named steps, not hand-written pixel values", async () => {
   const bad = 'className="text-[13px] font-[450] leading-[17px]"';
   const good = 'className="text-[1.75rem] text-[length:inherit] leading-[inherit] size-[13px]"';
   expect([...bad.matchAll(PIXEL_TYPOGRAPHY)], "typography matcher is stale").toHaveLength(3);
@@ -601,7 +617,7 @@ test("typography comes from the named steps, never hand-written pixels", async (
   }
 });
 
-test("the radius ladder has no hand-written steps", async () => {
+test("border radius uses only the defined steps", async () => {
   const bad = 'className="rounded-[5px] rounded-[calc(var(--radius)-1px)] rounded-tl-[7px]"';
   const good = 'className="rounded-md rounded-avatar rounded-[inherit] size-[13px]"';
   expect([...bad.matchAll(HAND_WRITTEN_RADIUS)], "radius matcher is stale").toHaveLength(3);
@@ -632,7 +648,7 @@ test("the radius ladder has no hand-written steps", async () => {
   );
 });
 
-test("the pill and the round badge are drawn by primitives, not by call sites", async () => {
+test("pills and round badges are drawn by primitives, not by call sites", async () => {
   const bad = '<Button className="h-8 rounded-full px-3" />';
   const good = '<Button size="icon" /><span className="rounded-lg" />';
   expect([...bad.matchAll(HAND_DRAWN_ROUND)], "round matcher is stale").toHaveLength(1);
@@ -674,7 +690,7 @@ function classLiterals(text: string): string[] {
   return [...text.matchAll(/"([^"\n]{12,})"|`([^`\n]{12,})`/g)].map((m) => m[1] ?? m[2] ?? "");
 }
 
-test("page headings all carry the title weight", async () => {
+test("page headings use the title font weight", async () => {
   const bad = '<h2 className="text-xl font-medium">账号</h2>';
   const good = '<h1 className="truncate text-xl font-semibold">看板</h1>';
 
@@ -698,7 +714,7 @@ test("page headings all carry the title weight", async () => {
   expect(tokens, "the title weight drifted off 520").toContain("--font-weight-semibold: 520;");
 });
 
-test("a hover fill lands with the pointer, never fades in", async () => {
+test("hover background appears immediately, without a colour transition", async () => {
   const bad = '"rounded-md transition-colors duration-150 hover:bg-pa-surface"';
   const good =
     '"transition-opacity duration-300 hover:opacity-85" + "rounded-md hover:bg-pa-surface" + "transition duration-200 hover:border-pa-line-hover"';
@@ -720,7 +736,7 @@ test("a hover fill lands with the pointer, never fades in", async () => {
   expect(input?.text, "the input frame lost its transition").toContain("transition duration-200");
 });
 
-test("chrome axes don't borrow the content tiers", async () => {
+test("disabled and placeholder text use their own tokens, not content text colours", async () => {
   const bad = 'className="disabled:text-pa-faint data-disabled:[&_svg]:text-pa-faint"';
   const good = 'className="text-pa-faint disabled:text-pa-disabled-fg"';
   expect([...bad.matchAll(BORROWED_FAINT)], "disabled-borrow matcher is stale").toHaveLength(2);
@@ -756,7 +772,7 @@ test("chrome axes don't borrow the content tiers", async () => {
   }
 });
 
-test("the neutral chip reads the same in every host", async () => {
+test("the neutral chip looks the same in every host", async () => {
   const sample =
     'function Badge({ children }) {\n  return <span className="rounded-sm px-1.5">{children}</span>;\n}';
   expect(CHIP_CLASS.exec(sample)?.[1], "chip class probe is stale").toBe("rounded-sm px-1.5");
@@ -790,7 +806,7 @@ test("the neutral chip reads the same in every host", async () => {
 
 const HAND_ROLLED_CLOSE = /aria-label="关闭"[\s\S]{0,160}?<Button\b/g;
 
-test("the overlay close button is drawn in one place", async () => {
+test("the overlay close button is defined in one place", async () => {
   const bad = '<DialogClose aria-label="关闭" render={<Button size="icon" variant="subtle" />}>';
   const good = '<DialogClose aria-label="关闭" render={<OverlayCloseButton />}>';
   expect([...bad.matchAll(HAND_ROLLED_CLOSE)], "close-button matcher is stale").toHaveLength(1);
@@ -825,7 +841,7 @@ function iconSteps(text: string): Map<string, string> {
   return steps;
 }
 
-test("the icon button's radius follows its size step: shell is round, content is base", async () => {
+test("icon button radius follows its size: app-frame buttons are round, content buttons use the base radius", async () => {
   const probe = iconSteps('icon: "size-8 rounded-full", "icon-sm": "size-7 rounded-md",');
   expect([...probe.keys()], "icon step probe is stale").toEqual(["icon", "icon-sm"]);
 
@@ -857,7 +873,7 @@ const HAND_WRITTEN_FOCUS =
   /\b(?:focus|focus-visible|focus-within):(?:ring-(?:\[|pa-|[1-9])[\w[\]/-]*|outline-[\w[\]/-]+)/g;
 const FOCUS_UTILITIES = ["pa-focus", "pa-focus-within"];
 
-test("keyboard focus has one mark: the pa-focus utilities, never a hand-written ring or outline", async () => {
+test("keyboard focus uses the pa-focus utilities, not hand-written rings or outlines", async () => {
   const bad =
     'className="outline-none focus-visible:ring-[3px] focus-visible:ring-pa-focus-ring focus-within:ring-2 focus:outline-pa-focus-strong focus-visible:outline-none"';
   const good =
@@ -881,7 +897,7 @@ test("keyboard focus has one mark: the pa-focus utilities, never a hand-written 
     ["result_view/src", RESULT_VIEW_SRC, 5],
     ["widget/src", WIDGET_SRC, -1],
   ] as const) {
-    // widget 自己不画接焦的件（它只摆结果视图），floor 为 -1 表示只查没有手写标记。
+    // widget 只渲染结果视图，没有自己的可聚焦组件；floor 为 -1 表示只检查没有手写焦点样式。
     const sources = await readSources(base);
     for (const { name, text } of sources) {
       expect(
@@ -900,7 +916,7 @@ test("keyboard focus has one mark: the pa-focus utilities, never a hand-written 
 const OVERRIDDEN_SMALLEST_LEADING =
   /text-2xs[^"'`]*\bleading-(?:4|5|6|7|relaxed|normal|loose)\b|\bleading-(?:4|5|6|7|relaxed|normal|loose)[^"'`]*text-2xs/g;
 
-test("the smallest type step is not re-leaded into a paragraph", async () => {
+test("the smallest font step is not given a looser paragraph line height", async () => {
   const bad = 'className="px-2 py-1.5 text-2xs leading-4 text-pa-muted"';
   const good = 'className="px-1 text-2xs leading-none text-pa-muted"';
   expect(
@@ -929,7 +945,7 @@ test("the smallest type step is not re-leaded into a paragraph", async () => {
 const RAW_AUTOCOMPLETE_INPUT = /<AutocompletePrimitive\.Input\b/g;
 const AUTOCOMPLETE_INPUT_HOMES = ["components/ui/autocomplete.tsx", "components/ui/command.tsx"];
 
-test("the popup search row is drawn in one place", async () => {
+test("the popup search row is defined in one place", async () => {
   expect([
     ...'<AutocompletePrimitive.Input aria-label="搜索" />'.matchAll(RAW_AUTOCOMPLETE_INPUT),
   ]).toHaveLength(1);
@@ -954,18 +970,21 @@ test("the popup search row is drawn in one place", async () => {
 
 const DIRECTIONAL_COLOR = /\b(?:text|bg|border)-pa-(?:success|danger)\b/g;
 
-test("差值只带符号不带涨跌色", async () => {
+test("差值只显示正负号，不使用涨跌色", async () => {
   const bad = '<span className="text-pa-success-fg tabular-nums">{row.delta}</span>';
-  expect([...bad.matchAll(DIRECTIONAL_COLOR)], "涨跌色探测器失灵").toHaveLength(1);
+  expect([...bad.matchAll(DIRECTIONAL_COLOR)], "匹配规则没有命中已知的违规样本").toHaveLength(1);
   const good = '<span className="text-pa-muted-fg tabular-nums">{row.delta}</span>';
-  expect([...good.matchAll(DIRECTIONAL_COLOR)], "探测器把中性色也算了进来").toEqual([]);
+  expect([...good.matchAll(DIRECTIONAL_COLOR)], "匹配规则误报了中性色").toEqual([]);
 
   const sources = (await readSources(RESULT_VIEW_SRC)).filter(({ text }) => /delta/i.test(text));
-  expect(sources.length, "result_view 里已经没有渲染差值的件，本条规则已经落空").toBeGreaterThan(0);
+  expect(
+    sources.length,
+    "result_view 里没有找到渲染差值的组件，这条检查已经不起作用",
+  ).toBeGreaterThan(0);
   for (const { name, text } of sources) {
     expect(
       [...text.matchAll(DIRECTIONAL_COLOR)],
-      `result_view/src/${name} 给差值染了涨跌色；模型层没有指标方向声明，绿涨红跌会把流失类指标读反`,
+      `result_view/src/${name} 给差值用了涨跌色；模型没有声明指标的好坏方向，按涨绿跌红着色会让离职类指标的含义看反`,
     ).toEqual([]);
   }
 });

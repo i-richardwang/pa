@@ -7,7 +7,7 @@ export type UsageSummary = {
   unmatched_terms?: string[];
 };
 
-/** 产品观察日志的唯一保留期；写入清理与统计窗口共用。 */
+/** 使用日志保留天数，过期清理和统计窗口共用。 */
 export const USAGE_LOG_RETENTION_DAYS = 90;
 
 export type UsageRecord = UsageSummary & {

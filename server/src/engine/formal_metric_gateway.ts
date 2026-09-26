@@ -1,4 +1,4 @@
-/** 把正式指标图叠加到权限裁剪后的物理模型；外部 Cube 适配器不认识业务指标。 */
+/** 正式指标叠加在按权限裁剪后的物理模型上；Cube 适配器只返回物理模型。 */
 import type { CubeGateway } from "../ports/cube_gateway.js";
 import { applyFormalMetricModel, type FormalMetricDefinition } from "./metric_model.js";
 

@@ -27,7 +27,7 @@ const inputs = [
 ];
 
 describe("通用时间源注册表", () => {
-  test("装配非 HR 实际、计划和显式对照时钟", () => {
+  test("装配非 HR 领域的实际、计划和仅显式比较的时钟", () => {
     const registry = buildTimeSourceRegistry(inputs);
     expect(registry.primary.id).toBe("sales_actual");
     expect(registry.by_id.get("sales_plan")?.reference_source).toBe("sales_actual");
@@ -35,7 +35,7 @@ describe("通用时间源注册表", () => {
     expect(timeSourceLabel(registry, "inventory_count")).toBe("Inventory counts");
   });
 
-  test("主时钟和计划基准关系 fail-closed", () => {
+  test("主时钟数量或计划基准关系不合法时报错", () => {
     expect(() =>
       buildTimeSourceRegistry(inputs.map((source) => ({ ...source, primary: false }))),
     ).toThrow("只能声明一个主时间来源");

@@ -7,19 +7,17 @@
 
   --pa-canvas: light-dark(#f7f7f8, #0f0f0f);
 
-  /* 内容文字三级：中性近黑起手，不带蓝调 */
+  /* 内容文字三级，从中性近黑开始，不带蓝色调 */
   --pa-fg: light-dark(#191919, #ededed);
   --pa-muted: light-dark(#767676, #a3a3a3);
   --pa-faint: light-dark(#aaaaaa, #6e6e6e);
-  /* 交互 chrome 的静息字与图标：比正文浅、比次级说明深。它不是内容层级的第四档，
-     而是另一根轴——面包屑链接、工具钮图标、菜单图标这类「可点但静息」的 chrome */
+  /* 可点击界面元素在静息状态下的文字和图标（面包屑链接、工具按钮图标、菜单图标）：
+     比正文浅、比次级说明深，与内容文字三级分开取值 */
   --pa-fg-soft: light-dark(#4c4c4c, #c9c9c9);
-  /* 停用件的字与图标：又一根独立的轴。它比 faint 更退，因为「这件事现在做不了」
-     不需要被读，只需要被认出；而 faint 是要读的内容（破折号、占位、轴刻度）。
-     半透黑而非实色灰：停用件也可能落在灰底上，实色灰在那里会浮起来 */
+  /* 停用控件的文字和图标：比 faint 更浅，停用状态只需被认出，faint 用于仍需阅读的内容（破折号、轴刻度）。
+     用半透明黑而不用实色灰，停用控件落在灰色背景上时才不会显得突出 */
   --pa-disabled-fg: light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.22));
-  /* 占位符：又一根轴，比内容第三档更退。占位是「这里还空着」的提示，
-     不是一条待读的内容，压到 faint 那一档会被当成已经填好的值 */
+  /* 输入框占位符：比 faint 更浅，避免被误认为已填写的值 */
   --pa-placeholder: light-dark(#c4c4c4, #5e5e5e);
 
   --pa-line: light-dark(rgba(0, 0, 0, 0.09), rgba(255, 255, 255, 0.1));
@@ -31,27 +29,26 @@
 
   --pa-wash-solid: light-dark(#fafafa, #1f1f1f);
 
-  /* 墨色：主动作实底、筛选片选中底、看板编辑态描边与落位框 */
+  /* 墨色：主操作按钮底色、选中的筛选项底色、看板编辑时的描边和放置框 */
   --pa-ink: light-dark(#191919, #ededed);
   --pa-ink-fg: light-dark(#ffffff, #171717);
 
   --pa-selected: color-mix(in srgb, var(--pa-ink) 10%, transparent);
 
   --pa-accent: light-dark(#3b6fdb, #5b8def);
-  /* 聚焦描边：框自己转成这个色，环另叠 pa-focus-ring。全站只有这一对，
-     无描边的件（按钮、分段、行）只叠环 */
+  /* 聚焦时的描边色，与 pa-focus-ring 光环配合使用；没有描边的元素（按钮、分段、行）只显示光环 */
   --pa-focus-strong: light-dark(#7eaff7, #5b8def);
-  /* 聚焦光环：描边色的半透版本，恒 3px。环与描边成对出现，不单用 */
+  /* 聚焦光环：描边色的半透明版本，宽 3px */
   --pa-focus-ring: light-dark(rgba(67, 138, 232, 0.15), rgba(91, 141, 239, 0.25));
 
   --pa-highlight: light-dark(#438ae8, #5b8def);
-  /* 强调蓝的带底：日历区间带、被选端点的圈。与 pa-avatar 同值不同义，两者各自独立取值 */
+  /* 强调蓝的浅底：日历选中区间和端点。与 pa-avatar 取值相同但用途不同，各自独立调整 */
   --pa-highlight-bg: light-dark(#e9f1fe, #24344d);
-  /* 登录浮签静默描边与标签灰 */
+  /* 登录页浮动标签的描边和文字灰 */
   --pa-login-input-border: light-dark(#d1d1d1, #3f3f3f);
   --pa-login-label: light-dark(#838383, #a3a3a3);
 
-  /* 反馈色：语义色降饱和到与中性壳同呼吸，仍守可读对比 */
+  /* 反馈色：降低饱和度以配合中性界面，同时保持可读的对比度 */
   --pa-danger: #b42318;
   --pa-danger-fg: light-dark(#b42318, #f97066);
   --pa-success: #3d9a5f;
@@ -61,33 +58,31 @@
   --pa-info-fg: light-dark(#3b6fdb, #5b8def);
 
   --pa-shadow: light-dark(rgba(25, 25, 25, 0.12), rgba(0, 0, 0, 0.4));
-  /* 弹层罩层：浅 dimmer 配 backdrop-grayscale，不是重墨遮罩 */
+  /* 弹层遮罩：浅色半透明加 backdrop-grayscale */
   --pa-dimmer: light-dark(rgba(10, 10, 10, 0.1), rgba(0, 0, 0, 0.4));
-  /* 玻璃浮层面：命令面这类大舞台走 glass，菜单与锚定选择器走 glass-popover */
+  /* 半透明浮层背景：命令面板用 glass，菜单和下拉选择器用 glass-popover */
   --pa-glass: light-dark(rgba(255, 255, 255, 0.8), rgba(38, 38, 38, 0.8));
   --pa-glass-popover: light-dark(rgba(255, 255, 255, 0.75), rgba(38, 38, 38, 0.75));
-  /* 玻璃的模糊分两档：读数卡盖住的是数据本身，同一档会把底下的线糊成一片色，故取轻；
-     菜单与命令面盖住的是版面，糊掉正好 */
+  /* 背景模糊分两档：读数卡盖在图表上，模糊要轻，否则下面的线条会糊成一片；菜单和命令面板用较重的模糊 */
   --pa-glass-blur-card: 8px;
   --pa-glass-blur-popup: 16px;
-  /* 玻璃浮层的外投影 + 双层内高光：只与玻璃底同用，独用会在实底上显出一圈假边。
-     内高光必须随明暗换档——暗面上留着亮面那道 50% 白边，浮层就镶了一圈会先于内容被看见的亮线 */
+  /* 半透明浮层的外阴影和内高光：只配合半透明背景使用，用在实色背景上会多出一圈边。
+     内高光在深色模式下要减弱，否则浮层边缘会出现一圈明显的亮线 */
   --pa-popover-glow:
     0 3px 16px 0 light-dark(rgb(0 0 0 / 0.15), rgb(0 0 0 / 0.3)),
     0 0 1px 0 light-dark(rgb(0 0 0 / 0.3), rgb(0 0 0 / 0.5)),
     inset 0 0 3px 0 light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.05)),
     inset 0 0 0 1px light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.1));
-  /* 身份徽标底（工作区标记、用户头像）：唯一带色相的中性片 */
+  /* 工作区标记和用户头像的底色 */
   --pa-avatar: light-dark(#e9f1fe, #24344d);
 
-  /* 悬停提示与 toast 的深面浅字（图表读数卡不在此列，它走玻璃浮层） */
+  /* 悬停提示和 toast 的深色背景与浅色文字（图表读数卡使用半透明浮层，不用这组颜色） */
   --pa-tooltip-bg: light-dark(#191919, #2e2e2e);
 }
 
 @theme inline {
-  /* 中性无衬线承担数字与拉丁，中文走系统栈。
-     「Inter Variable」是可变字重那一支的家族名，排在静态 Inter 之前：
-     没有它，写出来的 420 / 450 / 520 会被静态档吸回 400 / 500。 */
+  /* 数字和拉丁字母用 Inter，中文用系统字体。
+     「Inter Variable」是可变字重版本的字体名，必须排在静态 Inter 之前，否则 420 / 450 / 520 这类字重会退回 400 / 500。 */
   --font-sans:
     "Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Microsoft YaHei", sans-serif;
@@ -105,8 +100,7 @@
   --text-xl: 22px;
   --text-xl--line-height: 26px;
   --text-3xl--line-height: 34px;
-  /* 阶梯到此为止：没被上面点名的档一律撤名，`text-2xl` / `text-4xl` 这些 Tailwind 自带档
-     写出来会直接失效。禁令光靠正则拦不住——它们本来就有名字，看着完全合法。 */
+  /* 只保留上面定义的字号；其余 Tailwind 自带字号（如 `text-2xl`、`text-4xl`）在这里取消，写了也不会生效。 */
   --text-2xl: initial;
   --text-4xl: initial;
   --text-5xl: initial;
@@ -173,10 +167,9 @@
 }
 
 /*
- * 浮层的玻璃壳：菜单、Popover、Select 下拉、字段选择面、图表读数卡与命令面同料。
- *
- * 消费方跨控制台与结果视图两个包，壳只在这里拼一次；写在 components 层，件仍可用工具类改
- * 圆角与宽度。模糊档由修饰类换，面料随档走。
+ * 浮层的半透明外观，菜单、Popover、Select 下拉、字段选择面板、图表读数卡和命令面板共用。
+ * 控制台和结果视图两个包都用它，所以只在这里定义；放在 components 层，使用处仍可用工具类调整圆角和宽度。
+ * 模糊程度通过修饰类切换。
  */
 @layer components {
   .pa-popup-surface {
@@ -199,9 +192,9 @@
 }
 
 /*
- * 键盘聚焦全站只有一种标记：3px 的半透光环（`pa-focus-ring`），叠在件的外缘。
- * 自己接焦的件取 `pa-focus`；框住输入件的外壳取 `pa-focus-within`，外壳描边同时转成
- * `pa-focus-strong`——环与描边成对出现，不单用。两者都是工具类，可带变体前缀。
+ * 键盘聚焦统一显示 3px 的半透明光环（`pa-focus-ring`）。
+ * 能直接获得焦点的元素用 `pa-focus`；包住输入框的外框用 `pa-focus-within`，此时外框描边同时变为 `pa-focus-strong`。
+ * 两者都是工具类，可以带变体前缀。
  */
 @utility pa-focus {
   outline: none;
@@ -217,11 +210,10 @@
 }
 
 /*
- * 两个宿主共用的基线规则。结果视图那批件在控制台与 MCP Widget 里是同一份，
- * 它们依赖的滚动条、加载标记与减动效基线也只写这一份。
+ * 控制台和 MCP Widget 共用的基础样式：滚动条、加载标记和减少动效。
  */
 @layer base {
-  /* 细、浅的滚动条 */
+  /* 细而浅的滚动条 */
   * {
     scrollbar-width: thin;
     scrollbar-color: color-mix(in srgb, var(--pa-fg) 14%, transparent) transparent;
@@ -229,7 +221,7 @@
 }
 
 @layer components {
-  /* 加载标记（LoadingMark）：条自底边长起，往复由 alternate 给，故只写两端。 */
+  /* 加载标记（LoadingMark）：竖条从底部升起，往复由 animation-direction: alternate 实现，只需定义起止两帧。 */
   @keyframes pa-sweep {
     from {
       transform: scaleY(0.3);
@@ -247,7 +239,7 @@
   }
 }
 
-/* 无障碍动效降级：偏好减少动效时全量关闭。 */
+/* 用户开启减少动效时，关闭所有动效。 */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

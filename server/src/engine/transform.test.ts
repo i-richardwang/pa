@@ -11,7 +11,6 @@ import type { MetricValueBasis } from "../semantic_core/metric_value_basis.js";
 import { timeBuckets, type TimeOutputGrain } from "../semantic_core/time_contract.js";
 import type { BusinessTimeResolution } from "./time_plan.js";
 
-/** 截止月份坐标：单月桶，与结果粒度无关。 */
 const atCutoffs = (grain: TimeOutputGrain, ...months: string[]): BusinessTimeResolution => ({
   outputGrain: grain,
   coordinates: months.map((month) => ({
@@ -22,7 +21,6 @@ const atCutoffs = (grain: TimeOutputGrain, ...months: string[]): BusinessTimeRes
   })),
 });
 
-/** 连续期间坐标：桶由唯一枚举规则按结果粒度切出。 */
 const overRanges = (
   grain: TimeOutputGrain,
   ...ranges: { from: string; to: string }[]
@@ -146,7 +144,7 @@ const YOY: DerivedViewSpec = {
 };
 
 describe("transformDerivedView", () => {
-  test("重命名两侧同名搬运列，生成单张同比宽表并继承格式与口径", () => {
+  test("两侧同名列用 as 改名后并排输出，格式与说明沿用来源列", () => {
     const sources = new Map<string, ViewBlock>([
       [
         "v1",
@@ -210,7 +208,7 @@ describe("transformDerivedView", () => {
     ).toContain("来源 2025年；业务期间 2025年1月至6月（YTD）");
   });
 
-  test("按唯一同名键 left join，逐行算式、空侧 null、格式与口径合成", () => {
+  test("按同名维度 left join 后逐行计算，未命中一侧结果为 null，并生成公式与跨期比较说明", () => {
     const sources = new Map<string, ViewBlock>([
       [
         "v0",
@@ -245,7 +243,7 @@ describe("transformDerivedView", () => {
     expect(result.display_notes?.[0]?.text).toContain("跨期比较");
   });
 
-  test("左右不同物理列名可按同一语义维度关联", () => {
+  test("两侧列名不同但语义维度相同时可以 join", () => {
     const sources = new Map<string, ViewBlock>([
       ["v0", view("人员", [["A", 10]])],
       [
@@ -288,7 +286,7 @@ describe("transformDerivedView", () => {
     expect(result.derived?.formula).toContain("organization_name = department_name");
   });
 
-  test("inner join 只保留匹配行；limit 对派生结果记录 has_more", () => {
+  test("inner join 只保留两侧都命中的行，limit 截断后 has_more 为 true", () => {
     const sources = new Map<string, ViewBlock>([
       [
         "v0",
@@ -320,7 +318,7 @@ describe("transformDerivedView", () => {
     expect(result.has_more).toBe(true);
   });
 
-  test("full join 保留两侧独有组织，关联键回填且缺失指标保持 null", () => {
+  test("full join 保留两侧独有的组织并补上 join 键列，缺失的指标为 null，数据范围说明沿用来源", () => {
     const sources = new Map<string, ViewBlock>([
       [
         "v0",
@@ -397,7 +395,7 @@ describe("transformDerivedView", () => {
     ]);
   });
 
-  test("除零、null 与非有限结果归 null，数值字符串可参与算式", () => {
+  test("除零、null 和非有限结果为 null，数值字符串可以参与计算", () => {
     const source = view("输入", [
       ["A", "4"],
       ["B", 0],
@@ -426,7 +424,7 @@ describe("transformDerivedView", () => {
     ]);
   });
 
-  test("join 任一侧键重复即拒绝并给出收窄方式", () => {
+  test("任一侧 join 键重复时报错，并提示按这些维度唯一分组", () => {
     const duplicate = view("重复侧", [
       ["A", 1],
       ["A", 2],
@@ -467,7 +465,7 @@ describe("transformDerivedView", () => {
     ).toThrow(/join 键.*重复.*唯一分组/);
   });
 
-  test("输入 has_more 即拒绝；sampled 标记本身不影响完整行变换", () => {
+  test("输入 has_more 为 true 时报错；sampled 标记不影响计算", () => {
     const complete = view("完整", [["A", 2]], { sampled: "模型只见样本" });
     const other = view("对照", [["A", 1]]);
     expect(
@@ -493,7 +491,7 @@ describe("transformDerivedView", () => {
     ).toThrow(/输入结果不完整.*收窄查询/);
   });
 
-  test("派生列不得冒用标准指标展示名，非数值列不可进入算式", () => {
+  test("派生列不能与标准指标同名，非数值列不能参与计算", () => {
     const source = view("输入", [["A", 2]]);
     const named: DerivedViewSpec = {
       id: "named",
@@ -538,7 +536,7 @@ describe("transformDerivedView", () => {
     );
   });
 
-  test("空输入也校验算式引用列，拼错列名不能因无行而静默放过", () => {
+  test("输入为空时也校验算式引用的列", () => {
     const empty = view("空输入", []);
     const spec: DerivedViewSpec = {
       id: "invalid_column",
@@ -560,7 +558,7 @@ describe("transformDerivedView", () => {
     );
   });
 
-  test("跨事实维度凭规范同名身份 join；不同身份与 measure 键 fail-closed", () => {
+  test("不同事实表的维度 semanticId 相同即可 join；semanticId 不同或用度量作 join 键时报错", () => {
     const sources = new Map<string, ViewBlock>([
       ["v0", view("人员", [["A", 0.12]])],
       [
@@ -607,7 +605,7 @@ describe("transformDerivedView", () => {
     ).toThrow(/不是同一个一致性维度/);
   });
 
-  test("异窗 carry 可并排且逐列注记；数值维度与跨时间语义算式拒绝", () => {
+  test("不同时间的列可以并排输出并逐列注明业务期间；数值维度或不同求值基准参与计算时报错", () => {
     const sources = new Map<string, ViewBlock>([
       ["v0", view("当前快照", [["A", 10]])],
       [
@@ -700,7 +698,7 @@ describe("transformDerivedView", () => {
     ).toThrow(/不是标准度量/);
   });
 
-  test("可比矩阵只放行期末值时点差、区间指标同长期间与两类 YTD 比较", () => {
+  test("跨期计算只允许同一指标的期末值时点差、同长期间的区间值，以及同截止月或同年不同截止月的 YTD", () => {
     const sources = new Map<string, ViewBlock>([
       ["v0", view("本期", [["A", 12]])],
       [

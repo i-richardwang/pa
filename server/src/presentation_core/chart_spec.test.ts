@@ -1,4 +1,3 @@
-/** 声明与结果的绑定；运行时数据守卫在 view_shape/chart_config 测。 */
 import { describe, expect, test } from "bun:test";
 import { bindChartDecl, type ChartSpecContext, type UnboundChart } from "./chart_spec.js";
 
@@ -17,15 +16,15 @@ const SPLIT: ChartSpecContext = {
   dimensions: ["test_people_metrics.organization_name"],
 };
 
-describe("绑定与缺省补齐", () => {
-  test("line：y 缺省补齐为全部度量，输出载荷列短名", () => {
+describe("绑定与默认值", () => {
+  test("line 未声明 y 时使用全部度量，输出载荷列短名", () => {
     expect(bindChartDecl({ type: "line" }, TREND)).toEqual({
       type: "line",
       y: ["new_hire_count", "leave_count"],
     });
   });
 
-  test("y2 绑定为副轴系列；y 缺省时补齐为副轴之外的全部度量", () => {
+  test("y2 绑定为副轴系列，未声明 y 时使用副轴之外的全部度量", () => {
     expect(bindChartDecl({ type: "line", y2: ["test_people_metrics.leave_count"] }, TREND)).toEqual(
       {
         type: "line",
@@ -41,11 +40,11 @@ describe("绑定与缺省补齐", () => {
         { type: "line", y: ["new_hire_count"], y2: ["leave_count"], group_by: "organization_name" },
         SPLIT,
       ),
-    ).toThrow(/只能画一个指标/);
-    expect(() => bindChartDecl({ type: "line", y2: ["gone"] }, TREND)).toThrow(/副轴系列/);
+    ).toThrow(/只能有一个指标/);
+    expect(() => bindChartDecl({ type: "line", y2: ["gone"] }, TREND)).toThrow(/副轴指标（y2）/);
   });
 
-  test("绑定接受成员全名或列短名，归一为短名", () => {
+  test("绑定接受成员全名或列短名，输出短名", () => {
     expect(
       bindChartDecl(
         { type: "bar", x: "test_people_metrics.organization_name", y: ["active_employee_count"] },
@@ -54,7 +53,7 @@ describe("绑定与缺省补齐", () => {
     ).toEqual({ type: "bar", x: "organization_name", y: ["active_employee_count"] });
   });
 
-  test("display 与 value_labels 按度量归一后透传", () => {
+  test("display 的度量名换成短名，value_labels 原样保留", () => {
     expect(
       bindChartDecl(
         {
@@ -72,7 +71,7 @@ describe("绑定与缺省补齐", () => {
     );
   });
 
-  test("bar：辅助标注绑定独立于 Y 轴系列", () => {
+  test("bar 的辅助标注与 Y 轴系列分别绑定", () => {
     expect(
       bindChartDecl(
         {
@@ -97,7 +96,7 @@ describe("绑定与缺省补齐", () => {
     });
   });
 
-  test("bar：group_by 之外恰剩一个维度时 x 可省略自动补齐", () => {
+  test("bar 除 group_by 外只剩一个维度时可以省略 x", () => {
     expect(
       bindChartDecl({ type: "bar", group_by: "job_level_band", stack: true }, CATEGORY),
     ).toEqual({
@@ -109,7 +108,7 @@ describe("绑定与缺省补齐", () => {
     });
   });
 
-  test("pie：唯一度量 + 唯一维度时全靠缺省", () => {
+  test("pie 只有一个度量和一个维度时无需声明通道", () => {
     expect(
       bindChartDecl(
         { type: "pie" },
@@ -121,11 +120,11 @@ describe("绑定与缺省补齐", () => {
     ).toEqual({ type: "pie", x: "organization_name", y: ["active_employee_count"] });
   });
 
-  test("table：不声明列轴即不进声明——缺省布局由结果裁决", () => {
+  test("table 未声明列轴时声明中没有 tableColumns", () => {
     expect(bindChartDecl({ type: "table" }, CATEGORY)).toEqual({ type: "table" });
   });
 
-  test("table：columns 绑定有序列轴并归一为内部布局", () => {
+  test("table 的 columns 按顺序绑定为列轴", () => {
     expect(
       bindChartDecl({ type: "table", columns: ["test_people_metrics.job_level_band"] }, CATEGORY),
     ).toEqual({
@@ -134,7 +133,7 @@ describe("绑定与缺省补齐", () => {
     });
   });
 
-  test("table：省略 metrics 时指标轴自动补在时间轴外层", () => {
+  test("table 省略 metrics 时指标轴自动放在时间轴外层", () => {
     expect(bindChartDecl({ type: "table", columns: ["time"] }, TREND)).toEqual({
       type: "table",
       tableColumns: [{ kind: "metrics" }, { kind: "time", level: "bucket" }],
@@ -145,7 +144,7 @@ describe("绑定与缺省补齐", () => {
     });
   });
 
-  test("table：热力着色原样进声明", () => {
+  test("table 的热力着色原样写入声明", () => {
     expect(
       bindChartDecl(
         { type: "table", shading: { palette: "red_blue", flipped: true, values: false } },
@@ -167,26 +166,26 @@ describe("绑定与缺省补齐", () => {
   });
 });
 
-describe("通道只属于声明了它的图型", () => {
-  test("形状本身即校验：装不下的通道写不出来", () => {
+describe("各图型的通道", () => {
+  test("图型不支持的通道在类型检查时报错", () => {
     // @ts-expect-error 指标卡没有任何数据通道
     const kpi: UnboundChart = { type: "kpi", y: ["new_hire_count"] };
-    // @ts-expect-error 折线的横轴恒为时间，没有分类轴通道
+    // @ts-expect-error 折线的横轴是时间，没有分类轴通道
     const line: UnboundChart = { type: "line", x: "organization_name" };
-    // @ts-expect-error 饼图不拆系列，也没有视觉覆盖通道
+    // @ts-expect-error 饼图没有拆分通道
     const pie: UnboundChart = { type: "pie", group_by: "job_level_band" };
-    // @ts-expect-error 堆叠只属于柱状
+    // @ts-expect-error 只有柱状图有堆叠
     const stacked: UnboundChart = { type: "line", stack: true };
-    // @ts-expect-error 列轴与热力着色只属于表格
+    // @ts-expect-error 只有表格有列轴和热力着色
     const table: UnboundChart = { type: "bar", columns: ["metrics"] };
     expect([kpi, line, pie, stacked, table]).toHaveLength(5);
   });
 });
 
-describe("可行动报错", () => {
+describe("绑定错误提示", () => {
   test("值通道引用未查询度量", () => {
     expect(() => bindChartDecl({ type: "line", y: ["active_employee_count"] }, TREND)).toThrow(
-      /值通道的「active_employee_count」不在这次查询的结果里/,
+      /指标（y）的「active_employee_count」不在这次查询的结果里/,
     );
   });
 
@@ -196,13 +195,13 @@ describe("可行动报错", () => {
     );
   });
 
-  test("系列视觉设置引用未查询度量", () => {
+  test("系列设置引用了未查询的指标时报错", () => {
     expect(() =>
       bindChartDecl(
         { type: "line", display: { active_employee_count: { color: "#123abc" } } },
         TREND,
       ),
-    ).toThrow(/系列视觉设置的「active_employee_count」/);
+    ).toThrow(/系列设置（series）的「active_employee_count」/);
   });
 
   test("分类轴与拆分维度都不能用时间", () => {
@@ -214,13 +213,13 @@ describe("可行动报错", () => {
     ).toThrow(/拆分维度不能用时间/);
   });
 
-  test("拆系列时只能画一个指标", () => {
+  test("按维度拆分系列时只能画一个指标", () => {
     expect(() => bindChartDecl({ type: "line", group_by: "organization_name" }, SPLIT)).toThrow(
-      /只能画一个指标/,
+      /只能有一个指标/,
     );
   });
 
-  test("多维度时分类轴不可省略，且不能与拆分维度同源", () => {
+  test("多个维度时必须声明分类轴，且不能与拆分维度相同", () => {
     expect(() => bindChartDecl({ type: "bar" }, CATEGORY)).toThrow(/需要指定一个分类维度/);
     expect(() =>
       bindChartDecl(
@@ -230,7 +229,7 @@ describe("可行动报错", () => {
     ).toThrow(/不能是同一个维度/);
   });
 
-  test("pie：多度量必须用 y 收窄", () => {
+  test("pie 有多个度量时必须用 y 选定一个", () => {
     expect(() =>
       bindChartDecl(
         { type: "pie", x: "organization_name" },
@@ -243,7 +242,7 @@ describe("可行动报错", () => {
     expect(() => bindChartDecl({ type: "table", columns: ["degree"] }, CATEGORY)).toThrow(
       /列轴的「degree」不是时间、指标，也不是这次查询的维度/,
     );
-    // 时间轴不在此裁决：输出粒度出自引擎，结果没有时间轴时由呈现层降级说明。
+    // 这里不检查结果是否有时间轴；没有时由呈现层降级并说明。
     expect(bindChartDecl({ type: "table", columns: ["time"] }, CATEGORY)).toMatchObject({
       tableColumns: [{ kind: "metrics" }, { kind: "time", level: "bucket" }],
     });
@@ -252,7 +251,7 @@ describe("可行动报错", () => {
     ).toThrow(/列轴不能重复/);
     expect(() =>
       bindChartDecl({ type: "table", columns: ["metrics"] }, { measures: [], dimensions: [] }),
-    ).toThrow(/列轴放指标时这次查询必须查了指标/);
+    ).toThrow(/列轴包含 metrics 时，查询必须至少包含一个指标/);
   });
 
   test("辅助标注不能占用 Y 系列", () => {

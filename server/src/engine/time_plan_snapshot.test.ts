@@ -3,11 +3,7 @@ import type { CubeView, TimeContext } from "../ports/cube_gateway.js";
 import { planMetricQuery } from "../test_support/planning.js";
 import type { TimeInput } from "../semantic_core/time_contract.js";
 
-/**
- * 时间编译黄金对：三种时间语义 × 全部业务时间形态 × 单指标/混合指标的编译产物快照。
- * 快照锁定当前形态：正式指标计划只承载一份业务时间，执行腿只承载事实内查询与窗口。
- * 产物包含物理查询与守卫文案两类结果，改动任一都会在此暴露。
- */
+/** 时间编译快照：每个指标组合 × 每种业务时间输入的编译结果（物理查询或报错文案）。 */
 const GOLDEN_PATH = new URL("./time_plan.golden.json", import.meta.url);
 
 const views: CubeView[] = [
@@ -86,7 +82,6 @@ const context: TimeContext = {
 const people = "test_people_metrics";
 const plan = "headcount_plan";
 
-/** 指标组合：单语义四组覆盖三种时间语义与月度率约束，混合三组覆盖拆腿路径。 */
 const MEASURE_SETS: Record<string, string[]> = {
   point: [`${people}.active_employee_count`],
   flow: [`${people}.new_hire_count`],
@@ -101,7 +96,6 @@ const MEASURE_SETS: Record<string, string[]> = {
   ],
 };
 
-/** 业务时间形态：截止月份、按月、按年（含部分年与两月跨年）、合计、相对窗口、对照。 */
 const TIME_INPUTS: Record<string, TimeInput> = {
   cutoff_default: {},
   cutoff: { cutoff: "2026-06" },
@@ -126,7 +120,7 @@ const TIME_INPUTS: Record<string, TimeInput> = {
     compare: [{ years_ago: 1 }],
     grain: "year",
   },
-  // 省略锚点：窗口与相对对照的锚点取服务端 actual_through，是报告滚动语义的默认形态。
+  // 省略截止月时，相对窗口与对照以服务端 actual_through 为截止月。
   last_months_default_anchor: { last: { months: 12 }, grain: "month" },
   last_years_default_anchor: { last: { years: 3 }, grain: "year" },
   compare_years_ago_default_anchor: { compare: [{ years_ago: 1 }] },
@@ -158,7 +152,7 @@ function compileAll(): Record<string, string> {
       );
     }
   }
-  // 计划域：可查询上界延伸到未来登记月份，与实绩域共用同一套桶规则。
+  // 计划数据可查询到已登记的未来月份。
   const planMeasures = [`${plan}.point_in_time_target_count`, `${plan}.planned_position_count`];
   const planDimension = `${plan}.organization_name`;
   snapshot["plan_point × cutoff_default"] = compile(planMeasures, planDimension, {});
@@ -172,20 +166,20 @@ function compileAll(): Record<string, string> {
   return snapshot;
 }
 
-test("时间编译产物与单一业务时间终态黄金对逐字节一致", async () => {
+test("时间编译结果与快照文件一致", async () => {
   const actual = compileAll();
   if (process.env.UPDATE_TIME_GOLDEN) {
     await Bun.write(GOLDEN_PATH, `${JSON.stringify(actual, null, 2)}\n`);
   }
   const golden = (await Bun.file(GOLDEN_PATH).json()) as Record<string, string>;
-  // 键集合全等：新增时间形态必须同步录入黄金值。
+  // 新增输入组合后需用 UPDATE_TIME_GOLDEN=1 重新生成快照。
   expect(Object.keys(actual).sort()).toEqual(Object.keys(golden).sort());
   for (const key of Object.keys(golden)) {
     expect(actual[key], `编译产物变化：${key}`).toBe(golden[key]);
   }
 });
 
-test("黄金对覆盖三种时间语义与全部业务时间形态，且守卫用例仍在其中", async () => {
+test("快照覆盖三种时间语义和各类时间形态，并包含报错用例", async () => {
   const golden = (await Bun.file(GOLDEN_PATH).json()) as Record<string, string>;
   const thrown = Object.values(golden).filter((value) => value.startsWith("throw: "));
   expect(thrown.length).toBeGreaterThan(0);
