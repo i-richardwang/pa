@@ -1,6 +1,6 @@
 ---
 name: pa-analytics
-description: 查询 PA 组织与人才数据；用于人员规模、流动、编制、受控人员记录、报告和 CSV 导出，并遵守目录、时间、可比性与明细安全合同。
+description: 查询 PA 组织与人才数据，支持人员规模、流动、编制、调研期次、跨期组合表、受控人员记录、报告和 CSV 导出。
 ---
 
 # PA 人才分析
@@ -21,10 +21,8 @@ description: 查询 PA 组织与人才数据；用于人员规模、流动、编
 3. 只使用目录返回的语义 `id`。分组、筛选、排序和报告计算遵守所选指标共同支持的
    `query_capabilities`、`time.constraints` 与 `report_calculations`。过滤值不确定时用 `values_of` 核实，
    不从术语、标题或示例推断真实值。
-4. 用 `run_analysis` 回答一个语义问题。同一分组、筛选和业务时间坐标下的多个指标放进同一个查询；
-   行结构或业务问题不同才拆成多次调用。优先使用正式指标，不能拆查组件后复刻已有公式。
-5. 根据结果的 `time`、`column_time_basis`、`totals`、`data_as_of`、`time_context`、
-   `observation_scopes` 和 `display_notes` 解释结果。`query_notes` 只帮助正确查询，不向用户逐条复述。
+4. 用 `run_analysis` 回答一个语义问题。同一分组和期间的多个指标放进 `analysis.query`。按同一实体并列不同期间或指定调研期次时，使用 `analysis.composition` 和表格；每列独立选期。优先使用目录登记的正式指标。
+5. 直接查询按 `time`、`column_time_basis` 和 `totals` 解读；调研查看 `view.observations`，组合表逐列查看 `view.column_periods`。结合 `data_as_of`、`time_context`、`observation_scopes` 和 `display_notes` 说明口径。
 6. 保留成功响应的 `analysis_id` 与 `view_id`。当前客户端提供 `show_analysis` 时，用 `view_id` 打开结果卡；
    用户要求解读时再补充结论。
 
@@ -42,7 +40,7 @@ description: 查询 PA 组织与人才数据；用于人员规模、流动、编
 
 ## 按需读取
 
-- 涉及趋势、跨事实指标、结构占比、排行或显式派生时，读取
+- 涉及跨期组合表、调研期次、趋势、跨事实指标、结构占比、排行或显式派生时，读取
   [query_patterns.md](references/query_patterns.md)。
 - 涉及结果卡、人员名单、报告修改或导出时，读取
   [delivery_workflows.md](references/delivery_workflows.md)。

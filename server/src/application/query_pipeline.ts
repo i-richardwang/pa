@@ -1,23 +1,19 @@
+import { composeColumnResults } from "./composition_result.js";
 import { observationScopes } from "../engine/catalog_document.js";
 import type { Principal } from "../contracts/principal.js";
 import type { CubeSecurityContext, CubeView, TimeContext } from "../ports/cube_gateway.js";
-import type { ExportService } from "./export_service.js";
 import { memberDisplayTitle } from "../engine/member_presentation.js";
 import { AGGREGATE_MODEL_ROWS, modelSampleNote } from "../engine/result_limit.js";
-import { isDerivedViewSpec, type QueryViewSpec } from "../semantic_core/analysis_spec.js";
+import type { QueryViewSpec } from "../semantic_core/analysis_spec.js";
 import { memberShortName } from "../semantic_core/member_name.js";
 import type { ExecutionPlan, OutputDelivery } from "../semantic_core/execution_plan.js";
 import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
-import type {
-  ExportResourceLink,
-  FullRowsBlock,
-  OutputCapabilities,
-  QueryPayload,
-  ViewBlock,
-} from "../semantic_core/query_payload.js";
+import type { FullRowsBlock, QueryPayload, ViewBlock } from "../semantic_core/query_payload.js";
 import { QUERY_PAYLOAD_SCHEMA } from "../semantic_core/query_payload.js";
 import type { ChartDecl } from "../presentation_core/chart_decl.js";
 import { projectPresentation } from "../presentation_core/presentation_projection.js";
+import type { MetricSelectionOutcome } from "../engine/metric_calculator.js";
+import type { CubeFilter } from "../ports/cube_gateway.js";
 import type { MetricQueryPlan } from "../engine/metric_planner.js";
 import {
   transformDerivedView,
@@ -27,6 +23,12 @@ import {
 import { publicTimeContext, timeSourced, viewsForMembers } from "./time_context.js";
 import type { AuthorizedSemanticContext } from "./catalog_service.js";
 
+export type BoundGroupSelection = {
+  outcome: MetricSelectionOutcome;
+  filter: CubeFilter;
+  groups: (string | null)[][];
+};
+
 export type ExecutedViewResult = {
   block: EngineViewBlock;
   sampleForModel: boolean;
@@ -34,6 +36,7 @@ export type ExecutedViewResult = {
   /** 按执行结果解析出的公共列 id，覆盖 plan.output.columns 中的同名映射。 */
   resolvedDeliveryColumns?: Record<string, string>;
   exportPlan?: MetricQueryPlan;
+  groupSelection?: BoundGroupSelection;
 };
 
 export type QueryRunResult = {
@@ -43,7 +46,7 @@ export type QueryRunResult = {
   /** 呈现声明，列引用已换成公共列 id。 */
   decl: ChartDecl;
   fullRows?: FullRowsBlock;
-  exportResource?: ExportResourceLink;
+  exportPlan?: MetricQueryPlan;
 };
 
 type ExecuteView = (
@@ -103,6 +106,7 @@ function projectOutputBlock(
           ]),
         )
       : undefined;
+  const columnPeriods = projectRecord(block.column_periods);
   const columnFormats = projectRecord(block.column_formats);
   const columnDecimals = projectRecord(block.column_decimals);
   const columnTimeBasis = projectRecord(block.column_time_basis);
@@ -149,6 +153,33 @@ function projectOutputBlock(
         }
       : {}),
     columns,
+    ...(columnPeriods ? { column_periods: columnPeriods } : {}),
+    ...(block.observations
+      ? {
+          observations: block.observations.map((period) =>
+            period.columns
+              ? {
+                  ...period,
+                  columns: period.columns.map((id) =>
+                    requiredPublicColumnId(delivery, id, outputId),
+                  ),
+                }
+              : period,
+          ),
+        }
+      : {}),
+    ...(block.observation_axis
+      ? {
+          observation_axis: {
+            id_column: requiredPublicColumnId(delivery, block.observation_axis.id_column, outputId),
+            date_column: requiredPublicColumnId(
+              delivery,
+              block.observation_axis.date_column,
+              outputId,
+            ),
+          },
+        }
+      : {}),
     ...(columnFormats && Object.keys(columnFormats).length
       ? { column_formats: columnFormats }
       : {}),
@@ -175,10 +206,7 @@ function projectOutputBlock(
 }
 
 export async function runQueryPipeline(
-  deps: {
-    executeView: ExecuteView;
-    exports: Pick<ExportService, "createDelivery">;
-  },
+  executeView: ExecuteView,
   access: AuthorizedSemanticContext,
   plan: ExecutionPlan,
   presentation: PresentationSpec,
@@ -190,64 +218,61 @@ export async function runQueryPipeline(
     timeContext: context,
     time_sources: timeSources,
   } = access;
-  const caller = principal.email;
-  const specs = plan.nodes;
-  const queryEntries = specs.flatMap((spec) =>
-    isDerivedViewSpec(spec) ? [] : [{ id: spec.id, spec }],
-  );
-  const outputSpec = specs.find((spec) => spec.id === plan.output.id);
-  if (!outputSpec) throw new Error(`结果视图 ${plan.output.id} 不存在`);
+  const { id: outputId, operation } = plan.output;
   const summarySources = new Set(
-    outputSpec.summary ? (isDerivedViewSpec(outputSpec) ? outputSpec.from : [outputSpec.id]) : [],
+    operation.kind === "derived" && operation.view.summary ? operation.view.from : [],
   );
-  // 只有交付视图计算合计；交付视图是派生视图时没有合计。
-  const queryResults = await Promise.all(
-    queryEntries.map(({ spec }) =>
-      deps.executeView(
-        { principal, cubeContext },
-        spec,
-        authViews,
-        context,
-        summarySources.has(spec.id),
-        spec.id === plan.output.id,
-        access.compiler.access_scope.title,
-      ),
+  const queryResults = new Map(
+    await Promise.all(
+      plan.queries.map(async (spec) => {
+        const isOutput = operation.kind === "query" && spec.id === outputId;
+        const result = await executeView(
+          { principal, cubeContext },
+          spec,
+          authViews,
+          context,
+          (isOutput && Boolean(spec.summary)) || summarySources.has(spec.id),
+          isOutput,
+          access.compiler.access_scope.title,
+        );
+        return [spec.id, result] as const;
+      }),
     ),
   );
-  const resultById = new Map<string, ExecutedViewResult>();
-  queryEntries.forEach(({ id }, resultIndex) => {
-    resultById.set(id, queryResults[resultIndex]);
-  });
-  const sourceBlocks = new Map<string, EngineViewBlock>(
-    queryEntries.flatMap(({ id }) => {
-      const result = resultById.get(id);
-      return result ? [[id, result.block] as const] : [];
-    }),
-  );
-  const sourceSemantics = new Map<string, DerivedSourceSemantics>(
-    queryEntries.flatMap(({ id }) => {
-      const result = resultById.get(id);
-      return result?.sourceSemantics ? [[id, result.sourceSemantics] as const] : [];
-    }),
-  );
-  const standardMeasureTitles = new Set(
-    authViews.flatMap((view) =>
-      view.measures.map((measure) => memberDisplayTitle(authViews, measure.name, measure.title)),
-    ),
-  );
-  specs.forEach((spec) => {
-    if (!isDerivedViewSpec(spec)) return;
-    resultById.set(spec.id, {
-      block: transformDerivedView(spec, sourceBlocks, standardMeasureTitles, sourceSemantics),
-      sampleForModel: spec.limit === undefined,
-    });
-  });
-  specs.forEach((spec) => {
-    if (!resultById.get(spec.id)) throw new Error(`视图 ${spec.id} 未产生执行结果`);
-  });
+  let deliveredResult: ExecutedViewResult;
+  if (operation.kind === "query") {
+    const result = queryResults.get(outputId);
+    if (!result) throw new Error(`结果视图 ${outputId} 未产生执行结果`);
+    deliveredResult = result;
+  } else {
+    const blocks = new Map(Array.from(queryResults, ([id, result]) => [id, result.block]));
+    if (operation.kind === "composition") {
+      deliveredResult = {
+        block: composeColumnResults(outputId, operation.composition, blocks),
+        sampleForModel: true,
+      };
+    } else {
+      const semantics = new Map(
+        [...queryResults].flatMap(([id, result]) =>
+          result.sourceSemantics ? [[id, result.sourceSemantics] as const] : [],
+        ),
+      );
+      const titles = new Set(
+        authViews.flatMap((view) =>
+          view.measures.map((measure) =>
+            memberDisplayTitle(authViews, measure.name, measure.title),
+          ),
+        ),
+      );
+      deliveredResult = {
+        block: transformDerivedView(operation.view, blocks, titles, semantics),
+        sampleForModel: operation.view.limit === undefined,
+      };
+    }
+  }
   const queriedViews = viewsForMembers(
     authViews,
-    queryEntries.flatMap(({ spec }) => [
+    plan.queries.flatMap((spec) => [
       ...(spec.measures ?? []),
       ...(spec.dimensions ?? []),
       ...(spec.filters ?? []).map((filter) => filter.member),
@@ -260,10 +285,6 @@ export async function runQueryPipeline(
     data_as_of: context.dataAsOf,
     time_context: publicTimeContext(timeSourced(queriedViews), context, timeSources),
   };
-  // 中间视图只参与计算，不进入交付结果，也不发给模型。
-  const outputId = plan.output.id;
-  const deliveredResult = resultById.get(outputId);
-  if (!deliveredResult) throw new Error(`结果视图 ${outputId} 未产生执行结果`);
   const resolvedOutput = {
     ...plan.output,
     columns: {
@@ -284,23 +305,15 @@ export async function runQueryPipeline(
   const fullRows: FullRowsBlock | undefined = deliveredSampled.sampled
     ? { rows: deliveredFull.rows }
     : undefined;
-  let capabilities: OutputCapabilities | undefined;
-  let exportResource: ExportResourceLink | undefined;
-  if (deliveredResult.exportPlan) {
-    const delivery = await deps.exports.createDelivery(deliveredResult.exportPlan, caller);
-    capabilities = { export: delivery.link };
-    exportResource = delivery.resource;
-  }
   const payload = QUERY_PAYLOAD_SCHEMA.parse({
     ...shared,
     view: deliveredSampled,
-    ...(capabilities ? { capabilities } : {}),
   });
   return {
     payload,
     fullRowViewBlock: deliveredFull,
     decl,
     ...(fullRows ? { fullRows } : {}),
-    ...(exportResource ? { exportResource } : {}),
+    ...(deliveredResult.exportPlan ? { exportPlan: deliveredResult.exportPlan } : {}),
   };
 }

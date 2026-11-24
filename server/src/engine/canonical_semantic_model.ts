@@ -3,6 +3,7 @@ import type { CompilerCatalog } from "../semantic_core/compiler_catalog.js";
 import type { SemanticModelCatalog } from "../semantic_core/semantic_model_catalog.js";
 import type { SemanticTaxonomy } from "../semantic_core/semantic_taxonomy.js";
 import type { TimeSourceRegistry } from "../semantic_core/time_source.js";
+import { memberSemanticId, resultGuards } from "./model_contract.js";
 import { memberShortName } from "../semantic_core/member_name.js";
 import type { CubeView } from "../ports/cube_gateway.js";
 import type { CubeGateway, CubeSecurityContext } from "../ports/cube_gateway.js";
@@ -39,6 +40,13 @@ export function buildCanonicalSemanticModel(input: {
   time_sources: TimeSourceRegistry;
   access_scope: AccessScopeDefinition;
 }): CanonicalSemanticModel {
+  const measures = metricMembers(input.views);
+  const ids = new Set(measures.map((measure) => memberSemanticId("measure", measure)));
+  for (const measure of measures) {
+    for (const { support_measure } of resultGuards(measure)) {
+      if (!ids.has(support_measure)) throw new Error(`指标「${measure.title}」的支撑指标未登记`);
+    }
+  }
   const document = buildCatalogDocument(
     input.views,
     input.taxonomy,
@@ -248,6 +256,12 @@ function assertVisibleView(view: CubeView): void {
   assertUnique(members, `成员（${view.name}）`);
 }
 
+function metricMembers(views: CubeView[]) {
+  return views
+    .filter((view) => view.meta?.query_surface !== "detail")
+    .flatMap((view) => [...view.measures, ...(view.internalMeasures ?? [])]);
+}
+
 /** 将 Cube access policy 的成员可见性投影到 canonical 视图。 */
 export function projectAuthorizedSemanticViews(
   canonical: CanonicalSemanticModel,
@@ -263,7 +277,7 @@ export function projectAuthorizedSemanticViews(
     "视图",
   );
   const canonicalViews = new Map(canonical.views.map((view) => [view.name, view]));
-  return visibleViews.map((visible) => {
+  const projected = visibleViews.map((visible) => {
     assertVisibleView(visible);
     const modelView = canonicalViews.get(visible.name);
     if (!modelView) {
@@ -271,6 +285,29 @@ export function projectAuthorizedSemanticViews(
     }
     return projectCubeView(modelView, visible);
   });
+  const visibleMeasurements = new Map(
+    metricMembers(projected).map(
+      (measure) => [memberSemanticId("measure", measure), resultGuards(measure)] as const,
+    ),
+  );
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [id, guards] of visibleMeasurements) {
+      if (guards.some(({ support_measure }) => !visibleMeasurements.has(support_measure))) {
+        visibleMeasurements.delete(id);
+        changed = true;
+      }
+    }
+  }
+  return projected.map((view) => ({
+    ...view,
+    measures: view.measures.filter((measure) =>
+      resultGuards(measure).every(({ support_measure }) =>
+        visibleMeasurements.has(support_measure),
+      ),
+    ),
+  }));
 }
 
 /**

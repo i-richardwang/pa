@@ -21,6 +21,7 @@ time_sources:
     role: actual
     primary: false
     comparison_policy: explicit_only
+    observation: { id_member: wave_id, date_member: wave_date, title_member: wave_name }
 taxonomy:
   metric_domains:
     - id: metric_domain:workforce_structure
@@ -61,7 +62,7 @@ taxonomy:
       description: 离职事件对应的离职类型。
     - name: survey_wave
       title: 调研期次
-      description: 周期调研最近一期投放的期次编码、名称与实际月份。
+      description: 周期调研各次投放的编码、名称与实际日期。
 formal_metrics:
   - name: monthly_hire_rate
     metric_domain_id: metric_domain:workforce_movement
@@ -127,7 +128,7 @@ formal_metrics:
     metric_domain_id: metric_domain:employee_engagement
     host_view: q12_survey_participation_metrics
     title: Q12回复率
-    description: 最近一期Q12调研答卷人数占投放人数的比例。
+    description: 所选期次的Q12调研答卷人数占投放人数的比例。
     time_contract: { aggregation: last, window: selected }
     node:
       kind: ratio
@@ -141,7 +142,7 @@ formal_metrics:
     metric_domain_id: metric_domain:employee_engagement
     host_view: q12_survey_response_metrics
     title: Q12正向作答率
-    description: 最近一期Q12调研中评分为四分或五分的作答项数占全部有效作答项数的比例。
+    description: 所选期次的Q12调研中评分为四分或五分的作答项数占全部有效作答项数的比例。
     time_contract: { aggregation: last, window: selected }
     node:
       kind: ratio
@@ -155,7 +156,7 @@ formal_metrics:
     metric_domain_id: metric_domain:employee_engagement
     host_view: q12_survey_response_metrics
     title: Q12强烈认同率
-    description: 最近一期Q12调研中评分为五分的作答项数占全部有效作答项数的比例。
+    description: 所选期次的Q12调研中评分为五分的作答项数占全部有效作答项数的比例。
     time_contract: { aggregation: last, window: selected }
     node:
       kind: ratio

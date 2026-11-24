@@ -147,6 +147,33 @@ const selectionCell = (value: CubeCell): string | null => (value == null ? null 
 const selectionKey = (dimensions: string[], row: Record<string, CubeCell>) =>
   JSON.stringify(dimensions.map((dimension) => selectionCell(row[dimension])));
 
+export function selectedGroupsFilter(
+  dimensions: string[],
+  selectedCandidates: Record<string, CubeCell>[],
+): CubeFilter {
+  const tupleFilter = (row: Record<string, CubeCell>): CubeFilter => {
+    const conditions: CubeFilterCondition[] = dimensions.map((member) => {
+      const value = selectionCell(row[member]);
+      return value === null
+        ? { member, operator: "notSet" }
+        : { member, operator: "equals", values: [value] };
+    });
+    return conditions.length === 1 ? conditions[0]! : { and: conditions };
+  };
+  const firstDimension = dimensions[0]!;
+  const filter: CubeFilter = selectedCandidates.length
+    ? selectedCandidates.length === 1
+      ? tupleFilter(selectedCandidates[0]!)
+      : { or: selectedCandidates.map(tupleFilter) }
+    : {
+        and: [
+          { member: firstDimension, operator: "set" },
+          { member: firstDimension, operator: "notSet" },
+        ],
+      };
+  return filter;
+}
+
 function applySelection(
   plan: MetricQueryPlan,
   rows: Record<string, CubeCell>[],
@@ -207,27 +234,7 @@ function applySelection(
       rank.get(selectionKey(selection.dimensions, left))! -
       rank.get(selectionKey(selection.dimensions, right))!,
   );
-  const tupleFilter = (row: Record<string, CubeCell>): CubeFilter => {
-    const conditions: CubeFilterCondition[] = selection.dimensions.map((member) => {
-      const value = selectionCell(row[member]);
-      return value === null
-        ? { member, operator: "notSet" }
-        : { member, operator: "equals", values: [value] };
-    });
-    return conditions.length === 1 ? conditions[0]! : { and: conditions };
-  };
-  const selectedCandidates = ranked.slice(0, selection.count);
-  const firstDimension = selection.dimensions[0]!;
-  const filter: CubeFilter = selectedCandidates.length
-    ? selectedCandidates.length === 1
-      ? tupleFilter(selectedCandidates[0]!)
-      : { or: selectedCandidates.map(tupleFilter) }
-    : {
-        and: [
-          { member: firstDimension, operator: "set" },
-          { member: firstDimension, operator: "notSet" },
-        ],
-      };
+  const filter = selectedGroupsFilter(selection.dimensions, ranked.slice(0, selection.count));
   return {
     rows: selectedRows,
     filter,

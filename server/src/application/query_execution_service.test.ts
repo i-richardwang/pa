@@ -125,9 +125,6 @@ test("Agent 指标域拒绝手写技术维度与计算辅助指标，且不会�
   } as unknown as CubeGateway;
   const service = createQueryExecutionService({
     cube,
-    exports: {
-      createDelivery: async () => Promise.reject(new Error("不应导出")),
-    },
   });
   for (const query of [
     {
@@ -198,9 +195,6 @@ test("交付边界把执行成员一次性投影为语义列与语义口径引�
   } as unknown as CubeGateway;
   const service = createQueryExecutionService({
     cube,
-    exports: {
-      createDelivery: async () => Promise.reject(new Error("不应导出")),
-    },
   });
   const spec: AnalysisSpec = {
     views: [
@@ -313,7 +307,6 @@ test("分组构成占比、总体与基础查询共享一次解析的单月签�
   } as unknown as CubeGateway;
   const service = createQueryExecutionService({
     cube,
-    exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
   const spec: AnalysisSpec = {
     views: [
@@ -495,7 +488,6 @@ test("分组 Top-N 按正式指标在最新逻辑时间桶排名，并保留选�
   } as unknown as CubeGateway;
   const service = createQueryExecutionService({
     cube,
-    exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
   const result = await service.execute(
     planned(
@@ -659,7 +651,6 @@ test("Top-N 先按选择粒度排名，再展开选中分组的完整展示粒�
   } as unknown as CubeGateway;
   const service = createQueryExecutionService({
     cube,
-    exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
   const result = await service.execute(
     planned(
@@ -783,7 +774,6 @@ test("跨年连续期间把期末值、YTD 和流量指标拆成多个子查询�
   } as unknown as CubeGateway;
   const service = createQueryExecutionService({
     cube,
-    exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
   const annualSpec: AnalysisSpec = {
     views: [
@@ -902,29 +892,8 @@ function resultCube(rowCount: number): CubeGateway {
   } as unknown as CubeGateway;
 }
 
-test("截断的直查结果交付导出能力与资源", async () => {
-  const deliveryQueries: unknown[] = [];
-  const delivery = {
-    link: {
-      url: "https://pa.example/export/ticket",
-      expires_at: "2026-07-31T00:00:00.000Z",
-    },
-    resource: {
-      type: "resource_link",
-      uri: "pa://export/ticket",
-      name: "pa_export.csv",
-      mimeType: "text/csv; charset=utf-8",
-    },
-  } as const;
-  const service = createQueryExecutionService({
-    cube: resultCube(2001),
-    exports: {
-      createDelivery: async (query) => {
-        deliveryQueries.push(query);
-        return delivery;
-      },
-    },
-  });
+test("截断的直查结果返回无行数限制的导出计划", async () => {
+  const service = createQueryExecutionService({ cube: resultCube(2001) });
   const result = await service.execute(
     planned(
       identityExecution({
@@ -940,26 +909,12 @@ test("截断的直查结果交付导出能力与资源", async () => {
     ),
   );
 
-  expect(result.payload.capabilities).toEqual({ export: delivery.link });
-  expect(result.exportResource).toEqual(delivery.resource);
-  expect(deliveryQueries).toHaveLength(1);
-  expect(
-    (deliveryQueries[0] as { legs: Array<{ plan: { query: { limit?: number } } }> }).legs[0].plan
-      .query.limit,
-  ).toBeUndefined();
+  expect(result.exportPlan?.kind).toBe("metric_query");
+  expect(result.exportPlan?.legs[0].plan.query.limit).toBeUndefined();
 });
 
-test("派生结果不创建导出能力或资源", async () => {
-  let deliveries = 0;
-  const service = createQueryExecutionService({
-    cube: resultCube(2),
-    exports: {
-      createDelivery: async () => {
-        deliveries += 1;
-        throw new Error("派生结果不应创建导出");
-      },
-    },
-  });
+test("派生结果不提供直查导出计划", async () => {
+  const service = createQueryExecutionService({ cube: resultCube(2) });
   const result = await service.execute(
     planned(
       planExecution(
@@ -1005,8 +960,7 @@ test("派生结果不创建导出能力或资源", async () => {
     rows: [[null, 3]],
   });
   expect(result.payload.capabilities).toBeUndefined();
-  expect(result.exportResource).toBeUndefined();
-  expect(deliveries).toBe(0);
+  expect(result.exportPlan).toBeUndefined();
 });
 
 const monthlyRateView: CubeView = {
@@ -1065,7 +1019,6 @@ test("合计按各指标的求值基准标明实际覆盖期间，执行时使�
   };
   const service = createQueryExecutionService({
     cube: totalsCube(calls, (_query, measure) => values[measure]),
-    exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
   const result = await service.execute(
     planned(
@@ -1145,7 +1098,6 @@ test("带对照时每个指标逐期间给出合计", async () => {
     cube: totalsCube(calls, (query) =>
       Number(query.timeDimensions?.[0]?.dateRange?.[0]?.slice(0, 4) ?? 0),
     ),
-    exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
   const result = await service.execute(
     planned(
@@ -1179,7 +1131,6 @@ test("派生结果没有单一业务时间轴，因而没有整窗合计", async
   const calls: CubeQuery[] = [];
   const service = createQueryExecutionService({
     cube: totalsCube(calls, () => 7),
-    exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
   });
   const result = await service.execute(
     planned(
@@ -1272,7 +1223,6 @@ test("模型成员的 meta.decimals 随列进入载荷 column_decimals，且按�
   const run = (view: CubeView) =>
     createQueryExecutionService({
       cube: gateway(view),
-      exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
     }).execute(
       planned(
         planExecution(

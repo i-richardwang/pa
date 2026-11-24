@@ -21,6 +21,7 @@ test("公共 MCP 响应 schema 各层均为 strict，出现未声明字段时解
         kind: "measure",
         title: "在职人数",
         description: "月末在职人数。",
+        data_as_of: "2026-03",
         query_capabilities: { dimension_ids: [] },
         time: { value_basis: "bucket_end" },
       },

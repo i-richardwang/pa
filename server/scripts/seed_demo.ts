@@ -66,14 +66,7 @@ try {
     businessTerms: businessTermRegistry,
   });
   const planning = createSemanticPlanningService({ catalog });
-  const execution = createQueryExecutionService({
-    cube,
-    exports: {
-      createDelivery: async () => {
-        throw new Error("写入 Demo 数据时不创建导出");
-      },
-    },
-  });
+  const execution = createQueryExecutionService({ cube });
   const principal: Principal = {
     email: owner,
     roles: ["admin"],

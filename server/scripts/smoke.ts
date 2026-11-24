@@ -44,7 +44,7 @@ try {
   const expectedPopulationScopes = [
     "统计范围：公开虚构数据中的示例员工。",
     "统计范围：公开虚构数据中的Q12调研受邀员工。",
-    "统计范围：公开虚构数据中完成最近一期Q12答卷的员工。",
+    "统计范围：公开虚构数据中完成所选期次的Q12答卷的员工。",
   ];
   if (!expectedPopulationScopes.every((scope) => catalog.observation_scopes.includes(scope))) {
     throw new Error("catalog 没有返回模型里声明的统计范围");

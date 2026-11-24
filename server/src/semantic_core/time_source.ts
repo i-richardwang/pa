@@ -2,6 +2,12 @@
 export type TimeSourceRole = "actual" | "plan";
 export type TimeComparisonPolicy = "calendar" | "explicit_only";
 
+export type ObservationSource = {
+  id_member: string;
+  date_member: string;
+  title_member?: string;
+};
+
 export type TimeSourceDefinition = {
   id: string;
   title: string;
@@ -10,6 +16,7 @@ export type TimeSourceDefinition = {
   /** 计划时钟指向对应的实际时钟；实际时钟指向自身。 */
   reference_source: string;
   comparison_policy: TimeComparisonPolicy;
+  observation?: ObservationSource;
 };
 
 export type TimeSourceRegistry = {
@@ -50,6 +57,12 @@ export function buildTimeSourceRegistry(inputs: readonly TimeSourceInput[]): Tim
       throw new Error(
         `时间来源 ${definition.id} 引用了未登记的基准 ${definition.reference_source}`,
       );
+    }
+    if (
+      definition.observation &&
+      (definition.role !== "actual" || definition.comparison_policy !== "explicit_only")
+    ) {
+      throw new Error(`观测时间来源 ${definition.id} 的期次成员或时间合同无效`);
     }
     if (definition.role === "actual" && definition.reference_source !== definition.id) {
       throw new Error(`实际时间来源 ${definition.id} 必须引用自身`);

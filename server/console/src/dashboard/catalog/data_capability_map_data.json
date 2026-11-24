@@ -85,6 +85,19 @@
           "components": null
         },
         {
+          "name": "department_id",
+          "title": "部门编码",
+          "description": "虚构部门的稳定编码，用于区分不同部门。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
           "name": "department_name",
           "title": "部门",
           "description": "统计记录所属的部门。",
@@ -230,6 +243,19 @@
           "name": "organization_name",
           "title": "组织",
           "description": "员工在记录时点所属的事业部级组织。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "department_id",
+          "title": "部门编码",
+          "description": "虚构部门的稳定编码，用于区分不同部门。",
           "kind": "dimension",
           "member_type": "string",
           "internal": false,
@@ -528,6 +554,19 @@
           "name": "organization_name",
           "title": "组织",
           "description": "员工在记录时点所属的事业部级组织。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "department_id",
+          "title": "部门编码",
+          "description": "虚构部门的稳定编码，用于区分不同部门。",
           "kind": "dimension",
           "member_type": "string",
           "internal": false,
@@ -897,6 +936,19 @@
           "components": null
         },
         {
+          "name": "department_id",
+          "title": "部门编码",
+          "description": "虚构部门的稳定编码，用于区分不同部门。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
           "name": "department_name",
           "title": "部门",
           "description": "统计记录所属的部门。",
@@ -1122,7 +1174,7 @@
     {
       "name": "q12_survey_participation_fact",
       "title": "Q12调研投放",
-      "description": "公开演示数据中，每个月为最近一期Q12调研的每名受邀员工记一行，记录其投放与回复状态。",
+      "description": "公开演示数据中，按真实期次为Q12调研的每名受邀员工记一行，记录其投放与回复状态。",
       "kind": "fact",
       "members": [
         {
@@ -1233,6 +1285,19 @@
           "name": "organization_name",
           "title": "组织",
           "description": "员工在记录时点所属的事业部级组织。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "department_id",
+          "title": "部门编码",
+          "description": "虚构部门的稳定编码，用于区分不同部门。",
           "kind": "dimension",
           "member_type": "string",
           "internal": false,
@@ -1399,9 +1464,22 @@
           "components": null
         },
         {
+          "name": "wave_date",
+          "title": "调研日期",
+          "description": "Q12 调研期次的实际投放日期。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
           "name": "wave_id",
           "title": "调研期次编码",
-          "description": "最近一期Q12调研的期次编码。",
+          "description": "所选期次的Q12调研的期次编码。",
           "kind": "dimension",
           "member_type": "string",
           "internal": false,
@@ -1414,7 +1492,7 @@
         {
           "name": "wave_name",
           "title": "调研期次",
-          "description": "最近一期Q12调研的期次名称。",
+          "description": "所选期次的Q12调研的期次名称。",
           "kind": "dimension",
           "member_type": "string",
           "internal": false,
@@ -1427,7 +1505,7 @@
         {
           "name": "wave_month",
           "title": "调研月份",
-          "description": "最近一期Q12调研实际投放所在月份。",
+          "description": "所选期次的Q12调研实际投放所在月份。",
           "kind": "dimension",
           "member_type": "time",
           "internal": false,
@@ -1453,7 +1531,7 @@
         {
           "name": "q12_invited_count",
           "title": "Q12投放人数",
-          "description": "最近一期Q12调研中收到投放邀请的员工人数。",
+          "description": "所选期次的Q12调研中收到投放邀请的员工人数。",
           "kind": "measure",
           "member_type": "count",
           "internal": false,
@@ -1469,7 +1547,7 @@
         {
           "name": "q12_responded_count",
           "title": "Q12答卷人数",
-          "description": "最近一期Q12调研中完成答卷的员工人数。",
+          "description": "所选期次的Q12调研中完成答卷的员工人数。",
           "kind": "measure",
           "member_type": "count",
           "internal": false,
@@ -1488,7 +1566,7 @@
     {
       "name": "q12_survey_response_fact",
       "title": "Q12调研答卷",
-      "description": "公开演示数据中，每个月为最近一期Q12调研的每名答卷员工记一行，包含十二项虚构评分。",
+      "description": "公开演示数据中，按真实期次为Q12调研的每名答卷员工记一行，包含十二项虚构评分。",
       "kind": "fact",
       "members": [
         {
@@ -1599,6 +1677,19 @@
           "name": "organization_name",
           "title": "组织",
           "description": "员工在记录时点所属的事业部级组织。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "department_id",
+          "title": "部门编码",
+          "description": "虚构部门的稳定编码，用于区分不同部门。",
           "kind": "dimension",
           "member_type": "string",
           "internal": false,
@@ -1765,9 +1856,22 @@
           "components": null
         },
         {
+          "name": "wave_date",
+          "title": "调研日期",
+          "description": "Q12 调研期次的实际投放日期。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
           "name": "wave_id",
           "title": "调研期次编码",
-          "description": "最近一期Q12调研的期次编码。",
+          "description": "所选期次的Q12调研的期次编码。",
           "kind": "dimension",
           "member_type": "string",
           "internal": false,
@@ -1780,7 +1884,7 @@
         {
           "name": "wave_name",
           "title": "调研期次",
-          "description": "最近一期Q12调研的期次名称。",
+          "description": "所选期次的Q12调研的期次名称。",
           "kind": "dimension",
           "member_type": "string",
           "internal": false,
@@ -1793,7 +1897,7 @@
         {
           "name": "wave_month",
           "title": "调研月份",
-          "description": "最近一期Q12调研实际投放所在月份。",
+          "description": "所选期次的Q12调研实际投放所在月份。",
           "kind": "dimension",
           "member_type": "time",
           "internal": false,
@@ -1806,7 +1910,7 @@
         {
           "name": "q12_respondent_count",
           "title": "Q12有效答卷人数",
-          "description": "最近一期Q12调研中具有完整十二项评分的员工人数。",
+          "description": "所选期次的Q12调研中具有完整十二项评分的员工人数。",
           "kind": "measure",
           "member_type": "count",
           "internal": false,
@@ -1822,7 +1926,7 @@
         {
           "name": "q12_answered_item_count",
           "title": "Q12有效作答项数",
-          "description": "最近一期Q12调研中十二项有效评分的合计项数。",
+          "description": "所选期次的Q12调研中十二项有效评分的合计项数。",
           "kind": "measure",
           "member_type": "sum",
           "internal": false,
@@ -1838,7 +1942,7 @@
         {
           "name": "q12_favorable_item_count",
           "title": "Q12正向作答项数",
-          "description": "最近一期Q12调研中评分为四分或五分的作答项数。",
+          "description": "所选期次的Q12调研中评分为四分或五分的作答项数。",
           "kind": "measure",
           "member_type": "sum",
           "internal": false,
@@ -1854,7 +1958,7 @@
         {
           "name": "q12_strongly_agree_item_count",
           "title": "Q12强烈认同项数",
-          "description": "最近一期Q12调研中评分为五分的作答项数。",
+          "description": "所选期次的Q12调研中评分为五分的作答项数。",
           "kind": "measure",
           "member_type": "sum",
           "internal": false,
@@ -1870,7 +1974,7 @@
         {
           "name": "q12_average_score",
           "title": "Q12平均得分",
-          "description": "最近一期Q12调研十二项评分在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研十二项评分在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -1886,7 +1990,7 @@
         {
           "name": "q12_basic_needs_score",
           "title": "Q12基本需求得分",
-          "description": "最近一期Q12调研基本需求层题项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研基本需求层题项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -1902,7 +2006,7 @@
         {
           "name": "q12_individual_contribution_score",
           "title": "Q12个人贡献得分",
-          "description": "最近一期Q12调研个人贡献层题项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研个人贡献层题项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -1918,7 +2022,7 @@
         {
           "name": "q12_teamwork_score",
           "title": "Q12团队协作得分",
-          "description": "最近一期Q12调研团队协作层题项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研团队协作层题项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -1934,7 +2038,7 @@
         {
           "name": "q12_growth_score",
           "title": "Q12成长得分",
-          "description": "最近一期Q12调研成长层题项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研成长层题项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -1950,7 +2054,7 @@
         {
           "name": "q01_score",
           "title": "Q01工作期望清晰得分",
-          "description": "最近一期Q12调研中工作期望清晰项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研中工作期望清晰项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -1966,7 +2070,7 @@
         {
           "name": "q02_score",
           "title": "Q02工作资源支持得分",
-          "description": "最近一期Q12调研中工作资源支持项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研中工作资源支持项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -1982,7 +2086,7 @@
         {
           "name": "q03_score",
           "title": "Q03发挥优势机会得分",
-          "description": "最近一期Q12调研中发挥优势机会项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研中发挥优势机会项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -1998,7 +2102,7 @@
         {
           "name": "q04_score",
           "title": "Q04及时认可得分",
-          "description": "最近一期Q12调研中及时认可项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研中及时认可项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -2014,7 +2118,7 @@
         {
           "name": "q05_score",
           "title": "Q05人际关怀得分",
-          "description": "最近一期Q12调研中人际关怀项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研中人际关怀项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -2030,7 +2134,7 @@
         {
           "name": "q06_score",
           "title": "Q06成长支持得分",
-          "description": "最近一期Q12调研中成长支持项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研中成长支持项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -2046,7 +2150,7 @@
         {
           "name": "q07_score",
           "title": "Q07意见受到重视得分",
-          "description": "最近一期Q12调研中意见受到重视项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研中意见受到重视项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -2062,7 +2166,7 @@
         {
           "name": "q08_score",
           "title": "Q08工作意义得分",
-          "description": "最近一期Q12调研中工作意义项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研中工作意义项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -2078,7 +2182,7 @@
         {
           "name": "q09_score",
           "title": "Q09团队质量承诺得分",
-          "description": "最近一期Q12调研中团队质量承诺项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研中团队质量承诺项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -2094,7 +2198,7 @@
         {
           "name": "q10_score",
           "title": "Q10工作关系联结得分",
-          "description": "最近一期Q12调研中工作关系联结项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研中工作关系联结项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -2110,7 +2214,7 @@
         {
           "name": "q11_score",
           "title": "Q11进展反馈得分",
-          "description": "最近一期Q12调研中进展反馈项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研中进展反馈项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -2126,7 +2230,7 @@
         {
           "name": "q12_score",
           "title": "Q12学习与成长得分",
-          "description": "最近一期Q12调研中学习与成长项在一至五分量表上的平均值。",
+          "description": "所选期次的Q12调研中学习与成长项在一至五分量表上的平均值。",
           "kind": "measure",
           "member_type": "avg",
           "internal": false,
@@ -2256,6 +2360,19 @@
           "name": "organization_name",
           "title": "组织",
           "description": "员工在记录时点所属的事业部级组织。",
+          "kind": "dimension",
+          "member_type": "string",
+          "internal": false,
+          "role": null,
+          "metric_domain_id": null,
+          "time_contract": null,
+          "format": null,
+          "components": null
+        },
+        {
+          "name": "department_id",
+          "title": "部门编码",
+          "description": "虚构部门的稳定编码，用于区分不同部门。",
           "kind": "dimension",
           "member_type": "string",
           "internal": false,
@@ -2449,6 +2566,7 @@
       "members": [
         "legal_entity_name",
         "organization_name",
+        "department_id",
         "department_name"
       ],
       "bindings": [
@@ -2457,6 +2575,7 @@
           "members": [
             "legal_entity_name",
             "organization_name",
+            "department_id",
             "department_name"
           ]
         },
@@ -2465,6 +2584,7 @@
           "members": [
             "legal_entity_name",
             "organization_name",
+            "department_id",
             "department_name"
           ]
         },
@@ -2473,6 +2593,7 @@
           "members": [
             "legal_entity_name",
             "organization_name",
+            "department_id",
             "department_name"
           ]
         },
@@ -2481,6 +2602,7 @@
           "members": [
             "legal_entity_name",
             "organization_name",
+            "department_id",
             "department_name"
           ]
         },
@@ -2489,6 +2611,7 @@
           "members": [
             "legal_entity_name",
             "organization_name",
+            "department_id",
             "department_name"
           ]
         },
@@ -2497,6 +2620,7 @@
           "members": [
             "legal_entity_name",
             "organization_name",
+            "department_id",
             "department_name"
           ]
         },
@@ -2505,6 +2629,7 @@
           "members": [
             "legal_entity_name",
             "organization_name",
+            "department_id",
             "department_name"
           ]
         }
@@ -2702,8 +2827,9 @@
     {
       "name": "survey_wave",
       "title": "调研期次",
-      "description": "周期调研最近一期投放的期次编码、名称与实际月份。",
+      "description": "周期调研各次投放的编码、名称与实际日期。",
       "members": [
+        "wave_date",
         "wave_id",
         "wave_name",
         "wave_month"
@@ -2712,6 +2838,7 @@
         {
           "fact": "q12_survey_participation_fact",
           "members": [
+            "wave_date",
             "wave_id",
             "wave_name",
             "wave_month"
@@ -2720,6 +2847,7 @@
         {
           "fact": "q12_survey_response_fact",
           "members": [
+            "wave_date",
             "wave_id",
             "wave_name",
             "wave_month"
@@ -2754,6 +2882,7 @@
       "dimensions": [
         "legal_entity_name",
         "organization_name",
+        "department_id",
         "department_name",
         "work_location",
         "employment_type",
@@ -2817,6 +2946,7 @@
       "dimensions": [
         "legal_entity_name",
         "organization_name",
+        "department_id",
         "department_name",
         "work_location",
         "employment_type",
@@ -2868,6 +2998,7 @@
       "dimensions": [
         "legal_entity_name",
         "organization_name",
+        "department_id",
         "department_name"
       ],
       "bindings": [
@@ -2999,8 +3130,10 @@
         "wave_id",
         "wave_name",
         "wave_month",
+        "wave_date",
         "legal_entity_name",
         "organization_name",
+        "department_id",
         "department_name",
         "work_location",
         "employment_type",

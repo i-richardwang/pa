@@ -314,7 +314,9 @@ export const semanticPlanningStub = {
                 : {}),
           };
         }),
-        ...(semantic.derived ? [derivedStubView(semantic.derived, semantic)] : []),
+        ...("query" in semantic && semantic.derived
+          ? [derivedStubView(semantic.derived, semantic)]
+          : []),
       ],
     };
     const presentation = stubPresentation(declared, preferences);

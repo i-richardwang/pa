@@ -14,7 +14,7 @@ import {
   semanticPlanningStub,
 } from "../test_support/dashboard.js";
 import { planExecution } from "../semantic_core/execution_plan.js";
-import { semanticAnalysisOf } from "../test_support/report.js";
+import { semanticAnalysisOf, unexpectedExport } from "../test_support/report.js";
 import { REPLAY_PAYLOAD_SCHEMA } from "../contracts/replay_contract.js";
 import {
   REPORT_DETAIL_SCHEMA,
@@ -155,6 +155,7 @@ describe("dashboard report routes", () => {
     const reports = createReports(createTestAppDatabase(path));
     const usage = { log: async () => {} };
     const analyses = createAnalysisService({
+      createDelivery: unexpectedExport,
       repository,
       plan: semanticPlanningStub.plan,
       execute: async () => result,
@@ -278,6 +279,7 @@ describe("dashboard report routes", () => {
       },
     };
     const analyses = createAnalysisService({
+      createDelivery: unexpectedExport,
       repository,
       plan: semanticPlanning.plan,
       execute: async () => emptyChartResult,
@@ -403,6 +405,7 @@ describe("dashboard report routes", () => {
       },
     };
     const analyses = createAnalysisService({
+      createDelivery: unexpectedExport,
       repository,
       plan: semanticPlanningStub.plan,
       execute: async () => result,
@@ -478,6 +481,7 @@ describe("dashboard report routes", () => {
       reports,
       analyses: repository,
       execution: createAnalysisService({
+        createDelivery: unexpectedExport,
         repository,
         plan: semanticPlanningStub.plan,
         execute: async () => result,
@@ -610,6 +614,7 @@ describe("dashboard report routes", () => {
     const reports = createReports(createTestAppDatabase(path));
     const presentation = createPresentationService();
     const analyses = createAnalysisService({
+      createDelivery: unexpectedExport,
       repository,
       plan: semanticPlanningStub.plan,
       execute: async () => result,
@@ -658,6 +663,7 @@ describe("dashboard report routes", () => {
       viewId: analysis.view.id,
     });
     const analyses = createAnalysisService({
+      createDelivery: unexpectedExport,
       repository,
       plan: semanticPlanningStub.plan,
       execute: async () => {

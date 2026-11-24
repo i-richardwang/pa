@@ -87,7 +87,6 @@ const cube = {
 
 const service = createQueryExecutionService({
   cube,
-  exports: { createDelivery: async () => Promise.reject(new Error("不应导出")) },
 });
 
 /** 指标组合覆盖三种求值基准、按月定义的降级，以及拆腿路径。 */

@@ -9,7 +9,12 @@ import type {
 import type { CubeSecurityContext } from "../ports/cube_gateway.js";
 import { executeMetricQuery } from "./metric_executor.js";
 import { planMetricQuery } from "../test_support/planning.js";
-import { parseMetricQueryPlan, type MetricQueryPlan } from "./metric_planner.js";
+import { TEST_TIME_SOURCE_REGISTRY } from "../test_support/semantic_taxonomy.js";
+import {
+  measureDataAsOf,
+  METRIC_QUERY_PLAN_SCHEMA,
+  type MetricQueryPlan,
+} from "./metric_planner.js";
 
 const attrition = "employee_leave_metrics";
 const structure = "employee_snapshot_metrics";
@@ -374,14 +379,38 @@ describe("正式指标查询", () => {
       dimensions: [],
       measures: [active_employee_count],
       output_metric_ids: { [active_employee_count]: "measure:active_employee_count" },
-    };
-    expect(parseMetricQueryPlan(persisted)).toEqual(persisted as MetricQueryPlan);
+    } satisfies MetricQueryPlan;
+    expect(METRIC_QUERY_PLAN_SCHEMA.parse(persisted)).toEqual(persisted);
     const leg = persisted.legs[0];
     expect(() =>
-      parseMetricQueryPlan({
+      METRIC_QUERY_PLAN_SCHEMA.parse({
         ...persisted,
         legs: [{ ...leg, plan: { ...leg.plan, query: { ...leg.plan.query, unknown: true } } }],
       }),
-    ).toThrow(/持久化正式指标计划无效/);
+    ).toThrow();
   });
+});
+
+test("列的滚动截止月取其执行来源及正式指标依赖共同覆盖的月份", () => {
+  const distinctClocks = views.map((view) =>
+    view.name === structure
+      ? { ...view, meta: { ...view.meta, time_source: "headcount_plan" } }
+      : view,
+  );
+  const differentMonths = {
+    ...context,
+    sources: {
+      ...context.sources,
+      headcount_plan: { actualThrough: "2026-03", availableThrough: "2026-12" },
+    },
+  };
+  const months = measureDataAsOf(distinctClocks, differentMonths, TEST_TIME_SOURCE_REGISTRY);
+  expect(months.get("measure:turnover_count")).toBe("2026-07");
+  expect(months.get("measure:current_month_turnover_rate")).toBe("2026-03");
+  expect(months.get("measure:guarded_count")).toBe("2026-03");
+  expect(
+    measureDataAsOf(distinctClocks, context, TEST_TIME_SOURCE_REGISTRY).has(
+      "measure:guarded_count",
+    ),
+  ).toBe(false);
 });

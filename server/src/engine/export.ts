@@ -1,11 +1,22 @@
+import { z } from "zod";
 import type { CubeGateway, CubeSecurityContext } from "../ports/cube_gateway.js";
 import { memberDisplayTitle } from "./member_presentation.js";
 import { executeBoundedMetricQuery } from "./metric_executor.js";
-import { metricOutputMembers, type MetricQueryPlan } from "./metric_planner.js";
+import {
+  METRIC_QUERY_PLAN_SCHEMA,
+  metricOutputMembers,
+  type MetricQueryPlan,
+} from "./metric_planner.js";
 import { applyValueOrder } from "./value_order.js";
 
 /** Cube REST /v1/load 的默认行上限即 50000，导出档位顶格使用 */
 export const EXPORT_MAX_ROWS = 50000;
+
+export const EXPORT_PLAN_SCHEMA = z.union([
+  METRIC_QUERY_PLAN_SCHEMA,
+  z.object({ kind: z.literal("analysis_view"), view_id: z.string().uuid() }).strict(),
+]);
+export type ExportPlan = z.infer<typeof EXPORT_PLAN_SCHEMA>;
 
 export type MaterializedExport = {
   csv: string;

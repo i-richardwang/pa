@@ -19,7 +19,13 @@ import type {
 } from "@contracts/catalog_contract";
 import type { ReplayPayload } from "@contracts/replay_contract";
 import { LoadingMark } from "pa-result-view";
-import type { SemanticPercentOfTotalCalculation, SemanticQueryView } from "@semantic-analysis";
+import type {
+  AnalysisDefinition,
+  SemanticPercentOfTotalCalculation,
+  SemanticQueryView,
+} from "@semantic-analysis";
+import { COMPOSITION_COLUMN_LIMITS } from "@semantic-analysis";
+import type { TimeIntent } from "@time";
 import { makeTitleOf } from "@shape";
 import { queryCandidateFeasibilityIssue, queryFeasibilityIssueMessage } from "@query-feasibility";
 import { Button } from "@/components/ui/button";
@@ -53,6 +59,7 @@ import {
   setSemanticQueryView,
   type AnalysisEditState,
 } from "./analysis_draft";
+import { TimeBar } from "./time_editor";
 import { FilterEditor } from "./filter_editor";
 import { MemberPopover, type PickableMember } from "./member_picker";
 
@@ -507,6 +514,265 @@ function BreakdownField({
   );
 }
 
+type Composition = Extract<AnalysisDefinition, { composition: unknown }>["composition"];
+
+function columnTimeFromWindow(
+  window: TimeIntent["window"],
+): Composition["columns"][number]["time"] {
+  if (window.kind === "observation") {
+    return window.selection.kind === "trend"
+      ? { window: { kind: "current_month" } }
+      : { window: { kind: "observation", selection: window.selection } };
+  }
+  if (window.kind === "current_month") return { window };
+  const { grain: _grain, ...period } = window;
+  return { window: period };
+}
+
+function compositionDraft(draft: AnalysisEditState, composition: Composition): AnalysisEditState {
+  return {
+    ...draft,
+    analysis: { title: draft.analysis.title, composition },
+    view: { type: "table" },
+    view_preferences: draft.view.type === "table" ? draft.view_preferences : {},
+    previewed_analysis: null,
+    previewed_view: null,
+    previewed_view_preferences: null,
+  };
+}
+
+const ALL_COLUMN_ENTITIES = "*";
+
+function CompositionQueryRail({
+  catalog,
+  composition,
+  draft,
+  onChange,
+  onRunPreview,
+  previewing,
+  leading,
+  children,
+}: {
+  catalog: CatalogPayload;
+  composition: Composition;
+  draft: AnalysisEditState;
+  onChange: (draft: AnalysisEditState) => void;
+  onRunPreview: () => void;
+  previewing: boolean;
+  leading?: ReactNode;
+  children?: ReactNode;
+}) {
+  const groupChoices = catalog.dimensions.filter((dimension) => dimension.entity_label);
+  const group = groupChoices.find(({ id }) => id === composition.group_by);
+  const memberOf = (id: string) => catalog.measures.find((measure) => measure.id === id);
+  const supportsGroup = (id: string) =>
+    memberOf(id)?.query_capabilities.dimension_ids.includes(composition.group_by);
+  const columns = composition.columns;
+  const baseline = columns.find(({ id }) => id === composition.baseline);
+  const filters = composition.filters ?? [];
+  const runIssue = analysisReadiness(draft, catalog).issues[0];
+  const change = (next: Partial<Composition>) =>
+    onChange(compositionDraft(draft, { ...composition, ...next }));
+  const columnTitle = (column: Composition["columns"][number]) =>
+    column.title ?? memberOf(column.measure)?.title ?? column.measure;
+  const setColumn = (id: string, update: Partial<Composition["columns"][number]>) =>
+    change({
+      columns: columns.map((column) => (column.id === id ? { ...column, ...update } : column)),
+    });
+  const addColumn = (measure: string) => {
+    const used = new Set(columns.map(({ id }) => id));
+    let number = columns.length + 1;
+    while (used.has(`column_${number}`)) number++;
+    change({
+      columns: [
+        ...columns,
+        {
+          id: `column_${number}`,
+          measure,
+          time: { window: { kind: "current_month" } },
+        },
+      ],
+    });
+  };
+
+  return (
+    <div className="flex h-full min-h-0 flex-col" data-slot="report-query-rail">
+      <InspectorBody>
+        {leading}
+        <InspectorSection icon={<TagIcon />} title="组合表行">
+          <InspectorRow label="实体维度">
+            <MemberPopover
+              members={groupChoices}
+              selected={[composition.group_by]}
+              onPick={(member) => change({ group_by: member.id, baseline: undefined })}
+              trigger={
+                <Button aria-label="选择实体维度" variant="subtle">
+                  {group?.title ?? "选择实体维度"}
+                </Button>
+              }
+            />
+          </InspectorRow>
+          <Select
+            value={composition.baseline ?? ALL_COLUMN_ENTITIES}
+            onValueChange={(id) => {
+              if (id !== null) change({ baseline: id === ALL_COLUMN_ENTITIES ? undefined : id });
+            }}
+          >
+            <InspectorRow label="行基准">
+              <SelectTrigger aria-label="选择行基准" size="sm">
+                <SelectValue>{baseline ? columnTitle(baseline) : "各列实体并集"}</SelectValue>
+              </SelectTrigger>
+            </InspectorRow>
+            <SelectPopup>
+              <SelectItem value={ALL_COLUMN_ENTITIES}>各列实体并集</SelectItem>
+              {columns.map((column, index) =>
+                supportsGroup(column.measure) ? (
+                  <SelectItem key={column.id} value={column.id}>
+                    {`第 ${index + 1} 列 · ${columnTitle(column)}`}
+                  </SelectItem>
+                ) : null,
+              )}
+            </SelectPopup>
+          </Select>
+        </InspectorSection>
+        <InspectorSection
+          icon={<ListFilterIcon />}
+          title="共享筛选"
+          actions={
+            <MemberPopover
+              members={catalog.dimensions}
+              selected={filters.map(({ member }) => member)}
+              onPick={(member) => {
+                if (!filters.some((filter) => filter.member === member.id)) {
+                  change({
+                    filters: [...filters, { member: member.id, relation: "one_of", values: [] }],
+                  });
+                }
+              }}
+              trigger={addButton("添加组合表筛选")}
+            />
+          }
+        >
+          {filters.length > 0 && (
+            <FilterEditor
+              catalogDimensions={catalog.dimensions}
+              filters={filters}
+              onChange={(next) => change({ filters: next.length ? next : undefined })}
+            />
+          )}
+        </InspectorSection>
+        <InspectorSection
+          icon={<SigmaIcon />}
+          title="指标列"
+          actions={
+            columns.length < COMPOSITION_COLUMN_LIMITS.max && (
+              <MemberPopover
+                members={catalog.measures}
+                metricDomains={catalog.metric_domains}
+                onPick={(member) => addColumn(member.id)}
+                trigger={addButton("添加指标列")}
+              />
+            )
+          }
+        >
+          {columns.map((column, index) => {
+            const measure = memberOf(column.measure);
+            const title = columnTitle(column);
+            return (
+              <div key={column.id}>
+                <InspectorRow
+                  label={`第 ${index + 1} 列`}
+                  blocked={supportsGroup(column.measure) ? undefined : "此指标不支持所选实体粒度"}
+                  actions={
+                    <RowAction
+                      label={`移除第 ${index + 1} 列 ${title}`}
+                      tip="移除此列"
+                      icon={<MinusIcon />}
+                      onClick={() =>
+                        change({
+                          columns: columns.filter(({ id }) => id !== column.id),
+                          baseline:
+                            composition.baseline === column.id ? undefined : composition.baseline,
+                        })
+                      }
+                    />
+                  }
+                >
+                  <MemberPopover
+                    members={catalog.measures}
+                    metricDomains={catalog.metric_domains}
+                    selected={[column.measure]}
+                    onPick={(member) => {
+                      const supportsObservation = memberOf(member.id)?.time.constraints
+                        ?.observation;
+                      setColumn(column.id, {
+                        measure: member.id,
+                        title: undefined,
+                        ...(column.time.window.kind === "observation" && !supportsObservation
+                          ? { time: { window: { kind: "current_month" } } }
+                          : {}),
+                      });
+                    }}
+                    trigger={
+                      <Button
+                        aria-label={`选择第 ${index + 1} 列指标`}
+                        className="max-w-36 truncate"
+                        variant="subtle"
+                      >
+                        {title}
+                      </Button>
+                    }
+                  />
+                </InspectorRow>
+                <InspectorRow label="观察期间" indent>
+                  <TimeBar
+                    capabilities={measure?.time.constraints}
+                    dataAsOf={measure?.data_as_of}
+                    singleColumn
+                    time={column.time}
+                    onChange={(time) => setColumn(column.id, { time })}
+                  />
+                </InspectorRow>
+              </div>
+            );
+          })}
+        </InspectorSection>
+        {children}
+      </InspectorBody>
+      <PreviewAction
+        issue={runIssue?.message}
+        onRunPreview={onRunPreview}
+        previewing={previewing}
+      />
+    </div>
+  );
+}
+
+function PreviewAction({
+  issue,
+  onRunPreview,
+  previewing,
+}: {
+  issue?: string;
+  onRunPreview: () => void;
+  previewing: boolean;
+}) {
+  return (
+    <div className="shrink-0 border-t border-pa-line bg-pa-bg px-3 py-3 md:px-2.5">
+      <Button
+        className="w-full"
+        disabled={Boolean(issue)}
+        loading={previewing}
+        onClick={onRunPreview}
+        variant="filled"
+      >
+        运行预览
+      </Button>
+      {issue ? <Hint className="mt-2 text-center">{issue}</Hint> : null}
+    </div>
+  );
+}
+
 export function ReportQueryRail({
   draft,
   replay,
@@ -531,6 +797,21 @@ export function ReportQueryRail({
   const resultTitleOf = replay ? makeTitleOf(replay.payload.view) : (member: string) => member;
   const queryView = semanticEditableQuery(draft.analysis);
 
+  if (catalog && "composition" in draft.analysis) {
+    return (
+      <CompositionQueryRail
+        catalog={catalog}
+        composition={draft.analysis.composition}
+        draft={draft}
+        leading={leading}
+        onChange={onChange}
+        onRunPreview={onRunPreview}
+        previewing={previewing}
+      >
+        {children}
+      </CompositionQueryRail>
+    );
+  }
   if (!queryView || !catalog) {
     return (
       <div className="flex h-full min-h-0 flex-col" data-slot="report-query-rail">
@@ -550,6 +831,22 @@ export function ReportQueryRail({
   }
 
   const intent = queryView;
+  const entityDimensions = catalog.dimensions.filter(({ entity_label }) => entity_label);
+  const defaultGroup =
+    entityDimensions.find(({ id }) => intent.dimensions?.includes(id)) ?? entityDimensions[0];
+  function startComposition() {
+    if (!defaultGroup) return;
+    const time = columnTimeFromWindow(intent.time.window);
+    onChange(
+      compositionDraft(draft, {
+        group_by: defaultGroup.id,
+        filters: intent.filters,
+        columns: (intent.measures ?? [])
+          .slice(0, COMPOSITION_COLUMN_LIMITS.max)
+          .map((measure, i) => ({ id: `column_${i + 1}`, measure, time })),
+      }),
+    );
+  }
   const measures = intent.measures ?? [];
   const dimensions = intent.dimensions ?? [];
   const calculations = intent.calculations ?? [];
@@ -621,6 +918,13 @@ export function ReportQueryRail({
     <div className="flex h-full min-h-0 flex-col" data-slot="report-query-rail">
       <InspectorBody>
         {leading}
+        {defaultGroup && (
+          <InspectorRow label="分析方式">
+            <Button onClick={startComposition} variant="subtle">
+              改为跨期组合表
+            </Button>
+          </InspectorRow>
+        )}
         <InspectorSection
           actions={
             <MemberPopover
@@ -773,18 +1077,11 @@ export function ReportQueryRail({
         {children}
       </InspectorBody>
 
-      <div className="shrink-0 border-t border-pa-line bg-pa-bg px-3 py-3 md:px-2.5">
-        <Button
-          className="w-full"
-          disabled={Boolean(runIssue)}
-          loading={previewing}
-          onClick={onRunPreview}
-          variant="filled"
-        >
-          运行预览
-        </Button>
-        {runIssue ? <Hint className="mt-2 text-center">{runIssue.message}</Hint> : null}
-      </div>
+      <PreviewAction
+        issue={runIssue?.message}
+        onRunPreview={onRunPreview}
+        previewing={previewing}
+      />
     </div>
   );
 }

@@ -61,9 +61,10 @@ class DemoDataTest(unittest.TestCase):
                     "workforce_month_exposure_fact.parquet",
                 },
             )
-            for metadata in first["files"].values():
+            for file_name, metadata in first["files"].items():
                 self.assertGreater(metadata["rows"], 0)
-                self.assertEqual(metadata["period_to"], "2026-07-01")
+                expected_end = "2026-03-01" if file_name.startswith("q12_survey_") else "2026-07-01"
+                self.assertEqual(metadata["period_to"], expected_end)
                 self.assertRegex(metadata["sha256"], r"^[0-9a-f]{64}$")
 
     def test_workforce_lifecycle_and_monthly_balances_are_consistent(self) -> None:
@@ -212,7 +213,7 @@ class DemoDataTest(unittest.TestCase):
                     """,
                     [survey_participation],
                 ).fetchone()
-                self.assertEqual(survey_coverage[0], 60)
+                self.assertEqual(survey_coverage[0], survey_coverage[1])
                 self.assertGreaterEqual(survey_coverage[1], 9)
                 self.assertLessEqual(survey_coverage[1], 11)
                 self.assertLessEqual(survey_coverage[2], date(2021, 8, 1))
@@ -272,7 +273,7 @@ class DemoDataTest(unittest.TestCase):
                     """
                     WITH invited AS (
                       SELECT wave_month, count(*) AS invited
-                      FROM read_parquet(?) WHERE period_month = wave_month GROUP BY ALL
+                      FROM read_parquet(?) GROUP BY ALL
                     ), active AS (
                       SELECT period_month AS wave_month, count(*) AS active
                       FROM read_parquet(?) GROUP BY ALL

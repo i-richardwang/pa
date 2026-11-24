@@ -221,3 +221,7 @@ export function semanticAnalysisOf(
   })();
   return { analysis: definition, view };
 }
+
+export async function unexpectedExport(): Promise<never> {
+  throw new Error("此分析不应签发导出票据");
+}

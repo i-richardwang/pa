@@ -269,7 +269,7 @@ const rateSpec: AnalysisViewFixture = {
   ...spec,
   analysis: {
     query: {
-      ...spec.analysis.query,
+      ...("query" in spec.analysis ? spec.analysis.query : { time: currentMonth("2026-07") }),
       measures: ["measure:ytd_event_rate"],
     },
   },
@@ -424,7 +424,10 @@ test("记录投影按当前身份重编译，保留格子坐标并在 Cube 内�
     currentMonth("2026-06"),
   );
   expect(boardResult.rows).toHaveLength(1);
-  expect(compiledDefinitions.at(-1)?.query.time).toEqual(currentMonth("2026-06"));
+  const compiledDefinition = compiledDefinitions.at(-1);
+  expect(
+    compiledDefinition && "query" in compiledDefinition && compiledDefinition.query.time,
+  ).toEqual(currentMonth("2026-06"));
   expect(seen.at(-1)?.timeDimensions?.[0].dateRange).toEqual(["2026-06-01", "2026-06-30"]);
   expect(audit.at(-1)).toEqual(
     expect.objectContaining({

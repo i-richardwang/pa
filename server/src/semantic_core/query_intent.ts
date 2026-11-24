@@ -8,7 +8,7 @@
 import type { CompilerCatalog, CompilerCatalogMember } from "./compiler_catalog.js";
 import type { QueryViewSpec } from "./analysis_spec.js";
 import { completeHierarchyDimensions } from "./hierarchy_completion.js";
-import type { SemanticQueryView } from "./semantic_analysis.js";
+import { AnalysisDefinitionError, type PlannableQuery } from "./semantic_analysis.js";
 import { compileTimeIntent } from "./time_contract.js";
 import {
   queryFeasibilityIssue,
@@ -40,7 +40,7 @@ export type IncompatibleQueryResolution = {
 export type QueryIntentPlan = QueryIntentResolution | IncompatibleQueryResolution;
 
 export function bindSemanticFilter(
-  filter: NonNullable<SemanticQueryView["filters"]>[number],
+  filter: NonNullable<PlannableQuery["filters"]>[number],
   member: string,
 ): NonNullable<QueryViewSpec["filters"]>[number] {
   return {
@@ -102,7 +102,7 @@ function membersOf(
 function effectiveGroupDimensions(
   catalog: CompilerCatalog,
   grouped: CompilerCatalogMember[],
-  filters: SemanticQueryView["filters"],
+  filters: PlannableQuery["filters"],
   view: string,
 ): CompilerCatalogMember[] {
   const chains = catalog.views.find((candidate) => candidate.name === view)?.hierarchies ?? [];
@@ -124,7 +124,7 @@ function effectiveGroupDimensions(
 
 function dimensionMembers(
   catalog: CompilerCatalog,
-  intent: SemanticQueryView,
+  intent: PlannableQuery,
 ): CompilerCatalogMember[] {
   const ids = [
     ...(intent.dimensions ?? []),
@@ -144,8 +144,9 @@ function supports(member: CompilerCatalogMember, view: string): boolean {
  */
 export function planQueryIntent(
   catalog: CompilerCatalog,
-  intent: SemanticQueryView,
+  intent: PlannableQuery,
   viewId: string,
+  options: { stableGrouping?: true } = {},
 ): QueryIntentPlan {
   const feasibilityIssue = queryFeasibilityIssue(catalog, intent);
   if (feasibilityIssue) return { status: "incompatible", issue: feasibilityIssue };
@@ -173,18 +174,30 @@ export function planQueryIntent(
     };
   }
 
+  const bindings = ownerViews.length ? ownerViews : [anchorView];
+  if (intent.time.window.kind === "observation") {
+    const clocks = bindings.map((name) => {
+      const view = catalog.views.find((view) => view.name === name);
+      return view?.observation && view.time_source;
+    });
+    if (clocks.some((clock) => !clock)) {
+      throw new AnalysisDefinitionError("期次窗口只适用于声明了原生观测期次的指标");
+    }
+    if (new Set(clocks).size > 1) {
+      throw new AnalysisDefinitionError("不同调研来源请在组合表中为各列分别选择期次");
+    }
+  }
+
   const bindDimension = (member: CompilerCatalogMember) => bindMember(member, anchorView);
   const bind = (reference: string, kind: MemberKind) => {
     const member = catalogMember(catalog, reference, kind);
     if (!member) throw new Error(`catalog 中不存在成员 ${reference}`);
     return member.kind === "measure" ? measureOwner(member).member : bindDimension(member);
   };
-  const groupDimensions = effectiveGroupDimensions(
-    catalog,
-    membersOf(catalog, intent.dimensions ?? [], "dimension"),
-    intent.filters,
-    anchorView,
-  );
+  const declaredGroup = membersOf(catalog, intent.dimensions ?? [], "dimension");
+  const groupDimensions = options.stableGrouping
+    ? declaredGroup
+    : effectiveGroupDimensions(catalog, declaredGroup, intent.filters, anchorView);
   const selectionDimensions = intent.group_sort?.max_items
     ? effectiveGroupDimensions(
         catalog,
@@ -215,6 +228,7 @@ export function planQueryIntent(
       id: viewId,
       ...(intent.view_title ? { view_title: intent.view_title } : {}),
       time_view: anchorView,
+      ...(options.stableGrouping ? { stable_grouping: true as const } : {}),
       time: compileTimeIntent(intent.time),
       grouping_sets: {
         base: membersOf(catalog, intent.dimensions ?? [], "dimension").map((dimension) => ({

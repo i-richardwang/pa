@@ -100,6 +100,23 @@ describe("导出短票据", () => {
     expect(await store.resolve(ticket.id)).toBeNull();
   });
 
+  test("重放票据只接受有效的视图引用", async () => {
+    const { store, db } = fixture();
+    const plan = { kind: "analysis_view" as const, view_id: crypto.randomUUID() };
+    const { id } = await store.create(plan, "owner");
+    expect(await store.resolve(id)).toEqual({ plan, caller: "owner" });
+    for (const invalid of [
+      { ...plan, view_id: "" },
+      { ...plan, unexpected: true },
+    ]) {
+      db.prepare("UPDATE export_ticket SET query = ? WHERE id = ?").run(
+        JSON.stringify(invalid),
+        id,
+      );
+      expect(await store.resolve(id)).toBeNull();
+    }
+  });
+
   test("持久化的查询是合法 JSON 但结构不完整时解析返回空", async () => {
     const { store, db } = fixture();
     const ticket = await store.create(

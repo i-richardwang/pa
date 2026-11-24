@@ -44,6 +44,12 @@ cubes:
         sql: organization_name
         type: string
         meta: { dimension_group: organization }
+      - name: department_id
+        title: 部门编码
+        description: 虚构部门的稳定编码，用于区分不同部门。
+        sql: department_id
+        type: string
+        meta: { dimension_group: organization, entity_label: department_name }
       - name: department_name
         title: 部门
         description: 统计记录所属的部门。

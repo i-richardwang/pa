@@ -1,5 +1,6 @@
 /** 正式指标 Planner：把逻辑指标查询编译为数量最少的单事实 Cube 子查询。 */
 import type { TopNSelectionSpec } from "../semantic_core/analysis_spec.js";
+import type { TimeSourceRegistry } from "../semantic_core/time_source.js";
 import type { TimeInput } from "../semantic_core/time_contract.js";
 import { z } from "zod";
 import type {
@@ -10,13 +11,14 @@ import type {
   TimeContext,
 } from "../ports/cube_gateway.js";
 import { metricNodeOf, type MetricNode } from "./metric_model.js";
-import { memberSemanticId } from "./model_contract.js";
+import { memberSemanticId, resultGuards } from "./model_contract.js";
 import { memberShortName } from "../semantic_core/member_name.js";
 import {
   BUSINESS_TIME_SCHEMA,
   PLANNED_QUERY_LEG_SCHEMA,
   planResolvedTimeQuery,
   resolveTimePlanning,
+  queryTimeBounds,
   timeEmissionForForm,
   type BusinessTimeResolution,
   type PlannedQuery,
@@ -85,7 +87,7 @@ const EXECUTABLE_NODE_SCHEMA = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
-const METRIC_QUERY_PLAN_SCHEMA: z.ZodType<MetricQueryPlan> = z
+export const METRIC_QUERY_PLAN_SCHEMA: z.ZodType<MetricQueryPlan> = z
   .object({
     kind: z.literal("metric_query"),
     business_time: BUSINESS_TIME_SCHEMA,
@@ -133,25 +135,18 @@ const METRIC_QUERY_PLAN_SCHEMA: z.ZodType<MetricQueryPlan> = z
   })
   .strict();
 
-export function parseMetricQueryPlan(value: unknown): MetricQueryPlan {
-  const parsed = METRIC_QUERY_PLAN_SCHEMA.safeParse(value);
-  if (!parsed.success) {
-    throw new Error(
-      `持久化正式指标计划无效：${parsed.error.issues.map((issue) => issue.message).join("；")}`,
-    );
-  }
-  return parsed.data;
-}
-
 type MetricIndex = {
   byId: Map<string, CubeMember>;
+  publicByName: Map<string, CubeMember>;
 };
 
 const isDetail = (view: CubeView) => view.meta?.query_surface === "detail";
 
 function metricIndex(views: CubeView[]): MetricIndex {
   const byId = new Map<string, CubeMember>();
+  const publicByName = new Map<string, CubeMember>();
   for (const view of views.filter((candidate) => !isDetail(candidate))) {
+    for (const member of view.measures) publicByName.set(member.name, member);
     for (const member of [...view.measures, ...(view.internalMeasures ?? [])]) {
       const id = memberSemanticId("measure", member);
       if (byId.has(id)) {
@@ -160,7 +155,7 @@ function metricIndex(views: CubeView[]): MetricIndex {
       byId.set(id, member);
     }
   }
-  return { byId };
+  return { byId, publicByName };
 }
 
 function mapDimension(source: CubeView, member: string): string {
@@ -263,15 +258,49 @@ export function resolveMetricQueryPlanning(
   views: CubeView[],
   timeView?: string,
 ): ResolvedTimePlanning {
-  const { requested, leaves } = metricQueryParts(query, views);
-  const synthetic: CubeQuery = {
+  return resolveTimePlanning(
+    metricClockQuery(query, metricIndex(views)),
+    time,
+    context,
+    views,
+    timeView,
+  );
+}
+
+function metricClockQuery(query: CubeQuery, index: MetricIndex): CubeQuery {
+  const { requested, leaves } = metricQueryParts(query, index);
+  return {
     ...query,
     measures: [...new Set([...leaves.map((leaf) => leaf.member), ...requested])],
     order: undefined,
     limit: undefined,
     offset: undefined,
   };
-  return resolveTimePlanning(synthetic, time, context, views, timeView);
+}
+
+/** 观测指标按投放源选期，日历指标按依赖图中各来源共同覆盖的月份选期。 */
+export function measureDataAsOf(
+  views: CubeView[],
+  context: TimeContext,
+  sources: TimeSourceRegistry,
+): Map<string, string> {
+  const index = metricIndex(views);
+  const months = new Map<string, string>();
+  for (const view of views.filter((candidate) => !isDetail(candidate))) {
+    const source = view.meta?.time_source;
+    const observation = typeof source === "string" && sources.by_id.get(source)?.observation;
+    for (const member of view.measures) {
+      const query = { measures: [member.name] };
+      const bounds = queryTimeBounds(
+        observation ? query : metricClockQuery(query, index),
+        context,
+        views,
+      );
+      if (bounds.defaultThrough)
+        months.set(memberSemanticId("measure", member), bounds.defaultThrough);
+    }
+  }
+  return months;
 }
 
 type MetricQueryParts = {
@@ -282,17 +311,13 @@ type MetricQueryParts = {
   leaves: ReturnType<typeof physicalLeaves>;
 };
 
-function metricQueryParts(query: CubeQuery, views: CubeView[]): MetricQueryParts {
+function metricQueryParts(query: CubeQuery, index: MetricIndex): MetricQueryParts {
   const requested = query.measures ?? [];
-  const index = metricIndex(views);
   const outputMetricIds = new Map<string, string>();
   const nodes = new Map<string, ExecutableMetricNode>();
   const resultGuards: PlannedResultGuard[] = [];
   for (const memberName of requested) {
-    const member = views
-      .filter((view) => !isDetail(view))
-      .flatMap((view) => view.measures)
-      .find((candidate) => candidate.name === memberName);
+    const member = index.publicByName.get(memberName);
     if (!member) throw new Error(`指标 ${memberName} 不在当前身份可见目录中`);
     const id = memberSemanticId("measure", member);
     outputMetricIds.set(memberName, id);
@@ -314,7 +339,7 @@ export function planMetricQueryWithPlanning(
 ): MetricQueryPlan {
   const { requested, outputMetricIds, nodes, resultGuards, leaves } = metricQueryParts(
     query,
-    views,
+    metricIndex(views),
   );
   const outputTimeView = timeView ?? requested[0]?.split(".")[0] ?? planning.view;
   const groups = new Map<string, { source: CubeView; form: TimeEvalForm; leaves: typeof leaves }>();
@@ -353,6 +378,27 @@ export function planMetricQueryWithPlanning(
       measures: Object.fromEntries(groupLeaves.map((leaf) => [leaf.member, leaf.metricId])),
     };
   });
+  if (!requested.length && dimensions.length) {
+    const source = views.find((view) => view.name === outputTimeView);
+    if (!source) throw new Error("分类维度查询缺少执行来源");
+    const dimensionPairs = dimensions.map(
+      (target) => [mapDimension(source, target), target] as const,
+    );
+    legs.push({
+      source_view: source.name,
+      plan: planResolvedTimeQuery(
+        {
+          dimensions: dimensionPairs.map(([member]) => member),
+          ...(query.filters?.length
+            ? { filters: query.filters.map((filter) => mapFilter(source, filter)) }
+            : {}),
+        },
+        planningForSource(planning, source.name),
+      ),
+      dimensions: Object.fromEntries(dimensionPairs),
+      measures: {},
+    });
+  }
   return {
     kind: "metric_query",
     business_time: planning.businessTime,
@@ -374,41 +420,14 @@ function resultGuardsOf(
   index: MetricIndex,
   nodes: Map<string, ExecutableMetricNode>,
 ): PlannedResultGuard[] {
-  const raw = member.meta?.result_guards;
-  if (raw === undefined) return [];
-  if (!Array.isArray(raw) || !raw.length) {
-    throw new Error(`指标「${member.title ?? member.name}」的 result_guards 必须是非空数组`);
-  }
-  return raw.map((candidate) => {
-    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
-      throw new Error(`指标「${member.title ?? member.name}」的结果保护规则无效`);
-    }
-    const guard = candidate as Record<string, unknown>;
-    if (guard.kind !== "minimum_support") {
-      throw new Error(`指标「${member.title ?? member.name}」声明了未知结果保护类型`);
-    }
-    if (typeof guard.support_measure !== "string" || !guard.support_measure) {
-      throw new Error(`指标「${member.title ?? member.name}」的支撑指标必须显式声明`);
-    }
-    const threshold = Number(guard.threshold);
-    if (!Number.isInteger(threshold) || threshold <= 0) {
-      throw new Error(`指标「${member.title ?? member.name}」的最小支撑量必须是正整数`);
-    }
-    const supportId = guard.support_measure.startsWith("measure:")
-      ? guard.support_measure
-      : `measure:${memberShortName(guard.support_measure)}`;
-    if (!index.byId.has(supportId)) {
+  return resultGuards(member).map((guard) => {
+    if (!index.byId.has(guard.support_measure)) {
       throw new Error(
-        `指标「${member.title ?? member.name}」的支撑指标 ${supportId} 不在当前身份可见目录中`,
+        `指标「${member.title ?? member.name}」的支撑指标 ${guard.support_measure} 不在当前身份可见目录中`,
       );
     }
-    expandMetricGraph(supportId, index, nodes, new Set());
-    return {
-      kind: "minimum_support",
-      measure: member.name,
-      support_measure: supportId,
-      threshold,
-    };
+    expandMetricGraph(guard.support_measure, index, nodes, new Set());
+    return { ...guard, measure: member.name };
   });
 }
 

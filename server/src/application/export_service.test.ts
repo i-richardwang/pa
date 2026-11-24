@@ -146,6 +146,9 @@ function exportServiceFixture(input: {
   const audits: unknown[] = [];
   let executions = 0;
   const service = createExportService({
+    runReplayExport: async () => {
+      throw new Error("此票据应执行指标计划");
+    },
     analyses: {
       resolveOwnedView: async () => {
         throw new Error("测试不创建分析导出");

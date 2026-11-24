@@ -12,19 +12,22 @@ import { METRIC_TIME_INPUT } from "../semantic_core/time_contract.js";
 import { BUSINESS_TERM_RESOLUTION_SCHEMA } from "../contracts/business_term_contract.js";
 import { EXPORT_TICKET_TTL_MINUTES } from "../contracts/export_contract.js";
 import { ACCESS_SCOPE_DEFINITION_SCHEMA } from "../contracts/access_scope.js";
-import { MEASURE_QUERY_CAPABILITIES_SCHEMA } from "../contracts/catalog_contract.js";
+import {
+  MEASURE_QUERY_CAPABILITIES_SCHEMA,
+  MEASURE_DATA_AS_OF_SCHEMA,
+} from "../contracts/catalog_contract.js";
 
 export const SERVER_INSTRUCTIONS =
-  "PA 只接受预定义查询，结果按权限过滤。成员只用 catalog 的语义 id，遵守 query_capabilities、time.constraints 与 report_calculations；先用 catalog(terms) 解析术语，值不确定时用 values_of。" +
-  "术语只用于理解，不改写查询；有歧义先确认。查询只声明指标、维度和 time，不用标题、物理字段或 SQL，不擅自加范围或对比。" +
-  "明细记录只用于单结果格、单时间桶且 records_available 的分析，逐人数据只在 PA 记录卡展示。";
+  "用 catalog(terms) 取可见语义 id，遵守 query_capabilities、time.constraints 和 report_calculations。取值用 values_of，术语有歧义先确认。按要求选范围和对比，只用正式指标，不开放 SQL。" +
+  "同期间用 query，逐列选期用 composition。用 time.constraints.observation 指向的维度查期次编码。" +
+  "明细限单结果格、单时间桶且 records_available 的分析，逐人数据只在 PA 记录卡展示。";
 
 export const TOOL_DESCRIPTIONS = {
   catalog:
     "发现当前调用者可用的 PA 指标、维度与业务术语解释。查数时传 terms 按业务概念筛选；不传 terms 返回全部成员，响应很大，只在需要浏览全部能力时使用。成员 id 可直接用于分析。",
   values_of: "搜索一个分类维度在当前调用者权限范围内的真实值，可按子串收窄。",
   run_analysis:
-    "用 catalog 的语义 id 和呈现意图执行分析；不接受视觉设置、物理字段、SQL 或逐人字段；指标域由服务端自动匹配。成功返回分析结果，失败返回含 code/details 的错误 JSON。",
+    "用目录语义 id 执行分析。同期间多指标用 query，按稳定实体并列不同期间用 composition 和 table。失败返回含 code/details 的错误 JSON。",
   rerun_analysis: "用当前数据重新运行已有的 analysis_id，并生成新的 view_id；分析定义不变。",
   show_analysis: "为本人已有的 view_id 打开交互结果卡；只负责展示，不修改或重新执行分析。",
   load_analysis_result: "按 view_id 加载本人的分析定义、呈现意图和当前结果，供 Agent 继续修改。",
@@ -88,6 +91,7 @@ const CATALOG_MEMBER_OUTPUT = z
 
 const CATALOG_MEASURE_OUTPUT = CATALOG_MEMBER_OUTPUT.extend({
   kind: z.literal("measure"),
+  data_as_of: MEASURE_DATA_AS_OF_SCHEMA,
   records_available: z.literal(true).optional().describe("可以查看该指标结果的明细记录"),
   query_capabilities: MEASURE_QUERY_CAPABILITIES_SCHEMA.describe(
     "该指标可用的维度及其层级；分组、筛选、排序和构成占比都必须在此范围内",
@@ -115,6 +119,10 @@ const CATALOG_MEASURE_OUTPUT = CATALOG_MEMBER_OUTPUT.extend({
 const CATALOG_DIMENSION_OUTPUT = CATALOG_MEMBER_OUTPUT.extend({
   kind: z.literal("dimension"),
   dimension_kind: z.enum(["categorical", "overlapping"]).optional(),
+  entity_label: z
+    .string()
+    .optional()
+    .describe("声明此维度可作组合表的稳定实体键；值为对应的显示名称维度 id"),
 });
 
 /** 各数据来源的时间范围，按展示顺序排列；title 是语义包提供的业务名称，不输出内部 source key。 */

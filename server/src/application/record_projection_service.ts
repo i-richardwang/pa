@@ -368,7 +368,8 @@ export function createRecordProjectionService(deps: {
     options: { metricId?: string; offset?: number; limit?: number; dataAsOf?: string },
   ): ProjectionRequest {
     const resultViewId = semanticResultViewId(definition);
-    const semanticView = definition.derived ? undefined : definition.query;
+    const semanticView =
+      "query" in definition && !definition.derived ? definition.query : undefined;
     if (!semanticView) {
       throw new RecordProjectionRequestError("当前分析没有可直接展开的指标结果");
     }
@@ -459,7 +460,10 @@ export function createRecordProjectionService(deps: {
       if (input.result_view_id !== semanticResultViewId(access.definition)) {
         throw new RecordProjectionRequestError("当前结果列没有可追溯的基础指标");
       }
-      const semanticView = access.definition.derived ? undefined : access.definition.query;
+      const semanticView =
+        "query" in access.definition && !access.definition.derived
+          ? access.definition.query
+          : undefined;
       if (!semanticView) {
         throw new RecordProjectionRequestError("当前结果列没有可追溯的基础指标");
       }

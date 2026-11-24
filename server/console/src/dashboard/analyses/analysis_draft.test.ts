@@ -428,6 +428,7 @@ describe("分析草稿状态", () => {
   });
 
   test("派生分析不可编辑", () => {
+    if (!("query" in definition)) throw new Error("应为直接查询");
     const derived: AnalysisDefinition = {
       query: { ...definition.query, view_title: "来源" },
       derived: {
@@ -482,4 +483,42 @@ describe("查询成员纯转换", () => {
     expect(replaced.group_sort?.dimension).toBe("dimension:department_name");
     expect(replaced.calculations).toEqual([]);
   });
+});
+
+test("更换组合列指标后按该列截止月重新检查整段求值", () => {
+  const group = { ...catalog.dimensions[0], entity_label: catalog.dimensions[1].id };
+  const monthly = {
+    ...catalog.measures[0],
+    data_as_of: "2026-01",
+    time: {
+      value_basis: "whole_bucket" as const,
+      constraints: { grain: "month" as const },
+    },
+  };
+  const other = { ...catalog.measures[1], data_as_of: "2026-07" };
+  const composition = {
+    group_by: group.id,
+    columns: [
+      {
+        id: "monthly",
+        title: "月度读数",
+        measure: monthly.id,
+        time: { window: { kind: "year_to_date" as const } },
+      },
+      { id: "other", measure: other.id, time: { window: { kind: "current_month" as const } } },
+    ],
+  };
+  const issues = (data_as_of: string) =>
+    analysisReadiness(
+      { analysis: { composition } },
+      {
+        ...catalog,
+        dimensions: [group, catalog.dimensions[1]],
+        measures: [{ ...monthly, data_as_of }, other],
+      },
+    ).issues;
+  expect(issues("2026-01")).toEqual([]);
+  expect(issues("2026-02")).toMatchObject([
+    { code: "metric_time_grain_incompatible", message: expect.stringContaining("月度读数") },
+  ]);
 });

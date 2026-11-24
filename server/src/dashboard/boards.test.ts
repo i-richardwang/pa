@@ -15,7 +15,7 @@ import {
   freshPath,
   semanticPlanningStub,
 } from "../test_support/dashboard.js";
-import { semanticAnalysisOf } from "../test_support/report.js";
+import { semanticAnalysisOf, unexpectedExport } from "../test_support/report.js";
 import { createAnalysisRepository } from "../storage/analysis_repository.js";
 import {
   ADD_BOARD_ITEM_PAYLOAD_SCHEMA,
@@ -73,6 +73,7 @@ describe("dashboard board routes", () => {
       ],
     };
     const analyses = createAnalysisService({
+      createDelivery: unexpectedExport,
       repository: analysisRepository,
       plan: semanticPlanningStub.plan,
       execute: async () => ({

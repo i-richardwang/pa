@@ -1,3 +1,4 @@
+import { makeTitleOf } from "../../../src/presentation_core/view_shape.js";
 import { CircleAlertIcon } from "lucide-react";
 import { QueryNotesDetails } from "./query_notes.js";
 import { Badge } from "./badge.js";
@@ -13,6 +14,7 @@ import {
 } from "../../../src/presentation_core/chart_config.js";
 import {
   freshnessLabel,
+  observationSummary,
   type QueryPayload,
   type ViewBlock,
 } from "../../../src/semantic_core/query_payload.js";
@@ -192,15 +194,16 @@ export function ViewPageFooter({
       <div className="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 text-pa-muted text-xs">
         {view.provenance && <Badge>派生</Badge>}
         {count && <span className="font-medium">{count}</span>}
-        {view.rows.length > 0 && presentation.type !== "kpi" && (
-          <Notices
-            view={view}
-            exportLink={payload.capabilities?.export}
-            rowCount={presentation.table.rows.length}
-            actions={actions}
-            allRows
-          />
-        )}
+        {(view.rows.length > 0 || view.observations || view.column_periods) &&
+          presentation.type !== "kpi" && (
+            <Notices
+              view={view}
+              exportLink={payload.capabilities?.export}
+              rowCount={presentation.table.rows.length}
+              actions={actions}
+              allRows
+            />
+          )}
       </div>
     </PageFooterBand>
   );
@@ -217,6 +220,18 @@ export function ViewRenderer({
   const traits = VIEW_SCENES[scene];
   const view = payload.view;
   const subtitle = headerSubtitle(payload, presentation);
+  const notices = (view.observations ?? []).filter(
+    (period) => period.requested || period.requested_date || period.requested_id,
+  );
+  const missingKeys = view.query_notes.find((note) => note.title === "缺少实体标识");
+  const titleOf = makeTitleOf(view);
+  const observationNotices = notices
+    .filter((period) => notices.length === 1 || period.status !== "observed")
+    .map((period) =>
+      [period.columns?.map(titleOf).join("、"), observationSummary(period)]
+        .filter(Boolean)
+        .join(" · "),
+    );
 
   return (
     <>
@@ -233,6 +248,23 @@ export function ViewRenderer({
           </p>
         </div>
       ) : null}
+      {(observationNotices.length > 0 || missingKeys) && (
+        <div className={`shrink-0 ${sceneInsetClass(scene)} py-1.5 text-pa-muted text-xs`}>
+          {observationNotices.length === 1 ? (
+            <p>{observationNotices[0]}</p>
+          ) : observationNotices.length > 1 ? (
+            <details>
+              <summary className="cursor-pointer">查看未投放或未观测的期间</summary>
+              <ul>
+                {observationNotices.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+          {missingKeys && <p>{missingKeys.text}</p>}
+        </div>
+      )}
       <ViewBody
         key={view.id}
         payload={payload}

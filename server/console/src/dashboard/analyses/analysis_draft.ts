@@ -1,11 +1,13 @@
 import type { PublicCatalogDocument as CatalogPayload } from "@contracts/catalog_contract";
 import type { ReplayPayload } from "@contracts/replay_contract";
 import {
+  COMPOSITION_COLUMN_LIMITS,
   semanticResultView,
   type SemanticAnalysisView,
   type PlottedIntentType,
   type SemanticViewIntent,
   type SemanticQueryView,
+  type PlannableQuery,
   type AnalysisDefinition,
 } from "@semantic-analysis";
 import type { ViewPreferences } from "@view-preferences";
@@ -17,10 +19,8 @@ import { canonicalJson } from "@canonical-json";
 import {
   mergeTimeCapabilities,
   resolveTimeIntentSelection,
-  timeSelectionIssueMessage,
   type TimeCapabilities,
   type TimeIntent,
-  type TimeSelectionIssue,
   type TimeSelectionResult,
 } from "@time";
 import {
@@ -78,11 +78,6 @@ export type AnalysisReadinessIssue =
   | { code: "analysis_empty" | "analysis_unavailable" | "filter_incomplete"; message: string }
   | (QueryFeasibilityIssue & { message: string });
 
-const presentTimeIssue = (issue: TimeSelectionIssue): TimeSelectionIssue & { message: string } => ({
-  ...issue,
-  message: timeSelectionIssueMessage(issue),
-});
-
 const presentQueryIssue = (
   issue: QueryFeasibilityIssue,
 ): QueryFeasibilityIssue & { message: string } => ({
@@ -90,11 +85,68 @@ const presentQueryIssue = (
   message: queryFeasibilityIssueMessage(issue),
 });
 
+function queryReadiness(
+  catalog: CatalogPayload,
+  query: PlannableQuery,
+  latest: string | undefined,
+  mode: "column" | "query",
+) {
+  const time = resolveTimeIntentSelection(query.time, latest, mode);
+  const issue =
+    time.status === "invalid" ? time.issue : queryFeasibilityIssue(catalog, query, time.selection);
+  return { time, issue: issue && presentQueryIssue(issue) };
+}
+
 /** 返回草稿无法执行的原因和时间解析结果；服务端规划时会再校验一次。 */
 export function analysisReadiness(
   draft: Pick<AnalysisEditState, "analysis">,
   catalog: CatalogPayload,
 ): { issues: AnalysisReadinessIssue[]; time?: TimeSelectionResult } {
+  if ("composition" in draft.analysis) {
+    const { columns, group_by, baseline, filters } = draft.analysis.composition;
+    const dimensions = catalog.dimensions.filter(({ entity_label }) => entity_label);
+    const supported = columns.filter(({ measure }) =>
+      catalog.measures.some(
+        (metric) =>
+          metric.id === measure && metric.query_capabilities.dimension_ids.includes(group_by),
+      ),
+    );
+    let message: string | undefined;
+    if (!dimensions.some(({ id }) => id === group_by)) message = "请选择稳定实体维度";
+    else if (columns.length < COMPOSITION_COLUMN_LIMITS.min) message = "请至少添加两列指标";
+    else if (!supported.length) message = "请添加支持当前行粒度的指标";
+    else if (baseline && !supported.some(({ id }) => id === baseline))
+      message = "所选基准列必须支持当前行粒度";
+    else if (filters?.some(({ values }) => !values.length))
+      return { issues: [{ code: "filter_incomplete", message: "请先为筛选选择至少一个值" }] };
+    if (message) return { issues: [{ code: "analysis_empty", message }] };
+    const issues: AnalysisReadinessIssue[] = [];
+    for (const column of columns) {
+      const metric = catalog.measures.find(({ id }) => id === column.measure);
+      if (!metric) {
+        issues.push({
+          code: "analysis_unavailable",
+          message: `当前目录没有指标 ${column.measure}`,
+        });
+        continue;
+      }
+      if (!supported.includes(column)) continue;
+      const { issue } = queryReadiness(
+        catalog,
+        {
+          measures: [metric.id],
+          dimensions: [group_by],
+          filters,
+          time: column.time,
+        },
+        metric.data_as_of,
+        "column",
+      );
+      if (issue)
+        issues.push({ ...issue, message: `${column.title ?? metric.title}：${issue.message}` });
+    }
+    return { issues };
+  }
   const view = semanticEditableQuery(draft.analysis);
   if (!view) return { issues: [] };
   const issues: AnalysisReadinessIssue[] = [];
@@ -108,13 +160,8 @@ export function analysisReadiness(
   if (!filtersComplete) {
     issues.push({ code: "filter_incomplete", message: "请先为筛选选择至少一个值" });
   }
-  const time = resolveTimeIntentSelection(view.time, catalog.data_as_of);
-  if (time.status === "invalid") {
-    issues.push(presentTimeIssue(time.issue));
-  } else {
-    const issue = queryFeasibilityIssue(catalog, view, time.selection);
-    if (issue) issues.push(presentQueryIssue(issue));
-  }
+  const { time, issue } = queryReadiness(catalog, view, catalog.data_as_of, "query");
+  if (issue) issues.push(issue);
   return { issues, time };
 }
 
@@ -204,7 +251,7 @@ export function renameAnalysisDraft(draft: AnalysisEditState, name: string): Ana
 }
 
 export function semanticSummaryEnabled(draft: Pick<AnalysisEditState, "analysis">): boolean {
-  return semanticResultView(draft.analysis).summary?.mode === "grand_total";
+  return semanticResultView(draft.analysis)?.summary?.mode === "grand_total";
 }
 
 export function setSemanticSummary(
@@ -232,9 +279,10 @@ export function setSemanticSummary(
 }
 
 export function semanticViewContext(
-  view: SemanticAnalysisView,
+  view: SemanticAnalysisView | undefined,
   catalog: CatalogPayload,
 ): { measures: string[]; dimensions: string[] } {
+  if (!view) return { measures: [], dimensions: [] };
   if (!("columns" in view)) {
     return {
       measures: [...(view.measures ?? []), ...(view.calculations ?? []).map(({ id }) => id)],
@@ -404,7 +452,10 @@ export function setSemanticViewIntent(
   chart: SemanticViewIntent,
   catalog: CatalogPayload,
 ): AnalysisEditState {
-  const normalized = normalizeViewIntent(chart, semanticResultView(draft.analysis), catalog);
+  const result = semanticResultView(draft.analysis);
+  const normalized = result
+    ? normalizeViewIntent(chart, result, catalog)
+    : { type: "table" as const };
   return {
     ...draft,
     view_preferences: normalizeViewPreferences(draft.view_preferences, normalized),
@@ -421,7 +472,23 @@ export function setSemanticQueryView(
   catalog: CatalogPayload,
 ): AnalysisEditState {
   if (!semanticEditableQuery(draft.analysis)) return draft;
-  const viewIntent = normalizeViewIntent(draft.view, nextView, catalog);
+  const window = nextView.time.window;
+  const nativeView: SemanticViewIntent =
+    window.kind === "observation" && window.selection.kind === "trend" && nextView.measures?.length
+      ? nextView.dimensions?.length === 1 && nextView.measures.length === 1
+        ? { type: "line", group_by: nextView.dimensions[0] }
+        : nextView.dimensions?.length
+          ? { type: "table" }
+          : { type: "line" }
+      : { type: "table" };
+  const viewIntent = normalizeViewIntent(
+    window.kind === "observation" &&
+      (draft.view.type !== "line" || window.selection.kind !== "trend")
+      ? nativeView
+      : draft.view,
+    nextView,
+    catalog,
+  );
   return {
     ...draft,
     analysis: { ...draft.analysis, query: clone(nextView) },
@@ -435,7 +502,7 @@ export function setSemanticQueryView(
 
 /** 声明了 derived 的分析整体只读，返回 null；时间栏和右栏共用此函数判断能否编辑。 */
 export function semanticEditableQuery(analysis: AnalysisDefinition): SemanticQueryView | null {
-  return analysis.derived ? null : analysis.query;
+  return "query" in analysis && !analysis.derived ? analysis.query : null;
 }
 
 /** 视图的时间能力取所选指标时间约束的并集，与编译器逐指标拒绝的规则一致。 */
@@ -514,7 +581,7 @@ export function defaultSemanticViewIntent(
   result?: ViewBlock,
 ): SemanticViewIntent {
   const view = semanticResultView(draft.analysis);
-  if (type === "table") return { type: "table" };
+  if (type === "table" || !view) return { type: "table" };
   if (type === "kpi") return normalizeViewIntent({ type }, view, catalog);
   const { measures, dimensions } = semanticViewContext(view, catalog);
   const proposal = result ? proposeChartDecl(result, type) : null;

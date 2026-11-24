@@ -37,7 +37,8 @@ import { useRecordProjection, type RecordProjectionSource } from "../reports/use
 import { semanticEditableQuery, setDraftTime, timeCapabilitiesOf } from "./analysis_draft";
 import { ChartStage, ChartStageHeading } from "./chart_stage";
 import { ReportInspector } from "./report_inspector";
-import { TimeBar, windowSummary } from "./time_editor";
+import { TimeBar } from "./time_editor";
+import { windowSummary } from "@format";
 import type { AnalysisEditSession } from "./use_analysis_edit_session";
 
 const PRESENTATION_NOTE_COPY: Record<string, string> = {

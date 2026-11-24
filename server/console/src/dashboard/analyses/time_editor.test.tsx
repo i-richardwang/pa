@@ -173,14 +173,10 @@ test("自定义对照默认为主窗口整体回移一年", () => {
 });
 
 test("期间浮层按月滚动和按日历年分节，每行显示实际起止月", () => {
-  const picked: TimeIntent["window"][] = [];
   const out = renderToStaticMarkup(
     <WindowPopup
       latest="2026-07"
-      onChange={(time) => {
-        picked.push(time.window);
-        return true;
-      }}
+      onChange={() => true}
       onPick={() => {}}
       time={{ window: { kind: "trailing", count: 2, unit: "year", grain: "year" } }}
     />,
@@ -204,7 +200,6 @@ test("期间浮层按月滚动和按日历年分节，每行显示实际起止�
     "最近 3 年",
     "最近 5 年",
   ]);
-  expect(picked).toEqual([]);
 });
 
 test("按月定义的指标选按年回看时使用按月粒度，这些选项保持可用", () => {
@@ -433,4 +428,12 @@ test("默认窗口不指定锚点月份，随数据更新", () => {
   };
   expect(() => TIME_INTENT_INPUT.parse(aligned)).not.toThrow();
   expect(outputGrain(aligned)).toBe("year");
+});
+
+test("组合列用整段检查指标约束并提示每个实体一个结果", () => {
+  const time = { window: { kind: "range", from: "2026-01", to: "2026-06" } } as const;
+  expect(summarizeResolvedTime(time, "2026-07", "column")).toContain("一个结果");
+  expect(timeChangeIssue(time, "2026-07", { grain: "month" }, "column")?.code).toBe(
+    "metric_time_grain_incompatible",
+  );
 });

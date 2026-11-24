@@ -24,6 +24,22 @@ export function queryFingerprint(input: unknown): string | undefined {
   } catch {
     return undefined;
   }
+  const digest = createHash("sha256")
+    .update(canonicalJson(analysisShape(definition)))
+    .digest("hex");
+  return `q-${digest.slice(0, 10)}`;
+}
+
+function analysisShape(definition: AnalysisDefinition) {
+  if ("composition" in definition) {
+    const { group_by, filters, baseline, columns } = definition.composition;
+    return {
+      group_by,
+      baseline,
+      filters: (filters ?? []).map(canonicalJson).sort(),
+      columns: columns.map(({ id, measure, time }) => ({ id, measure, time })),
+    };
+  }
   const shape = (query: SemanticQueryView) => ({
     measures: query.measures ?? [],
     dimensions: query.dimensions ?? [],
@@ -47,10 +63,7 @@ export function queryFingerprint(input: unknown): string | undefined {
         ...(definition.derived.limit !== undefined ? { limit: definition.derived.limit } : {}),
       }
     : undefined;
-  const digest = createHash("sha256")
-    .update(canonicalJson({ queries, ...(derived ? { derived } : {}) }))
-    .digest("hex");
-  return `q-${digest.slice(0, 10)}`;
+  return { queries, ...(derived ? { derived } : {}) };
 }
 
 const OPERATOR_LABEL = { "+": "+", "-": "−", "*": "×", "/": "÷" } as const;
@@ -76,7 +89,7 @@ export function derivedFormulaSummaries(input: unknown): string[] {
   } catch {
     return [];
   }
-  const derived = definition.derived;
+  const derived = "query" in definition ? definition.derived : undefined;
   if (!derived) return [];
   const titles = new Map(
     semanticSourceViews(definition).map(({ role, query }) => [role, query.view_title ?? role]),

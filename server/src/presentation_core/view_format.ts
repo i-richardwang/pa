@@ -1,3 +1,4 @@
+import type { BusinessTime } from "../semantic_core/time_contract.js";
 /**
  * 结果列的格式化，服务端图表配置、预览卡片和重放页共用。
  * 列格式取载荷 column_formats，未声明时按普通数值或文本处理；percent / percentage_point 的原始值是 0–1 比例。
@@ -126,4 +127,22 @@ export function monthLabel(month: string): string {
 /** 月份闭区间的业务写法；起止同月时只写一个月。 */
 export function monthRangeLabel(from: string, to: string): string {
   return from === to ? monthLabel(from) : `${monthLabel(from)}—${monthLabel(to)}`;
+}
+
+export function windowSummary(time: BusinessTime): string {
+  const { window } = time;
+  if (window.kind === "current_month") {
+    return window.month ? monthLabel(window.month) : "最新月份";
+  }
+  if (window.kind === "observation") {
+    const { selection } = window;
+    if (selection.kind === "occurrence") return `期次 ${selection.id}`;
+    if (selection.kind === "as_of") return `截至 ${selection.date} 的最近一期`;
+    return `${selection.from} 至 ${selection.to} 的调研期次`;
+  }
+  if (window.kind === "year_to_date") return "今年至今";
+  if (window.kind === "trailing") {
+    return `最近 ${window.count} ${window.unit === "month" ? "个月" : "年"}`;
+  }
+  return monthRangeLabel(window.from, window.to);
 }

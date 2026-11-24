@@ -184,9 +184,11 @@ export function detectRoles(view: ViewBlock): Roles {
   const catIdx: number[] = [];
   const valuesOf = new Map<number, string[]>();
 
+  const observationId = view.observation_axis?.id_column;
+  const observationDate = view.observation_axis?.date_column;
   view.columns.forEach((c, i) => {
     const declared = view.column_roles[c];
-    if (declared === "time" && isTimeColumn(c)) {
+    if ((declared === "time" && isTimeColumn(c)) || c === observationId || c === observationDate) {
       timeIdx.push(i);
       return;
     }
@@ -200,6 +202,28 @@ export function detectRoles(view: ViewBlock): Roles {
       valuesOf.set(i, values);
     }
   });
+
+  if (observationId) {
+    const idIndex = view.columns.indexOf(observationId);
+    const observed = (view.observations ?? []).flatMap(({ occurrence }) =>
+      occurrence ? [occurrence] : [],
+    );
+    const countByDate = new Map<string, number>();
+    for (const { date } of observed) countByDate.set(date, (countByDate.get(date) ?? 0) + 1);
+    const points = new Map(
+      observed.map(({ id, date }, key) => [
+        id,
+        {
+          key,
+          label: (countByDate.get(date) ?? 0) > 1 ? `${date} · ${id}` : date,
+        },
+      ]),
+    );
+    const timeOfRow = view.rows.map(
+      (row) => points.get(String(row[idIndex])) ?? { key: -1, label: "" },
+    );
+    return { timeIdx, measureIdx, catIdx, timeOfRow, timePoints: [...points.values()], valuesOf };
+  }
 
   const yearIdx = timeColumnIndex(view, "year");
   const monthIdx = timeColumnIndex(view, "month");
@@ -1338,17 +1362,18 @@ export function compileTableWithStatus(
   shape: ResultShape = analyzeResultShape(view),
 ): TableCompilation {
   const roles = shape.detected;
-  const compiled = decl
-    ? compileTableLayout(
-        view,
-        roles,
-        titleOf,
-        decl.type === "table" ? decl.tableColumns : undefined,
-      )
-    : {
-        table: flatTable(view, titleOf),
-        layout: { state: "applied" as const, leafColumns: tableValueIndices(roles).length },
-      };
+  const compiled =
+    decl && !view.observation_axis
+      ? compileTableLayout(
+          view,
+          roles,
+          titleOf,
+          decl.type === "table" ? decl.tableColumns : undefined,
+        )
+      : {
+          table: flatTable(view, titleOf),
+          layout: { state: "applied" as const, leafColumns: tableValueIndices(roles).length },
+        };
   if (decl?.type !== "table" || !decl.shading) return compiled;
   const measureKeys = new Set(roles.measureIdx.map((index) => view.columns[index]));
   const shading = compileTableShading(

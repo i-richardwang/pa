@@ -14,7 +14,6 @@ import {
   type AnalysisDefinition,
   type SemanticViewIntent,
 } from "../semantic_core/semantic_analysis.js";
-import { isDerivedViewSpec, type QueryViewSpec } from "../semantic_core/analysis_spec.js";
 
 const parseDefinitionFrom = (input: { analysis: unknown }) =>
   parseAnalysisDefinition(input.analysis);
@@ -230,10 +229,7 @@ describe("semantic analysis compiler", () => {
       },
       view: { type: "table" },
     });
-    expect(compiled.plan.nodes).toHaveLength(1);
-    const queries = compiled.plan.nodes.filter(
-      (node): node is QueryViewSpec => !isDerivedViewSpec(node),
-    );
+    const { queries } = compiled.plan;
     expect(queries).toHaveLength(1);
     expect(queries[0]?.dimensions).toContain("test_people_metrics.age_band");
     expect(queries[0]?.grouping_sets).toEqual({
@@ -314,7 +310,7 @@ describe("semantic analysis compiler", () => {
       },
       view: { type: "table" },
     });
-    expect(compiled.plan.nodes[0]).toMatchObject({
+    expect(compiled.plan.queries[0]).toMatchObject({
       dimensions: ["test_people_metrics.organization_name", "test_people_metrics.department_name"],
       selection: {
         type: "top_n",
@@ -329,8 +325,8 @@ describe("semantic analysis compiler", () => {
       },
       summary: { mode: "grand_total" },
     });
-    expect(compiled.plan.nodes[0]).not.toHaveProperty("limit");
-    expect(compiled.plan.nodes[0]).not.toHaveProperty("order");
+    expect(compiled.plan.queries[0]).not.toHaveProperty("limit");
+    expect(compiled.plan.queries[0]).not.toHaveProperty("order");
   });
 
   test("按名称限制维度项数时，以目标维度自身作为排名字段", () => {
@@ -350,7 +346,7 @@ describe("semantic analysis compiler", () => {
       },
       view: { type: "table" },
     });
-    expect(compiled.plan.nodes[0]).toMatchObject({
+    expect(compiled.plan.queries[0]).toMatchObject({
       selection: {
         dimensions: [
           "test_people_metrics.organization_name",
@@ -616,7 +612,7 @@ describe("semantic analysis compiler", () => {
       view: { type: "table" },
     });
     expect(compiled.routes[0]).toMatchObject({ status: "direct" });
-    expect(compiled.plan.nodes[0]).toMatchObject({
+    expect(compiled.plan.queries[0]).toMatchObject({
       measures: ["test_people_metrics.active_employee_count", "test_people_metrics.ytd_event_rate"],
       dimensions: ["test_people_metrics.organization_name", "test_people_metrics.department_name"],
     });
@@ -653,7 +649,7 @@ describe("semantic analysis compiler", () => {
       view: { type: "table" },
     });
     expect(compiled.routes[0]).toMatchObject({ status: "direct" });
-    expect(compiled.plan.nodes[0]).toMatchObject({
+    expect(compiled.plan.queries[0]).toMatchObject({
       measures: [
         "test_people_metrics.active_employee_count",
         "headcount_plan.current_month_fulfillment_rate",
@@ -677,7 +673,7 @@ describe("semantic analysis compiler", () => {
       },
       view: { type: "table" },
     });
-    expect(compiled.plan.nodes[0]).toMatchObject({
+    expect(compiled.plan.queries[0]).toMatchObject({
       dimensions: ["test_people_metrics.department_name"],
       filters: [
         {
@@ -703,7 +699,7 @@ describe("semantic analysis compiler", () => {
       },
       view: { type: "table" },
     });
-    expect(compiled.plan.nodes[0]).toMatchObject({
+    expect(compiled.plan.queries[0]).toMatchObject({
       filters: [
         {
           member: "test_people_metrics.age_band",
@@ -725,7 +721,7 @@ describe("semantic analysis compiler", () => {
       },
       view: { type: "table" },
     });
-    expect(compiled.plan.nodes[0]).toMatchObject({
+    expect(compiled.plan.queries[0]).toMatchObject({
       dimensions: ["test_people_metrics.organization_name"],
     });
     expect(compiled.record_projection_bindings.views[0]?.dimensions).toEqual({
@@ -762,8 +758,8 @@ describe("semantic analysis compiler", () => {
       status: "direct",
       result_view_id: "query",
     });
-    expect(compiled.plan.nodes).toHaveLength(1);
-    expect(compiled.plan.nodes[0]).toMatchObject({
+    expect(compiled.plan.queries).toHaveLength(1);
+    expect(compiled.plan.queries[0]).toMatchObject({
       id: "query",
       measures: [
         "test_people_metrics.active_employee_count",
@@ -789,14 +785,14 @@ describe("semantic analysis compiler", () => {
       view: { type: "table" },
     });
     expect(compiled.routes[0]).toEqual({ status: "direct", result_view_id: "query" });
-    expect(compiled.plan.nodes).toEqual([
+    expect(compiled.plan.queries).toEqual([
       expect.objectContaining({
         id: "query",
         dimensions: ["test_people_metrics.department_name"],
       }),
     ]);
     expect(compiled.plan.output.id).toBe("query");
-    expect(compiled.plan.nodes.length).toBe(1);
+    expect(compiled.plan.queries.length).toBe(1);
     expect(Object.values(compiled.plan.output.columns)).toEqual(
       expect.arrayContaining([YTD_EVENT_RATE, CURRENT_MONTH_FULFILLMENT_RATE, DEPARTMENT]),
     );
@@ -820,7 +816,7 @@ describe("semantic analysis compiler", () => {
     expect(compiled.routes).toEqual([
       expect.objectContaining({ status: "direct", result_view_id: "query" }),
     ]);
-    expect(compiled.plan.nodes[0]).toMatchObject({
+    expect(compiled.plan.queries[0]).toMatchObject({
       measures: ["test_people_metrics.ytd_event_rate"],
       dimensions: ["test_people_metrics.age_band"],
     });
@@ -862,7 +858,7 @@ describe("semantic analysis compiler", () => {
         annotations: [ACTIVE_EMPLOYEE_SHARE],
       },
     });
-    expect(compiled.plan.nodes[0]).toMatchObject({
+    expect(compiled.plan.queries[0]).toMatchObject({
       measures: [
         "test_people_metrics.active_employee_count",
         "test_people_metrics.active_employee_share",
@@ -985,12 +981,15 @@ describe("semantic analysis compiler", () => {
       },
       view: { type: "table" },
     });
-    expect(compiled.plan.nodes[2]).toMatchObject({
-      join: {
-        on: [{ left: "department_name", right: "department_name" }],
-        how: "left",
+    expect(compiled.plan.output.operation).toMatchObject({
+      kind: "derived",
+      view: {
+        join: {
+          on: [{ left: "department_name", right: "department_name" }],
+          how: "left",
+        },
+        summary: { mode: "grand_total" },
       },
-      summary: { mode: "grand_total" },
     });
     expect(compiled.plan.output.provenance).toEqual({
       sources: [{ title: "人员数据" }, { title: "编制数据" }],

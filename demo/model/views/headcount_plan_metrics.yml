@@ -11,7 +11,7 @@ views:
       - groups: [pa_full, pa_service]
         member_level:
           includes: &members
-            [year, month, period_month, legal_entity_name, organization_name, department_name, planned_headcount]
+            [year, month, period_month, legal_entity_name, organization_name, department_id, department_name, planned_headcount]
         row_level: { allow_all: true }
       - group: pa_scoped
         member_level: { includes: *members }
