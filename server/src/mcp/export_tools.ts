@@ -1,4 +1,4 @@
-import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ResourceTemplate } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import {
   ExportIncompleteError,
@@ -12,7 +12,7 @@ import {
 } from "../contracts/export_contract.js";
 import type { McpRegistrationContext } from "./context.js";
 import {
-  EXPORT_OUTPUT,
+  EXPORT_OUTPUT_SCHEMA,
   OAUTH_SECURITY_SCHEMES,
   TOOL_DESCRIPTIONS,
   WRITE_ANNOTATIONS,
@@ -31,10 +31,10 @@ export function registerExportTools(
     {
       title: "导出分析结果",
       description: TOOL_DESCRIPTIONS.export_result,
-      inputSchema: {
-        view_id: z.string().uuid(),
-      },
-      outputSchema: EXPORT_OUTPUT,
+      inputSchema: z.strictObject({
+        view_id: z.uuid(),
+      }),
+      outputSchema: EXPORT_OUTPUT_SCHEMA,
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },

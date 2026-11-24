@@ -175,16 +175,14 @@ export function useUnarchiveReport() {
   });
 }
 
-const MATERIALIZED_VIEW_SCHEMA = z
-  .object({
-    analysis_id: z.string().uuid(),
-    view_id: z.string().uuid(),
-    view: SEMANTIC_VIEW_INTENT_INPUT,
-    view_preferences: VIEW_PREFERENCES_INPUT,
-    render_decl: CHART_DECL_SCHEMA,
-    record_projection_bindings: RECORD_PROJECTION_BINDINGS_SCHEMA,
-  })
-  .strict();
+const MATERIALIZED_VIEW_SCHEMA = z.strictObject({
+  analysis_id: z.uuid(),
+  view_id: z.uuid(),
+  view: SEMANTIC_VIEW_INTENT_INPUT,
+  view_preferences: VIEW_PREFERENCES_INPUT,
+  render_decl: CHART_DECL_SCHEMA,
+  record_projection_bindings: RECORD_PROJECTION_BINDINGS_SCHEMA,
+});
 
 type DraftRunInput = {
   analysis: AnalysisDefinition;

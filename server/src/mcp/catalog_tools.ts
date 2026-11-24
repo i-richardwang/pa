@@ -6,11 +6,11 @@ import type { UsageService } from "../application/usage_service.js";
 import { projectAgentCatalog } from "./catalog_result.js";
 import { safeMcpToolHandler } from "./errors.js";
 import {
-  CATALOG_OUTPUT,
+  CATALOG_OUTPUT_SCHEMA,
   OAUTH_SECURITY_SCHEMES,
   READ_ONLY_ANNOTATIONS,
   TOOL_DESCRIPTIONS,
-  VALUES_OUTPUT,
+  VALUES_OUTPUT_SCHEMA,
 } from "./contracts.js";
 
 export function registerCatalogTools(
@@ -27,8 +27,8 @@ export function registerCatalogTools(
     {
       title: "查找可用指标",
       description: TOOL_DESCRIPTIONS.catalog,
-      inputSchema: { terms: CATALOG_TERMS_INPUT },
-      outputSchema: CATALOG_OUTPUT,
+      inputSchema: z.strictObject({ terms: CATALOG_TERMS_INPUT }),
+      outputSchema: CATALOG_OUTPUT_SCHEMA,
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
@@ -63,11 +63,11 @@ export function registerCatalogTools(
     {
       title: "列出维度取值",
       description: TOOL_DESCRIPTIONS.values_of,
-      inputSchema: {
+      inputSchema: z.strictObject({
         dimension: z.string().min(1).describe("catalog 返回的分类维度 id"),
         contains: z.string().min(1).max(100).optional().describe("可选，只返回包含该文字的取值"),
-      },
-      outputSchema: VALUES_OUTPUT,
+      }),
+      outputSchema: VALUES_OUTPUT_SCHEMA,
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },

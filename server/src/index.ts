@@ -1,11 +1,20 @@
 import { readFile } from "node:fs/promises";
 import { serve } from "@hono/node-server";
-import { StreamableHTTPTransport } from "@hono/mcp";
+import { getConnInfo } from "@hono/node-server/conninfo";
+import { createMcpHandler } from "@modelcontextprotocol/server";
+import { requireMcpAuth } from "@better-auth/mcp";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
+import { html } from "hono/html";
 import { cors } from "hono/cors";
-import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins";
+import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
 import { principalFromAttributes, type Principal } from "./contracts/principal.js";
-import { API_KEY_PREFIX, buildAuth, initializeAuthSchema, type Auth } from "./auth.js";
+import {
+  API_KEY_PREFIX,
+  AUTH_PEER_IP_HEADER,
+  buildAuth,
+  initializeAuthSchema,
+  type Auth,
+} from "./auth.js";
 import { consoleLogger as logger } from "./adapters/console_logger.js";
 import { createApplication } from "./composition/application.js";
 import { config } from "./config.js";
@@ -37,8 +46,7 @@ if (!config.authSecret && !config.allowOpen) {
   );
 }
 
-type AppEnv = { Variables: { principal: Principal } };
-const app = new Hono<AppEnv>();
+const app = new Hono();
 
 const appDb = await openAppDatabase(config.appDb);
 const semanticPackage = await loadSemanticPackage(configuredSemanticPackageDir());
@@ -87,10 +95,18 @@ const LOCAL_PRINCIPAL: Principal = {
   accessScope: { kind: "all" },
 };
 
+app.use(async (c, next) => {
+  const { address } = getConnInfo(c).remote;
+  const headers = c.req.raw.headers;
+  if (address) headers.set(AUTH_PEER_IP_HEADER, address);
+  else headers.delete(AUTH_PEER_IP_HEADER);
+  return next();
+});
+
 app.get("/healthz", (c) => c.json({ ok: true }));
 
 const configuredOrigins = [new URL(config.baseUrl).origin, ...config.allowedOrigins];
-const originGuard: MiddlewareHandler<AppEnv> = async (c, next) => {
+const originGuard: MiddlewareHandler = async (c, next) => {
   const origin = c.req.header("Origin");
   // 原生 MCP/CLI 请求通常不带 Origin；浏览器请求带 Origin，必须在服务端拒绝未允许的来源，CORS 挡不住请求本身。
   if (origin && !isAllowedOrigin(origin, configuredOrigins)) {
@@ -102,8 +118,14 @@ const originGuard: MiddlewareHandler<AppEnv> = async (c, next) => {
 // 浏览器里的宿主（调试宿主、inspector）跨源访问需要 CORS；Origin 检查和 CORS 使用同一份白名单。
 const localCors = cors({
   origin: (origin) => (isAllowedOrigin(origin, configuredOrigins) ? origin : undefined),
-  allowHeaders: ["Content-Type", "Authorization", "Mcp-Protocol-Version", "Mcp-Session-Id"],
-  exposeHeaders: ["Mcp-Session-Id", "WWW-Authenticate"],
+  allowMethods: ["GET", "HEAD", "POST", "DELETE", "OPTIONS"],
+  exposeHeaders: [
+    "Mcp-Session-Id",
+    "Mcp-Protocol-Version",
+    "Mcp-Wire-Codec",
+    "WWW-Authenticate",
+    "DPoP-Nonce",
+  ],
 });
 app.use("/mcp", originGuard);
 app.use("/.well-known/*", originGuard);
@@ -127,14 +149,7 @@ if (config.authSecret) {
   const enabledAuth = auth;
 
   app.on(["GET", "POST"], "/api/auth/*", (c) => enabledAuth.handler(c.req.raw));
-  // 根路径的发现端点（MCP 规范要求）：部分客户端不解析 WWW-Authenticate，直接请求 /.well-known
-  app.get("/.well-known/oauth-authorization-server", (c) =>
-    oAuthDiscoveryMetadata(enabledAuth)(c.req.raw),
-  );
-  app.get("/.well-known/oauth-protected-resource", (c) =>
-    oAuthProtectedResourceMetadata(enabledAuth)(c.req.raw),
-  );
-
+  app.on(["GET", "HEAD"], "/.well-known/*", (c) => enabledAuth.handler(c.req.raw));
   const pageLoader = (distFile: string) => {
     let cached: string | undefined;
     const read = () =>
@@ -149,6 +164,29 @@ if (config.authSecret) {
   };
 
   const loginHtml = pageLoader("index.html");
+  app.get("/consent", async (c) => {
+    c.header("Cache-Control", "no-store");
+    c.header("Referrer-Policy", "no-referrer");
+    const query = new URL(c.req.url).searchParams;
+    const { secret } = await enabledAuth.$context;
+    if (!(await verifyOAuthQueryParams(query.toString(), secret)))
+      return c.text("授权请求无效或已过期", 400);
+    const clientId = query.get("client_id");
+    if (!clientId) return c.text("授权请求缺少客户端标识", 400);
+    const result = await enabledAuth.api.getOAuthClientPublic({
+      query: { client_id: clientId },
+      headers: c.req.raw.headers,
+      asResponse: true,
+    });
+    if (!result.ok)
+      return c.text("授权请求不可用，请从客户端重新连接", result.status === 401 ? 401 : 400);
+    const client = (await result.json()) as { client_name?: string };
+    const meta =
+      await html`<meta name="pa-oauth-client" content="${client.client_name ?? clientId}">`;
+    return c.html(
+      (await loginHtml()).replace(/<meta name="pa-oauth-client"\s*\/?>/, () => meta.toString()),
+    );
+  });
   app.get("/login", async (c) => {
     c.header("Cache-Control", "no-store");
     return c.html(await loginHtml());
@@ -191,17 +229,27 @@ async function resolvePrincipal(a: Auth, userId: string): Promise<Principal> {
   return resolveBetterAuthPrincipal(ctx.internalAdapter, userId, semanticPackage.access_scope);
 }
 
-// /mcp 认证：Bearer token 先按 API key 校验，失败再按 OAuth session 校验。
-// 未配置认证且 PA_ALLOW_OPEN=1 时，对能访问到服务的所有人开放。
-// API key 每个请求都实时校验，吊销立即生效。
-app.use("/mcp", async (c, next) => {
-  if (!auth) {
-    c.set("principal", LOCAL_PRINCIPAL);
-    return next();
-  }
-  const enabledAuth = auth;
+function handleMcp(request: Request, principal: Principal) {
+  return createMcpHandler(() => buildServer({ dependencies: serverDependencies, principal })).fetch(
+    request,
+  );
+}
+
+const enabledAuth = auth;
+const oauthMcp =
+  enabledAuth &&
+  requireMcpAuth(
+    enabledAuth,
+    async (request, claims) => {
+      if (!claims.sub) return new Response(null, { status: 401 });
+      return handleMcp(request, await resolvePrincipal(enabledAuth, claims.sub));
+    },
+    { resource: new URL("/mcp", config.baseUrl).href, requiredScopes: ["mcp"] },
+  );
+
+app.all("/mcp", async (c) => {
+  if (!enabledAuth || !oauthMcp) return handleMcp(c.req.raw, LOCAL_PRINCIPAL);
   const bearer = c.req.header("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
-  // OAuth access token 也用 Bearer 传递：没有 API key 前缀的直接走下面的 session 校验。
   if (bearer?.startsWith(API_KEY_PREFIX)) {
     const verified = await enabledAuth.api
       .verifyApiKey({ body: { key: bearer } })
@@ -219,37 +267,14 @@ app.use("/mcp", async (c, next) => {
     if (verified?.valid && verified.key) {
       const principal = await resolvePrincipal(enabledAuth, verified.key.referenceId);
       logger.info(`${principal.email} ${c.req.method} /mcp (api key)`);
-      c.set("principal", principal);
-      return next();
+      return handleMcp(c.req.raw, principal);
     }
   }
-  const session = await enabledAuth.api.getMcpSession({ headers: c.req.raw.headers });
-  if (session) {
-    const principal = await resolvePrincipal(enabledAuth, session.userId);
-    logger.info(`${principal.email} ${c.req.method} /mcp (oauth)`);
-    c.set("principal", principal);
-    return next();
-  }
-  // 401 响应附带受保护资源元数据的地址。
-  return c.json(
-    { jsonrpc: "2.0", error: { code: -32001, message: "未授权：需要有效凭证" }, id: null },
-    401,
-    {
-      "WWW-Authenticate": `Bearer resource_metadata="${config.baseUrl}/.well-known/oauth-protected-resource"`,
-    },
-  );
-});
-
-// Streamable HTTP 无状态模式：每个请求新建 server 和 transport
-app.all("/mcp", async (c) => {
-  const server = buildServer({ dependencies: serverDependencies, principal: c.get("principal") });
-  const transport = new StreamableHTTPTransport({ sessionIdGenerator: undefined });
-  await server.connect(transport);
-  return transport.handleRequest(c);
+  return oauthMcp(c.req.raw);
 });
 
 // 导出下载时重新验证票据所有者，按当前权限即时生成 CSV；明细数据不写入磁盘。
-const exportDownload = async (c: Context<AppEnv>) => {
+const exportDownload = async (c: Context) => {
   const ticket = c.req.param("ticket");
   if (!ticket) return c.text("下载链接无效或已过期，请让助手重新生成。", 403);
   try {

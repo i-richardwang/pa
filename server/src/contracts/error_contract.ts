@@ -19,14 +19,10 @@ export type PublicErrorPayload = {
   details?: Record<string, unknown>;
 };
 
-const PUBLIC_ERROR_PAYLOAD_SCHEMA: z.ZodType<PublicErrorPayload> = z
-  .object({
-    code: z.enum(PUBLIC_ERROR_CODES),
-    message: z.string(),
-    details: z.record(z.unknown()).optional(),
-  })
-  .strict();
+const PUBLIC_ERROR_PAYLOAD_SCHEMA: z.ZodType<PublicErrorPayload> = z.strictObject({
+  code: z.enum(PUBLIC_ERROR_CODES),
+  message: z.string(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
 
-export const PUBLIC_ERROR_RESPONSE_SCHEMA = z
-  .object({ error: PUBLIC_ERROR_PAYLOAD_SCHEMA })
-  .strict();
+export const PUBLIC_ERROR_RESPONSE_SCHEMA = z.strictObject({ error: PUBLIC_ERROR_PAYLOAD_SCHEMA });

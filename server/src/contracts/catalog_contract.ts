@@ -114,36 +114,31 @@ export const MEASURE_DATA_AS_OF_SCHEMA = z
   .optional()
   .describe("该指标滚动期间所依据的实际数据截止月");
 
-export const MEASURE_QUERY_CAPABILITIES_SCHEMA: z.ZodType<MeasureQueryCapabilities> = z
-  .object({
+export const MEASURE_QUERY_CAPABILITIES_SCHEMA: z.ZodType<MeasureQueryCapabilities> =
+  z.strictObject({
     dimension_ids: z.array(z.string()).describe("可用于分组、筛选和排序的维度 id"),
     hierarchies: z
       .array(z.array(z.string()))
       .optional()
       .describe("该指标可用的维度层级，每条从粗到细排列"),
     grouping: z
-      .object({
+      .strictObject({
         minimum_varying_dimensions: z
-          .number()
           .int()
           .positive()
           .describe("查询该指标至少需要的分组维度数；筛选成单个值的维度不计入"),
       })
-      .strict()
       .optional(),
-  })
-  .strict();
+  });
 
-const CATALOG_MEMBER_BASE_SCHEMA = z
-  .object({
-    id: z.string(),
-    title: z.string(),
-    description: z.string(),
-    format: z.string().optional(),
-    ai_context: z.string().optional(),
-    sensitivity: z.literal("restricted").optional(),
-  })
-  .strict();
+const CATALOG_MEMBER_BASE_SCHEMA = z.strictObject({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  format: z.string().optional(),
+  ai_context: z.string().optional(),
+  sensitivity: z.literal("restricted").optional(),
+});
 
 const CATALOG_MEASURE_SCHEMA: z.ZodType<PublicCatalogMeasure> = CATALOG_MEMBER_BASE_SCHEMA.extend({
   kind: z.literal("measure"),
@@ -152,17 +147,15 @@ const CATALOG_MEASURE_SCHEMA: z.ZodType<PublicCatalogMeasure> = CATALOG_MEMBER_B
   query_capabilities: MEASURE_QUERY_CAPABILITIES_SCHEMA,
   report_calculations: z.array(z.literal("percent_of_total")).optional(),
   formula: z
-    .object({
+    .strictObject({
       numerator: z.string(),
       denominator: z.string(),
       numerator_id: z.string().optional(),
       denominator_id: z.string().optional(),
     })
-    .strict()
     .optional(),
   relation: z
-    .object({ kind: z.literal("structure_share"), numerator_id: z.string() })
-    .strict()
+    .strictObject({ kind: z.literal("structure_share"), numerator_id: z.string() })
     .optional(),
   time: METRIC_TIME_INPUT,
 });
@@ -171,48 +164,40 @@ const CATALOG_DIMENSION_SCHEMA: z.ZodType<PublicCatalogDimension> =
   CATALOG_MEMBER_BASE_SCHEMA.extend({
     kind: z.literal("dimension"),
     dimension_kind: z.enum(["categorical", "overlapping"]).optional(),
-    dimension_group: z.object({ id: z.string(), title: z.string() }).strict(),
+    dimension_group: z.strictObject({ id: z.string(), title: z.string() }),
     entity_label: z.string().optional(),
   });
 
-const METRIC_DOMAIN_SCHEMA: z.ZodType<PublicMetricDomain> = z
-  .object({
-    id: z.string().regex(METRIC_DOMAIN_ID_PATTERN) as z.ZodType<MetricDomainId>,
-    title: z.string(),
-    query_contract: z.string().optional(),
-    time_context_title: z.string().optional(),
-    synonyms: z.array(z.string()),
-    measure_ids: z.array(z.string()),
-    dimension_ids: z.array(z.string()),
-  })
-  .strict();
+const METRIC_DOMAIN_SCHEMA: z.ZodType<PublicMetricDomain> = z.strictObject({
+  id: z.string().regex(METRIC_DOMAIN_ID_PATTERN) as z.ZodType<MetricDomainId>,
+  title: z.string(),
+  query_contract: z.string().optional(),
+  time_context_title: z.string().optional(),
+  synonyms: z.array(z.string()),
+  measure_ids: z.array(z.string()),
+  dimension_ids: z.array(z.string()),
+});
 
-export const PUBLIC_CATALOG_DOCUMENT_SCHEMA: z.ZodType<PublicCatalogDocument> = z
-  .object({
-    access_scope: ACCESS_SCOPE_DEFINITION_SCHEMA,
-    observation_scopes: z.array(z.string()),
-    data_as_of: z.string(),
-    time_context: z.array(
-      z
-        .object({
-          title: z.string(),
-          actual_through: z.string(),
-          available_through: z.string(),
-          plan_through: z.string().optional(),
-        })
-        .strict(),
-    ),
-    metric_domains: z.array(METRIC_DOMAIN_SCHEMA),
-    measures: z.array(CATALOG_MEASURE_SCHEMA),
-    dimensions: z.array(CATALOG_DIMENSION_SCHEMA),
-  })
-  .strict();
+export const PUBLIC_CATALOG_DOCUMENT_SCHEMA: z.ZodType<PublicCatalogDocument> = z.strictObject({
+  access_scope: ACCESS_SCOPE_DEFINITION_SCHEMA,
+  observation_scopes: z.array(z.string()),
+  data_as_of: z.string(),
+  time_context: z.array(
+    z.strictObject({
+      title: z.string(),
+      actual_through: z.string(),
+      available_through: z.string(),
+      plan_through: z.string().optional(),
+    }),
+  ),
+  metric_domains: z.array(METRIC_DOMAIN_SCHEMA),
+  measures: z.array(CATALOG_MEASURE_SCHEMA),
+  dimensions: z.array(CATALOG_DIMENSION_SCHEMA),
+});
 
-export const CATALOG_DIMENSION_VALUES_SCHEMA: z.ZodType<CatalogDimensionValues> = z
-  .object({
-    dimension: z.string(),
-    title: z.string(),
-    values: z.array(z.string()),
-    truncated: z.string().optional(),
-  })
-  .strict();
+export const CATALOG_DIMENSION_VALUES_SCHEMA: z.ZodType<CatalogDimensionValues> = z.strictObject({
+  dimension: z.string(),
+  title: z.string(),
+  values: z.array(z.string()),
+  truncated: z.string().optional(),
+});

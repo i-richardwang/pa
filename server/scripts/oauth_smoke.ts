@@ -1,6 +1,6 @@
 /**
  * 模拟 MCP 客户端走完整个 OAuth 流程和报告生命周期：动态注册客户端 → 密码登录 → 授权码（PKCE S256）
- * → 换取 token → 用 token 调 MCP 查询 → 重新运行生成新 View → App 展示和加载工具 → 保存为报告 →
+ * → 换取并刷新 token → 用 token 调 MCP 查询 → 重新运行生成新 View → App 展示和加载工具 → 保存为报告 →
  * 查找、改名、归档报告 → 导出结果 → 控制台重放并与 MCP 结果比对 → 未授权请求返回 401。
  * 修改 OAuth 相关代码后必须运行。
  * 前提：服务已启用 OAuth（设置了 PA_AUTH_SECRET），测试用户已创建。
@@ -8,8 +8,7 @@
  * 检查受限权限：先给账号设置单个授权值，再加 PA_EXPECT_ACCESS_SCOPE_VALUE=<授权值>，脚本会检查派生分析只返回该范围的数据。
  */
 import { createHash, randomBytes } from "node:crypto";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import {
   CATALOG_OUTPUT_SCHEMA,
   LOAD_ANALYSIS_OUTPUT_SCHEMA,
@@ -40,8 +39,24 @@ function toolText(result: unknown): string {
   return text;
 }
 
-// MCP 客户端从根路径的 well-known 地址发现 OAuth 配置
-const meta = (await (await fetch(`${base}/.well-known/oauth-authorization-server`)).json()) as {
+const resource = `${base}/mcp`;
+const unauthenticated = await fetch(resource, { method: "POST" });
+const authenticateHeader = unauthenticated.headers.get("WWW-Authenticate") ?? "";
+const metadataUrl = /resource_metadata="([^"]+)"/i.exec(authenticateHeader)?.[1];
+if (
+  unauthenticated.status !== 401 ||
+  metadataUrl !== `${base}/.well-known/oauth-protected-resource/mcp`
+) {
+  throw new Error("401 响应未指向 MCP 资源元数据");
+}
+const metadata = (await (await fetch(metadataUrl)).json()) as {
+  resource: string;
+  authorization_servers: string[];
+};
+if (metadata.resource !== resource) throw new Error("受保护资源标识错误");
+const issuer = new URL(metadata.authorization_servers[0]);
+const discovery = new URL(`/.well-known/oauth-authorization-server${issuer.pathname}`, issuer);
+const meta = (await (await fetch(discovery)).json()) as {
   authorization_endpoint: string;
   token_endpoint: string;
   registration_endpoint: string;
@@ -57,9 +72,10 @@ const reg = (await (
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       client_name: "pa-oauth-smoke",
+      scope: "mcp offline_access",
       redirect_uris: [redirectUri],
       token_endpoint_auth_method: "none",
-      grant_types: ["authorization_code"],
+      grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
     }),
   })
@@ -82,7 +98,7 @@ const cookie = signIn.headers
 if (!cookie) throw new Error("登录未返回会话 cookie");
 console.log("登录成功:", email);
 
-// PKCE S256；已登录时授权端点直接重定向并附上授权码
+// 首次授权须明确同意，拒绝时只返回拒绝状态。
 const verifier = b64url(randomBytes(32));
 const challenge = b64url(createHash("sha256").update(verifier).digest());
 const authorizeURL = new URL(meta.authorization_endpoint);
@@ -91,28 +107,63 @@ authorizeURL.searchParams.set("client_id", reg.client_id);
 authorizeURL.searchParams.set("redirect_uri", redirectUri);
 authorizeURL.searchParams.set("code_challenge", challenge);
 authorizeURL.searchParams.set("code_challenge_method", "S256");
-authorizeURL.searchParams.set("state", b64url(randomBytes(8)));
-const authorize = await fetch(authorizeURL, { headers: { cookie }, redirect: "manual" });
-const location = authorize.headers.get("location") ?? "";
-const code = new URL(location, base).searchParams.get("code");
-if (!code) throw new Error(`授权端点没有返回授权码: ${authorize.status} ${location}`);
+authorizeURL.searchParams.set("resource", resource);
+authorizeURL.searchParams.set("scope", "mcp offline_access");
+const state = b64url(randomBytes(18));
+authorizeURL.searchParams.set("state", state);
+async function decide(accept: boolean) {
+  const authorize = await fetch(authorizeURL, { headers: { cookie }, redirect: "manual" });
+  const location = authorize.headers.get("location");
+  if (!location) throw new Error(`授权端点响应异常：${authorize.status}`);
+  const consent = new URL(location, base);
+  if (consent.origin !== base || consent.pathname !== "/consent")
+    throw new Error("授权端点没有转到同意页");
+  const response = await fetch(`${base}/api/auth/oauth2/consent`, {
+    method: "POST",
+    headers: { cookie, Origin: base, "Content-Type": "application/json" },
+    body: JSON.stringify({ accept, oauth_query: consent.searchParams.toString() }),
+  });
+  if (!response.ok) throw new Error(`授权同意失败：${response.status}`);
+  const { url } = (await response.json()) as { url: string };
+  const callback = new URL(url);
+  if (
+    callback.origin + callback.pathname !== redirectUri ||
+    callback.searchParams.get("state") !== state
+  )
+    throw new Error("授权回调或状态不匹配");
+  return callback.searchParams;
+}
+const denied = await decide(false);
+if (denied.get("error") !== "access_denied" || denied.has("code"))
+  throw new Error("拒绝授权时响应异常");
+const code = (await decide(true)).get("code");
+if (!code) throw new Error("同意后未取得授权码");
 console.log("已取得授权码");
 
-const token = (await (
-  await fetch(meta.token_endpoint, {
+async function exchangeToken(grant: Record<string, string>) {
+  const response = await fetch(meta.token_endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: redirectUri,
-      client_id: reg.client_id,
-      code_verifier: verifier,
-    }),
-  })
-).json()) as { access_token?: string; error?: string };
-if (!token.access_token) throw new Error(`用授权码换取 token 失败: ${JSON.stringify(token)}`);
-console.log("access token 已取得");
+    body: new URLSearchParams({ ...grant, client_id: reg.client_id, resource }),
+  });
+  if (!response.ok)
+    throw new Error(`令牌端点拒绝 ${grant.grant_type} 请求（HTTP ${response.status}）`);
+  return (await response.json()) as { access_token: string; refresh_token: string };
+}
+const issued = await exchangeToken({
+  grant_type: "authorization_code",
+  code,
+  redirect_uri: redirectUri,
+  code_verifier: verifier,
+});
+if (!issued.access_token || !issued.refresh_token) throw new Error("授权码未换到访问和刷新令牌");
+const token = await exchangeToken({
+  grant_type: "refresh_token",
+  refresh_token: issued.refresh_token,
+});
+if (!token.access_token || !token.refresh_token || token.refresh_token === issued.refresh_token)
+  throw new Error("刷新令牌未轮换");
+console.log("已换取访问令牌并轮换刷新令牌");
 
 const client = new Client({ name: "pa-oauth-smoke", version: "0.1.0" });
 await client.connect(
@@ -548,22 +599,5 @@ const anonReplay = await fetch(`${base}/dashboard/api/analysis_views/${mineRow.v
 if (anonReplay.status !== 401)
   throw new Error(`未登录访问重放接口应返回 401: ${anonReplay.status}`);
 console.log("分析、报告、导出和控制台重放正常");
-
-// WWW-Authenticate 头要指向受保护资源元数据，MCP 客户端靠它找到授权服务器
-const unauth = await fetch(`${base}/mcp`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: "{}",
-});
-const wwwAuth = unauth.headers.get("www-authenticate") ?? "";
-if (unauth.status !== 401 || !wwwAuth.includes("resource_metadata")) {
-  throw new Error(`未授权请求的响应不符合预期: ${unauth.status} ${wwwAuth}`);
-}
-const prm = (await (await fetch(`${base}/.well-known/oauth-protected-resource`)).json()) as {
-  authorization_servers?: string[];
-};
-if (!prm.authorization_servers?.length)
-  throw new Error("受保护资源元数据缺少 authorization_servers");
-console.log("401 响应和资源元数据正常");
 
 console.log("OAUTH SMOKE OK");

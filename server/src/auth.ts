@@ -1,17 +1,17 @@
-/**
- * Better Auth 实例。mcp 插件让本服务作为 OAuth 授权服务器：MCP 客户端连接器只支持 OAuth，
- * 不支持 API key。apiKey 插件让用户自己签发绑定本人身份的 key；两种方式的调用者都是 key 所有者的 email。
- * 不开放自助注册，用户由管理员在管理界面或用命令开通。
- */
 import { apiKey } from "@better-auth/api-key";
+import { cimd } from "@better-auth/cimd";
+import { fetchClientMetadataResource } from "@better-auth/cimd/node";
+import { mcp } from "@better-auth/mcp";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
-import { admin, mcp } from "better-auth/plugins";
+import { admin, jwt } from "better-auth/plugins";
 import { isAllowedOrigin } from "./engine/origins.js";
 import type { SqliteDatabase } from "./sqlite.js";
 
 /** apiKey 插件的 key 前缀；/mcp 根据它区分 API key 和 OAuth access token。 */
 export const API_KEY_PREFIX = "pa_";
+/** 由 HTTP 入口从 socket 对端地址写入，供 Better Auth 的会话和限流使用。 */
+export const AUTH_PEER_IP_HEADER = "x-pa-peer-ip";
 
 export type AuthConfig = {
   baseUrl: string;
@@ -27,6 +27,8 @@ function authOptions(cfg: AuthConfig, db: SqliteDatabase) {
   const database = db as BetterAuthOptions["database"];
   return {
     baseURL: cfg.baseUrl,
+    disabledPaths: ["/token"],
+    advanced: { ipAddress: { ipAddressHeaders: [AUTH_PEER_IP_HEADER] } },
     secret: cfg.secret,
     database,
     telemetry: { enabled: false },
@@ -49,7 +51,27 @@ function authOptions(cfg: AuthConfig, db: SqliteDatabase) {
     // user.role 决定控制台的访问级别；角色和数据范围在同一次用户管理操作中提交。
     // apiKey 提供 /mcp bearer 认证用的 key，key 绑定到签发它的登录用户。
     plugins: [
-      mcp({ loginPage: "/login" }),
+      jwt({ disableSettingJwtHeader: true }),
+      mcp({
+        resource: new URL("/mcp", cfg.baseUrl).href,
+        loginPage: "/login",
+        consentPage: "/consent",
+        scopes: ["mcp", "offline_access", "openid", "profile", "email"],
+        schema: {
+          oauthClient: { modelName: "oauth_client" },
+          oauthResource: { modelName: "oauth_resource" },
+          oauthClientResource: { modelName: "oauth_client_resource" },
+          oauthAccessToken: { modelName: "oauth_access_token" },
+          oauthRefreshToken: { modelName: "oauth_refresh_token" },
+          oauthConsent: { modelName: "oauth_consent" },
+          oauthClientAssertion: { modelName: "oauth_client_assertion" },
+        },
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+        clientRegistrationDefaultApplicationType: "infer",
+        refreshTokenReuseInterval: 0,
+      }),
+      cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
       admin(),
       apiKey({ defaultPrefix: API_KEY_PREFIX, rateLimit: { enabled: true } }),
     ],

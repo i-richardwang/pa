@@ -44,9 +44,7 @@ export const TOOL_DESCRIPTIONS = {
 } as const;
 
 // MCP SDK 通过 _meta 序列化工具安全声明；OAuth 验签由 HTTP transport 边界执行。
-export const OAUTH_SECURITY_SCHEMES = [
-  { type: "oauth2", scopes: ["openid", "profile", "email"] },
-] as const;
+export const OAUTH_SECURITY_SCHEMES = [{ type: "oauth2", scopes: ["mcp"] }] as const;
 
 export const READ_ONLY_ANNOTATIONS = {
   readOnlyHint: true,
@@ -66,28 +64,26 @@ export const RECORDS_UI_RESOURCE_URI = "ui://pa/records.html";
 export const UI_RESOURCE_META = {
   prefersBorder: false,
   csp: { connectDomains: [], resourceDomains: [] },
-} as const;
+};
 export const OPENAI_WIDGET_CSP = {
   connect_domains: [],
   resource_domains: [],
 } as const;
 
-const CATALOG_MEMBER_OUTPUT = z
-  .object({
-    id: z.string().describe("稳定的语义成员 id；分析和 values_of 都用它引用成员"),
-    title: z.string(),
-    description: z.string(),
-    format: z
-      .enum(COLUMN_FORMATS)
-      .optional()
-      .describe("显示格式；percent 和 percentage_point 的原始值都是 0–1 的小数"),
-    ai_context: z
-      .string()
-      .optional()
-      .describe("写给 Agent 的说明：何时选用该成员、怎样查询、常见错误"),
-    sensitivity: z.literal("restricted").optional(),
-  })
-  .strict();
+const CATALOG_MEMBER_OUTPUT = z.strictObject({
+  id: z.string().describe("稳定的语义成员 id；分析和 values_of 都用它引用成员"),
+  title: z.string(),
+  description: z.string(),
+  format: z
+    .enum(COLUMN_FORMATS)
+    .optional()
+    .describe("显示格式；percent 和 percentage_point 的原始值都是 0–1 的小数"),
+  ai_context: z
+    .string()
+    .optional()
+    .describe("写给 Agent 的说明：何时选用该成员、怎样查询、常见错误"),
+  sensitivity: z.literal("restricted").optional(),
+});
 
 const CATALOG_MEASURE_OUTPUT = CATALOG_MEMBER_OUTPUT.extend({
   kind: z.literal("measure"),
@@ -101,13 +97,11 @@ const CATALOG_MEASURE_OUTPUT = CATALOG_MEMBER_OUTPUT.extend({
     .optional()
     .describe("该指标在分析中可以使用的附加计算"),
   formula: z
-    .object({ numerator: z.string(), denominator: z.string() })
-    .strict()
+    .strictObject({ numerator: z.string(), denominator: z.string() })
     .optional()
     .describe("比率指标的分子和分母（中文标题）"),
   relation: z
-    .object({ kind: z.literal("structure_share"), numerator_id: z.string() })
-    .strict()
+    .strictObject({ kind: z.literal("structure_share"), numerator_id: z.string() })
     .optional()
     .describe("指标间的关系：structure_share 表示本指标是 numerator_id 所指指标的结构占比"),
   time: METRIC_TIME_INPUT.describe(
@@ -128,7 +122,7 @@ const CATALOG_DIMENSION_OUTPUT = CATALOG_MEMBER_OUTPUT.extend({
 /** 各数据来源的时间范围，按展示顺序排列；title 是语义包提供的业务名称，不输出内部 source key。 */
 export const TIME_CONTEXT_OUTPUT = PUBLIC_TIME_CONTEXT_SCHEMA;
 
-export const CATALOG_OUTPUT = {
+export const CATALOG_OUTPUT_SCHEMA = z.strictObject({
   access_scope: ACCESS_SCOPE_DEFINITION_SCHEMA.describe(
     "行级权限所依据的维度（如组织）；实际过滤由服务端执行",
   ),
@@ -136,19 +130,17 @@ export const CATALOG_OUTPUT = {
   data_as_of: z.string().describe("当前结果的数据截至月"),
   time_context: TIME_CONTEXT_OUTPUT.describe("各数据来源的时间可用性"),
   metric_domains: z.array(
-    z
-      .object({
-        id: z.string().describe("指标域 id，只用于目录导航，不作为查询参数"),
-        title: z.string().describe("指标域的业务标题"),
-        query_contract: z.string().optional(),
-        measure_ids: z
-          .array(z.string())
-          .describe("本次响应中属于该指标域的指标 id；不表示它们能与其他指标域的指标组合"),
-        dimension_ids: z
-          .array(z.string())
-          .describe("本次响应中该指标域可用的维度 id；能否组合由服务端校验"),
-      })
-      .strict(),
+    z.strictObject({
+      id: z.string().describe("指标域 id，只用于目录导航，不作为查询参数"),
+      title: z.string().describe("指标域的业务标题"),
+      query_contract: z.string().optional(),
+      measure_ids: z
+        .array(z.string())
+        .describe("本次响应中属于该指标域的指标 id；不表示它们能与其他指标域的指标组合"),
+      dimension_ids: z
+        .array(z.string())
+        .describe("本次响应中该指标域可用的维度 id；能否组合由服务端校验"),
+    }),
   ),
   measures: z
     .array(CATALOG_MEASURE_OUTPUT)
@@ -165,74 +157,68 @@ export const CATALOG_OUTPUT = {
   term_resolutions: z
     .array(BUSINESS_TERM_RESOLUTION_SCHEMA)
     .describe("业务术语的定义、是否有歧义，以及当前调用者可见的相关成员"),
-};
-export const CATALOG_OUTPUT_SCHEMA = z.object(CATALOG_OUTPUT).strict();
+});
+
 export type AgentCatalogPayload = z.infer<typeof CATALOG_OUTPUT_SCHEMA>;
 
-export const VALUES_OUTPUT = {
+export const VALUES_OUTPUT_SCHEMA = z.strictObject({
   dimension: z.string(),
   title: z.string(),
   values: z.array(z.string()),
   truncated: z.string().optional(),
-};
+});
 
-export const RUN_OUTPUT = {
+export const RUN_OUTPUT_SCHEMA = z.strictObject({
   ...QUERY_PAYLOAD_OUTPUT,
   analysis_id: z.string().describe("本次结果对应的分析定义 id（不可变）"),
   view_id: z.string().describe("本次结果对应的呈现视图 id（不可变）"),
   presentation_notes: z
     .array(
-      z
-        .object({
-          result_view_id: z.string(),
-          kind: z.enum(["empty_result", "unsupported_shape"]),
-          note: z.string(),
-        })
-        .strict(),
+      z.strictObject({
+        result_view_id: z.string(),
+        kind: z.enum(["empty_result", "unsupported_shape"]),
+        note: z.string(),
+      }),
     )
     .optional()
     .describe(
       "呈现说明：empty_result 表示结果为空；unsupported_shape 表示声明的图型无法如实展示该结果",
     ),
-};
-export const RUN_OUTPUT_SCHEMA = z.object(RUN_OUTPUT).strict();
+});
 
-export const LOAD_ANALYSIS_OUTPUT = {
-  ...RUN_OUTPUT,
+export const LOAD_ANALYSIS_OUTPUT_SCHEMA = RUN_OUTPUT_SCHEMA.extend({
   analysis: ANALYSIS_DEFINITION_INPUT.describe(
     "该 analysis_id 对应的规范化分析定义；修改后用 run_analysis 生成新的 analysis_id",
   ),
   view_intent: SEMANTIC_VIEW_INTENT_INPUT.describe(
     "该 view_id 对应的呈现意图，Agent 可以修改后重新提交",
   ),
-};
-export const LOAD_ANALYSIS_OUTPUT_SCHEMA = z.object(LOAD_ANALYSIS_OUTPUT).strict();
+});
 
-export const SHOW_ANALYSIS_OUTPUT = {
-  view_id: z.string().uuid().describe("结果卡展示的本人分析视图"),
-};
+export const SHOW_ANALYSIS_OUTPUT_SCHEMA = z.strictObject({
+  view_id: z.uuid().describe("结果卡展示的本人分析视图"),
+});
 
-export const RECORDS_OUTPUT = {
-  view_id: z.string().uuid().describe("名单卡对应的本人分析视图"),
+export const RECORDS_OUTPUT_SCHEMA = z.strictObject({
+  view_id: z.uuid().describe("名单卡对应的本人分析视图"),
   metric_id: z.string().describe("本次展开的语义指标 id"),
   metric_title: z.string(),
   record_set_title: z.string(),
   record_set_description: z.string(),
-  offset: z.number().int().nonnegative(),
-  displayed_records: z.number().int().nonnegative(),
+  offset: z.int().nonnegative(),
+  displayed_records: z.int().nonnegative(),
   has_more: z.boolean(),
   limit_reached: z.literal(true).optional(),
   data_as_of: z.string(),
   data_changed: z.boolean(),
-};
-export const RECORDS_OUTPUT_SCHEMA = z.object(RECORDS_OUTPUT).strict();
+});
 
-export const EXPORT_OUTPUT = {
-  analysis_id: z.string().uuid(),
-  view_id: z.string().uuid(),
+export const EXPORT_OUTPUT_SCHEMA = z.strictObject({
+  analysis_id: z.uuid(),
+  view_id: z.uuid(),
   url: z.string(),
   expires_at: z.string(),
-  max_rows: z.number().int(),
+  max_rows: z.int(),
   data_as_of: z.string(),
   time_context: TIME_CONTEXT_OUTPUT,
-};
+});

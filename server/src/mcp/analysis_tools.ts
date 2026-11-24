@@ -15,9 +15,9 @@ import { safeMcpToolHandler } from "./errors.js";
 import {
   OAUTH_SECURITY_SCHEMES,
   READ_ONLY_ANNOTATIONS,
-  LOAD_ANALYSIS_OUTPUT,
-  RUN_OUTPUT,
-  SHOW_ANALYSIS_OUTPUT,
+  LOAD_ANALYSIS_OUTPUT_SCHEMA,
+  RUN_OUTPUT_SCHEMA,
+  SHOW_ANALYSIS_OUTPUT_SCHEMA,
   TOOL_DESCRIPTIONS,
   UI_RESOURCE_URI,
   WRITE_ANNOTATIONS,
@@ -38,13 +38,13 @@ export function registerAnalysisTools(
     {
       title: "执行人才分析",
       description: TOOL_DESCRIPTIONS.run_analysis,
-      inputSchema: {
+      inputSchema: z.strictObject({
         analysis: ANALYSIS_DEFINITION_INPUT.describe(
           "数据问题，与 view 平级。query 使用共同期间，composition 用稳定实体维度拼接独立选期的指标列",
         ),
         view: SEMANTIC_VIEW_INTENT_INPUT.describe("呈现意图；顶层参数，不嵌在 analysis 内"),
-      },
-      outputSchema: RUN_OUTPUT,
+      }),
+      outputSchema: RUN_OUTPUT_SCHEMA,
       annotations: WRITE_ANNOTATIONS,
       _meta: {
         securitySchemes: OAUTH_SECURITY_SCHEMES,
@@ -65,11 +65,11 @@ export function registerAnalysisTools(
     {
       title: "重新运行分析",
       description: TOOL_DESCRIPTIONS.rerun_analysis,
-      inputSchema: {
-        analysis_id: z.string().uuid().describe("run_analysis 返回的 analysis_id"),
+      inputSchema: z.strictObject({
+        analysis_id: z.uuid().describe("run_analysis 返回的 analysis_id"),
         view: SEMANTIC_VIEW_INTENT_INPUT,
-      },
-      outputSchema: RUN_OUTPUT,
+      }),
+      outputSchema: RUN_OUTPUT_SCHEMA,
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
@@ -90,13 +90,10 @@ export function registerAnalysisTools(
     {
       title: "展示分析结果",
       description: TOOL_DESCRIPTIONS.show_analysis,
-      inputSchema: {
-        view_id: z
-          .string()
-          .uuid()
-          .describe("run_analysis、rerun_analysis 或 find_report 返回的 view_id"),
-      },
-      outputSchema: SHOW_ANALYSIS_OUTPUT,
+      inputSchema: z.strictObject({
+        view_id: z.uuid().describe("run_analysis、rerun_analysis 或 find_report 返回的 view_id"),
+      }),
+      outputSchema: SHOW_ANALYSIS_OUTPUT_SCHEMA,
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: {
         securitySchemes: OAUTH_SECURITY_SCHEMES,
@@ -126,10 +123,10 @@ export function registerAnalysisTools(
     {
       title: "加载分析结果",
       description: TOOL_DESCRIPTIONS.load_analysis_result,
-      inputSchema: {
-        view_id: z.string().uuid().describe("当前结果卡从 show_analysis 接收的 view_id"),
-      },
-      outputSchema: LOAD_ANALYSIS_OUTPUT,
+      inputSchema: z.strictObject({
+        view_id: z.uuid().describe("当前结果卡从 show_analysis 接收的 view_id"),
+      }),
+      outputSchema: LOAD_ANALYSIS_OUTPUT_SCHEMA,
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: {
         securitySchemes: OAUTH_SECURITY_SCHEMES,
@@ -149,10 +146,10 @@ export function registerAnalysisTools(
     {
       title: "加载分析卡片",
       description: TOOL_DESCRIPTIONS.load_analysis_card,
-      inputSchema: {
-        view_id: z.string().uuid().describe("当前结果卡的 view_id"),
-      },
-      outputSchema: RUN_OUTPUT,
+      inputSchema: z.strictObject({
+        view_id: z.uuid().describe("当前结果卡的 view_id"),
+      }),
+      outputSchema: RUN_OUTPUT_SCHEMA,
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: {
         securitySchemes: OAUTH_SECURITY_SCHEMES,

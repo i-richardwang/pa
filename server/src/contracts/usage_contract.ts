@@ -39,51 +39,43 @@ export type ErrorRow = {
 
 export type UnansweredPayload = { days: number; zero_hits: ZeroHitRow[]; errors: ErrorRow[] };
 
-export const USAGE_OVERVIEW_PAYLOAD_SCHEMA: z.ZodType<UsageOverviewPayload> = z
-  .object({
-    days: z.number(),
-    cells: z.array(
-      z
-        .object({
-          tool: z.string(),
-          outcome: z.enum(["ok", "error"]),
-          n: z.number(),
-          truncated: z.number(),
-        })
-        .strict(),
-    ),
-    callers: z.array(z.object({ caller: z.string(), n: z.number(), last_at: z.string() }).strict()),
-  })
-  .strict();
+export const USAGE_OVERVIEW_PAYLOAD_SCHEMA: z.ZodType<UsageOverviewPayload> = z.strictObject({
+  days: z.number(),
+  cells: z.array(
+    z.strictObject({
+      tool: z.string(),
+      outcome: z.enum(["ok", "error"]),
+      n: z.number(),
+      truncated: z.number(),
+    }),
+  ),
+  callers: z.array(z.strictObject({ caller: z.string(), n: z.number(), last_at: z.string() })),
+});
 
-const USAGE_TITLE_ROW_SCHEMA: z.ZodType<UsageTitleRow> = z
-  .object({
-    id: z.number(),
-    at: z.string(),
-    caller: z.string(),
-    title: z.string(),
-    row_count: z.number().nullable(),
-  })
-  .strict();
+const USAGE_TITLE_ROW_SCHEMA: z.ZodType<UsageTitleRow> = z.strictObject({
+  id: z.number(),
+  at: z.string(),
+  caller: z.string(),
+  title: z.string(),
+  row_count: z.number().nullable(),
+});
 
-export const USAGE_TITLES_PAYLOAD_SCHEMA: z.ZodType<UsageTitlesPayload> = z
-  .object({ days: z.number(), rows: z.array(USAGE_TITLE_ROW_SCHEMA), total: z.number() })
-  .strict();
+export const USAGE_TITLES_PAYLOAD_SCHEMA: z.ZodType<UsageTitlesPayload> = z.strictObject({
+  days: z.number(),
+  rows: z.array(USAGE_TITLE_ROW_SCHEMA),
+  total: z.number(),
+});
 
-export const UNANSWERED_PAYLOAD_SCHEMA: z.ZodType<UnansweredPayload> = z
-  .object({
-    days: z.number(),
-    zero_hits: z.array(z.object({ term: z.string(), n: z.number(), last_at: z.string() }).strict()),
-    errors: z.array(
-      z
-        .object({
-          tool: z.string(),
-          error: z.string(),
-          n: z.number(),
-          last_at: z.string(),
-          example_title: z.string().nullable(),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
+export const UNANSWERED_PAYLOAD_SCHEMA: z.ZodType<UnansweredPayload> = z.strictObject({
+  days: z.number(),
+  zero_hits: z.array(z.strictObject({ term: z.string(), n: z.number(), last_at: z.string() })),
+  errors: z.array(
+    z.strictObject({
+      tool: z.string(),
+      error: z.string(),
+      n: z.number(),
+      last_at: z.string(),
+      example_title: z.string().nullable(),
+    }),
+  ),
+});

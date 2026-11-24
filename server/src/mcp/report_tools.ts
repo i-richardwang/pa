@@ -28,16 +28,16 @@ export function registerReportTools(
     {
       title: "保存报告",
       description: TOOL_DESCRIPTIONS.save_report,
-      inputSchema: {
-        view_id: z.string().uuid(),
+      inputSchema: z.strictObject({
+        view_id: z.uuid(),
         name: REPORT_NAME_SCHEMA,
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.strictObject({
         id: REPORT_ID_SCHEMA,
         name: z.string(),
-        revision: z.number().int().positive(),
+        revision: z.int().positive(),
         updated_at: z.string(),
-      },
+      }),
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
@@ -65,17 +65,17 @@ export function registerReportTools(
     {
       title: "更新报告",
       description: TOOL_DESCRIPTIONS.update_report,
-      inputSchema: {
+      inputSchema: z.strictObject({
         id: REPORT_ID_SCHEMA,
         action: MCP_REPORT_UPDATE_ACTION,
-        if_revision: z.number().int().positive().optional(),
-      },
-      outputSchema: {
+        if_revision: z.int().positive().optional(),
+      }),
+      outputSchema: z.strictObject({
         id: REPORT_ID_SCHEMA,
         name: z.string(),
-        revision: z.number().int(),
+        revision: z.int(),
         updated_at: z.string(),
-      },
+      }),
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },
@@ -103,22 +103,22 @@ export function registerReportTools(
     {
       title: "查找报告",
       description: TOOL_DESCRIPTIONS.find_report,
-      inputSchema: { query: z.string().max(100).optional() },
-      outputSchema: {
+      inputSchema: z.strictObject({ query: z.string().max(100).optional() }),
+      outputSchema: z.strictObject({
         reports: z.array(
           z.object({
             id: REPORT_ID_SCHEMA,
             name: z.string(),
-            analysis_id: z.string().uuid(),
-            view_id: z.string().uuid(),
+            analysis_id: z.uuid(),
+            view_id: z.uuid(),
             result_view_id: z.string(),
             presentation_type: PRESENTATION_TYPE_SCHEMA,
-            revision: z.number().int(),
+            revision: z.int(),
             updated_at: z.string(),
             url: z.string(),
           }),
         ),
-      },
+      }),
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },

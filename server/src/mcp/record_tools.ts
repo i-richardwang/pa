@@ -9,7 +9,7 @@ import { safeMcpToolHandler } from "./errors.js";
 import {
   OAUTH_SECURITY_SCHEMES,
   READ_ONLY_ANNOTATIONS,
-  RECORDS_OUTPUT,
+  RECORDS_OUTPUT_SCHEMA,
   RECORDS_UI_RESOURCE_URI,
   TOOL_DESCRIPTIONS,
 } from "./contracts.js";
@@ -52,14 +52,14 @@ export function registerRecordTools(
     {
       title: "展示构成记录",
       description: TOOL_DESCRIPTIONS.show_records,
-      inputSchema: {
-        view_id: z.string().uuid().describe("run_analysis 返回的 view_id"),
+      inputSchema: z.strictObject({
+        view_id: z.uuid().describe("run_analysis 返回的 view_id"),
         metric_id: z
           .string()
           .optional()
           .describe("分析中有多个可查看名单的指标时，指定需要展开的语义指标 id"),
-      },
-      outputSchema: RECORDS_OUTPUT,
+      }),
+      outputSchema: RECORDS_OUTPUT_SCHEMA,
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: {
         securitySchemes: OAUTH_SECURITY_SCHEMES,
@@ -92,14 +92,14 @@ export function registerRecordTools(
     {
       title: "加载名单分页",
       description: TOOL_DESCRIPTIONS.load_records_page,
-      inputSchema: {
-        view_id: z.string().uuid().describe("当前名单卡的 view_id"),
+      inputSchema: z.strictObject({
+        view_id: z.uuid().describe("当前名单卡的 view_id"),
         metric_id: z.string().describe("当前名单卡的语义指标 id"),
         data_as_of: z.string().describe("当前名单卡的数据截至月份，用于发现翻页期间数据是否已更新"),
-        offset: z.number().int().nonnegative().max(49_999),
-        limit: z.number().int().min(1).max(100).default(20),
-      },
-      outputSchema: RECORDS_OUTPUT,
+        offset: z.int().nonnegative().max(49_999),
+        limit: z.int().min(1).max(100).default(20),
+      }),
+      outputSchema: RECORDS_OUTPUT_SCHEMA,
       annotations: READ_ONLY_ANNOTATIONS,
       _meta: {
         securitySchemes: OAUTH_SECURITY_SCHEMES,

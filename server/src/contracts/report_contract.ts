@@ -31,12 +31,10 @@ export type ReportRow = {
 
 export type ReportsPayload = { rows: ReportRow[]; total: number };
 
-export const CREATE_REPORT_BODY = z
-  .object({
-    view_id: z.string().uuid(),
-    name: REPORT_NAME_SCHEMA,
-  })
-  .strict();
+export const CREATE_REPORT_BODY = z.strictObject({
+  view_id: z.uuid(),
+  name: REPORT_NAME_SCHEMA,
+});
 export type CreateReportBody = z.infer<typeof CREATE_REPORT_BODY>;
 
 export type ReportDetail = ReportRow & {
@@ -46,12 +44,10 @@ export type ReportDetail = ReportRow & {
   view_preferences: ViewPreferences;
 };
 
-export const UPDATE_REPORT_BODY = z
-  .object({
-    action: WEB_REPORT_UPDATE_ACTION,
-    if_revision: z.number().int().positive().optional(),
-  })
-  .strict();
+export const UPDATE_REPORT_BODY = z.strictObject({
+  action: WEB_REPORT_UPDATE_ACTION,
+  if_revision: z.int().positive().optional(),
+});
 export type UpdateReportBody = z.infer<typeof UPDATE_REPORT_BODY>;
 
 type ReportRevisionRow = {
@@ -65,43 +61,38 @@ export type ReportRevisionsPayload = { rows: ReportRevisionRow[] };
 const REPORT_ROW_FIELDS = {
   id: REPORT_ID_SCHEMA,
   name: z.string(),
-  analysis_id: z.string().uuid(),
-  view_id: z.string().uuid(),
+  analysis_id: z.uuid(),
+  view_id: z.uuid(),
   result_view_id: z.string(),
   presentation_type: PRESENTATION_TYPE_SCHEMA,
   render_shape: RENDER_SHAPE_SCHEMA.nullable(),
-  revision: z.number().int().positive(),
+  revision: z.int().positive(),
   updated_at: z.string(),
-} satisfies z.ZodRawShape;
+} satisfies z.core.$ZodShape;
 
-const REPORT_ROW_SCHEMA: z.ZodType<ReportRow> = z.object(REPORT_ROW_FIELDS).strict();
+const REPORT_ROW_SCHEMA: z.ZodType<ReportRow> = z.strictObject(REPORT_ROW_FIELDS);
 
-export const REPORTS_PAYLOAD_SCHEMA: z.ZodType<ReportsPayload> = z
-  .object({ rows: z.array(REPORT_ROW_SCHEMA), total: z.number() })
-  .strict();
+export const REPORTS_PAYLOAD_SCHEMA: z.ZodType<ReportsPayload> = z.strictObject({
+  rows: z.array(REPORT_ROW_SCHEMA),
+  total: z.number(),
+});
 export const REPORT_ROW_PAYLOAD_SCHEMA = REPORT_ROW_SCHEMA;
 
-export const REPORT_DETAIL_SCHEMA: z.ZodType<ReportDetail, z.ZodTypeDef, unknown> = z
-  .object({
-    ...REPORT_ROW_FIELDS,
-    owner: z.string(),
-    analysis: ANALYSIS_DEFINITION_INPUT,
-    view: SEMANTIC_VIEW_INTENT_INPUT,
-    view_preferences: VIEW_PREFERENCES_INPUT,
-  })
-  .strict();
+export const REPORT_DETAIL_SCHEMA: z.ZodType<ReportDetail> = z.strictObject({
+  ...REPORT_ROW_FIELDS,
+  owner: z.string(),
+  analysis: ANALYSIS_DEFINITION_INPUT,
+  view: SEMANTIC_VIEW_INTENT_INPUT,
+  view_preferences: VIEW_PREFERENCES_INPUT,
+});
 
-export const REPORT_REVISIONS_PAYLOAD_SCHEMA: z.ZodType<ReportRevisionsPayload> = z
-  .object({
-    rows: z.array(
-      z
-        .object({
-          revision: z.number().int().positive(),
-          name: z.string(),
-          saved_by: z.string(),
-          saved_at: z.string(),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
+export const REPORT_REVISIONS_PAYLOAD_SCHEMA: z.ZodType<ReportRevisionsPayload> = z.strictObject({
+  rows: z.array(
+    z.strictObject({
+      revision: z.int().positive(),
+      name: z.string(),
+      saved_by: z.string(),
+      saved_at: z.string(),
+    }),
+  ),
+});

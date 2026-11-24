@@ -1,4 +1,4 @@
-import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/server/validators/ajv";
 import { recordingLogger } from "./test_support/logger.js";
 import { describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
@@ -236,8 +236,8 @@ test("MCP 提供全部工具和 Apps 资源", async () => {
       RECORDS_UI_RESOURCE_URI,
     },
   ] = await Promise.all([
-    import("@modelcontextprotocol/sdk/client/index.js"),
-    import("@modelcontextprotocol/sdk/inMemory.js"),
+    import("@modelcontextprotocol/client"),
+    import("@modelcontextprotocol/server"),
     import("./composition/application.js"),
     import("./server.js"),
     import("./mcp/contracts.js"),

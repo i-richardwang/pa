@@ -47,36 +47,30 @@ export type ReplayPayload = {
   time_override?: "applied" | "unsupported";
 };
 
-export const REPLAY_PAYLOAD_SCHEMA: z.ZodType<ReplayPayload, z.ZodTypeDef, unknown> = z
-  .object({
-    at: z.string(),
-    caller: z.string(),
-    analysis_id: z.string().uuid(),
-    view_id: z.string().uuid(),
-    revision: z.number().int().positive().optional(),
-    analysis: ANALYSIS_DEFINITION_INPUT,
-    view: SEMANTIC_VIEW_INTENT_INPUT,
-    view_preferences: VIEW_PREFERENCES_INPUT,
-    record_projection_bindings: RECORD_PROJECTION_BINDINGS_SCHEMA,
-    payload: QUERY_PAYLOAD_SCHEMA,
-    render_bundle: z
-      .object({
-        view: VIEW_BLOCK_SCHEMA,
-        decl: CHART_DECL_SCHEMA,
-      })
-      .strict(),
-    presentation: z.custom<PresentationBlock>(isPresentationBlock),
-    presentation_notes: z
-      .array(
-        z
-          .object({
-            result_view_id: z.string(),
-            kind: z.enum(["empty_result", "unsupported_shape"]),
-            note: z.string(),
-          })
-          .strict(),
-      )
-      .optional(),
-    time_override: z.enum(["applied", "unsupported"]).optional(),
-  })
-  .strict();
+export const REPLAY_PAYLOAD_SCHEMA: z.ZodType<ReplayPayload> = z.strictObject({
+  at: z.string(),
+  caller: z.string(),
+  analysis_id: z.uuid(),
+  view_id: z.uuid(),
+  revision: z.int().positive().optional(),
+  analysis: ANALYSIS_DEFINITION_INPUT,
+  view: SEMANTIC_VIEW_INTENT_INPUT,
+  view_preferences: VIEW_PREFERENCES_INPUT,
+  record_projection_bindings: RECORD_PROJECTION_BINDINGS_SCHEMA,
+  payload: QUERY_PAYLOAD_SCHEMA,
+  render_bundle: z.strictObject({
+    view: VIEW_BLOCK_SCHEMA,
+    decl: CHART_DECL_SCHEMA,
+  }),
+  presentation: z.custom<PresentationBlock>(isPresentationBlock),
+  presentation_notes: z
+    .array(
+      z.strictObject({
+        result_view_id: z.string(),
+        kind: z.enum(["empty_result", "unsupported_shape"]),
+        note: z.string(),
+      }),
+    )
+    .optional(),
+  time_override: z.enum(["applied", "unsupported"]).optional(),
+});
