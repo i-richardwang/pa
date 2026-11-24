@@ -14,6 +14,7 @@ import { createReportService } from "../application/report_service.js";
 import { createSemanticPlanningService } from "../application/semantic_planning_service.js";
 import type { CubeGateway } from "../ports/cube_gateway.js";
 import type { Logger } from "../ports/logger.js";
+import { materializeResultCsv } from "../application/result_csv.js";
 import { runExport } from "../engine/export.js";
 import type { SqliteDatabase } from "../sqlite.js";
 import { createAnalysisRepository } from "../storage/analysis_repository.js";
@@ -65,6 +66,7 @@ export function createApplication(input: {
   const boards = createBoardRepository(input.db);
   const presentation = createPresentationService();
   const semanticPlanning = createSemanticPlanningService({ catalog });
+  const queryExecution = createQueryExecutionService({ cube: input.cube });
   const exportService = createExportService({
     analyses,
     semanticPlanning,
@@ -74,16 +76,24 @@ export function createApplication(input: {
     baseUrl: input.baseUrl,
     audit: createExportAudit(input.db).log,
     runExport: (plan, securityContext) => runExport(input.cube, plan, securityContext),
-  });
-  const queryExecution = createQueryExecutionService({
-    cube: input.cube,
-    exports: exportService,
+    runReplayExport: async (viewId, principal) => {
+      const identity = await analyses.resolveOwnedView(viewId, principal.email);
+      const planned = await semanticPlanning.plan(
+        principal,
+        identity.analysis.definition,
+        identity.view.intent,
+        identity.view.preferences,
+      );
+      const result = await queryExecution.execute(planned);
+      return materializeResultCsv(result.fullRowViewBlock, result.payload.data_as_of);
+    },
   });
   const analysis = createAnalysisService({
     repository: analyses,
     execute: queryExecution.execute,
     plan: semanticPlanning.plan,
     usage,
+    createDelivery: exportService.createDelivery,
   });
   const report = createReportService({
     reports,

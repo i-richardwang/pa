@@ -109,7 +109,7 @@ try {
   });
   const payload = await application.recordProjection.runReport(principal, report.id, {
     revision: report.revision,
-    result_view_id: "organization_summary",
+    result_view_id: executed.record_projection_bindings.views[0].result_view_id,
     metric_id: active.id,
     coordinates: [{ dimension_id: organization.id, value: scopeValue }],
     time_coordinate: { from: context.dataAsOf, to: context.dataAsOf },

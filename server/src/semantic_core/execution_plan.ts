@@ -6,8 +6,10 @@ import {
   parseAnalysisSpec,
   type AnalysisSpec,
   type AnalysisViewSpec,
+  type DerivedViewSpec,
   type QueryViewSpec,
 } from "./analysis_spec.js";
+import type { ColumnTime } from "./time_contract.js";
 import { memberShortName } from "./member_name.js";
 
 export type OutputProvenance = {
@@ -20,19 +22,55 @@ export type OutputDelivery = {
   provenance?: OutputProvenance;
 };
 
-export type ExecutionOutput = OutputDelivery & {
-  id: string;
-};
+type OutputOperation =
+  | { kind: "query"; view: QueryViewSpec }
+  | { kind: "derived"; view: DerivedViewSpec }
+  | { kind: "composition"; composition: CompositionExecution };
 
-/** 类型品牌：ExecutionPlan 只能由 planExecution 产生。 */
-declare const executionPlanBrand: unique symbol;
+const compiledPlan = Symbol("compiledPlan");
 
 export type ExecutionPlan = {
-  readonly [executionPlanBrand]: true;
+  readonly [compiledPlan]: true;
   title?: string;
-  nodes: AnalysisViewSpec[];
-  output: ExecutionOutput;
+  queries: QueryViewSpec[];
+  output: OutputDelivery & { id: string; operation: OutputOperation };
 };
+
+export type CompositionExecution = {
+  group: { id: string; title: string; label?: { id: string; title: string } };
+  baseline?: string;
+  columns: {
+    id: string;
+    title: string;
+    member: string;
+    source?: { query: string; labels?: string };
+    time: ColumnTime;
+  }[];
+};
+
+export function planComposition(input: {
+  title?: string;
+  queries: QueryViewSpec[];
+  composition: CompositionExecution;
+}): ExecutionPlan {
+  const { group, columns } = input.composition;
+  return {
+    [compiledPlan]: true,
+    title: input.title,
+    queries: input.queries,
+    output: {
+      operation: { kind: "composition", composition: input.composition },
+      id: "result",
+      columns: Object.fromEntries(
+        [
+          group.id,
+          ...(group.label ? [group.label.id] : []),
+          ...columns.map((column) => column.id),
+        ].map((id) => [id, id]),
+      ),
+    },
+  };
+}
 
 export type PlanOptions = {
   delivery: OutputDelivery | "identity";
@@ -57,15 +95,20 @@ export function planExecution(input: AnalysisSpec, opts: PlanOptions): Execution
     throw new Error(`交付结果 ${outputId} 缺少公共列投影`);
   }
   return {
+    [compiledPlan]: true,
     ...(spec.title ? { title: spec.title } : {}),
-    nodes: spec.views,
-    output: { id: outputId, ...delivery },
-  } as unknown as ExecutionPlan;
+    queries: spec.views.filter((node): node is QueryViewSpec => !isDerivedViewSpec(node)),
+    output: {
+      id: outputId,
+      operation: isDerivedViewSpec(view) ? { kind: "derived", view } : { kind: "query", view },
+      ...delivery,
+    },
+  };
 }
 
 export function exportableOutput(plan: ExecutionPlan): QueryViewSpec | undefined {
-  const node = plan.nodes.find((candidate) => candidate.id === plan.output.id);
-  return node && !isDerivedViewSpec(node) && !node.grouping_sets?.calculations?.length
-    ? node
+  const { operation } = plan.output;
+  return operation.kind === "query" && !operation.view.grouping_sets?.calculations?.length
+    ? operation.view
     : undefined;
 }

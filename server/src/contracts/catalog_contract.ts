@@ -3,6 +3,7 @@
  * 不含成员的物理绑定。
  */
 import { z } from "zod";
+import { YEAR_MONTH_REGEX } from "../semantic_core/year_month.js";
 import { ACCESS_SCOPE_DEFINITION_SCHEMA, type AccessScopeDefinition } from "./access_scope.js";
 import {
   METRIC_DOMAIN_ID_PATTERN,
@@ -38,6 +39,8 @@ export type PublicCatalogMeasure = PublicCatalogMemberBase & {
   kind: "measure";
   /** 指标结果可查看构成记录；具体目标由服务端按指标关系解析。 */
   records_available?: true;
+  /** 该指标的相对期间以此月份为终点。 */
+  data_as_of?: string;
   query_capabilities: MeasureQueryCapabilities;
   /** 该正式指标允许在报告中承载的受控临时计算。 */
   report_calculations?: ReportCalculationKind[];
@@ -53,6 +56,7 @@ export type PublicCatalogDimension = PublicCatalogMemberBase & {
   dimension_kind?: CatalogDimensionKind;
   /** 维度所属的业务属性组，每个公开维度都有；不影响查询来源的选择。 */
   dimension_group: { id: string; title: string };
+  entity_label?: string;
 };
 
 export type PublicCatalogMember = PublicCatalogMeasure | PublicCatalogDimension;
@@ -104,6 +108,12 @@ export type CatalogDimensionValues = {
   truncated?: string;
 };
 
+export const MEASURE_DATA_AS_OF_SCHEMA = z
+  .string()
+  .regex(YEAR_MONTH_REGEX)
+  .optional()
+  .describe("该指标滚动期间所依据的实际数据截止月");
+
 export const MEASURE_QUERY_CAPABILITIES_SCHEMA: z.ZodType<MeasureQueryCapabilities> = z
   .object({
     dimension_ids: z.array(z.string()).describe("可用于分组、筛选和排序的维度 id"),
@@ -138,6 +148,7 @@ const CATALOG_MEMBER_BASE_SCHEMA = z
 const CATALOG_MEASURE_SCHEMA: z.ZodType<PublicCatalogMeasure> = CATALOG_MEMBER_BASE_SCHEMA.extend({
   kind: z.literal("measure"),
   records_available: z.literal(true).optional(),
+  data_as_of: MEASURE_DATA_AS_OF_SCHEMA,
   query_capabilities: MEASURE_QUERY_CAPABILITIES_SCHEMA,
   report_calculations: z.array(z.literal("percent_of_total")).optional(),
   formula: z
@@ -161,6 +172,7 @@ const CATALOG_DIMENSION_SCHEMA: z.ZodType<PublicCatalogDimension> =
     kind: z.literal("dimension"),
     dimension_kind: z.enum(["categorical", "overlapping"]).optional(),
     dimension_group: z.object({ id: z.string(), title: z.string() }).strict(),
+    entity_label: z.string().optional(),
   });
 
 const METRIC_DOMAIN_SCHEMA: z.ZodType<PublicMetricDomain> = z

@@ -6,6 +6,7 @@ import type { SemanticQueryView } from "@semantic-analysis";
 import {
   beginAnalysisEdit,
   blankAnalysisDefinition,
+  semanticEditableQuery,
   type AnalysisEditState,
 } from "./analysis_draft";
 import { defaultPercentOfTotal, percentOfTotalPick, ReportQueryRail } from "./report_query_rail";
@@ -61,7 +62,7 @@ const blankDraft = (): AnalysisEditState =>
   );
 
 function withMembers(draft: AnalysisEditState): AnalysisEditState {
-  const view = draft.analysis.query;
+  const view = semanticEditableQuery(draft.analysis)!;
   if (!view || "from" in view) throw new Error("空白分析应是单个语义查询");
   return {
     ...draft,
@@ -77,7 +78,7 @@ function withMembers(draft: AnalysisEditState): AnalysisEditState {
 }
 
 function withAnnualMonthlyMetric(draft: AnalysisEditState): AnalysisEditState {
-  const view = draft.analysis.query;
+  const view = semanticEditableQuery(draft.analysis)!;
   if (!view || "from" in view) throw new Error("空白分析应是单个语义查询");
   return {
     ...draft,
@@ -94,7 +95,7 @@ function withAnnualMonthlyMetric(draft: AnalysisEditState): AnalysisEditState {
 
 function withOverlappingTime(draft: AnalysisEditState): AnalysisEditState {
   const withMeasure = withMembers(draft);
-  const view = withMeasure.analysis.query;
+  const view = semanticEditableQuery(withMeasure.analysis)!;
   if (!view || "from" in view) throw new Error("测试草稿应是单个语义查询");
   return {
     ...withMeasure,
@@ -115,7 +116,7 @@ function withSort(
   draft: AnalysisEditState,
   group_sort: Omit<NonNullable<SemanticQueryView["group_sort"]>, "dimension">,
 ): AnalysisEditState {
-  const view = draft.analysis.query;
+  const view = semanticEditableQuery(draft.analysis)!;
   if (!view || "from" in view) throw new Error("空白分析应是单个语义查询");
   return {
     ...draft,
@@ -128,7 +129,7 @@ function withSort(
 
 function withCalculation(draft: AnalysisEditState): AnalysisEditState {
   const withMembersDraft = withMembers(draft);
-  const view = withMembersDraft.analysis.query;
+  const view = semanticEditableQuery(withMembersDraft.analysis)!;
   if (!view || "from" in view) throw new Error("测试草稿应是单个语义查询");
   return {
     ...withMembersDraft,
@@ -155,7 +156,7 @@ function withFilter(
   relation: "one_of" | "none_of",
   values = ["示例组织甲"],
 ): AnalysisEditState {
-  const view = draft.analysis.query;
+  const view = semanticEditableQuery(draft.analysis)!;
   if (!view || "from" in view) throw new Error("空白分析应是单个语义查询");
   return {
     ...draft,
@@ -314,7 +315,7 @@ test("范围按钮显示当前设置：限制项数时显示方向和数量，�
 
 test("新增分组维度默认显示全部，不设置项数上限", () => {
   const draft = withMembers(blankDraft());
-  const view = draft.analysis.query;
+  const view = semanticEditableQuery(draft.analysis)!;
   if (!view || "from" in view) throw new Error("测试草稿应是单个语义查询");
   expect(view.group_sort).toBeUndefined();
   const out = render(draft);

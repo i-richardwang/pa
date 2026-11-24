@@ -105,6 +105,30 @@ describe("CanonicalSemanticModel 权限投影", () => {
     expect(authorized.views[0]?.measures).toEqual([]);
   });
 
+  test("结果保护的支撑指标不可见时，受保护指标也不公开", () => {
+    const source = canonicalViews[0];
+    const base = source.measures[0];
+    const scored = {
+      ...base,
+      name: "test_people_metrics.engagement_score",
+      title: "调研得分",
+      description: "参与答卷的平均得分。",
+      meta: {
+        ...base.meta,
+        result_guards: [
+          { kind: "minimum_support", support_measure: "active_employee_count", threshold: 5 },
+        ],
+      },
+    };
+    const model = canonicalModelFixture(
+      [{ ...source, measures: [base, scored] }],
+      TEST_SEMANTIC_TAXONOMY,
+    );
+    const authorized = authorizeCanonicalSemanticModel(model, [{ ...source, measures: [scored] }]);
+    expect(authorized.views[0]?.measures).toEqual([]);
+    expect(authorized.compiler.measures).toEqual([]);
+  });
+
   test("只有明细 View 可见时不暴露空指标域", () => {
     const detail: CubeView = {
       ...canonicalViews[0]!,

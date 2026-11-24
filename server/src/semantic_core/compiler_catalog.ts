@@ -59,6 +59,7 @@ export type CompilerCatalogMeasure = CompilerCatalogMemberBase & {
 
 export type CompilerCatalogDimension = CompilerCatalogMemberBase & {
   kind: "dimension";
+  entity_label?: string;
 };
 
 export type CompilerCatalogMember = CompilerCatalogMeasure | CompilerCatalogDimension;
@@ -71,6 +72,7 @@ export type CompilerCatalogView = {
   time_source?: string;
   /** 该时钟允许的相对比较形态。 */
   comparison_policy: TimeComparisonPolicy;
+  observation?: string;
   /** 业务层级链，已解析为维度语义 id。 */
   hierarchies?: string[][];
 };

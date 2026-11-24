@@ -13,7 +13,7 @@ import { planExecution } from "../semantic_core/execution_plan.js";
 import { compilePresentationBlock } from "../presentation_core/chart_config.js";
 import type { ViewBlock } from "../semantic_core/query_payload.js";
 import type { AnalysisDefinition, SemanticViewIntent } from "../semantic_core/semantic_analysis.js";
-import { semanticAnalysisOf } from "../test_support/report.js";
+import { semanticAnalysisOf, unexpectedExport } from "../test_support/report.js";
 import { createAnalysisRepository } from "../storage/analysis_repository.js";
 import { createAnalysisService } from "./analysis_service.js";
 import type { QueryRunResult } from "./query_pipeline.js";
@@ -99,6 +99,7 @@ function serviceWith(rows: ViewBlock["rows"]) {
   const repository = createAnalysisRepository(createTestAppDatabase());
   let executions = 0;
   const service = createAnalysisService({
+    createDelivery: unexpectedExport,
     repository,
     execute: async () => {
       executions += 1;
@@ -150,6 +151,7 @@ function pivotResultOf(rows: ViewBlock["rows"]): QueryRunResult {
 function pivotServiceWith(rows: ViewBlock["rows"]) {
   const repository = createAnalysisRepository(createTestAppDatabase());
   const service = createAnalysisService({
+    createDelivery: unexpectedExport,
     repository,
     execute: async () => pivotResultOf(rows),
     plan: async () => pivotCompiled,
@@ -295,6 +297,7 @@ describe("analysis service 身份与呈现边界", () => {
   test("定义被拒同样留下使用记录：最常见的失败不能在观察面上消失", async () => {
     const logged: { outcome: string; error?: string; tool: string }[] = [];
     const service = createAnalysisService({
+      createDelivery: unexpectedExport,
       repository: createAnalysisRepository(createTestAppDatabase()),
       plan: async () => {
         throw new Error("不应规划");
@@ -316,7 +319,7 @@ describe("analysis service 身份与呈现边界", () => {
       service.run(
         principal,
         // 定义里没有并列查询的落脚点：越过类型验被拒时仍然留痕。
-        { queries: [definition.query, definition.query] } as unknown as AnalysisDefinition,
+        { queries: [definition, definition] } as unknown as AnalysisDefinition,
         { type: "table" },
       ),
     ).rejects.toThrow(/query\.measures/);

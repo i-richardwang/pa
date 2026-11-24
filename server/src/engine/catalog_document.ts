@@ -59,6 +59,7 @@ export type CatalogMember = {
   sensitivity?: "restricted";
   dimension_kind?: DimensionKind;
   dimension_group?: { id: string; title: string };
+  entity_label?: string;
   /** 指标的时间合同及由它解析出的求值基准，仅指标有此字段。 */
   time?: MetricTimeResolution;
   calculation_role?: string;
@@ -89,6 +90,7 @@ type CatalogViewDocumentBase = {
   time_source: string;
   time_source_title: string;
   comparison_policy: TimeComparisonPolicy;
+  observation?: string;
   measures: CatalogMember[];
   dimensions: CatalogMember[];
   hierarchies: string[][];
@@ -169,6 +171,17 @@ function memberDocument(
   metricTimes: ReadonlyMap<string, MetricTimeResolution>,
 ): CatalogMember {
   const rawDimensionGroup = member.meta?.dimension_group;
+  const entityLabel = member.meta?.entity_label;
+  if (
+    entityLabel !== undefined &&
+    (kind !== "dimension" ||
+      member.type !== "string" ||
+      typeof entityLabel !== "string" ||
+      !/^[a-z][a-z0-9_]*$/.test(entityLabel) ||
+      entityLabel === memberShortName(member.name))
+  ) {
+    throw new Error(`成员 ${member.title} 的 entity_label 声明无效`);
+  }
   const dimensionGroup =
     kind === "dimension" && typeof rawDimensionGroup === "string"
       ? dimensionGroupDefinition(rawDimensionGroup, taxonomy.dimension_groups)
@@ -220,6 +233,7 @@ function memberDocument(
     ...(dimensionGroup
       ? { dimension_group: { id: dimensionGroup.name, title: dimensionGroup.title } }
       : {}),
+    ...(typeof entityLabel === "string" ? { entity_label: `dimension:${entityLabel}` } : {}),
     ...(kind === "measure" ? { time: requiredMetricTime(metricTimes, member) } : {}),
     ...(member.meta?.incompatible_dimensions === undefined
       ? {}
@@ -307,6 +321,9 @@ export function buildCatalogDocument(
         time_source: timeSource,
         time_source_title: timeSourceContract.title,
         comparison_policy: timeSourceContract.comparison_policy,
+        ...(timeSourceContract.observation
+          ? { observation: `dimension:${timeSourceContract.observation.id_member}` }
+          : {}),
         measures: view.measures.map((member) =>
           memberDocument(views, member, "measure", taxonomy, metricTimes),
         ),
@@ -442,6 +459,7 @@ export function canonicalCatalog(document: CatalogDocument): CanonicalCatalog {
             (declared.dimension_kind ?? "") !== (member.dimension_kind ?? "") ||
             JSON.stringify(declared.dimension_group ?? null) !==
               JSON.stringify(member.dimension_group ?? null) ||
+            declared.entity_label !== member.entity_label ||
             (declared.calculation_role ?? "") !== (member.calculation_role ?? "") ||
             JSON.stringify(declared.report_calculations ?? []) !==
               JSON.stringify(member.report_calculations ?? []) ||
@@ -616,6 +634,7 @@ function compilerMember(
     ...(member.sensitivity ? { sensitivity: member.sensitivity } : {}),
     ...(member.dimension_kind ? { dimension_kind: member.dimension_kind } : {}),
     ...(member.dimension_group ? { dimension_group: member.dimension_group } : {}),
+    ...(member.entity_label ? { entity_label: member.entity_label } : {}),
     ...(member.time ? { time: member.time } : {}),
     ...(member.available_in.some(({ member: physical }) => recordProjectionBindings.has(physical))
       ? { records_available: true as const }
@@ -681,6 +700,7 @@ function stripDimension(member: CompilerCatalogDimension): PublicCatalogDimensio
     kind: "dimension",
     ...(member.dimension_kind ? { dimension_kind: member.dimension_kind } : {}),
     dimension_group: member.dimension_group,
+    ...(member.entity_label ? { entity_label: member.entity_label } : {}),
   };
 }
 
@@ -759,6 +779,10 @@ export function toCompilerCatalog(document: CatalogDocument): CompilerCatalog {
       title: view.title,
       time_source: view.time_source,
       comparison_policy: view.comparison_policy,
+      ...(view.observation &&
+      view.dimensions.some((dimension) => dimensionSemanticId(dimension) === view.observation)
+        ? { observation: view.observation }
+        : {}),
       ...(view.hierarchies.length
         ? {
             hierarchies: view.hierarchies.flatMap((chain) => {
@@ -786,8 +810,12 @@ export function toCompilerCatalog(document: CatalogDocument): CompilerCatalog {
     if (member.kind !== "measure" || !member.time) {
       throw new Error(`指标目录成员 ${member.id} 的类型无效`);
     }
+    const observation = compiler.views.find(
+      (view) => view.name === measureExecutionView(member),
+    )?.observation;
     const constraints = {
       ...metricTimeCapabilities(member.time.contract),
+      ...(observation ? { observation } : {}),
       ...(requiresExplicitComparison(member, compiler.views)
         ? { comparison: "explicit_only" as const }
         : {}),
@@ -815,11 +843,7 @@ export function toCompilerCatalog(document: CatalogDocument): CompilerCatalog {
 
 export function toSemanticCatalog(
   document: CatalogDocument,
-  time: Pick<PublicCatalogDocument, "data_as_of" | "time_context"> = {
-    data_as_of: "未知",
-    time_context: [],
-  },
-): PublicCatalogDocument {
+): Omit<PublicCatalogDocument, "data_as_of" | "time_context"> {
   const compiler = toCompilerCatalog(document);
   const links = new Map(
     catalogMetricDomains(compiler, compiler.measures, compiler.dimensions).map((row) => [
@@ -830,7 +854,6 @@ export function toSemanticCatalog(
   return {
     access_scope: compiler.access_scope,
     observation_scopes: compiler.observation_scopes,
-    ...time,
     metric_domains: compiler.metric_domains.map((domain) => ({
       id: domain.id,
       title: domain.title,

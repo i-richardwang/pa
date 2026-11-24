@@ -252,7 +252,7 @@ function assertMetricTimeSelection(
   if (issue) throw new TimeSelectionError(issue);
 }
 
-function timeBounds(query: CubeQuery, context: TimeContext, views: CubeView[]) {
+export function queryTimeBounds(query: CubeQuery, context: TimeContext, views: CubeView[]) {
   const selectedViews = queryViews(query);
   const sources = unique(
     selectedViews.map((viewName) => {
@@ -262,16 +262,18 @@ function timeBounds(query: CubeQuery, context: TimeContext, views: CubeView[]) {
       }
       return sourceName;
     }),
-  ).map((sourceName) => {
-    const source = context.sources[sourceName];
-    if (!source) throw new Error(`数据时间状态 ${sourceName} 不可用，请稍后重试`);
-    return source;
-  });
+  );
   if (!sources.length) throw new Error("查询缺少可用的数据时间状态");
+  const clocks = [];
+  for (const id of sources) {
+    const clock = context.sources[id];
+    if (!clock) return { unavailable: id } as const;
+    clocks.push(clock);
+  }
   return {
     // 默认截止月取各来源实际数据都已覆盖的月份；显式上界可到计划数据覆盖的未来月份。
-    defaultThrough: sources.map((source) => source.actualThrough).sort()[0],
-    availableThrough: sources
+    defaultThrough: clocks.map((source) => source.actualThrough).sort()[0],
+    availableThrough: clocks
       .map((source) => source.availableThrough)
       .sort()
       .at(-1)!,
@@ -399,10 +401,14 @@ export function resolveTimePlanning(
   preferredView?: string,
 ): ResolvedTimePlanning {
   if (!time) throw new Error("查询必须提供业务时间；使用截止月份或连续期间");
+  if ("observation" in time && time.observation) throw new Error("期次选择须先解析为具体观测");
   assertNoRawTimeMembers(query);
   const view = queryTimeView(query, preferredView);
   const measures = measureTimes(query, views);
-  const bounds = timeBounds(query, context, views);
+  const bounds = queryTimeBounds(query, context, views);
+  if (bounds.unavailable !== undefined) {
+    throw new Error(`数据时间状态 ${bounds.unavailable} 不可用，请稍后重试`);
+  }
   const result = resolveTimeSelection(time, bounds.defaultThrough);
   if (result.status === "invalid") throw new TimeSelectionError(result.issue);
   const { selection } = result;

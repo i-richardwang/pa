@@ -13,9 +13,10 @@ import {
   type QueryViewSpec,
 } from "../semantic_core/analysis_spec.js";
 import type { CompilerCatalog, CompilerCatalogMember } from "../semantic_core/compiler_catalog.js";
-import type { UnboundChart } from "../presentation_core/chart_spec.js";
+import { bindChartDecl, type UnboundChart } from "../presentation_core/chart_spec.js";
 import {
   planExecution,
+  planComposition,
   type ExecutionPlan,
   type OutputDelivery,
   type OutputProvenance,
@@ -24,7 +25,6 @@ import { bindPresentation, type PresentationSpec } from "../presentation_core/pr
 import {
   parseAnalysisDefinition,
   parseSemanticViewIntent,
-  semanticResultView,
   semanticResultViewId,
   semanticSourceViews,
   SEMANTIC_DERIVED_VIEW_ID,
@@ -108,7 +108,8 @@ function recordProjectionBindingForIntent(
   const dimensions: RecordProjectionViewBinding["dimensions"] = {};
   for (const id of intent.measures ?? []) {
     const member = catalogMember(catalog, id, "measure");
-    if (member && planMetricRecordProjection(catalog, intent, member.id)) {
+    const usesObservation = member?.kind === "measure" && member.time.constraints?.observation;
+    if (member && !usesObservation && planMetricRecordProjection(catalog, intent, member.id)) {
       metrics[member.id] = { metric_id: member.id, title: member.title };
     }
   }
@@ -150,7 +151,7 @@ function routeForDerived(
   catalog: CompilerCatalog,
   definition: AnalysisDefinition,
 ): SemanticRoute[] {
-  const derived = definition.derived;
+  const derived = "query" in definition ? definition.derived : undefined;
   if (!derived) return [];
   const sources = semanticSourceViews(definition).map(({ query }) => {
     if (!query.view_title?.trim()) {
@@ -202,7 +203,7 @@ function semanticDelivery(
       ? [{ sources: route.sources, join_keys: route.join_keys } satisfies OutputProvenance]
       : [],
   )[0];
-  const derived = definition.derived;
+  const derived = "query" in definition ? definition.derived : undefined;
   if (derived) {
     return {
       columns: Object.fromEntries(derived.columns.map((column) => [column.as, column.as])),
@@ -213,6 +214,7 @@ function semanticDelivery(
   if (plan?.status !== "direct") {
     throw new Error(`语义结果视图 ${outputId} 没有可交付的执行计划`);
   }
+  if (!("query" in definition)) throw new Error("组合表必须使用独立列计划");
   return directDelivery(catalog, definition.query, plan);
 }
 
@@ -567,6 +569,97 @@ function groupingShareCalculations(
   });
 }
 
+function compileComposition(
+  catalog: CompilerCatalog,
+  definition: Extract<AnalysisDefinition, { composition: unknown }>,
+  intent: SemanticViewIntent,
+  preferences: ViewPreferences,
+): CompiledAnalysisView {
+  if (intent.type !== "table") throw new ViewIntentError("跨期组合只支持表格");
+  if (intent.columns?.some((axis) => axis !== "metrics")) {
+    throw new ViewIntentError("跨期组合表的列轴只支持 metrics");
+  }
+  const composition = definition.composition;
+  const group = catalog.dimensions.find((dimension) => dimension.id === composition.group_by);
+  if (!group?.entity_label) throw new AnalysisDefinitionError("组合表须使用目录声明的稳定实体维度");
+  const label = catalog.dimensions.find((dimension) => dimension.id === group.entity_label);
+  const queries: QueryViewSpec[] = [];
+  const columns = composition.columns.map((column, index) => {
+    const metric = catalog.measures.find((measure) => measure.id === column.measure);
+    if (!metric) throw new AnalysisDefinitionError(`当前目录没有指标 ${column.measure}`);
+    const dimensionIds = metric.query_capabilities.dimension_ids;
+    const result = {
+      id: column.id,
+      title: column.title ?? metric.title,
+      member: metric.id,
+      time: column.time,
+    };
+    if (!dimensionIds.includes(group.id)) return { ...result, source: undefined };
+    const intent = { measures: [metric.id], filters: composition.filters, time: column.time };
+    const planGroup = (id: string, dimensions: string[]) =>
+      planQueryIntent(catalog, { ...intent, dimensions }, id, { stableGrouping: true });
+    const source = `column_${index + 1}`;
+    const query = planGroup(source, [group.id]);
+    if (query.status === "incompatible") throw new SemanticQueryIncompatibleError(query.issue, []);
+    queries.push(query.query);
+    let labels: string | undefined;
+    if (label && dimensionIds.includes(label.id)) {
+      const labelId = `label_${index + 1}`;
+      const labelQuery = planGroup(labelId, [group.id, label.id]);
+      if (labelQuery.status === "direct") {
+        labels = labelId;
+        const { time } = labelQuery.query;
+        queries.push({
+          ...labelQuery.query,
+          measures: undefined,
+          time: "range" in time || "last" in time ? { ...time, grain: "month" } : time,
+        });
+      }
+    }
+    return { ...result, source: { query: source, labels } };
+  });
+  if (
+    !queries.length ||
+    (composition.baseline &&
+      !columns.some((column) => column.id === composition.baseline && column.source))
+  ) {
+    throw new AnalysisDefinitionError("组合表的行基准须支持所选实体粒度");
+  }
+  const plan = planComposition({
+    title: definition.title,
+    queries,
+    composition: {
+      group: { id: group.id, title: group.title, label },
+      baseline: composition.baseline,
+      columns,
+    },
+  });
+  const presentation = bindChartDecl(
+    {
+      type: "table",
+      ...(preferences.table_shading ? { shading: preferences.table_shading } : {}),
+    },
+    {
+      measures: columns.map((column) => column.id),
+      dimensions: [group.id, ...(label ? [label.id] : [])],
+    },
+  );
+  return {
+    plan,
+    presentation,
+    render_decl: projectPresentation(presentation, plan.output, plan.output.id),
+    routes: [
+      {
+        status: "composed",
+        result_view_id: plan.output.id,
+        sources: columns.map(({ title }) => ({ title })),
+        join_keys: [{ id: group.id, title: group.title }],
+      },
+    ],
+    record_projection_bindings: { views: [] },
+  };
+}
+
 /** catalog 须是当前用户可见的目录。 */
 export function compileAnalysisView(
   catalog: CompilerCatalog,
@@ -576,6 +669,8 @@ export function compileAnalysisView(
   const definition = parseAnalysisDefinition(input.analysis);
   const intent = parseSemanticViewIntent(input.view);
   const preferences = validateViewPreferences(intent, rawPreferences);
+  if ("composition" in definition)
+    return compileComposition(catalog, definition, intent, preferences);
   const sources = semanticSourceViews(definition);
   const resolved = sources.map(({ role, query }) => planQueryIntent(catalog, query, role));
   const routes = routesForPlans(
@@ -587,6 +682,15 @@ export function compileAnalysisView(
       plan.status === "incompatible",
   );
   if (incompatible) throw new SemanticQueryIncompatibleError(incompatible.issue, routes);
+  const window = definition.query.time.window;
+  const native = sources.some(({ query }) => query.time.window.kind === "observation");
+  const trend = window.kind === "observation" && window.selection.kind === "trend";
+  if (
+    native &&
+    (definition.derived || (intent.type !== "table" && !(trend && intent.type === "line")))
+  ) {
+    throw new ViewIntentError("原生期次支持表格，期次趋势也可使用折线");
+  }
   const outputId = semanticResultViewId(definition);
   const intentById = new Map(sources.map(({ role, query }) => [role, query]));
   const directPlans = resolved.filter(
@@ -621,7 +725,7 @@ export function compileAnalysisView(
   });
   const outputPhysical = analysis.views.find((view) => view.id === outputId);
   if (!outputPhysical) throw new Error(`结果视图 ${outputId} 不存在`);
-  const outputIntent = semanticResultView(definition);
+  const outputIntent = definition.derived ?? definition.query;
   validateSemanticTableLayout(outputIntent, intent);
   const outputQuery = definition.derived ? undefined : definition.query;
   const calculated = new Map<string, CalculatedMeasure>(

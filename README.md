@@ -67,8 +67,7 @@ flowchart LR
 仓库内的 [`plugins/pa`](./plugins/pa) 是完整插件制品，入口为
 [`plugins/pa/.codex-plugin/plugin.json`](./plugins/pa/.codex-plugin/plugin.json)，本地 marketplace
 为 [`.agents/plugins/marketplace.json`](./.agents/plugins/marketplace.json)。插件默认连接公开 Demo 的
-`http://127.0.0.1:8788/mcp`。内部部署由私有适配仓库生成自己的 MCP 连接配置；公共仓库不向消费目录
-复制文件，也不改写消费仓库的说明、Agent 指令或编辑器配置。
+`http://127.0.0.1:8788/mcp`。其他部署在客户端的工作区 MCP 配置中将服务名 `pa` 指向该部署的 `/mcp`。查询技能共用同一份，支持的指标、时间和权限由所连服务的目录决定。
 
 ### 本机并行运行多套语义包
 

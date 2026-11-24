@@ -56,6 +56,25 @@ describe("queryFingerprint", () => {
     expect(queryFingerprint(spec(reordered))).toBe(fingerprint);
   });
 
+  test("组合表保留列期间，筛选顺序不影响指纹", () => {
+    const { filters } = queryView();
+    const composition = (to: string, reverse: boolean) => ({
+      composition: {
+        group_by: "dimension:department_id",
+        filters: reverse ? filters.toReversed() : filters,
+        columns: ["first", "second"].map((id) => ({
+          id,
+          measure: "measure:active_employee_count",
+          time: { window: { kind: "range", from: "2026-01", to } },
+        })),
+      },
+    });
+    const fingerprint = queryFingerprint(composition("2026-06", false));
+    expect(fingerprint).toMatch(QUERY_FINGERPRINT_PATTERN);
+    expect(queryFingerprint(composition("2026-06", true))).toBe(fingerprint);
+    expect(queryFingerprint(composition("2026-07", false))).not.toBe(fingerprint);
+  });
+
   test("数据选择、列序与派生算式参与指纹", () => {
     const fingerprint = queryFingerprint(spec(queryView()));
     const changed = queryView();

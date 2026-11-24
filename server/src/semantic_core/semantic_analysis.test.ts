@@ -82,6 +82,7 @@ describe("semantic analysis filters", () => {
         },
       ]),
     );
+    if (!("query" in parsed)) throw new Error("应为直接查询");
     expect(parsed.query.filters?.[0]?.values).toEqual(["部门乙", "部门甲"]);
   });
 
@@ -143,7 +144,9 @@ describe("semantic analysis group sort", () => {
   });
 
   test("省略分组排序即展示全部，不自动产生 Top 10", () => {
-    expect(parseAnalysisDefinition(grouped()).query.group_sort).toBeUndefined();
+    const definition = parseAnalysisDefinition(grouped());
+    if (!("query" in definition)) throw new Error("应为直接查询");
+    expect(definition.query.group_sort).toBeUndefined();
   });
 
   test("最大项数是维度上下文的可选配置，上限为 20", () => {

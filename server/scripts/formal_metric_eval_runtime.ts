@@ -1,9 +1,12 @@
 import { createCubeGateway } from "../src/adapters/cube_gateway.js";
+import { createObservationDirectory } from "../src/application/observation_directory.js";
+import { selectObservations } from "../src/application/observation_execution.js";
 import { config } from "../src/config.js";
 import { SERVICE_CUBE_CONTEXT } from "../src/engine/cube_security.js";
 import { withFormalMetricModel } from "../src/engine/formal_metric_gateway.js";
 import { executeMetricQuery } from "../src/engine/metric_executor.js";
 import { metricPlanLeafQueries, planMetricQuery } from "../src/engine/metric_planner.js";
+import type { CubeQuery } from "../src/ports/cube_gateway.js";
 import {
   configuredSemanticPackageDir,
   loadSemanticPackage,
@@ -28,10 +31,36 @@ export async function createFormalMetricEvalRuntime() {
   const views = await cube.meta(SERVICE_CUBE_CONTEXT);
   const context = await cube.timeContext();
 
+  const occurrences = createObservationDirectory({
+    cube,
+    security: SERVICE_CUBE_CONTEXT,
+    views,
+    sources: semanticPackage.time_sources,
+  });
   async function execute(measures: string[], timeView?: string) {
+    const view = views.find(({ name }) => name === timeView);
+    const sourceId = view?.meta?.time_source;
+    const observation =
+      typeof sourceId === "string" && semanticPackage.time_sources.by_id.get(sourceId)?.observation;
+    let cutoff = context.dataAsOf;
+    let filters: CubeQuery["filters"];
+    if (observation && view && typeof sourceId === "string") {
+      const sequence = await occurrences.sequence(sourceId);
+      const { periods } = selectObservations(sequence, { cutoff }, context.sources[sourceId]);
+      const actual = periods[0]?.occurrence;
+      assert(actual, "截止月之前没有可核验的调研期次");
+      cutoff = actual.date.slice(0, 7);
+      filters = [
+        {
+          member: `${view.name}.${observation.id_member}`,
+          operator: "equals",
+          values: [actual.id],
+        },
+      ];
+    }
     const plan = planMetricQuery(
-      { measures },
-      { cutoff: context.dataAsOf },
+      { measures, filters },
+      { cutoff },
       context,
       views,
       timeView ? { timeView } : {},

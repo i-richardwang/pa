@@ -10,6 +10,7 @@ import {
   type AuthorizedSemanticModel,
   type CanonicalSemanticModel,
 } from "../engine/canonical_semantic_model.js";
+import { measureDataAsOf } from "../engine/metric_planner.js";
 import { catalogMember } from "../semantic_core/query_intent.js";
 import { normalizeCatalogQuery, type CatalogQueryInput } from "../contracts/catalog_query.js";
 import type { CubeGateway } from "../ports/cube_gateway.js";
@@ -25,11 +26,13 @@ import {
 import type {
   CatalogDimensionValues,
   PublicCatalogDocument,
+  PublicCatalogMeasure,
 } from "../contracts/catalog_contract.js";
 import type {
   BusinessTermResolution,
   PublicBusinessTerm,
 } from "../contracts/business_term_contract.js";
+import { createObservationDirectory } from "./observation_directory.js";
 import { publicTimeContext } from "./time_context.js";
 import type { BusinessTermRegistry } from "./business_term_registry.js";
 import type { CubeSecurityContext, TimeContext } from "../ports/cube_gateway.js";
@@ -93,7 +96,24 @@ export function createCatalogService(deps: {
     }
   };
 
-  const document = async (principal: Principal) => (await model(principal)).document;
+  const catalogSnapshot = async (principal: Principal) => {
+    const [{ document, views, time_sources }, clock] = await Promise.all([
+      model(principal),
+      deps.cube.timeContext().catch(() => null),
+    ]);
+    const months = clock ? measureDataAsOf(views, clock, time_sources) : undefined;
+    const withTime = <T extends { measures: PublicCatalogMeasure[] }>(result: T) => ({
+      ...result,
+      data_as_of: clock?.dataAsOf ?? "未知",
+      time_context: publicTimeContext(document.views, clock, time_sources),
+      measures: result.measures.map((measure) => {
+        const month = months?.get(measure.id);
+        return month ? { ...measure, data_as_of: month } : measure;
+      }),
+    });
+    return { document, withTime };
+  };
+
   const context = async (principal: Principal): Promise<AuthorizedSemanticContext> => {
     const [authorized, timeContext] = await Promise.all([
       model(principal),
@@ -115,18 +135,15 @@ export function createCatalogService(deps: {
   return {
     async query(principal, rawInput) {
       const input = normalizeCatalogQuery(rawInput);
-      const catalog = await document(principal);
-      const context = await deps.cube.timeContext().catch(() => null);
+      const { document: catalog, withTime } = await catalogSnapshot(principal);
       const shared = {
         access_scope: catalog.access_scope,
         observation_scopes: catalog.observation_scopes,
-        data_as_of: context?.dataAsOf ?? "未知",
-        time_context: publicTimeContext(catalog.views, context, deps.canonical.time_sources),
       };
       if (input.mode === "overview") {
         return {
           ...shared,
-          ...browseCatalogDocument(catalog),
+          ...withTime(browseCatalogDocument(catalog)),
           term_knowledge_status: "available" as const,
           term_resolutions: [],
           ambiguous_terms: [],
@@ -151,7 +168,7 @@ export function createCatalogService(deps: {
           ),
         ),
       );
-      const search = searchCatalogDocument(catalog, input.terms, relatedIds);
+      const search = withTime(searchCatalogDocument(catalog, input.terms, relatedIds));
       const resolvedInputs = new Set(resolutions.map(({ input_term }) => input_term));
       const matched = input.terms.filter(
         (term) => search.matched_terms.includes(term) || resolvedInputs.has(term),
@@ -172,22 +189,24 @@ export function createCatalogService(deps: {
     context,
 
     async publicDocument(principal) {
-      const catalog = await document(principal);
-      const context = await deps.cube.timeContext().catch(() => null);
-      return toSemanticCatalog(catalog, {
-        data_as_of: context?.dataAsOf ?? "未知",
-        time_context: publicTimeContext(catalog.views, context, deps.canonical.time_sources),
-      });
+      const { document, withTime } = await catalogSnapshot(principal);
+      return withTime(toSemanticCatalog(document));
     },
 
     async dimensionValues(principal, memberId, contains) {
-      const { context, views, compiler } = await model(principal);
+      const { context, views, compiler, time_sources: sources } = await model(principal);
       // 入参是语义 member id，在服务端解析成物理成员后查询候选值；响应不包含物理成员名。
       const semantic = catalogMember(compiler, memberId, "dimension");
       if (!semantic) {
         throw new InvalidRequestError(`维度 ${memberId} 不在当前目录中`);
       }
-      const physical = semantic.available_in[0]?.member;
+      const observation = createObservationDirectory({
+        cube: deps.cube,
+        security: context,
+        views,
+        sources,
+      }).forMember(memberId);
+      const physical = observation?.member ?? semantic.available_in[0]?.member;
       if (!physical) {
         throw new InvalidRequestError(`维度「${semantic.title}」当前没有可以查询取值的数据来源`);
       }
@@ -197,6 +216,19 @@ export function createCatalogService(deps: {
       } catch (error) {
         throw new InvalidRequestError(error instanceof Error ? error.message : String(error));
       }
+      if (observation) {
+        const term = contains?.trim().toLowerCase();
+        const values = [...(await observation.sequence())]
+          .reverse()
+          .filter(({ id }) => !term || id.toLowerCase().includes(term))
+          .map(({ id }) => id);
+        return dimensionValuesResult(
+          memberId,
+          dimension.displayTitle,
+          values,
+          values.length > DIMENSION_VALUES_CAP,
+        );
+      }
       const response = await deps.cube.load(dimensionValuesQuery(physical, contains), context);
       const raw = response.data
         .map((row) => row[physical])
@@ -204,16 +236,25 @@ export function createCatalogService(deps: {
         .map(String);
       const truncated =
         raw.length > DIMENSION_VALUES_CAP || response.data.length >= DIMENSION_VALUES_SCAN_LIMIT;
-      return {
-        dimension: memberId,
-        title: dimension.displayTitle,
-        values: raw.slice(0, DIMENSION_VALUES_CAP),
-        ...(truncated
-          ? {
-              truncated: `值超过 ${DIMENSION_VALUES_CAP} 个，仅返回前 ${DIMENSION_VALUES_CAP}；用 contains 缩小范围`,
-            }
-          : {}),
-      };
+      return dimensionValuesResult(memberId, dimension.displayTitle, raw, truncated);
     },
+  };
+}
+
+function dimensionValuesResult(
+  memberId: string,
+  title: string,
+  values: string[],
+  truncated: boolean,
+): CatalogDimensionValues {
+  return {
+    dimension: memberId,
+    title,
+    values: values.slice(0, DIMENSION_VALUES_CAP),
+    ...(truncated
+      ? {
+          truncated: `值超过 ${DIMENSION_VALUES_CAP} 个，仅返回前 ${DIMENSION_VALUES_CAP}；用 contains 缩小范围`,
+        }
+      : {}),
   };
 }

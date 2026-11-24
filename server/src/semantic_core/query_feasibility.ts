@@ -1,7 +1,7 @@
 /** 语义查询可行性：只消费公开成员身份与能力，不接触物理 View 或 Cube 成员名。 */
 import { canonicalJson } from "./canonical_json.js";
 import type { ReportCalculationKind } from "./report_calculation.js";
-import type { SemanticQueryView } from "./semantic_analysis.js";
+import type { PlannableQuery } from "./semantic_analysis.js";
 import {
   metricTimeComparisonIssue,
   metricTimeSelectionIssue,
@@ -123,7 +123,7 @@ function candidates(catalog: QueryFeasibilityCatalog, kind: MemberKind) {
 
 function invalidReferenceIssues(
   catalog: QueryFeasibilityCatalog,
-  view: SemanticQueryView,
+  view: PlannableQuery,
 ): QueryFeasibilityIssue[] {
   const requirements: ReferenceRequirement[] = [
     ...(view.measures ?? []).map((reference) => ({
@@ -191,7 +191,7 @@ function invalidReferenceIssues(
   });
 }
 
-function dimensionReferences(view: SemanticQueryView): DimensionReference[] {
+function dimensionReferences(view: PlannableQuery): DimensionReference[] {
   return [
     ...(view.dimensions ?? []).map((id) => ({ id, usage: "group" as const })),
     ...(view.filters ?? []).map(({ member: id }) => ({ id, usage: "filter" as const })),
@@ -246,7 +246,7 @@ export function queryFeasibilityIssueMessage(issue: QueryFeasibilityIssue): stri
 
 function selectedMeasures(
   catalog: QueryFeasibilityCatalog,
-  view: SemanticQueryView,
+  view: PlannableQuery,
 ): QueryFeasibilityMeasure[] {
   const measures = new Set(view.measures ?? []);
   return catalog.measures.filter((member) => measures.has(member.id));
@@ -254,7 +254,7 @@ function selectedMeasures(
 
 function unsupportedDimensionIssues(
   catalog: QueryFeasibilityCatalog,
-  view: SemanticQueryView,
+  view: PlannableQuery,
   measures: QueryFeasibilityMeasure[],
 ): QueryFeasibilityIssue[] {
   const dimensions = new Map(catalog.dimensions.map((member) => [member.id, member]));
@@ -279,7 +279,7 @@ function unsupportedDimensionIssues(
 
 function sortDimensionIssue(
   catalog: QueryFeasibilityCatalog,
-  view: SemanticQueryView,
+  view: PlannableQuery,
 ): QueryFeasibilityIssue | undefined {
   if (!view.group_sort || (view.dimensions ?? []).includes(view.group_sort.dimension)) {
     return undefined;
@@ -294,7 +294,7 @@ function sortDimensionIssue(
 }
 
 function comparisonIssue(
-  view: SemanticQueryView,
+  view: PlannableQuery,
   measures: QueryFeasibilityMeasure[],
 ): QueryFeasibilityIssue | undefined {
   const comparison = !view.time.comparison
@@ -312,7 +312,7 @@ function comparisonIssue(
 }
 
 function groupingRequirementIssues(
-  view: SemanticQueryView,
+  view: PlannableQuery,
   measures: QueryFeasibilityMeasure[],
 ): QueryFeasibilityIssue[] {
   const fixed = new Set(
@@ -337,7 +337,7 @@ function groupingRequirementIssues(
 
 function calculationIssues(
   catalog: QueryFeasibilityCatalog,
-  view: SemanticQueryView,
+  view: PlannableQuery,
   selected: QueryFeasibilityMeasure[],
 ): QueryFeasibilityIssue[] {
   const issues: QueryFeasibilityIssue[] = [];
@@ -397,7 +397,7 @@ function calculationIssues(
 
 function queryFeasibilityIssues(
   catalog: QueryFeasibilityCatalog,
-  view: SemanticQueryView,
+  view: PlannableQuery,
   timeSelection?: ResolvedTimeSelection,
 ): QueryFeasibilityIssue[] {
   const measures = selectedMeasures(catalog, view);
@@ -423,7 +423,7 @@ function queryFeasibilityIssues(
 /** 可预测的查询冲突只在这里判定；物理 Planner 对同一事实保留不可变量断言。 */
 export function queryFeasibilityIssue(
   catalog: QueryFeasibilityCatalog,
-  view: SemanticQueryView,
+  view: PlannableQuery,
   timeSelection?: ResolvedTimeSelection,
 ): QueryFeasibilityIssue | undefined {
   return queryFeasibilityIssues(catalog, view, timeSelection)[0];
@@ -432,8 +432,8 @@ export function queryFeasibilityIssue(
 /** 候选只为自己新增的冲突负责；当前草稿已有的同一冲突不应锁住无关编辑。 */
 export function queryCandidateFeasibilityIssue(
   catalog: QueryFeasibilityCatalog,
-  current: SemanticQueryView,
-  candidate: SemanticQueryView,
+  current: PlannableQuery,
+  candidate: PlannableQuery,
   timeSelection?: ResolvedTimeSelection,
 ): QueryFeasibilityIssue | undefined {
   const currentIssues = new Set(

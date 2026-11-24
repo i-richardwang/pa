@@ -1,4 +1,5 @@
 import type { Principal } from "../contracts/principal.js";
+import type { ExportResourceLink } from "../semantic_core/query_payload.js";
 import type { QueryRunResult } from "./query_pipeline.js";
 import {
   parseAnalysisDefinition,
@@ -21,7 +22,8 @@ import {
 import type { ChartDecl } from "../presentation_core/chart_decl.js";
 import type { PresentationSpec } from "../presentation_core/presentation_spec.js";
 import { derivedFormulaSummaries, queryFingerprint } from "../engine/query_fingerprint.js";
-import type { AuthorizedAnalysisPlan } from "./semantic_planning_service.js";
+import type { ExportService } from "./export_service.js";
+import { needsReplayExport, type AuthorizedAnalysisPlan } from "./semantic_planning_service.js";
 
 /** 执行只接收编译结果，不接触持久化的 Analysis/View 身份。 */
 type ExecuteAnalysis = (planned: AuthorizedAnalysisPlan) => Promise<QueryRunResult>;
@@ -40,7 +42,8 @@ export type MaterializedAnalysisView = OwnedAnalysisView & {
 };
 
 /** 数据库只保存 analysis/view 引用，不保存执行结果本身。 */
-export type ExecutedAnalysis = QueryRunResult & {
+export type ExecutedAnalysis = Omit<QueryRunResult, "exportPlan"> & {
+  exportResource?: ExportResourceLink;
   analysis_id: string;
   view_id: string;
   definition: AnalysisDefinition;
@@ -60,6 +63,7 @@ export function createAnalysisService(deps: {
   execute: ExecuteAnalysis;
   plan: PlanAnalysisView;
   usage: Pick<UsageService, "log">;
+  createDelivery: ExportService["createDelivery"];
 }) {
   /** 工具调用的解析、规划、执行和保存都在这里包裹执行；定义校验失败也要写入一条 error 使用记录。 */
   async function observed(
@@ -111,7 +115,7 @@ export function createAnalysisService(deps: {
     planned: AuthorizedAnalysisPlan;
     identity: IdentityStrategy;
   }): Promise<ExecutedAnalysis> {
-    const result = await deps.execute(input.planned);
+    const { exportPlan: metricPlan, ...result } = await deps.execute(input.planned);
     const identity =
       input.identity.kind === "create_analysis"
         ? await deps.repository.create(
@@ -128,10 +132,18 @@ export function createAnalysisService(deps: {
               input.preferences,
             )
           : input.identity.identity;
+    const exportPlan = needsReplayExport(input.planned)
+      ? { kind: "analysis_view" as const, view_id: identity.view.id }
+      : metricPlan;
+    const delivery = exportPlan && (await deps.createDelivery(exportPlan, input.principal.email));
     return {
       ...result,
+      ...(delivery ? { exportResource: delivery.resource } : {}),
       payload: {
         ...result.payload,
+        ...(delivery
+          ? { capabilities: { ...result.payload.capabilities, export: delivery.link } }
+          : {}),
         analysis_id: identity.analysis.id,
         view_id: identity.view.id,
       },

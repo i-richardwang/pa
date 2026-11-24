@@ -8,7 +8,8 @@ export function applyBoardTimeOverride(
   definition: AnalysisDefinition,
   time: TimeIntent,
 ): { definition: AnalysisDefinition; status: BoardTimeOverrideStatus } {
-  if (definition.derived) return { definition, status: "unsupported" };
+  if ("composition" in definition || definition.derived)
+    return { definition, status: "unsupported" };
   return {
     status: "applied",
     definition: { ...definition, query: { ...definition.query, time } },

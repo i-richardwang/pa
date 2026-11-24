@@ -166,35 +166,14 @@ if (
 }
 
 // run_analysis 分别接收 AnalysisDefinition 和 ViewIntent；成员都用 catalog 返回的语义 id。
-function analysisInput(raw: Record<string, unknown>) {
-  const { title, views: declaredViews, ...flat } = raw;
-  const sourceViews = Array.isArray(declaredViews) ? declaredViews : [flat];
-  const views = sourceViews.map((candidate, index) => {
-    const view = candidate as Record<string, unknown>;
-    const id =
-      typeof view.id === "string"
-        ? view.id
-        : "from" in view
-          ? `derived_${index + 1}`
-          : `query_${index + 1}`;
-    return { ...view, id };
-  });
-  return {
-    analysis: { ...(typeof title === "string" ? { title } : {}), views },
-    view: { type: "table" },
-  };
-}
-
 const currentMonthTime = (anchor?: string) => ({
   window: { kind: "current_month", ...(anchor ? { month: anchor } : {}) },
 });
 
 async function callTool(request: Parameters<typeof client.callTool>[0]) {
-  return client.callTool(
-    request.name === "run_analysis"
-      ? { ...request, arguments: analysisInput(request.arguments ?? {}) }
-      : request,
-  );
+  const result = await client.callTool(request);
+  if (result.isError) throw new Error(`${request.name}: ${toolText(result)}`);
+  return result;
 }
 // catalog 的 terms 每项是一个完整的业务概念；返回的成员只有语义 id、标题和类型，维度取值要另用 values_of 查询。
 const catalogPayload = CATALOG_OUTPUT_SCHEMA.parse(
@@ -264,7 +243,7 @@ const q = await callTool({
   arguments: {
     analysis: {
       title: smokeTitle,
-      queries: [{ id: "result", measures: [ACTIVE_EMPLOYEE], time: currentMonthTime() }],
+      query: { measures: [ACTIVE_EMPLOYEE], time: currentMonthTime() },
     },
     view: { type: "table" },
   },
@@ -363,8 +342,7 @@ const periodQuery = await callTool({
   name: "run_analysis",
   arguments: {
     analysis: {
-      queries: [],
-      derived: {
+      query: {
         measures: [HIRE_COUNT],
         time: {
           window: {
@@ -403,14 +381,7 @@ await callTool({
   arguments: {
     analysis: {
       title: smokeTitle2,
-      queries: [
-        {
-          id: "result",
-          measures: [ACTIVE_EMPLOYEE],
-          dimensions: [ORG_NAME],
-          time: currentMonthTime(),
-        },
-      ],
+      query: { measures: [ACTIVE_EMPLOYEE], dimensions: [ORG_NAME], time: currentMonthTime() },
     },
     view: { type: "table" },
   },
@@ -424,36 +395,35 @@ const scopedQuery = await callTool({
   arguments: {
     analysis: {
       title: scopedTitle,
-      queries: [
-        {
-          id: "current",
-          view_title: `${asOfYear}年`,
-          measures: [ACTIVE_EMPLOYEE],
-          dimensions: [ORG_NAME],
-          time: currentMonthTime(queryPayload.data_as_of),
-        },
-        {
-          id: "previous",
-          view_title: `${asOfYear - 1}年`,
-          measures: [ACTIVE_EMPLOYEE],
-          dimensions: [ORG_NAME],
-          time: currentMonthTime(`${asOfYear - 1}-${String(queryPayload.data_as_of).slice(5)}`),
-        },
-      ],
+      query: {
+        view_title: `${asOfYear}年`,
+        measures: [ACTIVE_EMPLOYEE],
+        dimensions: [ORG_NAME],
+        time: currentMonthTime(queryPayload.data_as_of),
+      },
       derived: {
         view_title: "同比变化",
-        join: { on: [ORG_NAME], how: "left" },
+        joined: {
+          query: {
+            view_title: `${asOfYear - 1}年`,
+            measures: [ACTIVE_EMPLOYEE],
+            dimensions: [ORG_NAME],
+            time: currentMonthTime(`${asOfYear - 1}-${String(queryPayload.data_as_of).slice(5)}`),
+          },
+          on: [ORG_NAME],
+          how: "left",
+        },
         columns: [
-          { member: ORG_NAME, source: "current", as: "组织" },
-          { member: ACTIVE_EMPLOYEE, source: "current", as: `${asOfYear}年在职人数` },
-          { member: ACTIVE_EMPLOYEE, source: "previous", as: `${asOfYear - 1}年在职人数` },
+          { member: ORG_NAME, source: "query", as: "organization" },
+          { member: ACTIVE_EMPLOYEE, source: "query", as: "current_headcount" },
+          { member: ACTIVE_EMPLOYEE, source: "joined", as: "previous_headcount" },
           {
             expr: {
               op: "-",
-              left: { member: ACTIVE_EMPLOYEE, source: "current" },
-              right: { member: ACTIVE_EMPLOYEE, source: "previous" },
+              left: { member: ACTIVE_EMPLOYEE, source: "query" },
+              right: { member: ACTIVE_EMPLOYEE, source: "joined" },
             },
-            as: "在职人数同比变化",
+            as: "headcount_change",
           },
         ],
       },
@@ -475,7 +445,7 @@ if (
 }
 console.log(`派生分析: ${scopedView.rows.length} 行，join 和逐行公式正常`);
 if (expectedScopedOrg) {
-  const orgColumn = scopedView.columns.indexOf("组织");
+  const orgColumn = scopedView.columns.indexOf("organization");
   if (
     orgColumn < 0 ||
     scopedView.rows.length !== 1 ||
@@ -483,11 +453,9 @@ if (expectedScopedOrg) {
   ) {
     throw new Error(`受限账号的派生分析出现了授权范围外的组织: ${JSON.stringify(scopedView)}`);
   }
-  const current = Number(scopedView.rows[0]?.[scopedView.columns.indexOf(`${asOfYear}年在职人数`)]);
-  const previous = Number(
-    scopedView.rows[0]?.[scopedView.columns.indexOf(`${asOfYear - 1}年在职人数`)],
-  );
-  const delta = Number(scopedView.rows[0]?.[scopedView.columns.indexOf("在职人数同比变化")]);
+  const current = Number(scopedView.rows[0]?.[scopedView.columns.indexOf("current_headcount")]);
+  const previous = Number(scopedView.rows[0]?.[scopedView.columns.indexOf("previous_headcount")]);
+  const delta = Number(scopedView.rows[0]?.[scopedView.columns.indexOf("headcount_change")]);
   if (!Number.isFinite(delta) || delta !== current - previous) {
     throw new Error(`受限账号的派生分析差值错误: ${delta} != ${current} - ${previous}`);
   }

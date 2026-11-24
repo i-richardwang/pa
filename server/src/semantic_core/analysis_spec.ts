@@ -144,6 +144,7 @@ export const QUERY_VIEW_INPUT = z
     view_title: z.string().min(1).max(30).optional(),
     /** 跨指标域查询使用的时间与一致维度锚点；仅存在于服务端物理执行规格。 */
     time_view: VIEW_ID.optional(),
+    stable_grouping: z.literal(true).optional(),
     ...QUERY_FIELDS,
     grouping_sets: GROUPING_SETS_INPUT.optional(),
     selection: TOP_N_SELECTION_INPUT.optional(),

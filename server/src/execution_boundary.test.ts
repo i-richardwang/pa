@@ -13,10 +13,9 @@ const sources = (readdirSync(SRC, { recursive: true }) as string[])
 
 const sourceOf = (file: string) => sources.find((entry) => entry.file === file)?.text ?? "";
 
-const plansExecution = (text: string) => /planExecution\s*\(/.test(text);
-const forgesPlanBrand = (text: string) => /as\s+(?:unknown\s+as\s+)?ExecutionPlan\b/.test(text);
+const plansExecution = (text: string) => /\bplan(?:Execution|Composition)\s*\(/.test(text);
+const castsToPlan = (text: string) => /as\s+(?:unknown\s+as\s+)?ExecutionPlan\b/.test(text);
 
-// 允许调用 planExecution 的文件。
 const PLANNER_ENTRIES = new Set([
   "semantic_core/execution_plan.ts",
   "engine/semantic_analysis_compiler.ts",
@@ -26,10 +25,11 @@ const PLANNER_ENTRIES = new Set([
 describe("执行计划边界", () => {
   test("匹配规则能识别违规写法，且不误报正常写法", () => {
     expect(plansExecution("const p = planExecution(spec)")).toBe(true);
+    expect(plansExecution("const p = planComposition(input)")).toBe(true);
     expect(plansExecution("const p = compiled.plan")).toBe(false);
-    expect(forgesPlanBrand("return x as ExecutionPlan")).toBe(true);
-    expect(forgesPlanBrand("return x as unknown as ExecutionPlan")).toBe(true);
-    expect(forgesPlanBrand("const p: ExecutionPlan = plan")).toBe(false);
+    expect(castsToPlan("return x as ExecutionPlan")).toBe(true);
+    expect(castsToPlan("return x as unknown as ExecutionPlan")).toBe(true);
+    expect(castsToPlan("const p: ExecutionPlan = plan")).toBe(false);
   });
 
   test("执行器只接收编译好的 plan，自己不调用规划", () => {
@@ -47,7 +47,7 @@ describe("执行计划边界", () => {
     }
   });
 
-  test("planExecution 只在规划入口被调用", () => {
+  test("执行计划只在规划入口构建", () => {
     const callers = sources.filter(({ text }) => plansExecution(text)).map(({ file }) => file);
     for (const file of callers) {
       expect(PLANNER_ENTRIES.has(file), `${file} 不应调用 planExecution`).toBe(true);
@@ -57,8 +57,8 @@ describe("执行计划边界", () => {
     expect(callers).toContain("engine/semantic_analysis_compiler.ts");
   });
 
-  test("只有 execution_plan.ts 能把值转换成 ExecutionPlan 类型", () => {
-    const forgers = sources.filter(({ text }) => forgesPlanBrand(text)).map(({ file }) => file);
-    expect(forgers).toEqual(["semantic_core/execution_plan.ts"]);
+  test("执行计划必须经过类型检查，禁止断言构造", () => {
+    const forgers = sources.filter(({ text }) => castsToPlan(text)).map(({ file }) => file);
+    expect(forgers).toEqual([]);
   });
 });

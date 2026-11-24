@@ -8,7 +8,8 @@ import {
   toCompilerCatalog,
 } from "../engine/catalog_document.js";
 import { createCatalogService, SemanticModelUnavailableError } from "./catalog_service.js";
-import { InvalidRequestError } from "./errors.js";
+import { buildTimeSourceRegistry } from "../semantic_core/time_source.js";
+import { ForbiddenError, InvalidRequestError } from "./errors.js";
 import {
   TEST_SEMANTIC_TAXONOMY,
   TEST_TIME_SOURCE_REGISTRY,
@@ -322,4 +323,117 @@ describe("CatalogService", () => {
       ]);
     }
   });
+});
+
+function surveyMetrics(name: string, sourceId: string, anchor = false): CubeView {
+  return {
+    name,
+    title: name,
+    meta: {
+      query_surface: "metric_source",
+      time_source: sourceId,
+      observation_scope: "虚构调研范围",
+      ...(anchor ? { time_anchor_measure: `${sourceId}_response_count` } : {}),
+    },
+    measures: anchor
+      ? [
+          {
+            name: `${name}.${sourceId}_response_count`,
+            title: "答卷人数",
+            description: "调研期次参加人数。",
+            type: "number",
+            aggType: "count",
+            meta: {
+              metric_domain_id: `metric_domain:${sourceId}`,
+              time_contract: { aggregation: "last", window: "selected" },
+            },
+          },
+        ]
+      : [],
+    dimensions: [
+      {
+        name: `${name}.wave_id`,
+        title: "期次编码",
+        description: "调研的期次编码。",
+        type: "string",
+        meta: { dimension_group: "organization" },
+      },
+      {
+        name: `${name}.wave_date`,
+        title: "期次日期",
+        description: "调研的期次日期。",
+        type: "string",
+        meta: { dimension_group: "organization" },
+      },
+    ],
+  };
+}
+
+test("期次候选读取同一授权时钟锚点，拒绝以其他执行面或时钟替代", async () => {
+  const timeSources = buildTimeSourceRegistry([
+    ...TEST_TIME_SOURCE_REGISTRY.definitions,
+    ...["survey_one", "survey_two"].map((id) => ({
+      id,
+      title: id,
+      role: "actual" as const,
+      primary: false,
+      comparison_policy: "explicit_only" as const,
+      observation: { id_member: "wave_id", date_member: "wave_date" },
+    })),
+  ]);
+  const anchor = surveyMetrics("z_survey_anchor", "survey_one", true);
+  const secondary = surveyMetrics("a_survey_metrics", "survey_one");
+  const other = surveyMetrics("other_survey_anchor", "survey_two", true);
+  const modelViews = [...views, anchor, secondary, other];
+  const taxonomy = {
+    ...TEST_SEMANTIC_TAXONOMY,
+    metric_domains: [
+      ...TEST_SEMANTIC_TAXONOMY.metric_domains,
+      ...(["survey_one", "survey_two"] as const).map((source) => ({
+        id: `metric_domain:${source}` as const,
+        title: source,
+        time_source: source,
+        description: "虚构调研指标。",
+        synonyms: [],
+      })),
+    ],
+  };
+  const canonical = canonicalModelFixture(modelViews, taxonomy, timeSources);
+  const queries: unknown[] = [];
+  let visible = [secondary, anchor];
+  const service = createService({
+    canonical,
+    cube: {
+      meta: async () => visible,
+      load: async (query, security) => {
+        queries.push({ query, security });
+        return {
+          data: [
+            { "z_survey_anchor.wave_id": "wave_one", "z_survey_anchor.wave_date": "2026-03-03" },
+            { "z_survey_anchor.wave_id": "wave_two", "z_survey_anchor.wave_date": "2026-05-20" },
+          ],
+          annotation: { measures: {}, dimensions: {} },
+        };
+      },
+      timeContext: async () => ({ dataAsOf: "2026-07", sources: {} }),
+    },
+  });
+  expect(await service.dimensionValues(principal, "dimension:wave_id", "TWO")).toMatchObject({
+    values: ["wave_two"],
+  });
+  expect(queries).toEqual([
+    {
+      query: { dimensions: ["z_survey_anchor.wave_id", "z_survey_anchor.wave_date"], limit: 1001 },
+      security: context,
+    },
+  ]);
+  visible = [secondary, other];
+  await expect(service.dimensionValues(principal, "dimension:wave_id")).rejects.toBeInstanceOf(
+    InvalidRequestError,
+  );
+  visible = [secondary, { ...anchor, dimensions: anchor.dimensions.slice(0, 1) }];
+  await expect(service.dimensionValues(principal, "dimension:wave_id")).rejects.toBeInstanceOf(
+    ForbiddenError,
+  );
+  expect(queries).toHaveLength(1);
 });

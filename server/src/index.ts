@@ -206,6 +206,16 @@ app.use("/mcp", async (c, next) => {
     const verified = await enabledAuth.api
       .verifyApiKey({ body: { key: bearer } })
       .catch(() => null);
+    if (verified?.error?.code === "RATE_LIMITED") {
+      return c.json(
+        {
+          jsonrpc: "2.0",
+          error: { code: -32000, message: "API Key 已达到请求频率限制" },
+          id: null,
+        },
+        429,
+      );
+    }
     if (verified?.valid && verified.key) {
       const principal = await resolvePrincipal(enabledAuth, verified.key.referenceId);
       logger.info(`${principal.email} ${c.req.method} /mcp (api key)`);

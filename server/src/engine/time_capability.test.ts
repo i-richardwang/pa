@@ -116,7 +116,7 @@ function planningFailure(measureId: string, time: TimeIntent): unknown {
       }),
       view: { type: "table" },
     });
-    const node = plan.plan.nodes[0];
+    const node = plan.plan.queries[0];
     if (!node || "from" in node) throw new Error("夹具必须编译出查询节点");
     planMetricQuery({ measures: node.measures ?? [] }, node.time, context, views);
     return undefined;

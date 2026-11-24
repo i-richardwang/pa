@@ -138,12 +138,19 @@ type PanelProps = {
 
 export function ChartTypeBar({ draft, replay, onChange, catalog }: PanelProps) {
   const resultView = replay.payload.view;
+  const direct = semanticResultView(draft.analysis);
+  const native =
+    direct && "time" in direct && direct.time.window.kind === "observation"
+      ? direct.time.window.selection
+      : undefined;
   return (
     <section className={INSPECTOR_SECTION_CLASS}>
       <ChartTypePicker>
         {FORM_ORDER.map((form) => {
           const availability = formAvailability(resultView, form);
-          const allowed = availability.state === "available";
+          const allowedKind =
+            form === "table" || (native ? native.kind === "trend" && form === "line" : !!direct);
+          const allowed = allowedKind && availability.state === "available";
           const label = PRESENTATION_TYPE_LABELS[form];
           return (
             <Tooltip disableHoverablePopup key={form}>
@@ -165,7 +172,13 @@ export function ChartTypeBar({ draft, replay, onChange, catalog }: PanelProps) {
                   selected={draft.view.type === form}
                 />
               </TooltipTrigger>
-              <TooltipPopup>{allowed ? label : unavailableText(availability, label)}</TooltipPopup>
+              <TooltipPopup>
+                {allowed
+                  ? label
+                  : !allowedKind
+                    ? "此查询支持表格或期次趋势折线"
+                    : unavailableText(availability, label)}
+              </TooltipPopup>
             </Tooltip>
           );
         })}
@@ -178,6 +191,7 @@ function TableOptionsPanel({ draft, replay, onChange, catalog }: PanelProps) {
   if (draft.view.type !== "table") return null;
 
   const resultView = replay.payload.view;
+  if ("composition" in draft.analysis || resultView.observation_axis) return null;
   const context = semanticViewContext(semanticResultView(draft.analysis), catalog);
   const measures = context?.measures ?? [];
   const dimensions = context?.dimensions ?? [];

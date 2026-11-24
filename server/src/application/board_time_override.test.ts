@@ -24,6 +24,7 @@ describe("applyBoardTimeOverride", () => {
     };
     const result = applyBoardTimeOverride(singleView, override);
     expect(result.status).toBe("applied");
+    if (!("query" in result.definition)) throw new Error("应返回直接查询");
     expect(result.definition.derived).toBeUndefined();
     expect(result.definition.query.time).toEqual(override);
     expect(result.definition.query.time.comparison).toBeUndefined();

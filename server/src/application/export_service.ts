@@ -3,7 +3,8 @@ import type { ExportTicketRepository } from "../ports/export_ticket_repository.j
 import { completeHierarchy } from "../engine/hierarchy.js";
 import { filterMembers } from "../engine/query_contract.js";
 import { publicTimeContext, timeSourced, viewsForMembers } from "./time_context.js";
-import { EXPORT_MAX_ROWS, type MaterializedExport } from "../engine/export.js";
+import { EXPORT_MAX_ROWS, type ExportPlan, type MaterializedExport } from "../engine/export.js";
+import { AGGREGATE_CARD_ROWS } from "../engine/result_limit.js";
 import type { Principal } from "../contracts/principal.js";
 import { cubeSecurityContext } from "../engine/cube_security.js";
 import type { CubeGateway, CubeQuery, CubeSecurityContext } from "../ports/cube_gateway.js";
@@ -13,7 +14,7 @@ import type { MetricQueryPlan } from "../engine/metric_planner.js";
 import { exportableOutput } from "../semantic_core/execution_plan.js";
 import type { AnalysisRepository } from "../ports/analysis_repository.js";
 import type { UsageService } from "./usage_service.js";
-import type { SemanticPlanningService } from "./semantic_planning_service.js";
+import { needsReplayExport, type SemanticPlanningService } from "./semantic_planning_service.js";
 import { EXPORT_RESOURCE_MIME_TYPE, exportResourceUri } from "../contracts/export_contract.js";
 import type { ExportLink, ExportResourceLink } from "../semantic_core/query_payload.js";
 import { LimitExceededError, NotFoundError } from "./errors.js";
@@ -40,15 +41,16 @@ export function createExportService(deps: {
   semanticPlanning: Pick<SemanticPlanningService, "plan">;
   usage: Pick<UsageService, "log">;
   cube: CubeGateway;
-  tickets: ExportTicketRepository<MetricQueryPlan>;
+  tickets: ExportTicketRepository<ExportPlan>;
   baseUrl: string;
   audit: (event: ExportAuditEvent) => Promise<void>;
+  runReplayExport: (viewId: string, principal: Principal) => Promise<MaterializedExport>;
   runExport: (
     plan: MetricQueryPlan,
     securityContext: CubeSecurityContext,
   ) => Promise<MaterializedExport>;
 }) {
-  async function createDelivery(plan: MetricQueryPlan, caller: string): Promise<ExportDelivery> {
+  async function createDelivery(plan: ExportPlan, caller: string): Promise<ExportDelivery> {
     const ticket = await deps.tickets.create(plan, caller);
     await deps.audit({ event: "export_created", caller, query: plan });
     return {
@@ -65,16 +67,16 @@ export function createExportService(deps: {
     };
   }
 
-  async function materialize(
-    claims: { plan: MetricQueryPlan; caller: string },
-    principal: Principal,
-  ) {
+  async function materialize(claims: { plan: ExportPlan; caller: string }, principal: Principal) {
     if (claims.caller !== principal.email) {
       throw new ExportTicketUnavailableError("下载资源无效、已过期或不属于当前用户，请重新查询。");
     }
-    const securityContext = cubeSecurityContext(principal);
     try {
-      const result = await deps.runExport(claims.plan, securityContext);
+      const plan = claims.plan;
+      const result =
+        plan.kind === "analysis_view"
+          ? await deps.runReplayExport(plan.view_id, principal)
+          : await deps.runExport(plan, cubeSecurityContext(principal));
       if (!result.complete) {
         await deps
           .audit({
@@ -130,8 +132,30 @@ export function createExportService(deps: {
         current.view.intent,
         current.view.preferences,
       );
-      const executionPlan = planned.plan;
-      const view = exportableOutput(executionPlan);
+      if (needsReplayExport(planned)) {
+        const { link } = await createDelivery(
+          { kind: "analysis_view", view_id: viewId },
+          principal.email,
+        );
+        const { timeContext, time_sources, views } = planned.access;
+        await deps.usage.log({
+          caller: principal.email,
+          tool: "export_result",
+          outcome: "ok",
+          duration_ms: performance.now() - started,
+          analysis_id: analysisId,
+          view_id: viewId,
+        });
+        return {
+          analysis_id: analysisId,
+          view_id: viewId,
+          ...link,
+          max_rows: AGGREGATE_CARD_ROWS,
+          data_as_of: timeContext.dataAsOf,
+          time_context: publicTimeContext(timeSourced(views), timeContext, time_sources),
+        };
+      }
+      const view = exportableOutput(planned.plan);
       if (!view) {
         throw new Error("该分析结果包含报告计算或派生列，暂不支持导出");
       }

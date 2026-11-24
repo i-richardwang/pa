@@ -1,9 +1,6 @@
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  MonthPickerDialog,
-  MonthRangePickerDialog,
-  type MonthRange,
-} from "@/components/ui/month-picker";
+import { MonthPickerDialog, MonthRangePickerDialog } from "@/components/ui/month-picker";
 import { Popover, PopoverPopup, PopoverTrigger } from "@/components/ui/popover";
 import { popoverListCheck, PopoverListPanel, PopoverListRow } from "@/components/ui/popover-list";
 import { PopupSection } from "@/components/ui/surface";
@@ -12,6 +9,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   metricTimeSelectionIssue,
+  OBSERVATION_SELECTION_INPUT,
   isYearMonth,
   parseTimeIntent,
   primaryTimeRange,
@@ -20,24 +18,22 @@ import {
   timeSelectionIssueMessage,
   type SeriesGrain,
   type TimeCapabilities,
+  type BusinessTime,
+  type ColumnTime,
   type TimeIntent,
+  COLUMN_TIME_INPUT,
   type TimeSelectionIssue,
 } from "@time";
 import { CalendarIcon, GitCompareArrowsIcon } from "lucide-react";
-import { Fragment, useState } from "react";
-import { monthLabel, monthRangeLabel } from "@format";
+import { Fragment, useEffect, useState } from "react";
+import { monthLabel, monthRangeLabel, windowSummary } from "@format";
 import { DEFAULT_TIME_WINDOW } from "./analysis_draft";
+import { useDimensionValues } from "../dashboard_queries";
 
-type WindowChoice =
-  | "current_month"
-  | "year_to_date"
-  | "trailing_months"
-  | "trailing_years"
-  | "range";
 type ComparisonChoice = "none" | "previous_period" | "previous_year" | "custom";
-type ApplyTimeChange = (time: TimeIntent, adjustment?: string) => boolean;
+type ApplyTimeChange = (time: BusinessTime, adjustment?: string) => boolean;
 type CustomComparisonWindow = Extract<
-  NonNullable<TimeIntent["comparison"]>,
+  NonNullable<BusinessTime["comparison"]>,
   { kind: "custom" }
 >["window"];
 
@@ -54,31 +50,19 @@ function shiftedMonth(value: string, delta: number): string {
 export const withCurrent = (choices: readonly number[], current: number): number[] =>
   choices.includes(current) ? [...choices] : [current, ...choices];
 
-export function windowSummary(time: TimeIntent): string {
-  const { window } = time;
-  if (window.kind === "current_month") {
-    return window.month ? monthLabel(window.month) : "最新月份";
-  }
-  if (window.kind === "year_to_date") return "今年至今";
-  if (window.kind === "trailing") {
-    return `最近 ${window.count} ${window.unit === "month" ? "个月" : "年"}`;
-  }
-  return monthRangeLabel(window.from, window.to);
-}
-
-function comparisonChoice(time: TimeIntent): ComparisonChoice {
+function comparisonChoice(time: BusinessTime): ComparisonChoice {
   return time.comparison?.kind ?? "none";
 }
 
-export function previousPeriodLabel(window: TimeIntent["window"]): string {
+export function previousPeriodLabel(window: BusinessTime["window"]): string {
   return window.kind === "current_month" ? "上月" : "上一期";
 }
 
-export function previousYearLabel(window: TimeIntent["window"]): string {
+export function previousYearLabel(window: BusinessTime["window"]): string {
   return window.kind === "current_month" ? "去年同月" : "去年同期";
 }
 
-function comparisonSummary(time: TimeIntent): string {
+function comparisonSummary(time: BusinessTime): string {
   const comparison = time.comparison;
   if (!comparison) return "添加对比";
   if (comparison.kind === "previous_period") {
@@ -89,22 +73,23 @@ function comparisonSummary(time: TimeIntent): string {
 }
 
 /** 指定月份的单月与自定义范围是固定时间，其余窗口随数据更新。 */
-function fixedWindow(time: TimeIntent): boolean {
+function fixedWindow(time: BusinessTime): boolean {
   return (
     time.window.kind === "range" ||
     (time.window.kind === "current_month" && time.window.month !== undefined)
   );
 }
 
-function withFixedMonth(time: TimeIntent, month?: string): TimeIntent {
+function withFixedMonth(time: BusinessTime, month?: string): BusinessTime {
   if (time.window.kind !== "current_month") return time;
   return { ...time, window: { kind: "current_month", ...(month ? { month } : {}) } };
 }
 
 export function adjustTimeWindow(
-  time: TimeIntent,
-  window: TimeIntent["window"],
-): { time: TimeIntent; adjustment?: string } {
+  time: BusinessTime,
+  window: BusinessTime["window"],
+): { time: BusinessTime; adjustment?: string } {
+  if (window.kind === "observation") return { time: { window } };
   let comparison = time.comparison;
   const adjustments: string[] = [];
   if (comparison?.kind === "previous_period" && window.kind === "year_to_date") {
@@ -126,48 +111,31 @@ export function adjustTimeWindow(
 }
 
 export function setTimeComparison(
-  time: TimeIntent,
-  comparison?: TimeIntent["comparison"],
-): TimeIntent {
+  time: BusinessTime,
+  comparison?: BusinessTime["comparison"],
+): BusinessTime {
   const { comparison: _comparison, ...base } = time;
   return { ...base, ...(comparison ? { comparison } : {}) };
 }
 
-function presetWindow(
-  choice: WindowChoice,
-  latest: string,
-  fixedEndpoint?: string,
-): TimeIntent["window"] {
-  if (choice === "current_month") {
-    return { kind: "current_month", ...(fixedEndpoint ? { month: fixedEndpoint } : {}) };
-  }
-  if (choice === "year_to_date") return { kind: "year_to_date", grain: "month" };
-  if (choice === "trailing_months") return DEFAULT_TIME_WINDOW.trailing_months;
-  if (choice === "trailing_years") return DEFAULT_TIME_WINDOW.trailing_years;
-  const to = fixedEndpoint ?? latest;
-  const from = shiftedMonth(to, -(DEFAULT_TIME_WINDOW.trailing_months.count - 1));
-  return {
-    kind: "range",
-    from,
-    to,
-    grain: "month",
-  };
+export function seriesGrainOf(window: BusinessTime["window"]): SeriesGrain | undefined {
+  return "grain" in window ? window.grain : undefined;
 }
 
-export function seriesGrainOf(window: TimeIntent["window"]): SeriesGrain | undefined {
-  return window.kind === "current_month" ? undefined : window.grain;
-}
-
-export function withSeriesGrain(time: TimeIntent, grain: SeriesGrain): TimeIntent {
-  if (time.window.kind === "current_month") return time;
+export function withSeriesGrain(time: BusinessTime, grain: SeriesGrain): BusinessTime {
+  if (!("grain" in time.window)) return time;
   return { ...time, window: { ...time.window, grain } };
 }
 
 const rangeLabel = ({ from, to }: { from: string; to: string }) => monthRangeLabel(from, to);
 
-export function summarizeResolvedTime(time: TimeIntent, latest: string): string {
-  const parsed = parseTimeIntent(time);
-  const result = resolveTimeIntentSelection(parsed, latest);
+export function summarizeResolvedTime(
+  time: BusinessTime,
+  latest: string,
+  mode: "query" | "column" = "query",
+): string {
+  if (time.window.kind === "observation") return windowSummary(time);
+  const result = resolveTimeIntentSelection(time, latest, mode);
   if (result.status === "invalid") return timeSelectionIssueMessage(result.issue);
   const ranges = result.selection.coordinates.map((coordinate) =>
     coordinate.kind === "cutoff"
@@ -175,22 +143,137 @@ export function summarizeResolvedTime(time: TimeIntent, latest: string): string 
       : { from: coordinate.from, to: coordinate.to },
   );
   const [primary, ...comparisons] = ranges;
-  const grain = seriesGrainOf(parsed.window);
+  const grain = seriesGrainOf(time.window);
   const displayText =
     grain === undefined ? "一个结果" : grain === "month" ? "每月一个结果" : "每年一个结果";
   const comparison = comparisons.length ? ` · 对比 ${comparisons.map(rangeLabel).join("、")}` : "";
-  const rolling = !fixedWindow(parsed);
+  const rolling = !fixedWindow(time);
   return `观察期 ${rangeLabel(primary)} · ${displayText}${comparison} · ${rolling ? "随数据更新" : "固定时间"}`;
 }
 
 export function timeChangeIssue(
-  time: TimeIntent,
+  time: BusinessTime,
   latest: string,
   capabilities: TimeCapabilities = {},
+  mode: "query" | "column" = "query",
 ): TimeSelectionIssue | undefined {
-  const result = resolveTimeIntentSelection(time, latest);
+  const result = resolveTimeIntentSelection(time, latest, mode);
   if (result.status === "invalid") return result.issue;
   return metricTimeSelectionIssue([{ capabilities }], result.selection);
+}
+
+function OccurrenceChoices({
+  dimension,
+  value,
+  onSelect,
+}: {
+  dimension: string;
+  value: string;
+  onSelect: (value: string) => void;
+}) {
+  const [search, setSearch] = useState(value.trim());
+  useEffect(() => {
+    const timeout = setTimeout(() => setSearch(value.trim()), 250);
+    return () => clearTimeout(timeout);
+  }, [value]);
+  const options = useDimensionValues(dimension, search);
+  return (
+    <div className="max-h-32 overflow-y-auto">
+      {options.data?.values.map((id) => (
+        <PopoverListRow key={id} selected={id === value} onClick={() => onSelect(id)}>
+          {id}
+        </PopoverListRow>
+      ))}
+      {options.isError && (
+        <p className="text-xs text-pa-muted">期次列表加载失败，可直接输入编码。</p>
+      )}
+    </div>
+  );
+}
+
+function ObservationWindowEditor({
+  time,
+  latest,
+  dimension,
+  singleColumn,
+  onChange,
+}: {
+  time: BusinessTime;
+  latest: string;
+  dimension: string;
+  singleColumn?: boolean;
+  onChange: ApplyTimeChange;
+}) {
+  const current = time.window.kind === "observation" ? time.window.selection : undefined;
+  const [kind, setKind] = useState(current?.kind ?? "as_of");
+  const [first, setFirst] = useState(
+    current?.kind === "occurrence"
+      ? current.id
+      : current?.kind === "as_of"
+        ? current.date
+        : (current?.from ?? `${latest}-01`),
+  );
+  const [last, setLast] = useState(current?.kind === "trend" ? current.to : `${latest}-01`);
+  const selection = OBSERVATION_SELECTION_INPUT.safeParse(
+    kind === "occurrence"
+      ? { kind, id: first }
+      : kind === "as_of"
+        ? { kind, date: first }
+        : { kind, from: first, to: last },
+  );
+  const changeKind = (kind: "occurrence" | "as_of" | "trend") => {
+    setKind(kind);
+    setFirst(kind === "occurrence" ? "" : `${latest}-01`);
+  };
+  return (
+    <PopupSection label="调研期次">
+      <ToggleGroup
+        columns={singleColumn ? 2 : 3}
+        value={[kind]}
+        onValueChange={(values) => {
+          const value = values[0];
+          if (value === "occurrence" || value === "as_of" || value === "trend") changeKind(value);
+        }}
+      >
+        <ToggleGroupItem value="occurrence">指定期次</ToggleGroupItem>
+        <ToggleGroupItem value="as_of">截至日期</ToggleGroupItem>
+        {!singleColumn && <ToggleGroupItem value="trend">期次趋势</ToggleGroupItem>}
+      </ToggleGroup>
+      <Input
+        aria-label={
+          kind === "occurrence" ? "期次编码" : kind === "as_of" ? "截止日期" : "观测开始日期"
+        }
+        onChange={(event) => setFirst(event.currentTarget.value)}
+        placeholder={kind === "occurrence" ? "期次编码" : undefined}
+        size="sm"
+        type={kind === "occurrence" ? "text" : "date"}
+        value={first}
+      />
+      {kind === "occurrence" && (
+        <OccurrenceChoices dimension={dimension} value={first} onSelect={setFirst} />
+      )}
+      {kind === "trend" && (
+        <Input
+          aria-label="观测结束日期"
+          onChange={(event) => setLast(event.currentTarget.value)}
+          size="sm"
+          type="date"
+          value={last}
+        />
+      )}
+      <Button
+        disabled={!selection.success || (kind === "trend" && first > last)}
+        onClick={() => {
+          if (selection.success)
+            onChange({ window: { kind: "observation", selection: selection.data } });
+        }}
+        size="compact"
+        variant="filled"
+      >
+        应用期次
+      </Button>
+    </PopupSection>
+  );
 }
 
 export function WindowPopup({
@@ -199,16 +282,18 @@ export function WindowPopup({
   capabilities = {},
   onChange,
   onPick,
+  singleColumn,
 }: {
-  time: TimeIntent;
+  time: BusinessTime;
   latest: string;
   capabilities?: TimeCapabilities;
   onChange: ApplyTimeChange;
   onPick: (kind: PickerKind) => void;
+  singleColumn?: boolean;
 }) {
   const window = time.window;
   const month = window.kind === "current_month" ? window.month : undefined;
-  const changeWindow = (next: TimeIntent["window"]) => {
+  const changeWindow = (next: BusinessTime["window"]) => {
     const normalized = adjustTimeWindow(time, next);
     return onChange(normalized.time, normalized.adjustment);
   };
@@ -220,7 +305,7 @@ export function WindowPopup({
         : undefined;
   const trailing = (unit: "month" | "year", count: number) =>
     window.kind === "trailing" && window.unit === unit && window.count === count;
-  const detail = (candidate: TimeIntent["window"]) => {
+  const detail = (candidate: BusinessTime["window"]) => {
     const { from, to } = primaryTimeRange({ window: candidate }, latest);
     return `${from} – ${to}`;
   };
@@ -229,10 +314,15 @@ export function WindowPopup({
     label: string,
     selected: boolean,
     onSelect: () => void,
-    candidate?: TimeIntent["window"],
+    candidate?: BusinessTime["window"],
   ) => {
     const issue = candidate
-      ? timeChangeIssue(adjustTimeWindow(time, candidate).time, latest, capabilities)
+      ? timeChangeIssue(
+          adjustTimeWindow(time, candidate).time,
+          latest,
+          capabilities,
+          singleColumn ? "column" : "query",
+        )
       : undefined;
     const reason = issue ? timeSelectionIssueMessage(issue) : undefined;
     const item = (
@@ -255,6 +345,8 @@ export function WindowPopup({
       </Tooltip>
     );
   };
+  const seriesGrain = (grain: SeriesGrain) => (singleColumn ? {} : { grain });
+  const yearToDate = { kind: "year_to_date", ...seriesGrain("month") } as const;
   const monthCounts = withCurrent(
     MONTH_CHOICES,
     window.kind === "trailing" && window.unit === "month" ? window.count : 0,
@@ -265,14 +357,29 @@ export function WindowPopup({
   ).filter((count) => count > 0);
   return (
     <PopoverListPanel>
+      {capabilities.observation && (
+        <ObservationWindowEditor
+          key={windowSummary(time)}
+          dimension={capabilities.observation}
+          latest={latest}
+          onChange={onChange}
+          singleColumn={singleColumn}
+          time={time}
+        />
+      )}
       <PopupSection>
         {row("current_month", "单个月份", window.kind === "current_month", () =>
-          changeWindow(presetWindow("current_month", latest, endpoint)),
+          changeWindow({ kind: "current_month", month: endpoint }),
         )}
       </PopupSection>
       <PopupSection label="按月滚动">
         {monthCounts.map((count) => {
-          const candidate = { kind: "trailing", count, unit: "month", grain: "month" } as const;
+          const candidate = {
+            kind: "trailing",
+            count,
+            unit: "month",
+            ...seriesGrain("month"),
+          } as const;
           return row(
             `m${count}`,
             `最近 ${count} 个月`,
@@ -287,15 +394,20 @@ export function WindowPopup({
           "year_to_date",
           "今年至今",
           window.kind === "year_to_date",
-          () => changeWindow(presetWindow("year_to_date", latest, endpoint)),
-          { kind: "year_to_date", grain: "month" },
+          () => changeWindow(yearToDate),
+          yearToDate,
         )}
         {yearCounts.map((count) => {
           const grain = capabilities.grain === "month" ? "month" : "year";
-          const candidate = { kind: "trailing", count, unit: "year", grain } as const;
+          const candidate = {
+            kind: "trailing",
+            count,
+            unit: "year",
+            ...seriesGrain(grain),
+          } as const;
           return row(
             `y${count}`,
-            `最近 ${count} 年${grain === "month" ? "（按月）" : ""}`,
+            `最近 ${count} 年${!singleColumn && grain === "month" ? "（按月）" : ""}`,
             trailing("year", count),
             () => changeWindow(candidate),
             candidate,
@@ -307,12 +419,7 @@ export function WindowPopup({
           "range",
           "自定义范围",
           window.kind === "range",
-          () => {
-            if (window.kind !== "range" && !changeWindow(presetWindow("range", latest, endpoint))) {
-              return;
-            }
-            onPick("window_range");
-          },
+          () => onPick("window_range"),
           window.kind === "range" ? window : undefined,
         )}
       </PopupSection>
@@ -326,10 +433,7 @@ export function WindowPopup({
             跟随最新数据
           </PopoverListRow>
           <PopoverListRow
-            onClick={() => {
-              if (!month && !onChange(withFixedMonth(time, latest))) return;
-              onPick("window_month");
-            }}
+            onClick={() => onPick("window_month")}
             selected={!!month}
             trailing={popoverListCheck(!!month)}
           >
@@ -347,7 +451,7 @@ const GRAIN_CHOICES: { value: SeriesGrain; label: string }[] = [
 ];
 
 function grainChoiceIssues(
-  time: TimeIntent,
+  time: BusinessTime,
   latest: string,
   capabilities: TimeCapabilities,
 ): Partial<Record<SeriesGrain, string>> {
@@ -366,7 +470,7 @@ function GrainSegments({
   capabilities,
   onChange,
 }: {
-  time: TimeIntent;
+  time: BusinessTime;
   latest: string;
   capabilities: TimeCapabilities;
   onChange: ApplyTimeChange;
@@ -405,7 +509,7 @@ function GrainSegments({
 }
 
 export function defaultCustomComparisonWindow(
-  time: TimeIntent,
+  time: BusinessTime,
   latest: string,
 ): CustomComparisonWindow {
   const range = primaryTimeRange(time, latest);
@@ -429,7 +533,7 @@ export function ComparisonPopup({
   onChange,
   onPick,
 }: {
-  time: TimeIntent;
+  time: BusinessTime;
   latest: string;
   capabilities: TimeCapabilities;
   onChange: ApplyTimeChange;
@@ -437,12 +541,12 @@ export function ComparisonPopup({
 }) {
   const choice = comparisonChoice(time);
   const custom = time.comparison?.kind === "custom" ? time.comparison.window : undefined;
-  const setComparison = (comparison?: TimeIntent["comparison"]) =>
+  const setComparison = (comparison?: BusinessTime["comparison"]) =>
     onChange(setTimeComparison(time, comparison));
   const row = (
     value: ComparisonChoice,
     label: string,
-    candidate: TimeIntent["comparison"] | undefined,
+    candidate: BusinessTime["comparison"] | undefined,
     onSelect: () => void,
   ) => {
     const selected = choice === value;
@@ -468,7 +572,7 @@ export function ComparisonPopup({
       </Tooltip>
     );
   };
-  const customCandidate: TimeIntent["comparison"] = custom
+  const customCandidate: BusinessTime["comparison"] = custom
     ? { kind: "custom", window: custom }
     : { kind: "custom", window: defaultCustomComparisonWindow(time, latest) };
   return (
@@ -509,15 +613,17 @@ function customComparisonSummary(window: CustomComparisonWindow): string {
 type PickerKind = "window_range" | "window_month" | "comparison";
 
 function TimeMonthPickers({
+  singleColumn,
   kind,
   onClose,
   time,
   latest,
   onChange,
 }: {
+  singleColumn?: boolean;
   kind?: PickerKind;
   onClose: () => void;
-  time: TimeIntent;
+  time: BusinessTime;
   latest: string;
   onChange: ApplyTimeChange;
 }) {
@@ -528,9 +634,10 @@ function TimeMonthPickers({
   };
   const applyComparison = (next: CustomComparisonWindow) =>
     onChange(setTimeComparison(time, { kind: "custom", window: next }));
-  const fallback: MonthRange = { from: latest, to: latest };
 
   if (kind === "window_range") {
+    const to = window.kind === "current_month" ? (window.month ?? latest) : latest;
+    const from = shiftedMonth(to, -(DEFAULT_TIME_WINDOW.trailing_months.count - 1));
     return (
       <MonthRangePickerDialog
         current={latest}
@@ -538,13 +645,13 @@ function TimeMonthPickers({
         label="自定义范围"
         onOpenChange={close}
         onValueChange={(range) => {
-          const grain = seriesGrainOf(window) ?? "month";
-          const normalized = adjustTimeWindow(time, { kind: "range", ...range, grain });
+          const output = singleColumn ? {} : { grain: seriesGrainOf(window) ?? "month" };
+          const normalized = adjustTimeWindow(time, { kind: "range", ...range, ...output });
           onChange(normalized.time, normalized.adjustment);
         }}
         open
         toLabel="结束月份"
-        value={window.kind === "range" ? { from: window.from, to: window.to } : fallback}
+        value={window.kind === "range" ? window : { from, to }}
       />
     );
   }
@@ -589,20 +696,19 @@ function TimeMonthPickers({
   return null;
 }
 
-/** 工作台底栏和看板时间覆盖共用此组件。 */
-export function TimeBar({
-  time,
-  onChange,
-  dataAsOf,
-  capabilities = {},
-}: {
-  time: TimeIntent;
-  onChange: (time: TimeIntent) => void;
-  dataAsOf: string;
+type TimeBarProps = {
+  dataAsOf?: string;
   capabilities?: TimeCapabilities;
-}) {
+} & (
+  | { singleColumn: true; time: ColumnTime; onChange: (time: ColumnTime) => void }
+  | { singleColumn?: false; time: TimeIntent; onChange: (time: TimeIntent) => void }
+);
+
+export function TimeBar(props: TimeBarProps) {
+  const { time: timeIntent, singleColumn, dataAsOf, capabilities = {} } = props;
+  const mode = singleColumn ? "column" : "query";
   const [picker, setPicker] = useState<PickerKind>();
-  const timeIntent = parseTimeIntent(time);
+  const [windowOpen, setWindowOpen] = useState(false);
   if (!validMonth(dataAsOf)) {
     return (
       <p className="text-pa-danger-fg text-xs" role="alert">
@@ -612,7 +718,7 @@ export function TimeBar({
   }
   const latest = dataAsOf;
   const applyChange: ApplyTimeChange = (next, message) => {
-    const issue = timeChangeIssue(next, latest, capabilities);
+    const issue = timeChangeIssue(next, latest, capabilities, mode);
     if (issue) {
       toastManager.add({
         type: "info",
@@ -621,12 +727,13 @@ export function TimeBar({
       return false;
     }
     if (message) toastManager.add({ type: "info", title: message });
-    onChange(next);
+    if (props.singleColumn) props.onChange(COLUMN_TIME_INPUT.parse(next));
+    else props.onChange(parseTimeIntent(next));
     return true;
   };
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="time-bar">
-      <Popover>
+      <Popover open={windowOpen} onOpenChange={setWindowOpen}>
         <Tooltip disableHoverablePopup>
           <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
             <PopoverTrigger
@@ -637,52 +744,62 @@ export function TimeBar({
             </PopoverTrigger>
           </TooltipTrigger>
           <TooltipPopup>
-            {summarizeResolvedTime(timeIntent, latest)} · 数据截至 {monthLabel(latest)}
+            {summarizeResolvedTime(timeIntent, latest, mode)} · 数据截至 {monthLabel(latest)}
           </TooltipPopup>
         </Tooltip>
         <PopoverPopup width="list">
           <WindowPopup
             capabilities={capabilities}
             latest={latest}
-            onChange={applyChange}
+            onChange={(next, message) => {
+              const applied = applyChange(next, message);
+              if (applied && next.window.kind === "observation") setWindowOpen(false);
+              return applied;
+            }}
             onPick={setPicker}
+            singleColumn={singleColumn}
             time={timeIntent}
           />
         </PopoverPopup>
       </Popover>
 
-      <GrainSegments
-        capabilities={capabilities}
-        latest={latest}
-        onChange={applyChange}
-        time={timeIntent}
-      />
+      {!singleColumn && (
+        <GrainSegments
+          capabilities={capabilities}
+          latest={latest}
+          onChange={applyChange}
+          time={timeIntent}
+        />
+      )}
 
-      <Popover>
-        <PopoverTrigger
-          render={
-            <Button
-              aria-label={timeIntent.comparison ? "时间对比" : "添加对比"}
-              className="min-w-0"
-              variant="subtle"
+      {!singleColumn && timeIntent.window.kind !== "observation" && (
+        <Popover>
+          <PopoverTrigger
+            render={
+              <Button
+                aria-label={timeIntent.comparison ? "时间对比" : "添加对比"}
+                className="min-w-0"
+                variant="subtle"
+              />
+            }
+          >
+            <GitCompareArrowsIcon aria-hidden="true" className="size-3.5" />
+            <span className="truncate">{comparisonSummary(timeIntent)}</span>
+          </PopoverTrigger>
+          <PopoverPopup width="list">
+            <ComparisonPopup
+              capabilities={capabilities}
+              latest={latest}
+              onChange={applyChange}
+              onPick={setPicker}
+              time={timeIntent}
             />
-          }
-        >
-          <GitCompareArrowsIcon aria-hidden="true" className="size-3.5" />
-          <span className="truncate">{comparisonSummary(timeIntent)}</span>
-        </PopoverTrigger>
-        <PopoverPopup width="list">
-          <ComparisonPopup
-            capabilities={capabilities}
-            latest={latest}
-            onChange={applyChange}
-            onPick={setPicker}
-            time={timeIntent}
-          />
-        </PopoverPopup>
-      </Popover>
+          </PopoverPopup>
+        </Popover>
+      )}
 
       <TimeMonthPickers
+        singleColumn={singleColumn}
         kind={picker}
         latest={latest}
         onChange={applyChange}

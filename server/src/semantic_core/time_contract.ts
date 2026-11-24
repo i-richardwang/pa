@@ -65,11 +65,22 @@ const COMPARE_FIELD = z
       "相对形态 {years_ago:n} 表示主坐标整体回移 n 个日历年，随主时间与数据推进自动滚动",
   );
 
+const SINGLE_OBSERVATION_OPTIONS = [
+  z.object({ kind: z.literal("occurrence"), id: z.string().trim().min(1).max(120) }).strict(),
+  z.object({ kind: z.literal("as_of"), date: z.string().date() }).strict(),
+] as const;
+export const OBSERVATION_SELECTION_INPUT = z.discriminatedUnion("kind", [
+  ...SINGLE_OBSERVATION_OPTIONS,
+  z.object({ kind: z.literal("trend"), from: z.string().date(), to: z.string().date() }).strict(),
+]);
+export type ObservationSelection = z.infer<typeof OBSERVATION_SELECTION_INPUT>;
+
 export const TIME_INPUT = z
   .union([
     z
       .object({
         cutoff: CUTOFF_FIELD,
+        observation: OBSERVATION_SELECTION_INPUT.optional(),
         grain: OUTPUT_GRAIN_FIELD.optional(),
         compare: COMPARE_FIELD,
       })
@@ -116,35 +127,53 @@ const SERIES_GRAIN_FIELD = z
   .enum(SERIES_GRAINS)
   .describe("期间按年还是按月输出序列；整段合计由结果的 totals 提供，不在这里指定");
 
+const MONTH_WINDOW = z
+  .object({
+    kind: z.literal("current_month"),
+    month: z
+      .string()
+      .regex(YEAR_MONTH_REGEX)
+      .optional()
+      .describe("固定观察月份；省略时使用所选数据源共同具备的最新月份"),
+  })
+  .strict();
+
+const OBSERVATION_WINDOW = z
+  .object({ kind: z.literal("observation"), selection: OBSERVATION_SELECTION_INPUT })
+  .strict();
+
+const YEAR_TO_DATE_WINDOW = z.object({ kind: z.literal("year_to_date") }).strict();
+const TRAILING_WINDOW = z
+  .object({
+    kind: z.literal("trailing"),
+    count: z.number().int().min(1).max(60),
+    unit: z.enum(["month", "year"]),
+  })
+  .strict();
+const RANGE_WINDOW = TIME_RANGE_INPUT.extend({ kind: z.literal("range") });
+
 export const TIME_WINDOW_INPUT = z.discriminatedUnion("kind", [
-  z
-    .object({
-      kind: z.literal("current_month"),
-      month: z
-        .string()
-        .regex(YEAR_MONTH_REGEX)
-        .optional()
-        .describe("固定观察月份；省略时使用所选数据源共同具备的最新月份"),
-    })
-    .strict(),
-  z.object({ kind: z.literal("year_to_date"), grain: SERIES_GRAIN_FIELD }).strict(),
-  z
-    .object({
-      kind: z.literal("trailing"),
-      count: z.number().int().min(1).max(60),
-      unit: z.enum(["month", "year"]),
-      grain: SERIES_GRAIN_FIELD,
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("range"),
-      from: z.string().regex(YEAR_MONTH_REGEX),
-      to: z.string().regex(YEAR_MONTH_REGEX),
-      grain: SERIES_GRAIN_FIELD,
-    })
-    .strict(),
+  MONTH_WINDOW,
+  OBSERVATION_WINDOW,
+  YEAR_TO_DATE_WINDOW.extend({ grain: SERIES_GRAIN_FIELD }),
+  TRAILING_WINDOW.extend({ grain: SERIES_GRAIN_FIELD }),
+  RANGE_WINDOW.extend({ grain: SERIES_GRAIN_FIELD }),
 ]);
+
+const COLUMN_TIME = z
+  .object({
+    window: z.discriminatedUnion("kind", [
+      MONTH_WINDOW,
+      OBSERVATION_WINDOW.extend({
+        selection: z.discriminatedUnion("kind", SINGLE_OBSERVATION_OPTIONS),
+      }),
+      YEAR_TO_DATE_WINDOW,
+      TRAILING_WINDOW,
+      RANGE_WINDOW,
+    ]),
+  })
+  .strict();
+export type ColumnTime = z.infer<typeof COLUMN_TIME>;
 
 const CUSTOM_COMPARISON_WINDOW = z.union([
   z
@@ -185,7 +214,7 @@ export const TIME_COMPARISON_INPUT = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
-export const TIME_INTENT_INPUT = z
+const QUERY_TIME = z
   .object({
     window: TIME_WINDOW_INPUT.describe(
       "观察时间：单个月份得到一个结果；年初至今、回看近 N 月/年或明确的起止月份是期间，" +
@@ -195,61 +224,84 @@ export const TIME_INTENT_INPUT = z
       "可选时间对比；上一等长期间、去年同期，或明确的单一自定义对照窗口",
     ),
   })
-  .strict()
-  .superRefine((time, context) => {
-    if (time.window.kind === "trailing" && time.window.unit === "year" && time.window.count > 8) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["window", "count"],
-        message: "按年选择最多支持近 8 年",
-      });
-    }
-    if (time.window.kind === "range" && time.window.from > time.window.to) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["window", "from"],
-        message: "时间范围的开始月份不能晚于结束月份",
-      });
-    }
-    if (time.window.kind === "year_to_date" && time.comparison?.kind === "previous_period") {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["comparison", "kind"],
-        message: "今年至今应与去年同期比较；如需其他基准，请明确指定自定义对照期间",
-      });
-    }
-    if (time.comparison?.kind === "custom") {
-      const expected = time.window.kind === "current_month" ? "current_month" : "range";
-      if (time.comparison.window.kind !== expected) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["comparison", "window"],
-          message: "自定义对照必须与主时间同为单月或同为连续期间",
-        });
-      }
-    }
-  });
+  .strict();
 
-export type TimeIntent = z.infer<typeof TIME_INTENT_INPUT>;
+export type TimeIntent = z.infer<typeof QUERY_TIME>;
 
-function compileParsedTimeIntent(business: TimeIntent): TimeInput {
+export type BusinessTime = {
+  window: TimeIntent["window"] | ColumnTime["window"];
+  comparison?: TimeIntent["comparison"];
+};
+
+function validateTimeIntent(time: BusinessTime, context: z.RefinementCtx): void {
+  if (time.window.kind === "observation") {
+    const selection = time.window.selection;
+    if (time.comparison || (selection.kind === "trend" && selection.from > selection.to)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["window"],
+        message: "期次区间须按日期正序，且期次窗口不能叠加日历对照",
+      });
+    }
+    return;
+  }
+  if (time.window.kind === "trailing" && time.window.unit === "year" && time.window.count > 8) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["window", "count"],
+      message: "按年选择最多支持近 8 年",
+    });
+  }
+  if (time.window.kind === "range" && time.window.from > time.window.to) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["window", "from"],
+      message: "时间范围的开始月份不能晚于结束月份",
+    });
+  }
+  if (time.window.kind === "year_to_date" && time.comparison?.kind === "previous_period") {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["comparison", "kind"],
+      message: "今年至今应与去年同期比较；如需其他基准，请明确指定自定义对照期间",
+    });
+  }
+  if (time.comparison?.kind === "custom") {
+    const expected = time.window.kind === "current_month" ? "current_month" : "range";
+    if (time.comparison.window.kind !== expected) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["comparison", "window"],
+        message: "自定义对照必须与主时间同为单月或同为连续期间",
+      });
+    }
+  }
+}
+
+export const TIME_INTENT_INPUT = QUERY_TIME.superRefine(validateTimeIntent);
+
+export const COLUMN_TIME_INPUT = COLUMN_TIME.superRefine(validateTimeIntent);
+
+export function compileTimeIntent(business: BusinessTime): TimeInput {
+  const grain = "grain" in business.window ? business.window.grain : "total";
   let primary: TimeInput;
+  if (business.window.kind === "observation") return { observation: business.window.selection };
   if (business.window.kind === "current_month") {
     primary = business.window.month ? { cutoff: business.window.month } : {};
   } else if (business.window.kind === "year_to_date") {
-    primary = { last: { years: 1 }, grain: business.window.grain };
+    primary = { last: { years: 1 }, grain };
   } else if (business.window.kind === "trailing") {
     primary = {
       last:
         business.window.unit === "month"
           ? { months: business.window.count }
           : { years: business.window.count },
-      grain: business.window.grain,
+      grain,
     };
   } else {
     primary = {
       range: { from: business.window.from, to: business.window.to },
-      grain: business.window.grain,
+      grain,
     };
   }
 
@@ -264,11 +316,6 @@ function compileParsedTimeIntent(business: TimeIntent): TimeInput {
           ? [{ cutoff: comparison.window.month }]
           : [{ range: { from: comparison.window.from, to: comparison.window.to } }];
   return { ...primary, compare };
-}
-
-/** 公开业务时间 → Planner 私有坐标；这是跨层翻译的唯一入口。 */
-export function compileTimeIntent(time: TimeIntent): TimeInput {
-  return compileParsedTimeIntent(parseTimeIntent(time));
 }
 
 export function parseTimeIntent(value: unknown): TimeIntent {
@@ -503,7 +550,10 @@ const coordinateLabel = (coordinate: TimeSelectionCoordinate) =>
   coordinate.kind === "cutoff" ? coordinate.cutoff : `${coordinate.from} 至 ${coordinate.to}`;
 
 /** 公开意图与 Planner 共用的时间坐标和结果粒度解析。 */
-export function resolveTimeSelection(time: TimeInput, defaultCutoff: string): TimeSelectionResult {
+export function resolveTimeSelection(
+  time: TimeInput,
+  defaultCutoff: string | undefined,
+): TimeSelectionResult {
   if (!isYearMonth(defaultCutoff)) {
     return { status: "invalid", issue: { code: "time_anchor_unavailable" } };
   }
@@ -570,8 +620,12 @@ export function resolveTimeSelection(time: TimeInput, defaultCutoff: string): Ti
   return { status: "resolved", selection: { coordinates, outputGrain: grain, comparison } };
 }
 
-export function resolveTimeIntentSelection(time: unknown, latest: string): TimeSelectionResult {
-  const parsed = TIME_INTENT_INPUT.safeParse(time);
+export function resolveTimeIntentSelection(
+  time: unknown,
+  latest: string | undefined,
+  mode: "query" | "column" = "query",
+): TimeSelectionResult {
+  const parsed = (mode === "column" ? COLUMN_TIME_INPUT : TIME_INTENT_INPUT).safeParse(time);
   if (!parsed.success) {
     return {
       status: "invalid",
@@ -581,7 +635,7 @@ export function resolveTimeIntentSelection(time: unknown, latest: string): TimeS
       },
     };
   }
-  return resolveTimeSelection(compileParsedTimeIntent(parsed.data), latest);
+  return resolveTimeSelection(compileTimeIntent(parsed.data), latest);
 }
 
 export function timeAvailabilityIssue(
@@ -609,6 +663,11 @@ export const TIME_CAPABILITIES_INPUT = z
       .optional()
       .describe("指标每年一月重新累计（年初累计类指标）；跨日历年的期间没有单一合计"),
     comparison: z.literal("explicit_only").optional().describe("指标只允许显式自定义对照期间"),
+    observation: z
+      .string()
+      .regex(/^dimension:[a-z][a-z0-9_]*$/)
+      .optional()
+      .describe("期次维度；values_of 可查可见编码，observation 窗口可按期次、日期或期次序列查询"),
   })
   .strict();
 
@@ -633,7 +692,11 @@ export function metricTimeCapabilities(contract: MetricTimeContract): TimeCapabi
 }
 
 export function mergeTimeCapabilities(capabilities: readonly TimeCapabilities[]): TimeCapabilities {
+  const observation = capabilities[0]?.observation;
   return {
+    ...(observation && capabilities.every((item) => item.observation === observation)
+      ? { observation }
+      : {}),
     ...(capabilities.some((item) => item.grain === "month") ? { grain: "month" as const } : {}),
     ...(capabilities.some((item) => item.year_scoped) ? { year_scoped: true as const } : {}),
     ...(capabilities.some((item) => item.comparison === "explicit_only")
@@ -718,7 +781,7 @@ export function totalPeriodOf(
   return { ...basisPeriod(time.basis, coordinate, degraded), ...(degraded ? { degraded } : {}) };
 }
 
-export function primaryTimeRange(time: TimeIntent, latest: string): { from: string; to: string } {
+export function primaryTimeRange(time: BusinessTime, latest: string): { from: string; to: string } {
   const expanded = expandTimeWindow(compileTimeIntent(time), latest);
   const range = timeRange(expanded);
   if (range) return range;

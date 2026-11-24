@@ -57,6 +57,7 @@ class Employee:
     leave_date: date | None
     legal_entity_name: str
     organization_name: str
+    department_id: str
     department_name: str
     work_location: str
     employment_type: str
@@ -341,6 +342,7 @@ COMMON_COLUMNS = (
     ("record_date", "DATE"),
     ("legal_entity_name", "VARCHAR"),
     ("organization_name", "VARCHAR"),
+    ("department_id", "VARCHAR"),
     ("department_name", "VARCHAR"),
     ("work_location", "VARCHAR"),
     ("employment_type", "VARCHAR"),
@@ -391,6 +393,7 @@ FACT_SCHEMAS = {
         ("period_month", "DATE"),
         ("legal_entity_name", "VARCHAR"),
         ("organization_name", "VARCHAR"),
+        ("department_id", "VARCHAR"),
         ("department_name", "VARCHAR"),
         ("planned_headcount", "INTEGER"),
     ),
@@ -557,6 +560,7 @@ def create_employee(
         leave_date=None,
         legal_entity_name=spec.legal_entity_name,
         organization_name=spec.organization_name,
+        department_id=spec.code,
         department_name=spec.department_name,
         work_location=rng.choice(spec.locations),
         employment_type=employment_type,
@@ -584,6 +588,7 @@ def common_row(
         record_date,
         employee.legal_entity_name,
         employee.organization_name,
+        employee.department_id,
         employee.department_name,
         employee.work_location,
         employee.employment_type,
@@ -686,7 +691,9 @@ def simulate(anchor: date) -> tuple[dict[str, list[tuple[object, ...]]], date]:
     rows: dict[str, list[tuple[object, ...]]] = {name: [] for name in FACT_SCHEMAS}
     employees: list[Employee] = []
     next_sequence = 1
-    latest_q12_wave: Q12Wave | None = None
+    first_wave_month = history_start
+    while not is_q12_wave(first_wave_month):
+        first_wave_month = add_months(first_wave_month, -1)
     initial_period = add_months(SIMULATION_START, -1)
     for spec in DEPARTMENTS:
         for _ in range(desired_headcount(spec, initial_period)):
@@ -777,48 +784,45 @@ def simulate(anchor: date) -> tuple[dict[str, list[tuple[object, ...]]], date]:
                         period_month,
                         spec.legal_entity_name,
                         spec.organization_name,
+                        spec.code,
                         spec.department_name,
                         planned_headcount(spec, period_month),
                     )
                 )
 
-        active_at_month_end = [
-            employee
-            for employee in employees
-            if employee.hire_date <= month_end
-            and (employee.leave_date is None or employee.leave_date > month_end)
-        ]
-        if is_q12_wave(period_month):
-            latest_q12_wave = create_q12_wave(period_month, active_at_month_end)
-
+        if period_month >= first_wave_month and is_q12_wave(period_month):
+            active_at_month_end = [
+                employee
+                for employee in employees
+                if employee.hire_date <= month_end
+                and (employee.leave_date is None or employee.leave_date > month_end)
+            ]
+            wave = create_q12_wave(period_month, active_at_month_end)
+            for participant in wave.participants:
+                employee = participant.employee
+                state_key = f"{employee.employee_id}:{period_month:%Y-%m}:{wave.wave_id}"
+                rows["q12_survey_participation_fact"].append(
+                    common_row(employee, f"{state_key}:invite", period_month, month_end)
+                    + (
+                        wave.wave_id,
+                        wave.wave_name,
+                        wave.wave_month,
+                        int(participant.responded),
+                    )
+                )
+                if participant.responded:
+                    rows["q12_survey_response_fact"].append(
+                        common_row(employee, f"{state_key}:response", period_month, month_end)
+                        + (
+                            wave.wave_id,
+                            wave.wave_name,
+                            wave.wave_month,
+                        )
+                        + participant.scores
+                        + q12_response_summary(participant.scores)
+                    )
         if not published:
             continue
-        if latest_q12_wave is None:
-            raise RuntimeError("数据发布期开始前还没有任何 Q12 期次，无法生成调研月度数据")
-        wave_date = last_of_month(latest_q12_wave.wave_month)
-        for participant in latest_q12_wave.participants:
-            employee = participant.employee
-            state_key = f"{employee.employee_id}:{period_month:%Y-%m}:{latest_q12_wave.wave_id}"
-            rows["q12_survey_participation_fact"].append(
-                common_row(employee, f"{state_key}:invite", period_month, wave_date)
-                + (
-                    latest_q12_wave.wave_id,
-                    latest_q12_wave.wave_name,
-                    latest_q12_wave.wave_month,
-                    int(participant.responded),
-                )
-            )
-            if participant.responded:
-                rows["q12_survey_response_fact"].append(
-                    common_row(employee, f"{state_key}:response", period_month, wave_date)
-                    + (
-                        latest_q12_wave.wave_id,
-                        latest_q12_wave.wave_name,
-                        latest_q12_wave.wave_month,
-                    )
-                    + participant.scores
-                    + q12_response_summary(participant.scores)
-                )
         for employee in employees:
             active_from = max(employee.hire_date, period_month)
             active_to = min(employee.leave_date or month_end, month_end)
@@ -910,8 +914,8 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
             """,
             [str(survey_participation)],
         ).fetchone()
-        if survey_coverage[:3] != (HISTORY_MONTHS, history_start, anchor):
-            raise RuntimeError(f"Q12 月度数据的时间覆盖错误：{survey_coverage}")
+        if survey_coverage[0] != survey_coverage[3] or survey_coverage[2] > anchor:
+            raise RuntimeError(f"Q12 期次数据的时间覆盖错误：{survey_coverage}")
         if not 9 <= survey_coverage[3] <= 11:
             raise RuntimeError(f"五年内的 Q12 期次应为 9 至 11 期，实际为 {survey_coverage[3]} 期")
         duplicate_keys = sum(
@@ -977,7 +981,8 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
         invalid_survey = connection.execute(
             """
             SELECT count(*) FROM read_parquet(?)
-            WHERE wave_month > period_month OR responded_flag NOT IN (0, 1)
+            WHERE wave_month IS DISTINCT FROM period_month
+               OR record_date IS DISTINCT FROM last_day(wave_month) OR responded_flag NOT IN (0, 1)
             """,
             [str(survey_participation)],
         ).fetchone()[0]
@@ -985,7 +990,8 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
         invalid_responses = connection.execute(
             f"""
             SELECT count(*) FROM read_parquet(?)
-            WHERE wave_month > period_month OR q12_answered_item_count <> 12
+            WHERE wave_month IS DISTINCT FROM period_month
+               OR record_date IS DISTINCT FROM last_day(wave_month) OR q12_answered_item_count <> 12
                OR q12_favorable_item_count NOT BETWEEN 0 AND 12
                OR q12_strongly_agree_item_count NOT BETWEEN 0 AND q12_favorable_item_count
                OR {score_bounds}
@@ -1016,7 +1022,7 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
             """
             WITH invited AS (
               SELECT wave_month, count(*) AS invited
-              FROM read_parquet(?) WHERE period_month = wave_month GROUP BY ALL
+              FROM read_parquet(?) GROUP BY ALL
             ), active AS (
               SELECT period_month AS wave_month, count(*) AS active
               FROM read_parquet(?) GROUP BY ALL
@@ -1025,23 +1031,6 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
             WHERE invited <> active
             """,
             [str(survey_participation), str(snapshot)],
-        ).fetchone()[0]
-        frozen_wave_errors = connection.execute(
-            """
-            SELECT count(*) FROM (
-              SELECT employee_id, wave_id,
-                     count(DISTINCT age) AS age_versions,
-                     count(DISTINCT tenure_years) AS tenure_versions,
-                     count(DISTINCT hash(q01_score, q02_score, q03_score, q04_score,
-                                         q05_score, q06_score, q07_score, q08_score,
-                                         q09_score, q10_score, q11_score, q12_score)) AS score_versions,
-                     count(*) FILTER (WHERE record_date <> last_day(wave_month)) AS invalid_dates
-              FROM read_parquet(?) GROUP BY ALL
-            )
-            WHERE age_versions <> 1 OR tenure_versions <> 1 OR score_versions <> 1
-               OR invalid_dates <> 0
-            """,
-            [str(survey_response)],
         ).fetchone()[0]
         survey_balance_errors = connection.execute(
             """
@@ -1053,8 +1042,8 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
               FROM read_parquet(?) GROUP BY ALL
             )
             SELECT count(*) FROM participation
-            JOIN responses USING (period_month, wave_id)
-            WHERE participation.respondents <> responses.respondents
+            FULL JOIN responses USING (period_month, wave_id)
+            WHERE coalesce(participation.respondents, 0) <> coalesce(responses.respondents, 0)
             """,
             [str(survey_participation), str(survey_response)],
         ).fetchone()[0]
@@ -1063,14 +1052,13 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
             or invalid_responses
             or response_summary_errors
             or wave_cohort_errors
-            or frozen_wave_errors
             or survey_balance_errors
         ):
             raise RuntimeError(
                 "Q12 数据校验失败（各项为不符合规则的行数）："
                 f"participation={invalid_survey}, responses={invalid_responses}, "
                 f"summary={response_summary_errors}, cohort={wave_cohort_errors}, "
-                f"frozen={frozen_wave_errors}, balance={survey_balance_errors}"
+                f"balance={survey_balance_errors}"
             )
         current_headcount = connection.execute(
             "SELECT count(*) FROM read_parquet(?) WHERE period_month = ?", [str(snapshot), anchor]
@@ -1082,12 +1070,12 @@ def validate(staging: Path, history_start: date, anchor: date) -> dict[str, obje
             SELECT count(*), sum(responded_flag), min(wave_id), max(wave_id)
             FROM read_parquet(?) WHERE period_month = ?
             """,
-            [str(survey_participation), anchor],
+            [str(survey_participation), survey_coverage[2]],
         ).fetchone()
         current_response_rate = current_survey[1] / current_survey[0]
         if not 0.58 <= current_response_rate <= 0.86 or current_survey[2] != current_survey[3]:
             raise RuntimeError(
-                f"截止月应只有一个 Q12 期次且回复率在 58% 至 86% 之间，实际为：{current_survey}"
+                f"最近一次 Q12 投放的月份应只有一期且回复率在 58% 至 86% 之间，实际为：{current_survey}"
             )
     return {
         "month_coverage": HISTORY_MONTHS,

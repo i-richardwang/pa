@@ -164,6 +164,46 @@ const OUTPUT_PROVENANCE_SCHEMA = z
   })
   .strict();
 
+const PERIOD_SCHEMA = z
+  .object({ from: z.string().regex(MONTH), to: z.string().regex(MONTH) })
+  .strict();
+export const OBSERVATION_OCCURRENCE_SCHEMA = z
+  .object({
+    id: z
+      .string()
+      .min(1)
+      .max(120)
+      .refine((id) => id === id.trim()),
+    date: z.string().date(),
+    title: z.string().optional(),
+  })
+  .strict();
+
+export const OBSERVATION_PERIOD_SCHEMA = z
+  .object({
+    columns: z.array(z.string()).min(1).optional().describe("混合查询中使用此观测时钟的结果列"),
+    requested: PERIOD_SCHEMA.optional(),
+    requested_date: z.string().date().optional(),
+    requested_id: z.string().optional(),
+    status: z
+      .enum(["observed", "no_release", "not_observed"])
+      .describe(
+        "observed 为所选期次或期间内有投放；no_release 为期间内无新投放，取 occurrence 指明的最近一期；not_observed 为没有匹配的可见期次",
+      ),
+    occurrence: OBSERVATION_OCCURRENCE_SCHEMA.optional(),
+  })
+  .strict();
+
+const COMPOSITION_PERIOD_SCHEMA = z
+  .object({
+    metric_id: z.string(),
+    requested: PERIOD_SCHEMA.optional(),
+    actual: PERIOD_SCHEMA.optional(),
+    observation: OBSERVATION_PERIOD_SCHEMA.optional(),
+    status: z.enum(["available", "unsupported_grain"]),
+  })
+  .strict();
+
 export const VIEW_BLOCK_SCHEMA = z
   .object({
     id: z.string().min(1).describe("与 AnalysisSpec 对应的稳定结果 id"),
@@ -174,6 +214,15 @@ export const VIEW_BLOCK_SCHEMA = z
     columns: z
       .array(z.string())
       .describe("公共结果列 id：语义成员 id、标准时间列 id 或派生规格显式列名"),
+    column_periods: z.record(COMPOSITION_PERIOD_SCHEMA).optional(),
+    observations: z.array(OBSERVATION_PERIOD_SCHEMA).optional(),
+    observation_axis: z
+      .object({
+        id_column: z.string(),
+        date_column: z.string(),
+      })
+      .strict()
+      .optional(),
     column_formats: z
       .record(COLUMN_FORMAT_SCHEMA)
       .optional()
@@ -221,7 +270,7 @@ export const VIEW_BLOCK_SCHEMA = z
   })
   .strict()
   .superRefine((view, ctx) => {
-    if (!view.provenance && !view.time) {
+    if (!view.provenance && !view.time && !view.column_periods && !view.observations) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["time"],
@@ -234,6 +283,21 @@ export const VIEW_BLOCK_SCHEMA = z
         path: ["time"],
         message: "派生结果没有单一业务时间轴",
       });
+    }
+    if (view.observation_axis) {
+      const { id_column, date_column } = view.observation_axis;
+      if (
+        view.time ||
+        id_column === date_column ||
+        view.column_roles[id_column] !== "dimension" ||
+        view.column_roles[date_column] !== "dimension"
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["observation_axis"],
+          message: "期次轴必须使用独立的期次编码与日期结果列",
+        });
+      }
     }
     if (view.time) {
       const { grain, buckets } = view.time;
@@ -469,6 +533,31 @@ export const QUERY_PAYLOAD_OUTPUT = {
 
 export const QUERY_PAYLOAD_SCHEMA = z.object(QUERY_PAYLOAD_OUTPUT).strict();
 
+export type ObservationPeriod = z.infer<typeof OBSERVATION_PERIOD_SCHEMA>;
+export function observationStatus(period: ObservationPeriod): string {
+  if (period.status === "not_observed") return "未观测";
+  return period.status === "no_release" ? "未投放" : "已观测";
+}
+
+export function observationSummary(period: ObservationPeriod): string {
+  const occurrence = period.occurrence;
+  const requested =
+    period.requested_date ??
+    (occurrence ? undefined : period.requested_id) ??
+    (period.requested &&
+      (period.requested.from === period.requested.to
+        ? period.requested.to
+        : `${period.requested.from} 至 ${period.requested.to}`));
+  const name = occurrence?.title ?? occurrence?.id;
+  const details = occurrence
+    ? [...new Set([occurrence.id, occurrence.date])].filter((part) => part !== name)
+    : [];
+  const label =
+    occurrence && (details.length ? `期次 ${name}（${details.join("，")}）` : `期次 ${name}`);
+  return [requested, observationStatus(period), label].filter(Boolean).join(" · ");
+}
+
+export type CompositionPeriod = z.infer<typeof COMPOSITION_PERIOD_SCHEMA>;
 export type QueryNote = z.infer<typeof QUERY_NOTE_SCHEMA>;
 export type StructureShare = z.infer<typeof STRUCTURE_SHARE_SCHEMA>;
 export type PublicTimeContext = z.infer<typeof PUBLIC_TIME_CONTEXT_SCHEMA>;

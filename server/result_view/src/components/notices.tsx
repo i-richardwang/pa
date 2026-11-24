@@ -61,7 +61,10 @@ export function noticesVisible(
   allRows: boolean,
   canFullscreen: boolean,
 ): boolean {
-  return (!allRows && rowCount > INLINE_ROWS && canFullscreen) || !!view.truncated;
+  return (
+    (!allRows && rowCount > INLINE_ROWS && canFullscreen) ||
+    !!(view.truncated || view.column_periods || view.observations)
+  );
 }
 
 export function Notices({
@@ -81,6 +84,7 @@ export function Notices({
   allRows: boolean;
 }) {
   const hiddenRows = !allRows && rowCount > INLINE_ROWS;
+  const downloadable = exportLink && (view.truncated || view.column_periods || view.observations);
   const [pendingAction, setPendingAction] = useState<"export" | "fullscreen" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -114,7 +118,7 @@ export function Notices({
           {!exportLink && <span>可下载完整结果（让助手导出），或缩小查询范围</span>}
         </>
       )}
-      {exportLink && view.truncated && (actions.exportAction || actions.copyText) && (
+      {downloadable && exportLink && (actions.exportAction || actions.copyText) && (
         <>
           {actions.exportAction && (
             <ActionButton
@@ -122,7 +126,7 @@ export function Notices({
               onClick={() => void runAction("export", () => actions.exportAction!.run(exportLink))}
             >
               {actions.exportAction.kind === "download_file" ? <Download /> : <ExternalLink />}
-              {actions.exportAction.kind === "download_file" ? "下载完整结果" : "打开下载链接"}
+              {actions.exportAction.kind === "download_file" ? "下载 CSV" : "打开下载链接"}
             </ActionButton>
           )}
           {actions.copyText && <CopyLinkButton url={exportLink.url} copyText={actions.copyText} />}

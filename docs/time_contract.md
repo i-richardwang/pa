@@ -4,8 +4,7 @@ PA 把时间分成三层：用户声明要观察的业务期间；指标声明�
 
 ## 1. 查询时间：用户要看哪段期间
 
-公开的时间参数由 `window` 和可选的 `comparison` 组成。输入格式以
-[`TIME_INTENT_INPUT`](../server/src/semantic_core/time_contract.ts) 为准，本文只说明代码里看不出的业务含义。
+普通查询通过 `window` 选择期间，通过可选的 `comparison` 选择对照。普通查询与组合列的输入分别由同一模块的 `TIME_INTENT_INPUT` 和 `COLUMN_TIME_INPUT` 定义。见[时间输入合同](../server/src/semantic_core/time_contract.ts)。
 
 - `window` 同时决定观察期间和输出粒度。单月查询只有一个结果桶；多月或多年的期间按声明的月或年粒度输出一个序列。
 - 相对窗口以数据源的 `actual_through`（数据实际更新到的月份）为终点，随数据更新向前推进；指定了具体月份或起止月的窗口固定不变。
@@ -62,8 +61,6 @@ meta:
 
 `semantic_package.yml.time_sources` 定义各个业务时钟以及它们之间的关系。每个包必须有且只有一个主时钟。计划类时间源可以引用一个实际类时间源，以它的数据截止月作为边界。比较策略有两种：`calendar` 允许按日历平移得到上一期和去年同期；`explicit_only` 只接受明确指定的期间，适用于不应按日历自动匹配的观测数据（例如调研）。
 
-稀疏数据是否补成逐月状态，由语义包的数据建模决定。补齐后，每个月的值表示该月末或之前最近一次的状态；数据批次（例如调研期次）仍作为业务维度公开。
-
 ## 4. 结果如何公开业务时间
 
 直接查询的结果里，`view.time` 给出服务端最终采用的粒度、主期和对比期坐标，以及带业务键的时间桶。`view.column_time_basis` 为每个指标列声明求值基准，它和时间桶一起确定每个单元格对应的真实期间。`view.totals` 只包含实际的起止月和可选的 `degraded` 标记，求值基准沿用所属指标列的。
@@ -73,3 +70,35 @@ meta:
 指标的物理时间窗口、求值方式、子查询数量和 Cube 时间成员都不属于公共协议。前端根据结果里的时间坐标组织时间轴和对比系列，不根据列名、指标名或数据值推断哪一列是时间，也不自行对指标做运算。
 
 更换指标的物理绑定后，标题、导出、明细和公共列标识必须仍然表示同一个业务含义；数值相同不代表含义相同。
+
+## 5. 原生观测期次
+
+观测事实只在真实投放期写入，时间源声明期次标识和精确到日的实际观测日期（YYYY-MM-DD）。按期次查询使用真实期次标识，趋势按实际观测排序，同月可出现多期。按自然期间查询观测指标时，先在当前调用者可见的期次序列上选期，再对该期应用业务筛选并分组。期间内没有新一期时使用截至期末的最近一期，并同时公开未投放状态和实际期次。首期以前标为未观测；已选期次里没有有效样本的组留空。
+
+目录中的 `time.constraints.observation` 指向期次维度。控制台与 Agent 可以用该维度查找当前账号可见的期次编码。
+
+## 6. 跨期组合表
+
+组合表的每个实体在每列得到一个值。每列可以指定自然期间、一期调研（`occurrence`），或截至某日的最近一期（`as_of`）。目录中指标的 `data_as_of` 是该列滚动窗口的截止月。日历指标取正式指标及所依赖来源共同覆盖的月份，观测指标取投放源的实际截止月。
+
+结果的 `column_periods` 给出每列请求的期间、实际求值期间和适用的观测期次，表头和 CSV 据此标注时间。指标不支持所选实体粒度时，该列保留作者指定的窗口和不可用原因。相对窗口在该列实际求值后显示具体月份。
+
+以下分析以部门编码对齐三列，用 `baseline` 指定部门名单来自哪一列。省略它时取各列可见部门编码的并集。
+
+```yaml
+analysis:
+  composition:
+    group_by: dimension:department_id
+    baseline: current_headcount
+    columns:
+      - id: current_headcount
+        measure: measure:active_headcount
+        time: { window: { kind: current_month, month: "2026-07" } }
+      - id: first_half_separations
+        measure: measure:separation_count
+        time: { window: { kind: range, from: "2026-01", to: "2026-06" } }
+      - id: latest_q12
+        measure: measure:q12_average_score
+        time: { window: { kind: observation, selection: { kind: as_of, date: "2026-07-31" } } }
+view: { type: table }
+```

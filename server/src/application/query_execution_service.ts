@@ -6,13 +6,13 @@ import type {
   TimeContext,
 } from "../ports/cube_gateway.js";
 import type { Principal } from "../contracts/principal.js";
-import type { ExportService } from "./export_service.js";
 import { completeHierarchy } from "../engine/hierarchy.js";
 import { assertPhysicalQueryInvariants, filterMembers } from "../engine/query_contract.js";
 import { AGGREGATE_CARD_ROWS, ResultLimitExceededError } from "../engine/result_limit.js";
 import {
   runQueryPipeline,
   type ExecutedViewResult,
+  type BoundGroupSelection,
   type QueryRunResult,
 } from "./query_pipeline.js";
 import type { QueryViewSpec } from "../semantic_core/analysis_spec.js";
@@ -21,6 +21,10 @@ import { applyGroupingSets } from "../engine/grouping_set_executor.js";
 import { planGroupingSets } from "../engine/grouping_set_planner.js";
 import { computeMetricTotals } from "./view_totals.js";
 import { memberSemanticId } from "../engine/model_contract.js";
+import { selectedGroupKeys } from "./group_selection.js";
+import { executeCalendarAndObservation } from "./mixed_observation_execution.js";
+import { createObservationDirectory } from "./observation_directory.js";
+import { executeObservationView } from "./observation_execution.js";
 import type { AuthorizedAnalysisPlan } from "./semantic_planning_service.js";
 import { buildResultNotes } from "./query_result_notes.js";
 import { encodeQueryResult } from "./query_result_block.js";
@@ -32,7 +36,7 @@ function toOrderTuples(order: OrderInput): CubeQuery["order"] {
 
 /** 受控记录字段不在公开查询中，只能通过 Record Projection 端点返回。 */
 async function executeView(
-  deps: QueryExecutionDependencies,
+  cube: CubeGateway,
   ctx: {
     principal: Principal;
     cubeContext: CubeSecurityContext;
@@ -43,6 +47,7 @@ async function executeView(
   includeSummary: boolean,
   includeTotals: boolean,
   accessScopeTitle: string,
+  preselected?: BoundGroupSelection,
 ): Promise<ExecutedViewResult> {
   const { principal, cubeContext } = ctx;
   const inputQuery: CubeQuery = {
@@ -68,22 +73,25 @@ async function executeView(
     throw new Error("执行计划引用了当前授权目录中不存在的物理成员");
   }
   assertPhysicalQueryInvariants({ measures, dimensions, filters, order }, authViews);
-  const { query: shaped, added: hierarchyDimensions } = completeHierarchy(
-    { measures, dimensions, filters, order },
-    authViews,
-  );
+  const query = { measures, dimensions, filters, order };
+  const { query: shaped, added: hierarchyDimensions } = spec.stable_grouping
+    ? { query, added: [] }
+    : completeHierarchy(query, authViews);
+  const selectedQuery = preselected
+    ? { ...shaped, filters: [...(shaped.filters ?? []), preselected.filter] }
+    : shaped;
   const prepared = await prepareMetricQueryExecution({
-    cube: deps.cube,
-    query: shaped,
+    cube,
+    query: selectedQuery,
     time: spec.time,
     context,
     views: authViews,
     securityContext: cubeContext,
     timeView: spec.time_view,
-    selection: spec.selection,
+    selection: preselected ? undefined : spec.selection,
   });
   const queryPlan = prepared.plan;
-  const selectionState = prepared.selection;
+  const selectionState = preselected ?? prepared.selection;
   const selection = selectionState?.outcome;
   const effectiveQuery: CubeQuery = selection
     ? {
@@ -108,15 +116,13 @@ async function executeView(
   const [displayResolved, groupingLoads, metricTotals] = await Promise.all([
     prepared.precomputed
       ? Promise.resolve(prepared.precomputed)
-      : executeMetricQuery(deps.cube, queryPlan, cubeContext, authViews),
+      : executeMetricQuery(cube, queryPlan, cubeContext, authViews),
     Promise.all(
-      groupingPlan.legs.map((leg) =>
-        executeMetricQuery(deps.cube, leg.plan, cubeContext, authViews),
-      ),
+      groupingPlan.legs.map((leg) => executeMetricQuery(cube, leg.plan, cubeContext, authViews)),
     ),
     includeTotals
       ? computeMetricTotals({
-          cube: deps.cube,
+          cube,
           query: shaped,
           context,
           views: authViews,
@@ -126,11 +132,11 @@ async function executeView(
         })
       : Promise.resolve([]),
   ]);
-  const resolved = prepared.selection
+  const resolved = selectionState
     ? {
         ...displayResolved,
-        selection: prepared.selection.outcome,
-        selectionFilter: prepared.selection.filter,
+        selection: selectionState.outcome,
+        selectionFilter: selectionState.filter,
       }
     : displayResolved;
   const groupingResolved = applyGroupingSets(
@@ -167,7 +173,7 @@ async function executeView(
     selection,
     hierarchyAdditions: hierarchyDimensions,
   });
-  return encodeQueryResult({
+  const encoded = encodeQueryResult({
     spec,
     views: authViews,
     shapedQuery: shaped,
@@ -179,23 +185,59 @@ async function executeView(
     queryNotes: notes,
     displayNotes,
   });
+  if (!selectionState) return encoded;
+  const groupSelection = preselected ?? {
+    ...selectionState,
+    groups: selectedGroupKeys(encoded.block, selectionState.outcome.dimensions),
+  };
+  return { ...encoded, groupSelection };
 }
 
-export type QueryExecutionDependencies = {
-  cube: CubeGateway;
-  exports: Pick<ExportService, "createDelivery">;
-};
-
-export function createQueryExecutionService(deps: QueryExecutionDependencies) {
-  const execute = (planned: AuthorizedAnalysisPlan): Promise<QueryRunResult> =>
-    runQueryPipeline(
-      {
-        executeView: (...args) => executeView(deps, ...args),
-        exports: deps.exports,
+export function createQueryExecutionService({ cube }: { cube: CubeGateway }) {
+  const execute = (planned: AuthorizedAnalysisPlan): Promise<QueryRunResult> => {
+    const { time_sources: sources, views, cubeContext: security } = planned.access;
+    const directory = createObservationDirectory({ cube, views, security, sources });
+    return runQueryPipeline(
+      (context, spec, views, time, summary, totals, scope) => {
+        const execute = (
+          resolved: QueryViewSpec,
+          includeSummary: boolean,
+          includeTotals: boolean,
+          selection?: BoundGroupSelection,
+        ) =>
+          executeView(
+            cube,
+            context,
+            resolved,
+            views,
+            time,
+            includeSummary,
+            includeTotals,
+            scope,
+            selection,
+          );
+        const executeSource = (
+          resolved: QueryViewSpec,
+          selection?: BoundGroupSelection,
+          ranking = false,
+        ) =>
+          executeObservationView({
+            directory,
+            spec: resolved,
+            views,
+            context: time,
+            sources,
+            execute,
+            summary: summary && !ranking,
+            totals: totals && !ranking,
+            selection,
+          }) ?? execute(resolved, summary && !ranking, totals && !ranking, selection);
+        return executeCalendarAndObservation(spec, views, sources, time, executeSource);
       },
       planned.access,
       planned.plan,
       planned.presentation,
     );
+  };
   return { execute };
 }

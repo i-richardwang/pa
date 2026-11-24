@@ -128,6 +128,14 @@ const manifestSchema = z
             primary: z.boolean(),
             reference_source: memberName.optional(),
             comparison_policy: z.enum(["calendar", "explicit_only"]),
+            observation: z
+              .object({
+                id_member: memberName,
+                date_member: memberName,
+                title_member: memberName.optional(),
+              })
+              .strict()
+              .optional(),
           })
           .strict(),
       )

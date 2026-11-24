@@ -114,6 +114,7 @@ type RawMeta = {
   time_source?: string;
   time_anchor_measure?: string;
   dimension_group?: string;
+  entity_label?: unknown;
   metric_domain_id?: string;
 };
 
@@ -294,6 +295,7 @@ function buildDimensionGroups(
   const bindings = new Map<string, SemanticCatalogDimensionGroupBinding[]>();
   const contracts = new Map<string, SemanticCatalogMember>();
   const groupByMember = new Map<string, string>();
+  const entityLabels = new Map<string, string | undefined>();
   for (const fact of facts) {
     const raw = rawByCube.get(fact.name);
     const path = paths.get(fact.name) ?? fact.name;
@@ -321,6 +323,24 @@ function buildDimensionGroups(
       }
       groupByMember.set(member.name, groupName);
       const semanticKey = `${groupName}.${member.name}`;
+      const entityLabel = rawDimensions.get(member.name)?.meta?.entity_label;
+      const label = fact.members.find(
+        (candidate) =>
+          candidate.name === entityLabel && candidate.kind === "dimension" && !candidate.internal,
+      );
+      if (
+        entityLabel !== undefined &&
+        (typeof entityLabel !== "string" ||
+          entityLabel === member.name ||
+          member.member_type !== "string" ||
+          label?.member_type !== "string" ||
+          rawDimensions.get(entityLabel)?.meta?.dimension_group !== groupName)
+      )
+        throw new Error(`semantic model catalog: ${path} 的实体标签声明无效：${member.name}`);
+      if (entityLabels.has(semanticKey) && entityLabels.get(semanticKey) !== entityLabel) {
+        throw new Error(`semantic model catalog: 规范维度 ${member.name} 的实体标签不一致`);
+      }
+      entityLabels.set(semanticKey, typeof entityLabel === "string" ? entityLabel : undefined);
       const previous = contracts.get(semanticKey);
       if (previous && !sameDimensionContract(previous, member)) {
         throw new Error(
@@ -437,6 +457,28 @@ export function buildSemanticModelCatalog(
         for (const include of includes) {
           if (!available.has(include)) {
             throw new Error(`semantic model catalog: ${factName} 不存在成员 ${include}`);
+          }
+        }
+        const observation = timeSourceRegistry.by_id.get(timeSource)?.observation;
+        if (observation) {
+          const required = [
+            observation.id_member,
+            observation.date_member,
+            observation.title_member,
+          ];
+          for (const observationMember of required) {
+            if (!observationMember) continue;
+            const binding = fact.members.find((member) => member.name === observationMember);
+            if (
+              !includes.includes(observationMember) ||
+              binding?.kind !== "dimension" ||
+              binding.internal ||
+              binding.member_type !== "string"
+            ) {
+              throw new Error(
+                `semantic model catalog: 执行 View ${viewName} 的观测期次成员无效：${observationMember}`,
+              );
+            }
           }
         }
         const anchorMeasure = view.meta?.time_anchor_measure;

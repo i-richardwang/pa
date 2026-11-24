@@ -6,8 +6,15 @@
 语义求值并对齐；回答时按结果中的求值基准和实际期间分别解释各列。行结构、粒度或业务问题不同时，才
 拆成多次 `run_analysis`。
 
-趋势查询使用用户要求的月或年粒度。快照、流量、平均值和正式比率都由服务端按各自合同求值；客户端不
+日历趋势使用用户要求的月或年粒度。快照、流量、平均值和正式比率都由服务端按各自合同求值；客户端不
 跨月累加快照、不平均已经计算的比例，也不把 YTD 指标当成普通月度值。
+
+## 调研期次与跨期组合表
+
+- 想看每次投放的变化，用 `time.window.kind = "observation"`，并在 `selection` 中给出 `{"kind":"trend","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}`。指定一期时，对指标的 `time.constraints.observation` 维度调用 `values_of`，将返回的编码放在 `{"kind":"occurrence","id":"…"}` 中。查截至某天的最近一期用 `{"kind":"as_of","date":"YYYY-MM-DD"}`。
+- 比如同一部门一行，并列去年末在职、今年上半年离职及两期调研。用一次 `run_analysis`，传 `view: {"type":"table"}` 和 `analysis.composition`。`group_by` 选目录中带 `entity_label` 的实体键维度。每个 `columns` 项给出独立的 `id`、目录 `measure` 和 `time`。同一指标可出现在多列，列 ID 各异。上半年累计用该年的一月至六月范围，组合表按整段求一个值。每列的滚动期间以目录中该指标的 `data_as_of` 为准，实际期次从结果的 `column_periods` 读取。
+- 默认展示各列实体并集。用户指定「只看 7 月在职的部门」时，用 `baseline` 引用对应列的 ID。范围筛选放在 `composition.filters`。若某指标的 `query_capabilities.dimension_ids` 未包含行维度，报告该列的粒度限制。
+- 解释结果时，按列 ID 读取 `view.column_periods`。调研状态 `no_release` 应同时说明请求期间和实际引用的期次，`not_observed` 表示尚未观测。保留空值和真实零的区别。
 
 ## 跨事实正式指标
 

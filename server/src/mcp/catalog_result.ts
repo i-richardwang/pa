@@ -18,6 +18,7 @@ const memberBase = (source: PublicCatalogMember) => ({
 
 const measure = (source: PublicCatalogMeasure) => ({
   ...memberBase(source),
+  ...(source.data_as_of ? { data_as_of: source.data_as_of } : {}),
   ...(source.records_available ? { records_available: true as const } : {}),
   query_capabilities: source.query_capabilities,
   ...(source.report_calculations?.length
@@ -38,6 +39,7 @@ const measure = (source: PublicCatalogMeasure) => ({
 const dimension = (source: PublicCatalogDimension) => ({
   ...memberBase(source),
   ...(source.dimension_kind ? { dimension_kind: source.dimension_kind } : {}),
+  ...(source.entity_label ? { entity_label: source.entity_label } : {}),
 });
 
 /** MCP 目录只输出 Agent 查询需要的字段；Web 导航字段只在 PublicCatalogDocument 中。 */

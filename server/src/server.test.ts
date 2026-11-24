@@ -1,3 +1,4 @@
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv";
 import { recordingLogger } from "./test_support/logger.js";
 import { describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
@@ -507,12 +508,55 @@ test("MCP 提供全部工具和 Apps 资源", async () => {
     expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(260);
     expect(SERVER_INSTRUCTIONS).toContain("time.constraints");
     expect(SERVER_INSTRUCTIONS).toContain("query_capabilities");
+    expect(SERVER_INSTRUCTIONS).toContain("time.constraints.observation");
+    expect(TOOL_DESCRIPTIONS.run_analysis).toContain("composition");
     expect(TOOL_DESCRIPTIONS.run_analysis).toContain("code/details");
     expect(TOOL_DESCRIPTIONS.run_analysis).toContain("错误 JSON");
     // 模型最常见的错误是把 view 嵌进 analysis；它只看得到 input schema，
     // 所以「两者平级」必须写在这两个属性的描述里。
     const runSchema = listed.tools.find((candidate) => candidate.name === "run_analysis")
       ?.inputSchema as { properties: Record<string, { description?: string }> };
+    const accepts = new AjvJsonSchemaValidator().getValidator(runSchema);
+    const column = {
+      id: "first",
+      measure: "measure:people",
+      time: { window: { kind: "current_month" } },
+    };
+    const withColumnTime = (time: unknown) => ({
+      view: { type: "table" },
+      analysis: {
+        composition: {
+          group_by: "dimension:department_id",
+          columns: [column, { ...column, id: "second", time }],
+        },
+      },
+    });
+    expect(
+      accepts(withColumnTime({ window: { kind: "range", from: "2026-01", to: "2026-06" } })).valid,
+    ).toBe(true);
+    for (const grain of ["month", "year", "total"]) {
+      expect(
+        accepts(
+          withColumnTime({ window: { kind: "range", from: "2026-01", to: "2026-06", grain } }),
+        ).valid,
+      ).toBe(false);
+    }
+    const trend = {
+      window: {
+        kind: "observation",
+        selection: { kind: "trend", from: "2026-01-01", to: "2026-06-30" },
+      },
+    };
+    expect(accepts(withColumnTime(trend)).valid).toBe(false);
+    expect(
+      accepts(withColumnTime({ ...column.time, comparison: { kind: "previous_year" } })).valid,
+    ).toBe(false);
+    expect(
+      accepts({
+        analysis: { query: { measures: [column.measure], time: trend } },
+        view: { type: "table" },
+      }).valid,
+    ).toBe(true);
     expect(runSchema.properties.analysis.description).toContain("与 view 平级");
     expect(runSchema.properties.view.description).toContain("不嵌在 analysis 内");
     expect(UI_RESOURCE_URI).toBe("ui://pa/result.html");
@@ -619,7 +663,9 @@ test("MCP 提供全部工具和 Apps 资源", async () => {
       description: "最多保留的完整分组数量；省略即展示全部分组，不做 Top-N 截取",
     });
     expect(runAnalysisInput).toContain('"group_sort"');
-    expect(runAnalysisInput).not.toContain('"selection"');
+    expect(analysisProperties.query).not.toHaveProperty("properties.selection");
+    expect(runAnalysisInput).toContain('"observation"');
+    expect(runAnalysisInput).toContain('"composition"');
     const rerunAnalysisInput = JSON.stringify(tools.rerun_analysis?.inputSchema);
     for (const humanOnlyField of [
       "color",

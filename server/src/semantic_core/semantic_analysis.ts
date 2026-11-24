@@ -7,7 +7,7 @@ import { z } from "zod";
 import { validateDerivedColumns } from "./analysis_graph.js";
 import { GRAND_TOTAL_DESCRIPTION } from "./analysis_spec.js";
 import { COLUMN_FORMATS, type ColumnFormat } from "./query_payload.js";
-import { TIME_INTENT_INPUT } from "./time_contract.js";
+import { COLUMN_TIME_INPUT, TIME_INTENT_INPUT, type BusinessTime } from "./time_contract.js";
 
 const SEMANTIC_MEMBER_NAME = /^[a-z][a-z0-9_]*$/;
 const SEMANTIC_MEASURE_ID = z
@@ -203,6 +203,7 @@ export const SEMANTIC_QUERY_VIEW_INPUT = z
   });
 
 export type SemanticQueryView = z.infer<typeof SEMANTIC_QUERY_VIEW_INPUT>;
+export type PlannableQuery = Omit<SemanticQueryView, "time"> & { time: BusinessTime };
 
 export type SemanticColumnOperand = { member: string; source: SemanticSourceRole };
 export type SemanticCarriedColumn = SemanticColumnOperand & { as: string };
@@ -347,7 +348,7 @@ export const SEMANTIC_VIEW_INTENT_INPUT = z
       .strict(),
     z
       .object({
-        type: z.literal("line").describe("按月或按年的连续时间趋势；横轴是时间"),
+        type: z.literal("line").describe("按月、年或真实观测期次显示时间趋势"),
         series: PRESENTATION_SERIES,
         secondary_series: PRESENTATION_SECONDARY_SERIES,
         group_by: PRESENTATION_GROUP_BY,
@@ -422,7 +423,7 @@ export type PlottedIntentType = Extract<SemanticViewIntent["type"], "line" | "ba
  * 否则唯一的 query 就是结果。第二个查询只存在于 derived.joined 里，因此
  * 「多个互不相干的结果」和「有第二个查询却没有算术」都写不出来。
  */
-export const ANALYSIS_DEFINITION_INPUT = z
+const DIRECT_ANALYSIS_INPUT = z
   .object({
     title: z.string().min(1).max(100).optional(),
     query: SEMANTIC_QUERY_VIEW_INPUT.describe(
@@ -437,11 +438,49 @@ export const ANALYSIS_DEFINITION_INPUT = z
   // 多写一个查询、把 view 写进来是最常见的两种错法，strict 的默认文案只会说「多余的键」，
   // 这里替它指路。
   .strict(
-    "分析定义只有 title / query / derived 三个字段：分组、时间与筛选一致的多个指标合并进 " +
-      "query.measures；需要跨查询逐行算术时把第二个查询放进 derived.joined；" +
+    "直接分析使用 title / query / derived：分组、时间与筛选一致的多个指标合并进 " +
+      "query.measures；需要跨查询逐行算术时把第二个查询放进 derived.joined；并列跨期指标用 composition；" +
       "属于不同业务问题则分成多次 run_analysis。呈现意图写在与 analysis 平级的 view 参数里，" +
       "不放进分析定义",
   );
+
+export const COMPOSITION_COLUMN_LIMITS = { min: 2, max: 12 } as const;
+
+const COMPOSITION_COLUMN = z
+  .object({
+    id: DERIVED_OUTPUT_NAME.describe(
+      "列的唯一标识，采用 ASCII snake_case。同一指标可按不同期间配置多列",
+    ),
+    title: z.string().trim().min(1).max(60).optional(),
+    measure: SEMANTIC_MEASURE_ID,
+    time: COLUMN_TIME_INPUT,
+  })
+  .strict();
+
+const COMPOSITION_ANALYSIS_INPUT = z
+  .object({
+    title: z.string().min(1).max(100).optional(),
+    composition: z
+      .object({
+        group_by: SEMANTIC_DIMENSION_ID.describe("使用目录中带 entity_label 的维度 id 作为行键"),
+        baseline: DERIVED_OUTPUT_NAME.optional().describe(
+          "用此列的实体集合确定行；省略时取各列实体并集",
+        ),
+        columns: z
+          .array(COMPOSITION_COLUMN)
+          .min(COMPOSITION_COLUMN_LIMITS.min)
+          .max(COMPOSITION_COLUMN_LIMITS.max)
+          .describe("按指定顺序输出的正式指标列，每列独立选期"),
+        filters: SEMANTIC_QUERY_VIEW_INPUT.innerType().shape.filters,
+      })
+      .strict(),
+  })
+  .strict();
+
+export const ANALYSIS_DEFINITION_INPUT = z.union([
+  DIRECT_ANALYSIS_INPUT,
+  COMPOSITION_ANALYSIS_INPUT,
+]);
 
 export type AnalysisDefinition = z.infer<typeof ANALYSIS_DEFINITION_INPUT>;
 
@@ -470,17 +509,20 @@ function semanticOperands(column: SemanticDerivedColumn): SemanticColumnOperand[
 /** 派生结果在执行层的视图身份；来源视图身份即来源角色本身。 */
 export const SEMANTIC_DERIVED_VIEW_ID = "result";
 
-export function semanticResultView(definition: AnalysisDefinition): SemanticAnalysisView {
-  return definition.derived ?? definition.query;
+export function semanticResultView(
+  definition: AnalysisDefinition,
+): SemanticAnalysisView | undefined {
+  return "query" in definition ? (definition.derived ?? definition.query) : undefined;
 }
 
 export function semanticResultViewId(definition: AnalysisDefinition): string {
-  return definition.derived ? SEMANTIC_DERIVED_VIEW_ID : "query";
+  return "composition" in definition || definition.derived ? SEMANTIC_DERIVED_VIEW_ID : "query";
 }
 
 export function semanticSourceViews(
   definition: AnalysisDefinition,
 ): { role: SemanticSourceRole; query: SemanticQueryView }[] {
+  if ("composition" in definition) return [];
   const joined = definition.derived?.joined;
   return [
     { role: "query", query: definition.query },
@@ -489,13 +531,26 @@ export function semanticSourceViews(
 }
 
 export function parseAnalysisDefinition(value: unknown): AnalysisDefinition {
-  const parsed = ANALYSIS_DEFINITION_INPUT.safeParse(value);
+  const parsed =
+    value && typeof value === "object" && "composition" in value
+      ? COMPOSITION_ANALYSIS_INPUT.safeParse(value)
+      : DIRECT_ANALYSIS_INPUT.safeParse(value);
   if (!parsed.success) {
     throw new AnalysisDefinitionError(
       `分析定义无效：${parsed.error.issues.map((issue) => issue.message).join("；")}`,
     );
   }
   try {
+    if ("composition" in parsed.data) {
+      const { columns, baseline, filters } = parsed.data.composition;
+      const ids = new Set(columns.map((column) => column.id));
+      if (ids.size !== columns.length) throw new Error("组合表列 id 必须唯一");
+      if (baseline && !ids.has(baseline)) throw new Error("行基准必须引用本组合表的列");
+      if (new Set(filters?.map((filter) => filter.member)).size !== (filters?.length ?? 0)) {
+        throw new Error("同一维度只能声明一条筛选");
+      }
+      return parsed.data;
+    }
     const { derived } = parsed.data;
     const sources = semanticSourceViews(parsed.data);
     if (derived) {

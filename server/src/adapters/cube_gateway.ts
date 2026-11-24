@@ -411,20 +411,21 @@ async function fetchTimeContext(state: CubeGatewayState): Promise<TimeContext> {
       }),
     ),
   );
+  const dataAsOf = anchorMonths.get(state.config.timeSources.primary.id)!;
   const sources: Record<string, TimeSourceContext> = {};
   for (const source of present) {
     const actualThrough = anchorMonths.get(source.reference_source);
     if (actualThrough === undefined) {
       throw new Error(`时间来源 ${source.id} 引用的实际数据来源 ${source.reference_source} 不存在`);
     }
-    const availableThrough = anchorMonths.get(source.id)!;
+    const sourceMonth = anchorMonths.get(source.id)!;
+    const availableThrough = source.observation && dataAsOf > sourceMonth ? dataAsOf : sourceMonth;
     sources[source.id] = {
-      actualThrough,
+      actualThrough: source.observation ? availableThrough : actualThrough,
       availableThrough,
       ...(source.role === "plan" ? { planThrough: availableThrough } : {}),
     };
   }
-  const dataAsOf = anchorMonths.get(state.config.timeSources.primary.id)!;
   const value: TimeContext = {
     dataAsOf,
     sources,
