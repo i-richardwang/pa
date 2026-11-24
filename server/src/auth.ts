@@ -5,21 +5,20 @@ import { mcp } from "@better-auth/mcp";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
 import { admin, jwt } from "better-auth/plugins";
+import { MCP_ACCESS_SCOPE, mcpResourceUrl } from "./contracts/mcp_access.js";
 import { isAllowedOrigin } from "./engine/origins.js";
-import type { SqliteDatabase } from "./sqlite.js";
+import { openSqlite, type SqliteDatabase } from "./sqlite.js";
 
 /** apiKey 插件的 key 前缀；/mcp 根据它区分 API key 和 OAuth access token。 */
 export const API_KEY_PREFIX = "pa_";
 /** 由 HTTP 入口从 socket 对端地址写入，供 Better Auth 的会话和限流使用。 */
 export const AUTH_PEER_IP_HEADER = "x-pa-peer-ip";
 
-export type AuthConfig = {
+type AuthConfig = {
   baseUrl: string;
   secret: string;
   dbPath: string;
   allowedOrigins?: string[];
-  /** 只有开通用户的脚本设为 true；服务端的注册端点始终关闭 */
-  allowSignUp?: boolean;
 };
 
 function authOptions(cfg: AuthConfig, db: SqliteDatabase) {
@@ -39,7 +38,7 @@ function authOptions(cfg: AuthConfig, db: SqliteDatabase) {
     },
     emailAndPassword: {
       enabled: true,
-      disableSignUp: !cfg.allowSignUp,
+      disableSignUp: true,
     },
     // access_scope 以字符串存在 Better Auth 用户表里；应用解析后写进 Cube JWT 的 data_scope。
     // input:false：用户不能自己修改，只能由管理员或开通命令写入。
@@ -53,10 +52,10 @@ function authOptions(cfg: AuthConfig, db: SqliteDatabase) {
     plugins: [
       jwt({ disableSettingJwtHeader: true }),
       mcp({
-        resource: new URL("/mcp", cfg.baseUrl).href,
+        resource: mcpResourceUrl(cfg.baseUrl),
         loginPage: "/login",
         consentPage: "/consent",
-        scopes: ["mcp", "offline_access", "openid", "profile", "email"],
+        scopes: [MCP_ACCESS_SCOPE, "offline_access", "openid", "profile", "email"],
         schema: {
           oauthClient: { modelName: "oauth_client" },
           oauthResource: { modelName: "oauth_resource" },
@@ -78,13 +77,17 @@ function authOptions(cfg: AuthConfig, db: SqliteDatabase) {
   } satisfies BetterAuthOptions;
 }
 
-export function buildAuth(cfg: AuthConfig, db: SqliteDatabase) {
-  return betterAuth(authOptions(cfg, db));
+export async function openAuth(cfg: AuthConfig) {
+  const db = await openSqlite(cfg.dbPath);
+  try {
+    const options = authOptions(cfg, db);
+    const { runMigrations } = await getMigrations(options);
+    await runMigrations();
+    return { auth: betterAuth(options), db };
+  } catch (error) {
+    db.close();
+    throw error;
+  }
 }
 
-export type Auth = ReturnType<typeof buildAuth>;
-
-export async function initializeAuthSchema(cfg: AuthConfig, db: SqliteDatabase): Promise<void> {
-  const { runMigrations } = await getMigrations(authOptions(cfg, db));
-  await runMigrations();
-}
+export type Auth = Awaited<ReturnType<typeof openAuth>>["auth"];

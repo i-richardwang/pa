@@ -2,25 +2,18 @@ import { readFile } from "node:fs/promises";
 import { serve } from "@hono/node-server";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { createMcpHandler } from "@modelcontextprotocol/server";
-import { requireMcpAuth } from "@better-auth/mcp";
+import { authenticateMcp } from "./adapters/mcp_auth.js";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
-import { html } from "hono/html";
 import { cors } from "hono/cors";
 import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
+import { MCP_RESOURCE_PATH } from "./contracts/mcp_access.js";
 import { principalFromAttributes, type Principal } from "./contracts/principal.js";
-import {
-  API_KEY_PREFIX,
-  AUTH_PEER_IP_HEADER,
-  buildAuth,
-  initializeAuthSchema,
-  type Auth,
-} from "./auth.js";
+import { AUTH_PEER_IP_HEADER, openAuth } from "./auth.js";
 import { consoleLogger as logger } from "./adapters/console_logger.js";
 import { createApplication } from "./composition/application.js";
 import { config } from "./config.js";
 import { createCubeGateway } from "./adapters/cube_gateway.js";
 import { createBetterAuthUserAccountAdministration } from "./adapters/better_auth_user_account_administration.js";
-import { resolveBetterAuthPrincipal } from "./adapters/better_auth_principal.js";
 import { SERVICE_CUBE_CONTEXT } from "./engine/cube_security.js";
 import { withFormalMetricModel } from "./engine/formal_metric_gateway.js";
 import { dashboardRoutes } from "./dashboard/index.js";
@@ -31,7 +24,6 @@ import {
 import { isAllowedOrigin } from "./engine/origins.js";
 import { buildServer, type McpServerDependencies } from "./server.js";
 import { openAppDatabase } from "./storage/app_database.js";
-import { openSqlite, type SqliteDatabase } from "./sqlite.js";
 import { configuredSemanticPackageDir, loadSemanticPackage } from "./engine/semantic_package.js";
 import {
   loadCanonicalSemanticModel,
@@ -127,29 +119,22 @@ const localCors = cors({
     "DPoP-Nonce",
   ],
 });
-app.use("/mcp", originGuard);
-app.use("/.well-known/*", originGuard);
-app.use("/api/auth/*", originGuard);
-app.use("/mcp", localCors);
-app.use("/.well-known/*", localCors);
-app.use("/api/auth/*", localCors);
+app.use(MCP_RESOURCE_PATH, originGuard, localCors);
+app.use("/.well-known/*", originGuard, localCors);
+app.use("/api/auth/*", originGuard, localCors);
 
-let auth: Auth | null = null;
-let authDb: SqliteDatabase | null = null;
-if (config.authSecret) {
-  const authCfg = {
-    baseUrl: config.baseUrl,
-    secret: config.authSecret,
-    dbPath: config.authDb,
-    allowedOrigins: configuredOrigins,
-  };
-  authDb = await openSqlite(config.authDb);
-  await initializeAuthSchema(authCfg, authDb);
-  auth = buildAuth(authCfg, authDb);
-  const enabledAuth = auth;
-
-  app.on(["GET", "POST"], "/api/auth/*", (c) => enabledAuth.handler(c.req.raw));
-  app.on(["GET", "HEAD"], "/.well-known/*", (c) => enabledAuth.handler(c.req.raw));
+const authentication = config.authSecret
+  ? await openAuth({
+      baseUrl: config.baseUrl,
+      secret: config.authSecret,
+      dbPath: config.authDb,
+      allowedOrigins: configuredOrigins,
+    })
+  : null;
+const auth = authentication?.auth;
+if (auth) {
+  app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+  app.on(["GET", "HEAD"], "/.well-known/*", (c) => auth.handler(c.req.raw));
   const pageLoader = (distFile: string) => {
     let cached: string | undefined;
     const read = () =>
@@ -163,33 +148,20 @@ if (config.authSecret) {
     };
   };
 
-  const loginHtml = pageLoader("index.html");
+  const authPageHtml = pageLoader("index.html");
   app.get("/consent", async (c) => {
     c.header("Cache-Control", "no-store");
     c.header("Referrer-Policy", "no-referrer");
     const query = new URL(c.req.url).searchParams;
-    const { secret } = await enabledAuth.$context;
+    const { secret } = await auth.$context;
     if (!(await verifyOAuthQueryParams(query.toString(), secret)))
       return c.text("授权请求无效或已过期", 400);
-    const clientId = query.get("client_id");
-    if (!clientId) return c.text("授权请求缺少客户端标识", 400);
-    const result = await enabledAuth.api.getOAuthClientPublic({
-      query: { client_id: clientId },
-      headers: c.req.raw.headers,
-      asResponse: true,
-    });
-    if (!result.ok)
-      return c.text("授权请求不可用，请从客户端重新连接", result.status === 401 ? 401 : 400);
-    const client = (await result.json()) as { client_name?: string };
-    const meta =
-      await html`<meta name="pa-oauth-client" content="${client.client_name ?? clientId}">`;
-    return c.html(
-      (await loginHtml()).replace(/<meta name="pa-oauth-client"\s*\/?>/, () => meta.toString()),
-    );
+    return c.html(await authPageHtml());
   });
   app.get("/login", async (c) => {
     c.header("Cache-Control", "no-store");
-    return c.html(await loginHtml());
+    c.header("Referrer-Policy", "no-referrer");
+    return c.html(await authPageHtml());
   });
   // 父 app 的 strict 路由设置对子应用不生效，这里显式处理尾斜杠。
   app.get("/dashboard/", (c) => c.redirect("/dashboard"));
@@ -197,14 +169,14 @@ if (config.authSecret) {
     "/dashboard",
     dashboardRoutes({
       logger,
-      auth: enabledAuth,
+      auth: auth,
       accessScopeDefinition: canonicalModel.access_scope,
       usage: application.usage,
       html: pageLoader("dashboard.html"),
       userAdministration: (headers) =>
         createUserAdministrationService({
           accounts: createBetterAuthUserAccountAdministration(
-            enabledAuth,
+            auth,
             canonicalModel.access_scope,
             headers,
           ),
@@ -222,56 +194,16 @@ if (config.authSecret) {
   );
 }
 
-// token（OAuth 或 API key）只带 userId；每个请求都重新查询 email、角色和授权范围，不缓存，
-// 管理员的修改立即生效。两种认证方式共用这一步，生成相同的 Cube securityContext。
-async function resolvePrincipal(a: Auth, userId: string): Promise<Principal> {
-  const ctx = await a.$context;
-  return resolveBetterAuthPrincipal(ctx.internalAdapter, userId, semanticPackage.access_scope);
-}
-
-function handleMcp(request: Request, principal: Principal) {
+function serveMcp(request: Request, principal: Principal) {
   return createMcpHandler(() => buildServer({ dependencies: serverDependencies, principal })).fetch(
     request,
   );
 }
 
-const enabledAuth = auth;
-const oauthMcp =
-  enabledAuth &&
-  requireMcpAuth(
-    enabledAuth,
-    async (request, claims) => {
-      if (!claims.sub) return new Response(null, { status: 401 });
-      return handleMcp(request, await resolvePrincipal(enabledAuth, claims.sub));
-    },
-    { resource: new URL("/mcp", config.baseUrl).href, requiredScopes: ["mcp"] },
-  );
-
-app.all("/mcp", async (c) => {
-  if (!enabledAuth || !oauthMcp) return handleMcp(c.req.raw, LOCAL_PRINCIPAL);
-  const bearer = c.req.header("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
-  if (bearer?.startsWith(API_KEY_PREFIX)) {
-    const verified = await enabledAuth.api
-      .verifyApiKey({ body: { key: bearer } })
-      .catch(() => null);
-    if (verified?.error?.code === "RATE_LIMITED") {
-      return c.json(
-        {
-          jsonrpc: "2.0",
-          error: { code: -32000, message: "API Key 已达到请求频率限制" },
-          id: null,
-        },
-        429,
-      );
-    }
-    if (verified?.valid && verified.key) {
-      const principal = await resolvePrincipal(enabledAuth, verified.key.referenceId);
-      logger.info(`${principal.email} ${c.req.method} /mcp (api key)`);
-      return handleMcp(c.req.raw, principal);
-    }
-  }
-  return oauthMcp(c.req.raw);
-});
+const handleMcp = auth
+  ? authenticateMcp({ auth, accessScope: semanticPackage.access_scope, logger }, serveMcp)
+  : (request: Request) => serveMcp(request, LOCAL_PRINCIPAL);
+app.all(MCP_RESOURCE_PATH, (c) => handleMcp(c.req.raw));
 
 // 导出下载时重新验证票据所有者，按当前权限即时生成 CSV；明细数据不写入磁盘。
 const exportDownload = async (c: Context) => {
@@ -320,7 +252,7 @@ const shutdown = () => {
   if (closing) return;
   closing = true;
   httpServer.close(() => {
-    authDb?.close();
+    authentication?.db.close();
     appDb.close();
     process.exit(0);
   });

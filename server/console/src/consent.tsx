@@ -1,27 +1,46 @@
 import { useState } from "react";
+import { MCP_ACCESS_SCOPE } from "@contracts/mcp_access";
 import { Button } from "@/components/ui/button";
 import { authClient } from "./auth_client";
 
 const scopeTitles: Record<string, string> = {
-  mcp: "按你的数据权限使用 PA 分析工具",
+  [MCP_ACCESS_SCOPE]: "按你的数据权限使用 PA 分析工具",
   offline_access: "在本次会话结束后继续访问",
   openid: "确认你的账号身份",
   profile: "读取账号资料",
   email: "读取邮箱地址",
 };
 
-export function ConsentPage() {
+export async function loadConsentRequest(query: URLSearchParams) {
+  const clientId = query.get("client_id");
+  const redirectUri = query.get("redirect_uri");
+  if (!clientId || !redirectUri) return null;
+  const { data: client } = await authClient.oauth2.publicClient({ query: { client_id: clientId } });
+  if (!client) return null;
+  const claims = JSON.parse(query.get("claims") ?? "{}") as { userinfo?: Record<string, unknown> };
+  return {
+    clientName: client.client_name ?? clientId,
+    clientId,
+    redirectUri,
+    scopes: (query.get("scope") ?? "").split(/\s+/).filter(Boolean),
+    userInfoClaims: Object.keys(claims.userinfo ?? {}),
+  };
+}
+
+export function ConsentPage({
+  request,
+}: {
+  request: Awaited<ReturnType<typeof loadConsentRequest>>;
+}) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const query = new URLSearchParams(window.location.search);
-  const clientName = document.querySelector<HTMLMetaElement>(
-    'meta[name="pa-oauth-client"]',
-  )?.content;
-  const scopes = (query.get("scope") ?? "").split(" ").filter(Boolean);
-  const requestedClaims = JSON.parse(query.get("claims") ?? "{}") as {
-    userinfo?: Record<string, unknown>;
-  };
-  const userInfoClaims = Object.keys(requestedClaims.userinfo ?? {});
+  if (!request)
+    return (
+      <main role="alert" className="p-6 text-pa-fg">
+        授权请求不可用，请从客户端重新连接。
+      </main>
+    );
+  const { clientId, clientName, redirectUri, scopes, userInfoClaims } = request;
   async function decide(accept: boolean) {
     setPending(true);
     try {
@@ -44,11 +63,11 @@ export function ConsentPage() {
           </div>
           <div>
             <dt className="text-pa-muted">客户端标识</dt>
-            <dd className="break-all">{query.get("client_id")}</dd>
+            <dd className="break-all">{clientId}</dd>
           </div>
           <div>
             <dt className="text-pa-muted">授权后返回</dt>
-            <dd className="break-all">{query.get("redirect_uri")}</dd>
+            <dd className="break-all">{redirectUri}</dd>
           </div>
           <div>
             <dt className="text-pa-muted">申请的权限</dt>

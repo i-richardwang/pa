@@ -26,15 +26,31 @@ test("按用户当前属性解析出角色与数据范围", async () => {
   });
 });
 
-test("用户不存在时返回无权限主体，查询出错时抛出原始异常", async () => {
-  await expect(
-    resolveBetterAuthPrincipal({ findUserById: async () => null }, "deleted-user", ACCESS_SCOPE),
-  ).resolves.toEqual({
-    email: "deleted-user",
-    roles: [],
-    accessScope: { kind: "limited", values: [] },
-  });
+test("已删除的账号无法通过 MCP 认证", async () => {
+  expect(
+    await resolveBetterAuthPrincipal(
+      { findUserById: async () => null },
+      "deleted-user",
+      ACCESS_SCOPE,
+    ),
+  ).toBeNull();
+});
 
+test.each([
+  [null, false],
+  [new Date("9999-01-01"), false],
+  [new Date("2000-01-01"), true],
+] as const)("封禁截止时间 %s 的账号可访问 MCP 为 %s", async (banExpires, allowed) => {
+  const account = { email: "member@example.test", role: "admin", banned: true, banExpires };
+  const principal = await resolveBetterAuthPrincipal(
+    { findUserById: async () => account },
+    "member",
+    ACCESS_SCOPE,
+  );
+  expect(principal?.email ?? null).toBe(allowed ? account.email : null);
+});
+
+test("账号查询失败保留原始异常", async () => {
   const failure = new Error("auth database unavailable");
   await expect(
     resolveBetterAuthPrincipal(

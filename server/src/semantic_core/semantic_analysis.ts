@@ -447,9 +447,25 @@ const COMPOSITION_ANALYSIS_INPUT = z.strictObject({
   }),
 });
 
+function analysisValidationMessage(issues: readonly z.core.$ZodIssue[]): string {
+  return issues
+    .map(({ path, message }) => (path.length ? `${z.core.toDotPath(path)}：${message}` : message))
+    .join("；");
+}
+
 export const ANALYSIS_DEFINITION_INPUT = z.union(
   [DIRECT_ANALYSIS_INPUT, COMPOSITION_ANALYSIS_INPUT],
-  { error: ANALYSIS_SHAPE_GUIDANCE },
+  {
+    error: (issue) => {
+      if (issue.code !== "invalid_union" || typeof issue.input !== "object" || !issue.input)
+        return ANALYSIS_SHAPE_GUIDANCE;
+      const query = "query" in issue.input;
+      const composition = "composition" in issue.input;
+      if (query === composition) return ANALYSIS_SHAPE_GUIDANCE;
+      const issues = issue.errors[query ? 0 : 1];
+      return issues?.length ? analysisValidationMessage(issues) : ANALYSIS_SHAPE_GUIDANCE;
+    },
+  },
 );
 
 export type AnalysisDefinition = z.infer<typeof ANALYSIS_DEFINITION_INPUT>;
@@ -501,13 +517,10 @@ export function semanticSourceViews(
 }
 
 export function parseAnalysisDefinition(value: unknown): AnalysisDefinition {
-  const parsed =
-    value && typeof value === "object" && "composition" in value
-      ? COMPOSITION_ANALYSIS_INPUT.safeParse(value)
-      : DIRECT_ANALYSIS_INPUT.safeParse(value);
+  const parsed = ANALYSIS_DEFINITION_INPUT.safeParse(value);
   if (!parsed.success) {
     throw new AnalysisDefinitionError(
-      `分析定义无效：${parsed.error.issues.map((issue) => issue.message).join("；")}`,
+      `分析定义无效：${analysisValidationMessage(parsed.error.issues)}`,
     );
   }
   try {

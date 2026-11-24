@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MCP_ACCESS_SCOPE } from "../contracts/mcp_access.js";
 import {
   QUERY_PAYLOAD_OUTPUT,
   COLUMN_FORMATS,
@@ -44,7 +45,7 @@ export const TOOL_DESCRIPTIONS = {
 } as const;
 
 // MCP SDK 通过 _meta 序列化工具安全声明；OAuth 验签由 HTTP transport 边界执行。
-export const OAUTH_SECURITY_SCHEMES = [{ type: "oauth2", scopes: ["mcp"] }] as const;
+export const OAUTH_SECURITY_SCHEMES = [{ type: "oauth2", scopes: [MCP_ACCESS_SCOPE] }] as const;
 
 export const READ_ONLY_ANNOTATIONS = {
   readOnlyHint: true,
@@ -119,16 +120,13 @@ const CATALOG_DIMENSION_OUTPUT = CATALOG_MEMBER_OUTPUT.extend({
     .describe("声明此维度可作组合表的稳定实体键；值为对应的显示名称维度 id"),
 });
 
-/** 各数据来源的时间范围，按展示顺序排列；title 是语义包提供的业务名称，不输出内部 source key。 */
-export const TIME_CONTEXT_OUTPUT = PUBLIC_TIME_CONTEXT_SCHEMA;
-
 export const CATALOG_OUTPUT_SCHEMA = z.strictObject({
   access_scope: ACCESS_SCOPE_DEFINITION_SCHEMA.describe(
     "行级权限所依据的维度（如组织）；实际过滤由服务端执行",
   ),
   observation_scopes: z.array(z.string()),
   data_as_of: z.string().describe("当前结果的数据截至月"),
-  time_context: TIME_CONTEXT_OUTPUT.describe("各数据来源的时间可用性"),
+  time_context: PUBLIC_TIME_CONTEXT_SCHEMA.describe("各数据来源的时间可用性"),
   metric_domains: z.array(
     z.strictObject({
       id: z.string().describe("指标域 id，只用于目录导航，不作为查询参数"),
@@ -220,5 +218,5 @@ export const EXPORT_OUTPUT_SCHEMA = z.strictObject({
   expires_at: z.string(),
   max_rows: z.int(),
   data_as_of: z.string(),
-  time_context: TIME_CONTEXT_OUTPUT,
+  time_context: PUBLIC_TIME_CONTEXT_SCHEMA,
 });
