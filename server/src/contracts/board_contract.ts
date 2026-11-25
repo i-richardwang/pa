@@ -9,7 +9,7 @@ export const MAX_BOARD_TILES = 24;
 export const MAX_BOARD_NAME_LENGTH = 50;
 export const MAX_BOARD_TEXT_LENGTH = 4000;
 
-export const BOARD_ID_SCHEMA = z.string().uuid();
+export const BOARD_ID_SCHEMA = z.uuid();
 export const BOARD_NAME_SCHEMA = z.string().trim().min(1).max(MAX_BOARD_NAME_LENGTH);
 
 export type BoardRow = {
@@ -49,43 +49,38 @@ export type BoardPayload = {
   tiles: BoardTile[];
 };
 
-export const CREATE_BOARD_BODY = z.object({ name: BOARD_NAME_SCHEMA }).strict();
+export const CREATE_BOARD_BODY = z.strictObject({ name: BOARD_NAME_SCHEMA });
 type AddBoardItemPayload = { added: boolean; board: BoardPayload };
 
 const PLACE_SCHEMA: z.ZodType<Place> = z
-  .object({
-    x: z.number().int().nonnegative(),
-    y: z.number().int().nonnegative(),
-    w: z.number().int().positive(),
-    h: z.number().int().positive(),
+  .strictObject({
+    x: z.int().nonnegative(),
+    y: z.int().nonnegative(),
+    w: z.int().positive(),
+    h: z.int().positive(),
   })
-  .strict()
   .superRefine((place, context) => {
     if (place.x + place.w > BOARD_GRID_COLUMNS) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: `瓦片超出看板宽度：x+w 不能超过 ${BOARD_GRID_COLUMNS} 列`,
       });
     }
   });
 
-const REPORT_MUTATION_TILE_SCHEMA = z
-  .object({
-    kind: z.literal("report"),
-    tile_id: BOARD_ID_SCHEMA,
-    report_id: REPORT_ID_SCHEMA,
-    place: PLACE_SCHEMA,
-  })
-  .strict();
+const REPORT_MUTATION_TILE_SCHEMA = z.strictObject({
+  kind: z.literal("report"),
+  tile_id: BOARD_ID_SCHEMA,
+  report_id: REPORT_ID_SCHEMA,
+  place: PLACE_SCHEMA,
+});
 
-const TEXT_MUTATION_TILE_SCHEMA = z
-  .object({
-    kind: z.literal("text"),
-    tile_id: BOARD_ID_SCHEMA,
-    md: z.string().max(MAX_BOARD_TEXT_LENGTH),
-    place: PLACE_SCHEMA,
-  })
-  .strict();
+const TEXT_MUTATION_TILE_SCHEMA = z.strictObject({
+  kind: z.literal("text"),
+  tile_id: BOARD_ID_SCHEMA,
+  md: z.string().max(MAX_BOARD_TEXT_LENGTH),
+  place: PLACE_SCHEMA,
+});
 
 export const BOARD_MUTATION_TILE_SCHEMA: z.ZodType<BoardMutationTile> = z.discriminatedUnion(
   "kind",
@@ -100,7 +95,7 @@ export const BOARD_MUTATION_TILES_SCHEMA = z
     for (const [index, tile] of tiles.entries()) {
       if (seen.has(tile.tile_id)) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: [index, "tile_id"],
           message: `瓦片 tile_id 重复：${tile.tile_id}`,
         });
@@ -114,48 +109,44 @@ const BOARD_TILE_SCHEMA: z.ZodType<BoardTile> = z.discriminatedUnion("kind", [
     name: z.string(),
     presentation_type: PRESENTATION_TYPE_SCHEMA,
     render_shape: RENDER_SHAPE_SCHEMA.nullable(),
-  }).strict(),
+  }),
   TEXT_MUTATION_TILE_SCHEMA,
 ]);
 
-export const UPDATE_BOARD_BODY = z
-  .object({
-    if_revision: z.number().int().positive(),
-    name: BOARD_NAME_SCHEMA.optional(),
-    tiles: BOARD_MUTATION_TILES_SCHEMA.optional(),
-  })
-  .strict();
+export const UPDATE_BOARD_BODY = z.strictObject({
+  if_revision: z.int().positive(),
+  name: BOARD_NAME_SCHEMA.optional(),
+  tiles: BOARD_MUTATION_TILES_SCHEMA.optional(),
+});
 export type UpdateBoardBody = z.infer<typeof UPDATE_BOARD_BODY>;
 
-export const ADD_BOARD_ITEM_BODY = z
-  .object({ report_id: REPORT_ID_SCHEMA, if_revision: z.number().int().positive() })
-  .strict();
+export const ADD_BOARD_ITEM_BODY = z.strictObject({
+  report_id: REPORT_ID_SCHEMA,
+  if_revision: z.int().positive(),
+});
 
-const BOARD_ROW_SCHEMA: z.ZodType<BoardRow> = z
-  .object({
-    id: BOARD_ID_SCHEMA,
-    name: z.string(),
-    count: z.number(),
-    created_by: z.string(),
-    updated_at: z.string(),
-  })
-  .strict();
+const BOARD_ROW_SCHEMA: z.ZodType<BoardRow> = z.strictObject({
+  id: BOARD_ID_SCHEMA,
+  name: z.string(),
+  count: z.number(),
+  created_by: z.string(),
+  updated_at: z.string(),
+});
 
-export const BOARDS_PAYLOAD_SCHEMA: z.ZodType<BoardsPayload> = z
-  .object({ rows: z.array(BOARD_ROW_SCHEMA) })
-  .strict();
+export const BOARDS_PAYLOAD_SCHEMA: z.ZodType<BoardsPayload> = z.strictObject({
+  rows: z.array(BOARD_ROW_SCHEMA),
+});
 
-export const BOARD_PAYLOAD_SCHEMA: z.ZodType<BoardPayload> = z
-  .object({
-    id: BOARD_ID_SCHEMA,
-    name: z.string(),
-    created_by: z.string(),
-    revision: z.number().int().positive(),
-    updated_at: z.string(),
-    tiles: z.array(BOARD_TILE_SCHEMA),
-  })
-  .strict();
+export const BOARD_PAYLOAD_SCHEMA: z.ZodType<BoardPayload> = z.strictObject({
+  id: BOARD_ID_SCHEMA,
+  name: z.string(),
+  created_by: z.string(),
+  revision: z.int().positive(),
+  updated_at: z.string(),
+  tiles: z.array(BOARD_TILE_SCHEMA),
+});
 
-export const ADD_BOARD_ITEM_PAYLOAD_SCHEMA: z.ZodType<AddBoardItemPayload> = z
-  .object({ added: z.boolean(), board: BOARD_PAYLOAD_SCHEMA })
-  .strict();
+export const ADD_BOARD_ITEM_PAYLOAD_SCHEMA: z.ZodType<AddBoardItemPayload> = z.strictObject({
+  added: z.boolean(),
+  board: BOARD_PAYLOAD_SCHEMA,
+});

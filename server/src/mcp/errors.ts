@@ -1,4 +1,4 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from "@modelcontextprotocol/server";
 import { publicApplicationError, type PublicApplicationError } from "../application/errors.js";
 import type { PublicErrorPayload } from "../contracts/error_contract.js";
 import type { Logger } from "../ports/logger.js";

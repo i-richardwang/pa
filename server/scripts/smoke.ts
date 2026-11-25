@@ -1,7 +1,6 @@
 /** 用 MCP 客户端依次调用公开 Demo 的目录、维度取值、分析工具，并读取结果卡片资源。 */
 import type { z } from "zod";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { PRODUCT_VERSION } from "../src/contracts/product_metadata.js";
 import { CATALOG_OUTPUT_SCHEMA, RUN_OUTPUT_SCHEMA, UI_RESOURCE_URI } from "../src/mcp/contracts.js";
 

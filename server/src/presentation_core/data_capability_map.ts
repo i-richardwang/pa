@@ -18,73 +18,61 @@ export type DataCapabilityMapData = {
 };
 
 const nullableText = z.string().nullable();
-const memberSchema = z
-  .object({
-    name: z.string(),
-    title: nullableText,
-    description: nullableText,
-    kind: z.enum(["dimension", "measure"]),
-    member_type: nullableText,
-    internal: z.boolean(),
-    role: z
-      .enum([
-        "relationship_key",
-        "time_control",
-        "calculation_input",
-        "availability_control",
-        "restricted_detail",
-      ])
-      .nullable(),
-    metric_domain_id: z.string().regex(METRIC_DOMAIN_ID_PATTERN).nullable(),
-    time_contract: METRIC_TIME_CONTRACT_SCHEMA.nullable(),
-    format: nullableText,
-    components: z.object({ numerator: z.string(), denominator: z.string() }).strict().nullable(),
-  })
-  .strict();
+const memberSchema = z.strictObject({
+  name: z.string(),
+  title: nullableText,
+  description: nullableText,
+  kind: z.enum(["dimension", "measure"]),
+  member_type: nullableText,
+  internal: z.boolean(),
+  role: z
+    .enum([
+      "relationship_key",
+      "time_control",
+      "calculation_input",
+      "availability_control",
+      "restricted_detail",
+    ])
+    .nullable(),
+  metric_domain_id: z.string().regex(METRIC_DOMAIN_ID_PATTERN).nullable(),
+  time_contract: METRIC_TIME_CONTRACT_SCHEMA.nullable(),
+  format: nullableText,
+  components: z.strictObject({ numerator: z.string(), denominator: z.string() }).nullable(),
+});
 
-export const DATA_CAPABILITY_MAP_SCHEMA = z
-  .object({
-    facts: z.array(
-      z
-        .object({
-          name: z.string(),
-          title: nullableText,
-          description: nullableText,
-          kind: z.literal("fact"),
-          members: z.array(memberSchema),
-          hierarchies: z.array(
-            z
-              .object({ name: z.string(), title: nullableText, levels: z.array(z.string()) })
-              .strict(),
-          ),
-        })
-        .strict(),
-    ),
-    dimension_groups: z.array(
-      z
-        .object({
-          name: z.string(),
-          title: z.string(),
-          description: z.string(),
-          members: z.array(z.string()),
-          bindings: z.array(z.object({ fact: z.string(), members: z.array(z.string()) }).strict()),
-        })
-        .strict(),
-    ),
-    metric_domains: z.array(
-      z
-        .object({
-          id: z.string().regex(METRIC_DOMAIN_ID_PATTERN),
-          title: z.string(),
-          description: z.string(),
-          metrics: z.array(z.object({ name: z.string(), title: z.string() }).strict()),
-          dimensions: z.array(z.string()),
-          bindings: z.array(z.object({ fact: z.string(), includes: z.array(z.string()) }).strict()),
-        })
-        .strict(),
-    ),
-  })
-  .strict() as z.ZodType<DataCapabilityMapData>;
+export const DATA_CAPABILITY_MAP_SCHEMA = z.strictObject({
+  facts: z.array(
+    z.strictObject({
+      name: z.string(),
+      title: nullableText,
+      description: nullableText,
+      kind: z.literal("fact"),
+      members: z.array(memberSchema),
+      hierarchies: z.array(
+        z.strictObject({ name: z.string(), title: nullableText, levels: z.array(z.string()) }),
+      ),
+    }),
+  ),
+  dimension_groups: z.array(
+    z.strictObject({
+      name: z.string(),
+      title: z.string(),
+      description: z.string(),
+      members: z.array(z.string()),
+      bindings: z.array(z.strictObject({ fact: z.string(), members: z.array(z.string()) })),
+    }),
+  ),
+  metric_domains: z.array(
+    z.strictObject({
+      id: z.string().regex(METRIC_DOMAIN_ID_PATTERN),
+      title: z.string(),
+      description: z.string(),
+      metrics: z.array(z.strictObject({ name: z.string(), title: z.string() })),
+      dimensions: z.array(z.string()),
+      bindings: z.array(z.strictObject({ fact: z.string(), includes: z.array(z.string()) })),
+    }),
+  ),
+}) as z.ZodType<DataCapabilityMapData>;
 
 export function projectDataCapabilityMap(catalog: SemanticModelCatalog): DataCapabilityMapData {
   return {

@@ -28,4 +28,4 @@ jobs:
           docker build --tag pa-server-ci server
           docker run --rm --entrypoint node pa-server-ci \
             --input-type=module --eval \
-            "await import('./dist/engine/semantic_package.js'); await import('./dist/semantic_core/semantic_model_catalog.js')"
+            "await import('./dist/auth.js'); await import('./dist/server.js'); await import('./dist/engine/semantic_package.js'); await import('./dist/semantic_core/semantic_model_catalog.js')"

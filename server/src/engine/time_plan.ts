@@ -92,82 +92,70 @@ export type PlannedQuery = PlannedQueryLeg & { businessTime: BusinessTimeResolut
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DATE_RANGE = z.tuple([z.string().regex(DATE), z.string().regex(DATE)]);
-const FILTER_CONDITION = z
-  .object({
-    member: z.string().min(1),
-    operator: z.string().min(1),
-    values: z.array(z.string()).optional(),
-  })
-  .strict();
+const FILTER_CONDITION = z.strictObject({
+  member: z.string().min(1),
+  operator: z.string().min(1),
+  values: z.array(z.string()).optional(),
+});
 const CUBE_FILTER: z.ZodType<CubeFilter> = z.lazy(() =>
   z.union([
     FILTER_CONDITION,
-    z.object({ or: z.array(CUBE_FILTER).min(1) }).strict(),
-    z.object({ and: z.array(CUBE_FILTER).min(1) }).strict(),
+    z.strictObject({ or: z.array(CUBE_FILTER).min(1) }),
+    z.strictObject({ and: z.array(CUBE_FILTER).min(1) }),
   ]),
 );
-const CUBE_QUERY: z.ZodType<CubeQuery> = z
-  .object({
-    measures: z.array(z.string().min(1)).optional(),
-    dimensions: z.array(z.string().min(1)).optional(),
-    filters: z.array(CUBE_FILTER).optional(),
-    timeDimensions: z
-      .array(
-        z
-          .object({
-            dimension: z.string().min(1),
-            granularity: z.enum(["month", "year"]).optional(),
-            dateRange: DATE_RANGE.optional(),
-            compareDateRange: z.array(DATE_RANGE).min(1).optional(),
-          })
-          .strict()
-          .refine((value) => !(value.dateRange && value.compareDateRange), {
-            message: "dateRange 与 compareDateRange 不能同时存在",
-          }),
-      )
-      .max(1)
-      .optional(),
-    order: z.array(z.tuple([z.string().min(1), z.enum(["asc", "desc"])])).optional(),
-    limit: z.number().int().positive().max(50000).optional(),
-    offset: z.number().int().nonnegative().max(50000).optional(),
-  })
-  .strict();
+const CUBE_QUERY: z.ZodType<CubeQuery> = z.strictObject({
+  measures: z.array(z.string().min(1)).optional(),
+  dimensions: z.array(z.string().min(1)).optional(),
+  filters: z.array(CUBE_FILTER).optional(),
+  timeDimensions: z
+    .array(
+      z
+        .strictObject({
+          dimension: z.string().min(1),
+          granularity: z.enum(["month", "year"]).optional(),
+          dateRange: DATE_RANGE.optional(),
+          compareDateRange: z.array(DATE_RANGE).min(1).optional(),
+        })
+        .refine((value) => !(value.dateRange && value.compareDateRange), {
+          message: "dateRange 与 compareDateRange 不能同时存在",
+        }),
+    )
+    .max(1)
+    .optional(),
+  order: z.array(z.tuple([z.string().min(1), z.enum(["asc", "desc"])])).optional(),
+  limit: z.int().positive().max(50000).optional(),
+  offset: z.int().nonnegative().max(50000).optional(),
+});
 
-const TIME_BUCKET = z
-  .object({ from: z.string().regex(YEAR_MONTH_REGEX), to: z.string().regex(YEAR_MONTH_REGEX) })
-  .strict();
+const TIME_BUCKET = z.strictObject({
+  from: z.string().regex(YEAR_MONTH_REGEX),
+  to: z.string().regex(YEAR_MONTH_REGEX),
+});
 
-export const BUSINESS_TIME_SCHEMA = z
-  .object({
-    outputGrain: z.enum(["total", "year", "month"]),
-    coordinates: z
-      .array(
-        z
-          .object({
-            kind: z.enum(["cutoff", "range"]),
-            from: z.string().regex(YEAR_MONTH_REGEX),
-            to: z.string().regex(YEAR_MONTH_REGEX),
-            buckets: z.array(TIME_BUCKET).min(1),
-          })
-          .strict(),
-      )
+export const BUSINESS_TIME_SCHEMA = z.strictObject({
+  outputGrain: z.enum(["total", "year", "month"]),
+  coordinates: z
+    .array(
+      z.strictObject({
+        kind: z.enum(["cutoff", "range"]),
+        from: z.string().regex(YEAR_MONTH_REGEX),
+        to: z.string().regex(YEAR_MONTH_REGEX),
+        buckets: z.array(TIME_BUCKET).min(1),
+      }),
+    )
+    .min(1),
+}) satisfies z.ZodType<BusinessTimeResolution>;
+
+export const PLANNED_QUERY_LEG_SCHEMA = z.strictObject({
+  query: CUBE_QUERY,
+  time: z.strictObject({
+    view: z.string().min(1),
+    windows: z
+      .array(z.strictObject({ from: z.string().regex(DATE), to: z.string().regex(DATE) }))
       .min(1),
-  })
-  .strict() satisfies z.ZodType<BusinessTimeResolution>;
-
-export const PLANNED_QUERY_LEG_SCHEMA = z
-  .object({
-    query: CUBE_QUERY,
-    time: z
-      .object({
-        view: z.string().min(1),
-        windows: z
-          .array(z.object({ from: z.string().regex(DATE), to: z.string().regex(DATE) }).strict())
-          .min(1),
-      })
-      .strict(),
-  })
-  .strict() satisfies z.ZodType<PlannedQueryLeg>;
+  }),
+}) satisfies z.ZodType<PlannedQueryLeg>;
 
 const pad2 = (value: number) => String(value).padStart(2, "0");
 const yearMonthOf = (date: string) => date.slice(0, 7);

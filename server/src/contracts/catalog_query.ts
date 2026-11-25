@@ -10,7 +10,7 @@ export const CATALOG_TERMS_INPUT = z
   .optional()
   .describe("本次问题涉及的业务概念、指标名或同义词；每项作为一个完整术语匹配并一次提交");
 
-export const CATALOG_QUERY_INPUT = z.object({ terms: CATALOG_TERMS_INPUT }).strict();
+export const CATALOG_QUERY_INPUT = z.strictObject({ terms: CATALOG_TERMS_INPUT });
 export type CatalogQueryInput = z.infer<typeof CATALOG_QUERY_INPUT>;
 
 export type NormalizedCatalogQuery = { mode: "overview" } | { mode: "search"; terms: string[] };

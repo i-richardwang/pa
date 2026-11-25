@@ -8,16 +8,14 @@ export { ACCESS_SCOPE_DEFINITION_SCHEMA, type AccessScopeDefinition };
 
 const ACCESS_SCOPE_ID_SCHEMA = ACCESS_SCOPE_DEFINITION_SCHEMA.shape.id;
 
-const LIMITED_ACCESS_SCOPE_SCHEMA = z
-  .object({
-    kind: z.literal("limited"),
-    values: z.array(z.string().trim().min(1)),
-  })
-  .strict();
+const LIMITED_ACCESS_SCOPE_SCHEMA = z.strictObject({
+  kind: z.literal("limited"),
+  values: z.array(z.string().trim().min(1)),
+});
 
 export const ACCESS_SCOPE_SCHEMA = z
   .discriminatedUnion("kind", [
-    z.object({ kind: z.literal("all") }).strict(),
+    z.strictObject({ kind: z.literal("all") }),
     LIMITED_ACCESS_SCOPE_SCHEMA,
   ])
   .transform((scope) =>
@@ -30,21 +28,17 @@ export type PresentedAccessScope = AccessScope & AccessScopeDefinition;
 
 export const PRESENTED_ACCESS_SCOPE_SCHEMA: z.ZodType<PresentedAccessScope> = z
   .union([
-    z
-      .object({
-        id: ACCESS_SCOPE_ID_SCHEMA,
-        title: z.string().trim().min(1),
-        kind: z.literal("all"),
-      })
-      .strict(),
-    z
-      .object({
-        id: ACCESS_SCOPE_ID_SCHEMA,
-        title: z.string().trim().min(1),
-        kind: z.literal("limited"),
-        values: z.array(z.string().trim().min(1)),
-      })
-      .strict(),
+    z.strictObject({
+      id: ACCESS_SCOPE_ID_SCHEMA,
+      title: z.string().trim().min(1),
+      kind: z.literal("all"),
+    }),
+    z.strictObject({
+      id: ACCESS_SCOPE_ID_SCHEMA,
+      title: z.string().trim().min(1),
+      kind: z.literal("limited"),
+      values: z.array(z.string().trim().min(1)),
+    }),
   ])
   .transform((scope) =>
     scope.kind === "all" ? scope : { ...scope, values: [...new Set(scope.values)] },
@@ -52,14 +46,12 @@ export const PRESENTED_ACCESS_SCOPE_SCHEMA: z.ZodType<PresentedAccessScope> = z
 
 const STORED_ACCESS_SCOPE_SCHEMA = z
   .discriminatedUnion("kind", [
-    z.object({ scope_id: ACCESS_SCOPE_ID_SCHEMA, kind: z.literal("all") }).strict(),
-    z
-      .object({
-        scope_id: ACCESS_SCOPE_ID_SCHEMA,
-        kind: z.literal("limited"),
-        values: z.array(z.string().trim().min(1)),
-      })
-      .strict(),
+    z.strictObject({ scope_id: ACCESS_SCOPE_ID_SCHEMA, kind: z.literal("all") }),
+    z.strictObject({
+      scope_id: ACCESS_SCOPE_ID_SCHEMA,
+      kind: z.literal("limited"),
+      values: z.array(z.string().trim().min(1)),
+    }),
   ])
   .transform((scope) =>
     scope.kind === "all" ? scope : { ...scope, values: [...new Set(scope.values)] },

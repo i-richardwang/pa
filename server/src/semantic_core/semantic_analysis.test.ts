@@ -10,6 +10,15 @@ const specWithFilters = (filters: unknown[]) => ({
   },
 });
 
+test("直接查询与组合表指明校验失败的字段", () => {
+  expect(() => parseAnalysisDefinition({ query: { measures: [42] } })).toThrow(
+    /query\.measures\[0\]/,
+  );
+  expect(() => parseAnalysisDefinition({ composition: { group_by: 42, columns: true } })).toThrow(
+    /composition\.columns/,
+  );
+});
+
 test("并列多个查询时拒绝，并提示合并到同一查询或使用 derived.joined", () => {
   const query = {
     measures: ["measure:active_employee_count"],

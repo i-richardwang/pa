@@ -1,12 +1,5 @@
-/**
- * 在命令行为用户签发 API Key，用于 CI、smoke 或没有浏览器的脚本接入。
- * 直接调用 Better Auth apiKey 插件的 createApiKey（不经过 HTTP，也不需要登录会话），key 绑定该用户。
- * key 以 SHA-256 散列保存（插件默认做法，与 PA_AUTH_SECRET 无关），所以离线签发的 key 运行中的服务也能校验。
- * 注意：容器内的服务一直打开着数据库，Docker 挂载目录的新写入对它不可见（virtiofs 缓存），
- * 签发后要执行 docker compose restart server 才生效。
- */
-import { buildAuth, initializeAuthSchema } from "../src/auth.js";
-import { openSqlite } from "../src/sqlite.js";
+/** 本机管理员为已有账号签发 API Key，明文仅输出一次。 */
+import { openLocalAuth } from "./local_auth.js";
 
 const [email, name] = process.argv.slice(2);
 if (!email) {
@@ -14,15 +7,7 @@ if (!email) {
   process.exit(1);
 }
 
-const cfg = {
-  baseUrl: process.env.PA_BASE_URL ?? "http://127.0.0.1:8788",
-  secret: process.env.PA_AUTH_SECRET ?? "issue-key-offline",
-  dbPath: process.env.PA_AUTH_DB ?? "data/auth.db",
-};
-
-const authDb = await openSqlite(cfg.dbPath);
-await initializeAuthSchema(cfg, authDb);
-const auth = buildAuth(cfg, authDb);
+const { auth, db: authDb } = await openLocalAuth();
 const ctx = await auth.$context;
 const found = await ctx.internalAdapter.findUserByEmail(email.toLowerCase());
 if (!found) {

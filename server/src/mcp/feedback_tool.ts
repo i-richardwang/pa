@@ -20,7 +20,7 @@ export function registerFeedbackTool(
     {
       title: "反馈数据能力缺口",
       description: TOOL_DESCRIPTIONS.feedback,
-      inputSchema: {
+      inputSchema: z.strictObject({
         ask: z
           .string()
           .min(1)
@@ -31,13 +31,13 @@ export function registerFeedbackTool(
           .min(1)
           .max(FEEDBACK_LIMITS.detail)
           .describe("缺少什么、已经尝试过什么、为什么现有目录无法满足"),
-      },
-      outputSchema: {
-        id: z.number().int().positive().describe("本次反馈记录编号"),
+      }),
+      outputSchema: z.strictObject({
+        id: z.int().positive().describe("本次反馈记录编号"),
         topic_key: z.string().describe("同类反馈的聚合主题编号"),
         status: z.literal("open").describe("待管理员审核"),
         message: z.string().describe("提交结果说明：反馈不会直接改变指标或口径"),
-      },
+      }),
       annotations: WRITE_ANNOTATIONS,
       _meta: { securitySchemes: OAUTH_SECURITY_SCHEMES },
     },

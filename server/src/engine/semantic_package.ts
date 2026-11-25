@@ -27,128 +27,101 @@ import { buildTimeSourceRegistry, type TimeSourceRegistry } from "../semantic_co
 
 const memberName = z.string().regex(/^[a-z][a-z0-9_]*$/);
 const metricId = z.string().regex(METRIC_DOMAIN_ID_PATTERN);
-const component = z
-  .object({
-    metric_id: z.string().regex(/^measure:[a-z][a-z0-9_]*$/),
-    missing: z.enum(["null", "zero"]),
-  })
-  .strict();
-const ratioNode = z
-  .object({
-    kind: z.literal("ratio"),
-    numerator: component,
-    denominator: component,
-    division_by_zero: z.literal("null"),
-  })
-  .strict();
-const availabilityGuardNode = z
-  .object({
-    kind: z.literal("availability_guard"),
-    value: component,
-    availability: component,
-    unavailable: z.literal("null"),
-  })
-  .strict();
+const component = z.strictObject({
+  metric_id: z.string().regex(/^measure:[a-z][a-z0-9_]*$/),
+  missing: z.enum(["null", "zero"]),
+});
+const ratioNode = z.strictObject({
+  kind: z.literal("ratio"),
+  numerator: component,
+  denominator: component,
+  division_by_zero: z.literal("null"),
+});
+const availabilityGuardNode = z.strictObject({
+  kind: z.literal("availability_guard"),
+  value: component,
+  availability: component,
+  unavailable: z.literal("null"),
+});
 const recordSelection = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("self") }).strict(),
-  z.object({ kind: z.literal("numerator") }).strict(),
-  z.object({ kind: z.literal("measure"), member: memberName }).strict(),
+  z.strictObject({ kind: z.literal("self") }),
+  z.strictObject({ kind: z.literal("numerator") }),
+  z.strictObject({ kind: z.literal("measure"), member: memberName }),
 ]);
-const formalMetric = z
-  .object({
-    name: memberName,
-    metric_domain_id: metricId,
-    host_view: memberName,
-    title: z.string().trim().min(1),
-    description: z.string().trim().min(1).max(160),
-    time_contract: METRIC_TIME_CONTRACT_SCHEMA,
-    node: z.discriminatedUnion("kind", [ratioNode, availabilityGuardNode]),
-    format: z.enum(["number", "percent"]).optional(),
-    result_guards: z
-      .array(
-        z
-          .object({
-            kind: z.literal("minimum_support"),
-            support_measure: memberName,
-            threshold: z.number().int().positive(),
+const formalMetric = z.strictObject({
+  name: memberName,
+  metric_domain_id: metricId,
+  host_view: memberName,
+  title: z.string().trim().min(1),
+  description: z.string().trim().min(1).max(160),
+  time_contract: METRIC_TIME_CONTRACT_SCHEMA,
+  node: z.discriminatedUnion("kind", [ratioNode, availabilityGuardNode]),
+  format: z.enum(["number", "percent"]).optional(),
+  result_guards: z
+    .array(
+      z.strictObject({
+        kind: z.literal("minimum_support"),
+        support_measure: memberName,
+        threshold: z.int().positive(),
+      }),
+    )
+    .min(1)
+    .optional(),
+  sensitivity: z.literal("restricted").optional(),
+  ai_context: z.string().trim().min(1).max(180).optional(),
+  incompatible_dimensions: z
+    .array(z.strictObject({ member: memberName, reason: z.string().trim().min(1) }))
+    .optional(),
+  record_projection: z
+    .strictObject({
+      view: memberName,
+      components: z.strictObject({ numerator: memberName, denominator: memberName }).optional(),
+      underlying_records: z.strictObject({ record_set: memberName, selection: recordSelection }),
+    })
+    .optional(),
+});
+const metricDomain = z.strictObject({
+  id: metricId,
+  title: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+  time_source: memberName,
+  synonyms: z.array(z.string().trim().min(1)),
+});
+const dimensionGroup = z.strictObject({
+  name: memberName,
+  title: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+});
+const manifestSchema = z.strictObject({
+  schema_version: z.literal(1),
+  id: memberName,
+  model_path: z.string().trim().min(1),
+  access_scope: ACCESS_SCOPE_DEFINITION_SCHEMA,
+  time_sources: z
+    .array(
+      z.strictObject({
+        id: memberName,
+        title: z.string().trim().min(1),
+        role: z.enum(["actual", "plan"]),
+        primary: z.boolean(),
+        reference_source: memberName.optional(),
+        comparison_policy: z.enum(["calendar", "explicit_only"]),
+        observation: z
+          .strictObject({
+            id_member: memberName,
+            date_member: memberName,
+            title_member: memberName.optional(),
           })
-          .strict(),
-      )
-      .min(1)
-      .optional(),
-    sensitivity: z.literal("restricted").optional(),
-    ai_context: z.string().trim().min(1).max(180).optional(),
-    incompatible_dimensions: z
-      .array(z.object({ member: memberName, reason: z.string().trim().min(1) }).strict())
-      .optional(),
-    record_projection: z
-      .object({
-        view: memberName,
-        components: z
-          .object({ numerator: memberName, denominator: memberName })
-          .strict()
           .optional(),
-        underlying_records: z
-          .object({ record_set: memberName, selection: recordSelection })
-          .strict(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict();
-const metricDomain = z
-  .object({
-    id: metricId,
-    title: z.string().trim().min(1),
-    description: z.string().trim().min(1),
-    time_source: memberName,
-    synonyms: z.array(z.string().trim().min(1)),
-  })
-  .strict();
-const dimensionGroup = z
-  .object({
-    name: memberName,
-    title: z.string().trim().min(1),
-    description: z.string().trim().min(1),
-  })
-  .strict();
-const manifestSchema = z
-  .object({
-    schema_version: z.literal(1),
-    id: memberName,
-    model_path: z.string().trim().min(1),
-    access_scope: ACCESS_SCOPE_DEFINITION_SCHEMA,
-    time_sources: z
-      .array(
-        z
-          .object({
-            id: memberName,
-            title: z.string().trim().min(1),
-            role: z.enum(["actual", "plan"]),
-            primary: z.boolean(),
-            reference_source: memberName.optional(),
-            comparison_policy: z.enum(["calendar", "explicit_only"]),
-            observation: z
-              .object({
-                id_member: memberName,
-                date_member: memberName,
-                title_member: memberName.optional(),
-              })
-              .strict()
-              .optional(),
-          })
-          .strict(),
-      )
-      .min(1),
-    taxonomy: z
-      .object({
-        metric_domains: z.array(metricDomain).min(1),
-        dimension_groups: z.array(dimensionGroup).min(1),
-      })
-      .strict(),
-    formal_metrics: z.array(formalMetric),
-  })
-  .strict();
+      }),
+    )
+    .min(1),
+  taxonomy: z.strictObject({
+    metric_domains: z.array(metricDomain).min(1),
+    dimension_groups: z.array(dimensionGroup).min(1),
+  }),
+  formal_metrics: z.array(formalMetric),
+});
 
 export type SemanticPackage = {
   schema_version: 1;

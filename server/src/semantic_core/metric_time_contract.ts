@@ -5,12 +5,11 @@ export const METRIC_TIME_AGGREGATIONS = ["sum", "average", "last", "recompute"] 
 export const METRIC_TIME_WINDOWS = ["selected", "year_to_date"] as const;
 
 export const METRIC_TIME_CONTRACT_SCHEMA = z
-  .object({
+  .strictObject({
     aggregation: z.enum(METRIC_TIME_AGGREGATIONS),
     window: z.enum(METRIC_TIME_WINDOWS),
     grain: z.literal("month").optional(),
   })
-  .strict()
   .refine((contract) => !(contract.window === "year_to_date" && contract.grain === "month"), {
     message: "window: year_to_date 与 grain: month 不能并存",
     path: ["grain"],

@@ -26,30 +26,27 @@ export type FeedbackGroup = {
 
 export type FeedbackListPayload = { rows: FeedbackGroup[]; total: number };
 
-export const RESOLVE_FEEDBACK_BODY = z
-  .object({
-    status: z.enum(["accepted", "rejected"]),
-    note: z.string().trim().min(1).max(FEEDBACK_LIMITS.note),
-  })
-  .strict();
+export const RESOLVE_FEEDBACK_BODY = z.strictObject({
+  status: z.enum(["accepted", "rejected"]),
+  note: z.string().trim().min(1).max(FEEDBACK_LIMITS.note),
+});
 
-const FEEDBACK_GROUP_SCHEMA: z.ZodType<FeedbackGroup> = z
-  .object({
-    topic_key: FEEDBACK_TOPIC_KEY_SCHEMA,
-    ask: z.string(),
-    detail: z.string(),
-    status: z.enum(FEEDBACK_STATUSES),
-    note: z.string().optional(),
-    resolved_by: z.string().optional(),
-    resolved_at: z.string().optional(),
-    occurrences: z.number(),
-    first_at: z.string(),
-    last_at: z.string(),
-    callers: z.array(z.string()),
-  })
-  .strict();
+const FEEDBACK_GROUP_SCHEMA: z.ZodType<FeedbackGroup> = z.strictObject({
+  topic_key: FEEDBACK_TOPIC_KEY_SCHEMA,
+  ask: z.string(),
+  detail: z.string(),
+  status: z.enum(FEEDBACK_STATUSES),
+  note: z.string().optional(),
+  resolved_by: z.string().optional(),
+  resolved_at: z.string().optional(),
+  occurrences: z.number(),
+  first_at: z.string(),
+  last_at: z.string(),
+  callers: z.array(z.string()),
+});
 
 export const FEEDBACK_GROUP_PAYLOAD_SCHEMA = FEEDBACK_GROUP_SCHEMA;
-export const FEEDBACK_LIST_PAYLOAD_SCHEMA: z.ZodType<FeedbackListPayload> = z
-  .object({ rows: z.array(FEEDBACK_GROUP_SCHEMA), total: z.number() })
-  .strict();
+export const FEEDBACK_LIST_PAYLOAD_SCHEMA: z.ZodType<FeedbackListPayload> = z.strictObject({
+  rows: z.array(FEEDBACK_GROUP_SCHEMA),
+  total: z.number(),
+});

@@ -36,7 +36,7 @@ const SEMANTIC_FILTER_VALUES = z
   .array(z.string().trim().min(1).describe("values_of 返回的真实分类值；不接受空字符串"))
   .min(1)
   .describe("要包含或排除的真实分类值；至少一项，多项按集合处理")
-  .transform((values) =>
+  .overwrite((values) =>
     [...new Set(values)].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0)),
   );
 /**
@@ -55,61 +55,52 @@ const CALCULATION_ID = z
   .max(120)
   .describe("报告内稳定且唯一的临时计算 id；不进入全局指标目录");
 
-export const SEMANTIC_PERCENT_OF_TOTAL_CALCULATION_INPUT = z
-  .object({
-    id: CALCULATION_ID,
-    title: z.string().trim().min(1).max(30),
-    kind: z.literal("percent_of_total"),
-    measure: SEMANTIC_MEASURE_ID.describe("作为分子与分母聚合基础的正式指标 id"),
-    category_dimension: SEMANTIC_DIMENSION_ID.describe("从分母分组中移除的构成分类维度 id"),
-  })
-  .strict();
+export const SEMANTIC_PERCENT_OF_TOTAL_CALCULATION_INPUT = z.strictObject({
+  id: CALCULATION_ID,
+  title: z.string().trim().min(1).max(30),
+  kind: z.literal("percent_of_total"),
+  measure: SEMANTIC_MEASURE_ID.describe("作为分子与分母聚合基础的正式指标 id"),
+  category_dimension: SEMANTIC_DIMENSION_ID.describe("从分母分组中移除的构成分类维度 id"),
+});
 
 export type SemanticPercentOfTotalCalculation = z.infer<
   typeof SEMANTIC_PERCENT_OF_TOTAL_CALCULATION_INPUT
 >;
 
-const SEMANTIC_GROUP_SORT = z
-  .object({
-    dimension: SEMANTIC_DIMENSION_ID.describe("要配置排序与最大项数的已选分组维度 id"),
-    by: z
-      .union([z.literal("name"), SEMANTIC_MEASURE_ID])
-      .describe("排序依据；name 表示按分组名称，指标 id 表示按该指标数值"),
-    direction: z.enum(["asc", "desc"]).describe("从低到高 / A 到 Z，或从高到低 / Z 到 A"),
-    max_items: z
-      .number()
-      .int()
-      .positive()
-      .max(20)
-      .optional()
-      .describe("最多保留的完整分组数量；省略即展示全部分组，不做 Top-N 截取"),
-  })
-  .strict();
+const SEMANTIC_GROUP_SORT = z.strictObject({
+  dimension: SEMANTIC_DIMENSION_ID.describe("要配置排序与最大项数的已选分组维度 id"),
+  by: z
+    .union([z.literal("name"), SEMANTIC_MEASURE_ID])
+    .describe("排序依据；name 表示按分组名称，指标 id 表示按该指标数值"),
+  direction: z.enum(["asc", "desc"]).describe("从低到高 / A 到 Z，或从高到低 / Z 到 A"),
+  max_items: z
+    .int()
+    .positive()
+    .max(20)
+    .optional()
+    .describe("最多保留的完整分组数量；省略即展示全部分组，不做 Top-N 截取"),
+});
 
-export const SEMANTIC_SUMMARY_INPUT = z
-  .object({
-    mode: z.literal("grand_total").describe(GRAND_TOTAL_DESCRIPTION),
-  })
-  .strict();
+export const SEMANTIC_SUMMARY_INPUT = z.strictObject({
+  mode: z.literal("grand_total").describe(GRAND_TOTAL_DESCRIPTION),
+});
 
 export type SemanticSummary = z.infer<typeof SEMANTIC_SUMMARY_INPUT>;
 
 export const SEMANTIC_QUERY_VIEW_INPUT = z
-  .object({
+  .strictObject({
     view_title: z.string().min(1).max(30).optional(),
     measures: z.array(SEMANTIC_MEASURE_ID).optional(),
     dimensions: z.array(SEMANTIC_DIMENSION_ID).optional(),
     filters: z
       .array(
-        z
-          .object({
-            member: SEMANTIC_DIMENSION_ID,
-            relation: z
-              .enum(["one_of", "none_of"])
-              .describe("one_of 保留值属于给定集合的记录；none_of 排除值属于给定集合的记录"),
-            values: SEMANTIC_FILTER_VALUES,
-          })
-          .strict(),
+        z.strictObject({
+          member: SEMANTIC_DIMENSION_ID,
+          relation: z
+            .enum(["one_of", "none_of"])
+            .describe("one_of 保留值属于给定集合的记录；none_of 排除值属于给定集合的记录"),
+          values: SEMANTIC_FILTER_VALUES,
+        }),
       )
       .describe("分类维度筛选；同一 member 最多出现一次")
       .optional(),
@@ -124,17 +115,16 @@ export const SEMANTIC_QUERY_VIEW_INPUT = z
       .describe("报告级受控临时计算；聚合仍由模型查询完成，不注册为正式指标"),
     summary: SEMANTIC_SUMMARY_INPUT.optional().describe("结果表格的总计行（由模型重新计算）"),
   })
-  .strict()
   .superRefine((view, context) => {
     if (!view.measures?.length && !view.dimensions?.length) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "measures 与 dimensions 至少提供一个",
       });
     }
     if (view.summary && (!view.measures?.length || !view.dimensions?.length)) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["summary"],
         message: "总体行只适用于同时包含指标与业务分组维度的查询",
       });
@@ -143,7 +133,7 @@ export const SEMANTIC_QUERY_VIEW_INPUT = z
     const calculationIds = calculations.map((calculation) => calculation.id);
     if (new Set(calculationIds).size !== calculationIds.length) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["calculations"],
         message: "临时计算 id 不能重复",
       });
@@ -151,14 +141,14 @@ export const SEMANTIC_QUERY_VIEW_INPUT = z
     for (const [index, calculation] of calculations.entries()) {
       if (!view.measures?.includes(calculation.measure)) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["calculations", index, "measure"],
           message: "构成占比的基础指标必须同时出现在 measures 中",
         });
       }
       if (!view.dimensions?.includes(calculation.category_dimension)) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["calculations", index, "category_dimension"],
           message: "构成占比的分类维度必须同时出现在 dimensions 中",
         });
@@ -170,7 +160,7 @@ export const SEMANTIC_QUERY_VIEW_INPUT = z
     );
     if (duplicateFilterMember) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["filters"],
         message: `同一维度只能声明一条筛选；请把 ${duplicateFilterMember} 的多个值合并到同一 values`,
       });
@@ -179,7 +169,7 @@ export const SEMANTIC_QUERY_VIEW_INPUT = z
     const dimensions = new Set(view.dimensions ?? []);
     if (!dimensions.has(view.group_sort.dimension)) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["group_sort", "dimension"],
         message: "分组排序配置的 dimension 必须同时出现在 dimensions 中",
       });
@@ -188,14 +178,14 @@ export const SEMANTIC_QUERY_VIEW_INPUT = z
     const byName = view.group_sort.by === "name";
     if (!byMeasure && !byName) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["group_sort", "by"],
         message: 'group_sort.by 必须是查询中的指标，或使用 "name" 表示按名称排序',
       });
     }
     if (view.group_sort.max_items && !view.measures?.length) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["group_sort", "max_items"],
         message: "限制分组最大项数时至少需要一个查询指标",
       });
@@ -229,9 +219,10 @@ export type SemanticDerivedView = {
   summary?: SemanticSummary;
 };
 
-const SEMANTIC_COLUMN_OPERAND = z
-  .object({ member: SEMANTIC_QUERY_MEMBER_ID, source: SEMANTIC_SOURCE_ROLE })
-  .strict();
+const SEMANTIC_COLUMN_OPERAND = z.strictObject({
+  member: SEMANTIC_QUERY_MEMBER_ID,
+  source: SEMANTIC_SOURCE_ROLE,
+});
 /** 派生输出列名是标识符：与呈现通道同一份词汇，通道引用才能在 schema 层判定。 */
 const DERIVED_OUTPUT_NAME = z
   .string()
@@ -239,51 +230,44 @@ const DERIVED_OUTPUT_NAME = z
   .max(120);
 const SEMANTIC_CARRIED_COLUMN = SEMANTIC_COLUMN_OPERAND.extend({
   as: DERIVED_OUTPUT_NAME,
-}).strict();
-const SEMANTIC_LITERAL_OPERAND = z.object({ lit: z.number() }).strict();
+});
+const SEMANTIC_LITERAL_OPERAND = z.strictObject({ lit: z.number() });
 const SEMANTIC_EXPR_NODE: z.ZodType<SemanticExprNode> = z.lazy(() =>
-  z
-    .object({
-      op: z.enum(["+", "-", "*", "/"]),
-      left: z.union([SEMANTIC_EXPR_NODE, SEMANTIC_COLUMN_OPERAND, SEMANTIC_LITERAL_OPERAND]),
-      right: z.union([SEMANTIC_EXPR_NODE, SEMANTIC_COLUMN_OPERAND, SEMANTIC_LITERAL_OPERAND]),
-    })
-    .strict(),
+  z.strictObject({
+    op: z.enum(["+", "-", "*", "/"]),
+    left: z.union([SEMANTIC_EXPR_NODE, SEMANTIC_COLUMN_OPERAND, SEMANTIC_LITERAL_OPERAND]),
+    right: z.union([SEMANTIC_EXPR_NODE, SEMANTIC_COLUMN_OPERAND, SEMANTIC_LITERAL_OPERAND]),
+  }),
 );
 
-export const SEMANTIC_DERIVED_VIEW_INPUT: z.ZodType<SemanticDerivedView> = z
-  .object({
-    view_title: z.string().min(1).max(30),
-    joined: z
-      .object({
-        query: SEMANTIC_QUERY_VIEW_INPUT.describe("参与逐行算术的第二个查询；它只为本次算术存在"),
-        on: z.array(SEMANTIC_DIMENSION_ID).min(1).describe("两个来源查询共同使用的语义维度 id"),
-        how: z.enum(["left", "inner", "full"]).describe("以顶层 query 为左表"),
-      })
-      .strict()
-      .optional()
-      .describe("需要跨两个查询逐行算术时声明；第二个查询与它的关联合同只能一起出现"),
-    columns: z
-      .array(
-        z.union([
-          SEMANTIC_CARRIED_COLUMN,
-          z
-            .object({
-              expr: SEMANTIC_EXPR_NODE,
-              as: DERIVED_OUTPUT_NAME,
-              format: z.enum(COLUMN_FORMATS).optional(),
-            })
-            .strict(),
-        ]),
-      )
-      .min(1),
-    order: z
-      .array(z.object({ by: DERIVED_OUTPUT_NAME, direction: z.enum(["asc", "desc"]) }).strict())
-      .optional(),
-    limit: z.number().int().positive().max(1000).optional(),
-    summary: SEMANTIC_SUMMARY_INPUT.optional().describe("结果表格的总计行（由模型重新计算）"),
-  })
-  .strict();
+export const SEMANTIC_DERIVED_VIEW_INPUT: z.ZodType<SemanticDerivedView> = z.strictObject({
+  view_title: z.string().min(1).max(30),
+  joined: z
+    .strictObject({
+      query: SEMANTIC_QUERY_VIEW_INPUT.describe("参与逐行算术的第二个查询；它只为本次算术存在"),
+      on: z.array(SEMANTIC_DIMENSION_ID).min(1).describe("两个来源查询共同使用的语义维度 id"),
+      how: z.enum(["left", "inner", "full"]).describe("以顶层 query 为左表"),
+    })
+    .optional()
+    .describe("需要跨两个查询逐行算术时声明；第二个查询与它的关联合同只能一起出现"),
+  columns: z
+    .array(
+      z.union([
+        SEMANTIC_CARRIED_COLUMN,
+        z.strictObject({
+          expr: SEMANTIC_EXPR_NODE,
+          as: DERIVED_OUTPUT_NAME,
+          format: z.enum(COLUMN_FORMATS).optional(),
+        }),
+      ]),
+    )
+    .min(1),
+  order: z
+    .array(z.strictObject({ by: DERIVED_OUTPUT_NAME, direction: z.enum(["asc", "desc"]) }))
+    .optional(),
+  limit: z.int().positive().max(1000).optional(),
+  summary: SEMANTIC_SUMMARY_INPUT.optional().describe("结果表格的总计行（由模型重新计算）"),
+});
 
 export type SemanticAnalysisView = SemanticQueryView | SemanticDerivedView;
 
@@ -326,65 +310,55 @@ const PRESENTATION_GROUP_BY = DIMENSION_CHANNEL_FIELD.optional().describe(
 );
 export const SEMANTIC_VIEW_INTENT_INPUT = z
   .discriminatedUnion("type", [
-    z
-      .object({
-        type: z.literal("table").describe("精确读数、矩阵或类别较多时使用的表格"),
-        columns: z
-          .array(DIMENSION_CHANNEL_FIELD)
-          .min(1)
-          .optional()
-          .describe(
-            "table 专用有序列轴：time=逻辑时间桶，metrics=指标轴，其他值为分组维度 id 或派生输出列名；" +
-              "单个指标 id 不能写进列轴，整条指标轴统一用 metrics 表示；" +
-              "未进入列轴的分组维度留在行轴；指标与时间同在列轴时默认使用 [metrics, time]，" +
-              "即指标在外层、年份或月份在内层；只有明确需要相反层级时才交换顺序",
-          ),
-      })
-      .strict(),
-    z
-      .object({
-        type: z.literal("kpi").describe("无分组维度、只有一个结果行的指标卡"),
-      })
-      .strict(),
-    z
-      .object({
-        type: z.literal("line").describe("按月、年或真实观测期次显示时间趋势"),
-        series: PRESENTATION_SERIES,
-        secondary_series: PRESENTATION_SECONDARY_SERIES,
-        group_by: PRESENTATION_GROUP_BY,
-      })
-      .strict(),
-    z
-      .object({
-        type: z.literal("bar").describe("有限类别的比较或排行"),
-        category: PRESENTATION_CATEGORY,
-        series: PRESENTATION_SERIES,
-        secondary_series: PRESENTATION_SECONDARY_SERIES,
-        annotations: z
-          .array(MEASURE_CHANNEL_FIELD)
-          .optional()
-          .describe("结构占比等辅助标注指标；不能与主系列重复，仅 bar 支持"),
-        group_by: PRESENTATION_GROUP_BY,
-        stack: z.boolean().optional().describe("需同时声明 group_by；true=堆叠，false=并列分组"),
-      })
-      .strict(),
-    z
-      .object({
-        type: z.literal("pie").describe("一个可加计数指标在少量互斥类别中的构成"),
-        category: PRESENTATION_CATEGORY,
-        series: z
-          .array(MEASURE_CHANNEL_FIELD)
-          .length(1)
-          .optional()
-          .describe("唯一的可加计数指标；省略时使用查询中的唯一指标"),
-      })
-      .strict(),
+    z.strictObject({
+      type: z.literal("table").describe("精确读数、矩阵或类别较多时使用的表格"),
+      columns: z
+        .array(DIMENSION_CHANNEL_FIELD)
+        .min(1)
+        .optional()
+        .describe(
+          "table 专用有序列轴：time=逻辑时间桶，metrics=指标轴，其他值为分组维度 id 或派生输出列名；" +
+            "单个指标 id 不能写进列轴，整条指标轴统一用 metrics 表示；" +
+            "未进入列轴的分组维度留在行轴；指标与时间同在列轴时默认使用 [metrics, time]，" +
+            "即指标在外层、年份或月份在内层；只有明确需要相反层级时才交换顺序",
+        ),
+    }),
+    z.strictObject({
+      type: z.literal("kpi").describe("无分组维度、只有一个结果行的指标卡"),
+    }),
+    z.strictObject({
+      type: z.literal("line").describe("按月、年或真实观测期次显示时间趋势"),
+      series: PRESENTATION_SERIES,
+      secondary_series: PRESENTATION_SECONDARY_SERIES,
+      group_by: PRESENTATION_GROUP_BY,
+    }),
+    z.strictObject({
+      type: z.literal("bar").describe("有限类别的比较或排行"),
+      category: PRESENTATION_CATEGORY,
+      series: PRESENTATION_SERIES,
+      secondary_series: PRESENTATION_SECONDARY_SERIES,
+      annotations: z
+        .array(MEASURE_CHANNEL_FIELD)
+        .optional()
+        .describe("结构占比等辅助标注指标；不能与主系列重复，仅 bar 支持"),
+      group_by: PRESENTATION_GROUP_BY,
+      stack: z.boolean().optional().describe("需同时声明 group_by；true=堆叠，false=并列分组"),
+    }),
+    z.strictObject({
+      type: z.literal("pie").describe("一个可加计数指标在少量互斥类别中的构成"),
+      category: PRESENTATION_CATEGORY,
+      series: z
+        .array(MEASURE_CHANNEL_FIELD)
+        .length(1)
+        .optional()
+        .describe("唯一的可加计数指标；省略时使用查询中的唯一指标"),
+    }),
   ])
   .superRefine((chart, context) => {
     if (chart.type === "table" && chart.columns) {
       if (new Set(chart.columns).size !== chart.columns.length) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["columns"],
           message: "presentation.columns 不能包含重复列轴",
         });
@@ -393,14 +367,14 @@ export const SEMANTIC_VIEW_INTENT_INPUT = z
     if ((chart.type === "line" || chart.type === "bar") && chart.secondary_series) {
       if (chart.group_by) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["secondary_series"],
           message: "presentation.secondary_series 与 group_by 互斥：拆分系列只画一个指标",
         });
       }
       if (chart.series?.some((member) => chart.secondary_series?.includes(member))) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["secondary_series"],
           message: "presentation.secondary_series 不能与 series 重复",
         });
@@ -408,7 +382,7 @@ export const SEMANTIC_VIEW_INTENT_INPUT = z
     }
     if (chart.type === "bar" && chart.stack !== undefined && !chart.group_by) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["stack"],
         message: "presentation.stack 仅用于 bar 且需同时声明 group_by",
       });
@@ -418,13 +392,19 @@ export const SEMANTIC_VIEW_INTENT_INPUT = z
 export type SemanticViewIntent = z.infer<typeof SEMANTIC_VIEW_INTENT_INPUT>;
 export type PlottedIntentType = Extract<SemanticViewIntent["type"], "line" | "bar" | "pie">;
 
+const ANALYSIS_SHAPE_GUIDANCE =
+  "直接分析使用 title / query / derived：分组、时间与筛选一致的多个指标合并进 " +
+  "query.measures；需要跨查询逐行算术时把第二个查询放进 derived.joined；并列跨期指标用 composition；" +
+  "属于不同业务问题则分成多次 run_analysis。呈现意图写在与 analysis 平级的 view 参数里，" +
+  "不放进分析定义";
+
 /**
  * 一次分析只交付一个结果，所以结果节点由形状固定：声明 derived 时它就是结果，
  * 否则唯一的 query 就是结果。第二个查询只存在于 derived.joined 里，因此
  * 「多个互不相干的结果」和「有第二个查询却没有算术」都写不出来。
  */
-const DIRECT_ANALYSIS_INPUT = z
-  .object({
+const DIRECT_ANALYSIS_INPUT = z.strictObject(
+  {
     title: z.string().min(1).max(100).optional(),
     query: SEMANTIC_QUERY_VIEW_INPUT.describe(
       "数据问题。分组、时间与筛选一致的多个指标写进同一个查询的 measures，得到一张宽表；" +
@@ -434,53 +414,59 @@ const DIRECT_ANALYSIS_INPUT = z
       "对来源查询逐行算术后交付的结果；声明它时来源查询都成为中间节点。" +
         "已有正式指标不要用它复刻除法",
     ),
-  })
-  // 多写一个查询、把 view 写进来是最常见的两种错法，strict 的默认文案只会说「多余的键」，
-  // 这里替它指路。
-  .strict(
-    "直接分析使用 title / query / derived：分组、时间与筛选一致的多个指标合并进 " +
-      "query.measures；需要跨查询逐行算术时把第二个查询放进 derived.joined；并列跨期指标用 composition；" +
-      "属于不同业务问题则分成多次 run_analysis。呈现意图写在与 analysis 平级的 view 参数里，" +
-      "不放进分析定义",
-  );
+  },
+  {
+    error: (issue) => (issue.code === "unrecognized_keys" ? ANALYSIS_SHAPE_GUIDANCE : undefined),
+  },
+);
 
 export const COMPOSITION_COLUMN_LIMITS = { min: 2, max: 12 } as const;
 
-const COMPOSITION_COLUMN = z
-  .object({
-    id: DERIVED_OUTPUT_NAME.describe(
-      "列的唯一标识，采用 ASCII snake_case。同一指标可按不同期间配置多列",
+const COMPOSITION_COLUMN = z.strictObject({
+  id: DERIVED_OUTPUT_NAME.describe(
+    "列的唯一标识，采用 ASCII snake_case。同一指标可按不同期间配置多列",
+  ),
+  title: z.string().trim().min(1).max(60).optional(),
+  measure: SEMANTIC_MEASURE_ID,
+  time: COLUMN_TIME_INPUT,
+});
+
+const COMPOSITION_ANALYSIS_INPUT = z.strictObject({
+  title: z.string().min(1).max(100).optional(),
+  composition: z.strictObject({
+    group_by: SEMANTIC_DIMENSION_ID.describe("使用目录中带 entity_label 的维度 id 作为行键"),
+    baseline: DERIVED_OUTPUT_NAME.optional().describe(
+      "用此列的实体集合确定行；省略时取各列实体并集",
     ),
-    title: z.string().trim().min(1).max(60).optional(),
-    measure: SEMANTIC_MEASURE_ID,
-    time: COLUMN_TIME_INPUT,
-  })
-  .strict();
+    columns: z
+      .array(COMPOSITION_COLUMN)
+      .min(COMPOSITION_COLUMN_LIMITS.min)
+      .max(COMPOSITION_COLUMN_LIMITS.max)
+      .describe("按指定顺序输出的正式指标列，每列独立选期"),
+    filters: SEMANTIC_QUERY_VIEW_INPUT.shape.filters,
+  }),
+});
 
-const COMPOSITION_ANALYSIS_INPUT = z
-  .object({
-    title: z.string().min(1).max(100).optional(),
-    composition: z
-      .object({
-        group_by: SEMANTIC_DIMENSION_ID.describe("使用目录中带 entity_label 的维度 id 作为行键"),
-        baseline: DERIVED_OUTPUT_NAME.optional().describe(
-          "用此列的实体集合确定行；省略时取各列实体并集",
-        ),
-        columns: z
-          .array(COMPOSITION_COLUMN)
-          .min(COMPOSITION_COLUMN_LIMITS.min)
-          .max(COMPOSITION_COLUMN_LIMITS.max)
-          .describe("按指定顺序输出的正式指标列，每列独立选期"),
-        filters: SEMANTIC_QUERY_VIEW_INPUT.innerType().shape.filters,
-      })
-      .strict(),
-  })
-  .strict();
+function analysisValidationMessage(issues: readonly z.core.$ZodIssue[]): string {
+  return issues
+    .map(({ path, message }) => (path.length ? `${z.core.toDotPath(path)}：${message}` : message))
+    .join("；");
+}
 
-export const ANALYSIS_DEFINITION_INPUT = z.union([
-  DIRECT_ANALYSIS_INPUT,
-  COMPOSITION_ANALYSIS_INPUT,
-]);
+export const ANALYSIS_DEFINITION_INPUT = z.union(
+  [DIRECT_ANALYSIS_INPUT, COMPOSITION_ANALYSIS_INPUT],
+  {
+    error: (issue) => {
+      if (issue.code !== "invalid_union" || typeof issue.input !== "object" || !issue.input)
+        return ANALYSIS_SHAPE_GUIDANCE;
+      const query = "query" in issue.input;
+      const composition = "composition" in issue.input;
+      if (query === composition) return ANALYSIS_SHAPE_GUIDANCE;
+      const issues = issue.errors[query ? 0 : 1];
+      return issues?.length ? analysisValidationMessage(issues) : ANALYSIS_SHAPE_GUIDANCE;
+    },
+  },
+);
 
 export type AnalysisDefinition = z.infer<typeof ANALYSIS_DEFINITION_INPUT>;
 
@@ -531,13 +517,10 @@ export function semanticSourceViews(
 }
 
 export function parseAnalysisDefinition(value: unknown): AnalysisDefinition {
-  const parsed =
-    value && typeof value === "object" && "composition" in value
-      ? COMPOSITION_ANALYSIS_INPUT.safeParse(value)
-      : DIRECT_ANALYSIS_INPUT.safeParse(value);
+  const parsed = ANALYSIS_DEFINITION_INPUT.safeParse(value);
   if (!parsed.success) {
     throw new AnalysisDefinitionError(
-      `分析定义无效：${parsed.error.issues.map((issue) => issue.message).join("；")}`,
+      `分析定义无效：${analysisValidationMessage(parsed.error.issues)}`,
     );
   }
   try {

@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import type { Principal } from "../contracts/principal.js";
 import type { Logger } from "../ports/logger.js";
 

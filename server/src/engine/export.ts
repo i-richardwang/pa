@@ -14,7 +14,7 @@ export const EXPORT_MAX_ROWS = 50000;
 
 export const EXPORT_PLAN_SCHEMA = z.union([
   METRIC_QUERY_PLAN_SCHEMA,
-  z.object({ kind: z.literal("analysis_view"), view_id: z.string().uuid() }).strict(),
+  z.strictObject({ kind: z.literal("analysis_view"), view_id: z.uuid() }),
 ]);
 export type ExportPlan = z.infer<typeof EXPORT_PLAN_SCHEMA>;
 

@@ -16,33 +16,29 @@ export type MyAnalysisRow = {
 
 export type MyAnalysesPayload = { days: number; rows: MyAnalysisRow[]; total: number };
 
-const MY_ANALYSIS_ROW_SCHEMA: z.ZodType<MyAnalysisRow> = z
-  .object({
-    id: z.number(),
-    analysis_id: z.string().uuid().nullable(),
-    view_id: z.string().uuid().nullable(),
-    at: z.string(),
-    title: z.string(),
-    row_count: z.number().nullable(),
-  })
-  .strict();
+const MY_ANALYSIS_ROW_SCHEMA: z.ZodType<MyAnalysisRow> = z.strictObject({
+  id: z.number(),
+  analysis_id: z.uuid().nullable(),
+  view_id: z.uuid().nullable(),
+  at: z.string(),
+  title: z.string(),
+  row_count: z.number().nullable(),
+});
 
-export const MY_ANALYSES_PAYLOAD_SCHEMA: z.ZodType<MyAnalysesPayload> = z
-  .object({ days: z.number(), rows: z.array(MY_ANALYSIS_ROW_SCHEMA), total: z.number() })
-  .strict();
+export const MY_ANALYSES_PAYLOAD_SCHEMA: z.ZodType<MyAnalysesPayload> = z.strictObject({
+  days: z.number(),
+  rows: z.array(MY_ANALYSIS_ROW_SCHEMA),
+  total: z.number(),
+});
 
-export const PREVIEW_ANALYSIS_BODY = z
-  .object({
-    analysis: ANALYSIS_DEFINITION_INPUT,
-    view: SEMANTIC_VIEW_INTENT_INPUT,
-    view_preferences: VIEW_PREFERENCES_INPUT,
-  })
-  .strict();
+export const PREVIEW_ANALYSIS_BODY = z.strictObject({
+  analysis: ANALYSIS_DEFINITION_INPUT,
+  view: SEMANTIC_VIEW_INTENT_INPUT,
+  view_preferences: VIEW_PREFERENCES_INPUT,
+});
 
-export const CREATE_ANALYSIS_VIEW_BODY = z
-  .object({
-    analysis_id: z.string().uuid(),
-    view: SEMANTIC_VIEW_INTENT_INPUT,
-    view_preferences: VIEW_PREFERENCES_INPUT,
-  })
-  .strict();
+export const CREATE_ANALYSIS_VIEW_BODY = z.strictObject({
+  analysis_id: z.uuid(),
+  view: SEMANTIC_VIEW_INTENT_INPUT,
+  view_preferences: VIEW_PREFERENCES_INPUT,
+});

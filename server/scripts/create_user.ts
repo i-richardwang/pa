@@ -1,22 +1,10 @@
-/**
- * 由管理员在本机创建用户，写入服务使用的同一个 SQLite 文件（PA_AUTH_DB，默认 data/auth.db，
- * 相对 server/ 目录）。服务没有自助注册，账号只能通过这个脚本创建。
- *
- * 数据权限规则见 src/engine/cube_security.ts 和 view 的 access_policy；不传 --data-scope 时，
- * 账号可以登录，但查不到任何数据。
- *
- * 通过用户账号适配器和 apiKey 插件直接写入（不经过 HTTP，也不需要登录会话），同时保存绑定当前
- * 语义包的数据权限范围。密码散列（scrypt）和 key 散列（SHA-256）都与 PA_AUTH_SECRET 无关。
- * 注意：容器内的服务一直打开着数据库，Docker 挂载目录的新写入对它不可见（virtiofs 缓存），
- * 创建后要执行 docker compose restart server 才生效。
- */
-import { buildAuth, initializeAuthSchema } from "../src/auth.js";
+/** 本机管理员开通账号并写入当前语义包的数据范围；未设置数据范围的账号可以登录。 */
+import { openLocalAuth } from "./local_auth.js";
 import { createBetterAuthUserAccountAdministration } from "../src/adapters/better_auth_user_account_administration.js";
 import {
   configuredSemanticPackageDir,
   loadSemanticPackage,
 } from "../src/engine/semantic_package.js";
-import { openSqlite } from "../src/sqlite.js";
 
 const argv = process.argv.slice(2);
 const opts = new Map<string, string>();
@@ -55,16 +43,7 @@ const accessScope =
       };
 const withKey = opts.has("with-key");
 
-const cfg = {
-  baseUrl: process.env.PA_BASE_URL ?? "http://127.0.0.1:8788",
-  secret: process.env.PA_AUTH_SECRET ?? "create-user-offline",
-  dbPath: process.env.PA_AUTH_DB ?? "data/auth.db",
-  allowSignUp: true,
-};
-
-const authDb = await openSqlite(cfg.dbPath);
-await initializeAuthSchema(cfg, authDb);
-const auth = buildAuth(cfg, authDb);
+const { auth, db: authDb } = await openLocalAuth();
 const semanticPackage = await loadSemanticPackage(configuredSemanticPackageDir());
 const accounts = createBetterAuthUserAccountAdministration(auth, semanticPackage.access_scope);
 const user = await accounts.create({
@@ -84,5 +63,4 @@ if (withKey) {
   console.log("API Key（明文仅此一次，请妥善保管）：");
   console.log(key.key);
 }
-console.log("服务容器正在运行时，需 docker compose restart server 使新用户生效。");
 authDb.close();

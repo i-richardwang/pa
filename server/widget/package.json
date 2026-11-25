@@ -1,9 +1,10 @@
 {
   "name": "pa-widget",
   "private": true,
+  "type": "module",
   "description": "MCP 结果卡片：渲染服务端生成的图表和表格（依赖只在构建时使用）",
   "devDependencies": {
-    "@modelcontextprotocol/ext-apps": "^1.7.4",
+    "@modelcontextprotocol/ext-apps": "2.0.4",
     "lucide-react": "^1.24.0",
     "pa-result-view": "workspace:*"
   }

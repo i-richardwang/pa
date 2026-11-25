@@ -25,28 +25,24 @@ export type TimeOutputGrain = (typeof TIME_GRAINS)[number];
 export const SERIES_GRAINS = ["year", "month"] as const;
 export type SeriesGrain = (typeof SERIES_GRAINS)[number];
 
-export const TIME_RANGE_INPUT = z
-  .object({
-    from: z.string().regex(YEAR_MONTH_REGEX),
-    to: z.string().regex(YEAR_MONTH_REGEX),
-  })
-  .strict();
+export const TIME_RANGE_INPUT = z.strictObject({
+  from: z.string().regex(YEAR_MONTH_REGEX),
+  to: z.string().regex(YEAR_MONTH_REGEX),
+});
 
 export const TIME_COMPARE_INPUT = z.union([
-  z.object({ cutoff: z.string().regex(YEAR_MONTH_REGEX) }).strict(),
-  z.object({ range: TIME_RANGE_INPUT }).strict(),
-  z.object({ previous_period: z.literal(true) }).strict(),
-  z
-    .object({
-      years_ago: z.number().int().min(1).max(8),
-      alignment: z.enum(["to_date", "full_period"]).optional(),
-    })
-    .strict(),
+  z.strictObject({ cutoff: z.string().regex(YEAR_MONTH_REGEX) }),
+  z.strictObject({ range: TIME_RANGE_INPUT }),
+  z.strictObject({ previous_period: z.literal(true) }),
+  z.strictObject({
+    years_ago: z.int().min(1).max(8),
+    alignment: z.enum(["to_date", "full_period"]).optional(),
+  }),
 ]);
 
 export const TIME_LAST_INPUT = z.union([
-  z.object({ months: z.number().int().min(1).max(60) }).strict(),
-  z.object({ years: z.number().int().min(1).max(8) }).strict(),
+  z.strictObject({ months: z.int().min(1).max(60) }),
+  z.strictObject({ years: z.int().min(1).max(8) }),
 ]);
 
 const CUTOFF_FIELD = z
@@ -66,42 +62,36 @@ const COMPARE_FIELD = z
   );
 
 const SINGLE_OBSERVATION_OPTIONS = [
-  z.object({ kind: z.literal("occurrence"), id: z.string().trim().min(1).max(120) }).strict(),
-  z.object({ kind: z.literal("as_of"), date: z.string().date() }).strict(),
+  z.strictObject({ kind: z.literal("occurrence"), id: z.string().trim().min(1).max(120) }),
+  z.strictObject({ kind: z.literal("as_of"), date: z.iso.date() }),
 ] as const;
 export const OBSERVATION_SELECTION_INPUT = z.discriminatedUnion("kind", [
   ...SINGLE_OBSERVATION_OPTIONS,
-  z.object({ kind: z.literal("trend"), from: z.string().date(), to: z.string().date() }).strict(),
+  z.strictObject({ kind: z.literal("trend"), from: z.iso.date(), to: z.iso.date() }),
 ]);
 export type ObservationSelection = z.infer<typeof OBSERVATION_SELECTION_INPUT>;
 
 export const TIME_INPUT = z
   .union([
-    z
-      .object({
-        cutoff: CUTOFF_FIELD,
-        observation: OBSERVATION_SELECTION_INPUT.optional(),
-        grain: OUTPUT_GRAIN_FIELD.optional(),
-        compare: COMPARE_FIELD,
-      })
-      .strict(),
-    z
-      .object({
-        range: TIME_RANGE_INPUT.describe("连续业务月份范围"),
-        grain: OUTPUT_GRAIN_FIELD,
-        compare: COMPARE_FIELD,
-      })
-      .strict(),
-    z
-      .object({
-        cutoff: CUTOFF_FIELD,
-        last: TIME_LAST_INPUT.describe(
-          "相对窗口：以锚点（cutoff，省略即 actual_through）为终点回看近 N 月或近 N 个日历年",
-        ),
-        grain: OUTPUT_GRAIN_FIELD,
-        compare: COMPARE_FIELD,
-      })
-      .strict(),
+    z.strictObject({
+      cutoff: CUTOFF_FIELD,
+      observation: OBSERVATION_SELECTION_INPUT.optional(),
+      grain: OUTPUT_GRAIN_FIELD.optional(),
+      compare: COMPARE_FIELD,
+    }),
+    z.strictObject({
+      range: TIME_RANGE_INPUT.describe("连续业务月份范围"),
+      grain: OUTPUT_GRAIN_FIELD,
+      compare: COMPARE_FIELD,
+    }),
+    z.strictObject({
+      cutoff: CUTOFF_FIELD,
+      last: TIME_LAST_INPUT.describe(
+        "相对窗口：以锚点（cutoff，省略即 actual_through）为终点回看近 N 月或近 N 个日历年",
+      ),
+      grain: OUTPUT_GRAIN_FIELD,
+      compare: COMPARE_FIELD,
+    }),
   ])
   .superRefine((time, context) => {
     const kind = "range" in time || "last" in time ? "range" : "cutoff";
@@ -111,7 +101,7 @@ export const TIME_INPUT = z
     });
     if (mixed) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "对照时间必须与主时间同为截止月份或同为连续期间",
       });
     }
@@ -127,29 +117,26 @@ const SERIES_GRAIN_FIELD = z
   .enum(SERIES_GRAINS)
   .describe("期间按年还是按月输出序列；整段合计由结果的 totals 提供，不在这里指定");
 
-const MONTH_WINDOW = z
-  .object({
-    kind: z.literal("current_month"),
-    month: z
-      .string()
-      .regex(YEAR_MONTH_REGEX)
-      .optional()
-      .describe("固定观察月份；省略时使用所选数据源共同具备的最新月份"),
-  })
-  .strict();
+const MONTH_WINDOW = z.strictObject({
+  kind: z.literal("current_month"),
+  month: z
+    .string()
+    .regex(YEAR_MONTH_REGEX)
+    .optional()
+    .describe("固定观察月份；省略时使用所选数据源共同具备的最新月份"),
+});
 
-const OBSERVATION_WINDOW = z
-  .object({ kind: z.literal("observation"), selection: OBSERVATION_SELECTION_INPUT })
-  .strict();
+const OBSERVATION_WINDOW = z.strictObject({
+  kind: z.literal("observation"),
+  selection: OBSERVATION_SELECTION_INPUT,
+});
 
-const YEAR_TO_DATE_WINDOW = z.object({ kind: z.literal("year_to_date") }).strict();
-const TRAILING_WINDOW = z
-  .object({
-    kind: z.literal("trailing"),
-    count: z.number().int().min(1).max(60),
-    unit: z.enum(["month", "year"]),
-  })
-  .strict();
+const YEAR_TO_DATE_WINDOW = z.strictObject({ kind: z.literal("year_to_date") });
+const TRAILING_WINDOW = z.strictObject({
+  kind: z.literal("trailing"),
+  count: z.int().min(1).max(60),
+  unit: z.enum(["month", "year"]),
+});
 const RANGE_WINDOW = TIME_RANGE_INPUT.extend({ kind: z.literal("range") });
 
 export const TIME_WINDOW_INPUT = z.discriminatedUnion("kind", [
@@ -160,35 +147,30 @@ export const TIME_WINDOW_INPUT = z.discriminatedUnion("kind", [
   RANGE_WINDOW.extend({ grain: SERIES_GRAIN_FIELD }),
 ]);
 
-const COLUMN_TIME = z
-  .object({
-    window: z.discriminatedUnion("kind", [
-      MONTH_WINDOW,
-      OBSERVATION_WINDOW.extend({
-        selection: z.discriminatedUnion("kind", SINGLE_OBSERVATION_OPTIONS),
-      }),
-      YEAR_TO_DATE_WINDOW,
-      TRAILING_WINDOW,
-      RANGE_WINDOW,
-    ]),
-  })
-  .strict();
+const COLUMN_TIME = z.strictObject({
+  window: z.discriminatedUnion("kind", [
+    MONTH_WINDOW,
+    OBSERVATION_WINDOW.extend({
+      selection: z.discriminatedUnion("kind", SINGLE_OBSERVATION_OPTIONS),
+    }),
+    YEAR_TO_DATE_WINDOW,
+    TRAILING_WINDOW,
+    RANGE_WINDOW,
+  ]),
+});
 export type ColumnTime = z.infer<typeof COLUMN_TIME>;
 
 const CUSTOM_COMPARISON_WINDOW = z.union([
+  z.strictObject({
+    kind: z.literal("current_month"),
+    month: z.string().regex(YEAR_MONTH_REGEX),
+  }),
   z
-    .object({
-      kind: z.literal("current_month"),
-      month: z.string().regex(YEAR_MONTH_REGEX),
-    })
-    .strict(),
-  z
-    .object({
+    .strictObject({
       kind: z.literal("range"),
       from: z.string().regex(YEAR_MONTH_REGEX),
       to: z.string().regex(YEAR_MONTH_REGEX),
     })
-    .strict()
     .refine((window) => window.from <= window.to, {
       message: "对照范围的开始月份不能晚于结束月份",
       path: ["from"],
@@ -196,35 +178,27 @@ const CUSTOM_COMPARISON_WINDOW = z.union([
 ]);
 
 export const TIME_COMPARISON_INPUT = z.discriminatedUnion("kind", [
-  z
-    .object({
-      kind: z.literal("previous_period"),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("previous_year"),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("custom"),
-      window: CUSTOM_COMPARISON_WINDOW,
-    })
-    .strict(),
+  z.strictObject({
+    kind: z.literal("previous_period"),
+  }),
+  z.strictObject({
+    kind: z.literal("previous_year"),
+  }),
+  z.strictObject({
+    kind: z.literal("custom"),
+    window: CUSTOM_COMPARISON_WINDOW,
+  }),
 ]);
 
-const QUERY_TIME = z
-  .object({
-    window: TIME_WINDOW_INPUT.describe(
-      "观察时间：单个月份得到一个结果；年初至今、回看近 N 月/年或明确的起止月份是期间，" +
-        "按所带的 grain 成序列。相对窗口随数据推进滚动，需要冻结时用明确的起止月份表达",
-    ),
-    comparison: TIME_COMPARISON_INPUT.optional().describe(
-      "可选时间对比；上一等长期间、去年同期，或明确的单一自定义对照窗口",
-    ),
-  })
-  .strict();
+const QUERY_TIME = z.strictObject({
+  window: TIME_WINDOW_INPUT.describe(
+    "观察时间：单个月份得到一个结果；年初至今、回看近 N 月/年或明确的起止月份是期间，" +
+      "按所带的 grain 成序列。相对窗口随数据推进滚动，需要冻结时用明确的起止月份表达",
+  ),
+  comparison: TIME_COMPARISON_INPUT.optional().describe(
+    "可选时间对比；上一等长期间、去年同期，或明确的单一自定义对照窗口",
+  ),
+});
 
 export type TimeIntent = z.infer<typeof QUERY_TIME>;
 
@@ -238,7 +212,7 @@ function validateTimeIntent(time: BusinessTime, context: z.RefinementCtx): void 
     const selection = time.window.selection;
     if (time.comparison || (selection.kind === "trend" && selection.from > selection.to)) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["window"],
         message: "期次区间须按日期正序，且期次窗口不能叠加日历对照",
       });
@@ -247,21 +221,21 @@ function validateTimeIntent(time: BusinessTime, context: z.RefinementCtx): void 
   }
   if (time.window.kind === "trailing" && time.window.unit === "year" && time.window.count > 8) {
     context.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: "custom",
       path: ["window", "count"],
       message: "按年选择最多支持近 8 年",
     });
   }
   if (time.window.kind === "range" && time.window.from > time.window.to) {
     context.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: "custom",
       path: ["window", "from"],
       message: "时间范围的开始月份不能晚于结束月份",
     });
   }
   if (time.window.kind === "year_to_date" && time.comparison?.kind === "previous_period") {
     context.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: "custom",
       path: ["comparison", "kind"],
       message: "今年至今应与去年同期比较；如需其他基准，请明确指定自定义对照期间",
     });
@@ -270,7 +244,7 @@ function validateTimeIntent(time: BusinessTime, context: z.RefinementCtx): void 
     const expected = time.window.kind === "current_month" ? "current_month" : "range";
     if (time.comparison.window.kind !== expected) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["comparison", "window"],
         message: "自定义对照必须与主时间同为单月或同为连续期间",
       });
@@ -655,32 +629,28 @@ export function timeAvailabilityIssue(
 }
 
 /** 时间能力由模型合同推导，不接受手写值。 */
-export const TIME_CAPABILITIES_INPUT = z
-  .object({
-    grain: z.literal("month").optional().describe("指标只在单月桶上有定义；跨月窗口只能按月呈现"),
-    year_scoped: z
-      .literal(true)
-      .optional()
-      .describe("指标每年一月重新累计（年初累计类指标）；跨日历年的期间没有单一合计"),
-    comparison: z.literal("explicit_only").optional().describe("指标只允许显式自定义对照期间"),
-    observation: z
-      .string()
-      .regex(/^dimension:[a-z][a-z0-9_]*$/)
-      .optional()
-      .describe("期次维度；values_of 可查可见编码，observation 窗口可按期次、日期或期次序列查询"),
-  })
-  .strict();
+export const TIME_CAPABILITIES_INPUT = z.strictObject({
+  grain: z.literal("month").optional().describe("指标只在单月桶上有定义；跨月窗口只能按月呈现"),
+  year_scoped: z
+    .literal(true)
+    .optional()
+    .describe("指标每年一月重新累计（年初累计类指标）；跨日历年的期间没有单一合计"),
+  comparison: z.literal("explicit_only").optional().describe("指标只允许显式自定义对照期间"),
+  observation: z
+    .string()
+    .regex(/^dimension:[a-z][a-z0-9_]*$/)
+    .optional()
+    .describe("期次维度；values_of 可查可见编码，observation 窗口可按期次、日期或期次序列查询"),
+});
 
 export type TimeCapabilities = z.infer<typeof TIME_CAPABILITIES_INPUT>;
 
-export const METRIC_TIME_INPUT = z
-  .object({
-    value_basis: METRIC_VALUE_BASIS_INPUT,
-    constraints: TIME_CAPABILITIES_INPUT.optional().describe(
-      "指标对时间选择的限制；省略表示没有额外限制",
-    ),
-  })
-  .strict();
+export const METRIC_TIME_INPUT = z.strictObject({
+  value_basis: METRIC_VALUE_BASIS_INPUT,
+  constraints: TIME_CAPABILITIES_INPUT.optional().describe(
+    "指标对时间选择的限制；省略表示没有额外限制",
+  ),
+});
 
 export type MetricTime = z.infer<typeof METRIC_TIME_INPUT>;
 

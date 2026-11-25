@@ -12,7 +12,7 @@ export class ApiError extends Error {
   }
 }
 
-type JsonSchema<T> = z.ZodType<T, z.ZodTypeDef, unknown>;
+type JsonSchema<T> = z.ZodType<T>;
 
 export async function getJson<T>(path: string, schema: JsonSchema<T>): Promise<T> {
   return request(await fetch(path, { headers: { Accept: "application/json" } }), schema);

@@ -10,6 +10,7 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 export default defineConfig(({ mode }) => {
   const dashboard = mode === "dashboard";
   return {
+    input: path.resolve(import.meta.dirname, dashboard ? "dashboard.html" : "index.html"),
     plugins: [react(), tailwindcss(), viteSingleFile()],
     resolve: {
       alias: {
@@ -54,9 +55,6 @@ export default defineConfig(({ mode }) => {
       cssTarget: ["chrome123", "safari17.5", "firefox120"],
       chunkSizeWarningLimit: 2048,
       emptyOutDir: !dashboard,
-      rollupOptions: {
-        input: path.resolve(import.meta.dirname, dashboard ? "dashboard.html" : "index.html"),
-      },
     },
   };
 });

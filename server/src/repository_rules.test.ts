@@ -76,16 +76,18 @@ test("通用核心不内置 Demo 的业务时间源或调研类型", async () =>
   expect(violations).toEqual([]);
 });
 
-test("应用库只有 composition root 与 app_database 可以打开连接", async () => {
+test("认证库与应用库各自拥有 SQLite 连接入口", async () => {
+  const opensSqlite = /\bopenSqlite\s*\(/;
+  expect(opensSqlite.test("await openSqlite(path)")).toBe(true);
   const files = await sourceFiles(join(rootPath, "server", "src"));
   const callers: string[] = [];
   for (const path of files) {
-    if ((await readFile(path, "utf8")).includes("openSqlite(")) {
+    if (opensSqlite.test(await readFile(path, "utf8"))) {
       callers.push(relative(rootPath, path));
     }
   }
   expect(callers.sort()).toEqual([
-    "server/src/index.ts",
+    "server/src/auth.ts",
     "server/src/sqlite.ts",
     "server/src/storage/app_database.ts",
   ]);

@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import type { AnalysisService } from "./application/analysis_service.js";
 import type { CatalogService } from "./application/catalog_service.js";
 import type { ExportService } from "./application/export_service.js";

@@ -1,4 +1,4 @@
-import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/server/validators/ajv";
 import { recordingLogger } from "./test_support/logger.js";
 import { describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
@@ -236,8 +236,8 @@ test("MCP 提供全部工具和 Apps 资源", async () => {
       RECORDS_UI_RESOURCE_URI,
     },
   ] = await Promise.all([
-    import("@modelcontextprotocol/sdk/client/index.js"),
-    import("@modelcontextprotocol/sdk/inMemory.js"),
+    import("@modelcontextprotocol/client"),
+    import("@modelcontextprotocol/server"),
     import("./composition/application.js"),
     import("./server.js"),
     import("./mcp/contracts.js"),
@@ -828,6 +828,15 @@ test("MCP 提供全部工具和 Apps 资源", async () => {
     expect(JSON.stringify(invalidAnalysis)).toContain("query.measures");
     expect(JSON.stringify(invalidAnalysis)).toContain("derived.joined");
 
+    const mistypedMeasure = await client.callTool({
+      name: "run_analysis",
+      arguments: {
+        analysis: { query: { ...pivotDefinition.query, measures: [42] } },
+        view: { type: "table" },
+      },
+    });
+    expect(mistypedMeasure.isError).toBe(true);
+    expect(JSON.stringify(mistypedMeasure.content)).toContain("query.measures[0]");
     // 格式正确但语义错误的请求由服务端拒绝，返回 isError 和 JSON 格式的错误。
     const danglingSource = await client.callTool({
       name: "run_analysis",

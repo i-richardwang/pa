@@ -63,77 +63,67 @@ export type MetricQueryPlan = {
   selection?: TopNSelectionSpec;
 };
 
-const COMPONENT_SCHEMA = z
-  .object({ metric_id: z.string().min(1), missing: z.enum(["null", "zero"]) })
-  .strict();
+const COMPONENT_SCHEMA = z.strictObject({
+  metric_id: z.string().min(1),
+  missing: z.enum(["null", "zero"]),
+});
 
 const EXECUTABLE_NODE_SCHEMA = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("aggregate"), member: z.string().min(1) }).strict(),
-  z
-    .object({
-      kind: z.literal("ratio"),
-      numerator: COMPONENT_SCHEMA,
-      denominator: COMPONENT_SCHEMA,
-      division_by_zero: z.literal("null"),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("availability_guard"),
-      value: COMPONENT_SCHEMA,
-      availability: COMPONENT_SCHEMA,
-      unavailable: z.literal("null"),
-    })
-    .strict(),
+  z.strictObject({ kind: z.literal("aggregate"), member: z.string().min(1) }),
+  z.strictObject({
+    kind: z.literal("ratio"),
+    numerator: COMPONENT_SCHEMA,
+    denominator: COMPONENT_SCHEMA,
+    division_by_zero: z.literal("null"),
+  }),
+  z.strictObject({
+    kind: z.literal("availability_guard"),
+    value: COMPONENT_SCHEMA,
+    availability: COMPONENT_SCHEMA,
+    unavailable: z.literal("null"),
+  }),
 ]);
 
-export const METRIC_QUERY_PLAN_SCHEMA: z.ZodType<MetricQueryPlan> = z
-  .object({
-    kind: z.literal("metric_query"),
-    business_time: BUSINESS_TIME_SCHEMA,
-    time_view: z.string().min(1),
-    legs: z
-      .array(
-        z
-          .object({
-            source_view: z.string().min(1),
-            plan: PLANNED_QUERY_LEG_SCHEMA,
-            dimensions: z.record(z.string(), z.string()),
-            measures: z.record(z.string(), z.string()),
-          })
-          .strict(),
-      )
-      .min(1),
-    nodes: z.record(z.string(), EXECUTABLE_NODE_SCHEMA),
-    dimensions: z.array(z.string()),
-    measures: z.array(z.string()),
-    output_metric_ids: z.record(z.string(), z.string()),
-    result_guards: z
-      .array(
-        z
-          .object({
-            kind: z.literal("minimum_support"),
-            measure: z.string().min(1),
-            support_measure: z.string().min(1),
-            threshold: z.number().int().positive(),
-          })
-          .strict(),
-      )
-      .optional(),
-    order: z.array(z.tuple([z.string(), z.enum(["asc", "desc"])])).optional(),
-    selection: z
-      .object({
-        type: z.literal("top_n"),
-        dimensions: z.array(z.string().min(1)).min(1),
-        by: z.string().min(1),
-        window: z.literal("anchor"),
-        count: z.number().int().positive().max(1000),
-        direction: z.enum(["asc", "desc"]),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict();
+export const METRIC_QUERY_PLAN_SCHEMA: z.ZodType<MetricQueryPlan> = z.strictObject({
+  kind: z.literal("metric_query"),
+  business_time: BUSINESS_TIME_SCHEMA,
+  time_view: z.string().min(1),
+  legs: z
+    .array(
+      z.strictObject({
+        source_view: z.string().min(1),
+        plan: PLANNED_QUERY_LEG_SCHEMA,
+        dimensions: z.record(z.string(), z.string()),
+        measures: z.record(z.string(), z.string()),
+      }),
+    )
+    .min(1),
+  nodes: z.record(z.string(), EXECUTABLE_NODE_SCHEMA),
+  dimensions: z.array(z.string()),
+  measures: z.array(z.string()),
+  output_metric_ids: z.record(z.string(), z.string()),
+  result_guards: z
+    .array(
+      z.strictObject({
+        kind: z.literal("minimum_support"),
+        measure: z.string().min(1),
+        support_measure: z.string().min(1),
+        threshold: z.int().positive(),
+      }),
+    )
+    .optional(),
+  order: z.array(z.tuple([z.string(), z.enum(["asc", "desc"])])).optional(),
+  selection: z
+    .strictObject({
+      type: z.literal("top_n"),
+      dimensions: z.array(z.string().min(1)).min(1),
+      by: z.string().min(1),
+      window: z.literal("anchor"),
+      count: z.int().positive().max(1000),
+      direction: z.enum(["asc", "desc"]),
+    })
+    .optional(),
+});
 
 type MetricIndex = {
   byId: Map<string, CubeMember>;

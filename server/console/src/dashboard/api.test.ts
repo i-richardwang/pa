@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { z } from "zod";
 import { ApiError, parseJsonResponse, postJson } from "./api";
 
-const PAYLOAD = z.object({ value: z.string() }).strict();
+const PAYLOAD = z.strictObject({ value: z.string() });
 
 test("Dashboard API 成功响应按 schema 校验，不符合时报 502", async () => {
   await expect(

@@ -13,38 +13,32 @@ export type AdminUser = {
   banned: boolean;
 };
 
-export const ADMIN_USER_SCHEMA: z.ZodType<AdminUser> = z
-  .object({
-    id: z.string().trim().min(1),
-    email: z.string().email(),
-    name: z.string(),
-    role: ACCESS_ROLE_SCHEMA,
-    access_scope: ACCESS_SCOPE_SCHEMA,
-    banned: z.boolean(),
-  })
-  .strict();
+export const ADMIN_USER_SCHEMA: z.ZodType<AdminUser> = z.strictObject({
+  id: z.string().trim().min(1),
+  email: z.email(),
+  name: z.string(),
+  role: ACCESS_ROLE_SCHEMA,
+  access_scope: ACCESS_SCOPE_SCHEMA,
+  banned: z.boolean(),
+});
 
-export const ADMIN_USERS_PAYLOAD_SCHEMA = z.object({ users: z.array(ADMIN_USER_SCHEMA) }).strict();
+export const ADMIN_USERS_PAYLOAD_SCHEMA = z.strictObject({ users: z.array(ADMIN_USER_SCHEMA) });
 export type AdminUsersPayload = z.infer<typeof ADMIN_USERS_PAYLOAD_SCHEMA>;
 
-export const CREATE_ADMIN_USER_BODY = z
-  .object({
-    email: z.string().trim().email(),
-    password: z.string().min(8),
-    name: z.string().trim().optional(),
-    role: ACCESS_ROLE_SCHEMA,
-    access_scope: ACCESS_SCOPE_SCHEMA,
-  })
-  .strict();
+export const CREATE_ADMIN_USER_BODY = z.strictObject({
+  email: z.string().trim().email(),
+  password: z.string().min(8),
+  name: z.string().trim().optional(),
+  role: ACCESS_ROLE_SCHEMA,
+  access_scope: ACCESS_SCOPE_SCHEMA,
+});
 export type CreateAdminUserBody = z.infer<typeof CREATE_ADMIN_USER_BODY>;
 
-export const UPDATE_USER_AUTHORIZATION_BODY = z
-  .object({
-    role: ACCESS_ROLE_SCHEMA,
-    access_scope: ACCESS_SCOPE_SCHEMA,
-  })
-  .strict();
+export const UPDATE_USER_AUTHORIZATION_BODY = z.strictObject({
+  role: ACCESS_ROLE_SCHEMA,
+  access_scope: ACCESS_SCOPE_SCHEMA,
+});
 export type UpdateUserAuthorizationBody = z.infer<typeof UPDATE_USER_AUTHORIZATION_BODY>;
 
-export const RESET_USER_PASSWORD_BODY = z.object({ password: z.string().min(8) }).strict();
+export const RESET_USER_PASSWORD_BODY = z.strictObject({ password: z.string().min(8) });
 export type ResetUserPasswordBody = z.infer<typeof RESET_USER_PASSWORD_BODY>;

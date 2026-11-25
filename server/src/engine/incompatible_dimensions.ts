@@ -1,11 +1,9 @@
 import { z } from "zod";
 
-const INCOMPATIBLE_DIMENSION_SCHEMA = z
-  .object({
-    member: z.string().regex(/^[a-z][a-z0-9_]*$/),
-    reason: z.string().trim().min(1),
-  })
-  .strict();
+const INCOMPATIBLE_DIMENSION_SCHEMA = z.strictObject({
+  member: z.string().regex(/^[a-z][a-z0-9_]*$/),
+  reason: z.string().trim().min(1),
+});
 
 const INCOMPATIBLE_DIMENSIONS_SCHEMA = z.array(INCOMPATIBLE_DIMENSION_SCHEMA);
 

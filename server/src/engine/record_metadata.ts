@@ -3,49 +3,41 @@ import type { CubeMember, CubeView } from "../ports/cube_gateway.js";
 import { resolveMetricTime } from "./metric_time.js";
 import type { MetricValueBasis } from "../semantic_core/metric_value_basis.js";
 
-const RECORD_FIELD_META = z
-  .object({
-    member: z.string().min(1),
-    title: z.string().min(1).optional(),
-  })
-  .strict();
+const RECORD_FIELD_META = z.strictObject({
+  member: z.string().min(1),
+  title: z.string().min(1).optional(),
+});
 
-const RECORD_SET_META = z
-  .object({
-    title: z.string().min(1),
-    description: z.string().min(1),
-    record_key: z.string().min(1),
-    entity_key: z.string().min(1),
-    fields: z.array(RECORD_FIELD_META).min(1),
-    entity_order: z
-      .array(
-        z
-          .object({
-            member: z.string().min(1),
-            direction: z.enum(["asc", "desc"]),
-          })
-          .strict(),
-      )
-      .min(1),
-  })
-  .strict();
+const RECORD_SET_META = z.strictObject({
+  title: z.string().min(1),
+  description: z.string().min(1),
+  record_key: z.string().min(1),
+  entity_key: z.string().min(1),
+  fields: z.array(RECORD_FIELD_META).min(1),
+  entity_order: z
+    .array(
+      z.strictObject({
+        member: z.string().min(1),
+        direction: z.enum(["asc", "desc"]),
+      }),
+    )
+    .min(1),
+});
 
 const RECORD_SETS_META = z
   .record(z.string().min(1), RECORD_SET_META)
   .refine((sets) => Object.keys(sets).length > 0, { message: "至少声明一个记录集" });
 
 const RECORD_SELECTION = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("self") }).strict(),
-  z.object({ kind: z.literal("numerator") }).strict(),
-  z.object({ kind: z.literal("measure"), member: z.string().min(1) }).strict(),
+  z.strictObject({ kind: z.literal("self") }),
+  z.strictObject({ kind: z.literal("numerator") }),
+  z.strictObject({ kind: z.literal("measure"), member: z.string().min(1) }),
 ]);
 
-const MEMBER_UNDERLYING_RECORDS_META = z
-  .object({
-    record_set: z.string().min(1),
-    selection: RECORD_SELECTION,
-  })
-  .strict();
+const MEMBER_UNDERLYING_RECORDS_META = z.strictObject({
+  record_set: z.string().min(1),
+  selection: RECORD_SELECTION,
+});
 
 export type RecordField = { member: string; title?: string };
 

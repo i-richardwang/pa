@@ -9,12 +9,10 @@ export type MePayload = {
   access_scope: PresentedAccessScope;
 };
 
-export const ME_PAYLOAD_SCHEMA: z.ZodType<MePayload> = z
-  .object({
-    email: z.string(),
-    name: z.string(),
-    role: z.string(),
-    is_admin: z.boolean(),
-    access_scope: PRESENTED_ACCESS_SCOPE_SCHEMA,
-  })
-  .strict();
+export const ME_PAYLOAD_SCHEMA: z.ZodType<MePayload> = z.strictObject({
+  email: z.string(),
+  name: z.string(),
+  role: z.string(),
+  is_admin: z.boolean(),
+  access_scope: PRESENTED_ACCESS_SCOPE_SCHEMA,
+});

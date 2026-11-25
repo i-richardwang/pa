@@ -1,10 +1,17 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { ConsentPage, loadConsentRequest } from "./consent";
 import { LoginPage } from "./login";
 import "./styles.css";
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
+const page =
+  window.location.pathname === "/consent" ? (
+    <ConsentPage
+      request={
+        await loadConsentRequest(new URLSearchParams(window.location.search)).catch(() => null)
+      }
+    />
+  ) : (
     <LoginPage />
-  </StrictMode>,
-);
+  );
+createRoot(document.getElementById("root")!).render(<StrictMode>{page}</StrictMode>);

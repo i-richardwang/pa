@@ -8,16 +8,14 @@ const PREFERENCE_FIELD = z
   .max(120)
   .describe("ViewIntent 中的指标 id 或派生输出列名");
 
-export const SERIES_PREFERENCES_INPUT = z
-  .object({
-    color: z
-      .string()
-      .regex(/^#[0-9a-fA-F]{6}$/)
-      .transform((color) => color.toLowerCase())
-      .optional(),
-    mark: z.enum(["line", "bar"]).optional(),
-  })
-  .strict();
+export const SERIES_PREFERENCES_INPUT = z.strictObject({
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .toLowerCase()
+    .optional(),
+  mark: z.enum(["line", "bar"]).optional(),
+});
 
 export type SeriesPreferences = z.infer<typeof SERIES_PREFERENCES_INPUT>;
 
@@ -26,53 +24,48 @@ export const SHADING_PALETTE_NAMES = ["traffic_lights", "red_blue", "viridis", "
 export type ShadingPaletteName = (typeof SHADING_PALETTE_NAMES)[number];
 
 /** 表格热力着色：色阶和是否显示数值，不承载业务阈值或指标口径。 */
-export const TABLE_SHADING_PREFERENCES_INPUT = z
-  .object({
-    palette: z.union([
-      z
-        .string()
-        .regex(/^#[0-9a-fA-F]{6}$/)
-        .transform((color) => color.toLowerCase()),
-      z.enum(SHADING_PALETTE_NAMES),
-    ]),
-    flipped: z.boolean().optional(),
-    thresholds: z
-      .object({
-        min: z.number().finite().optional(),
-        mid: z.number().finite().optional(),
-        max: z.number().finite().optional(),
-      })
-      .strict()
-      .superRefine((thresholds, context) => {
-        if (
-          thresholds.min !== undefined &&
-          thresholds.max !== undefined &&
-          thresholds.min > thresholds.max
-        ) {
-          context.addIssue({ code: z.ZodIssueCode.custom, message: "色阶下限不能大于上限" });
-        }
-        if (
-          thresholds.mid !== undefined &&
-          ((thresholds.min !== undefined && thresholds.mid < thresholds.min) ||
-            (thresholds.max !== undefined && thresholds.mid > thresholds.max))
-        ) {
-          context.addIssue({ code: z.ZodIssueCode.custom, message: "色阶中点必须位于上下限之间" });
-        }
-      })
-      .optional(),
-    values: z.boolean().optional(),
-  })
-  .strict();
+export const TABLE_SHADING_PREFERENCES_INPUT = z.strictObject({
+  palette: z.union([
+    z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .toLowerCase(),
+    z.enum(SHADING_PALETTE_NAMES),
+  ]),
+  flipped: z.boolean().optional(),
+  thresholds: z
+    .strictObject({
+      min: z.number().optional(),
+      mid: z.number().optional(),
+      max: z.number().optional(),
+    })
+    .superRefine((thresholds, context) => {
+      if (
+        thresholds.min !== undefined &&
+        thresholds.max !== undefined &&
+        thresholds.min > thresholds.max
+      ) {
+        context.addIssue({ code: "custom", message: "色阶下限不能大于上限" });
+      }
+      if (
+        thresholds.mid !== undefined &&
+        ((thresholds.min !== undefined && thresholds.mid < thresholds.min) ||
+          (thresholds.max !== undefined && thresholds.mid > thresholds.max))
+      ) {
+        context.addIssue({ code: "custom", message: "色阶中点必须位于上下限之间" });
+      }
+    })
+    .optional(),
+  values: z.boolean().optional(),
+});
 
 export type TableShadingPreferences = z.infer<typeof TABLE_SHADING_PREFERENCES_INPUT>;
 
-export const VIEW_PREFERENCES_INPUT = z
-  .object({
-    series: z.record(PREFERENCE_FIELD, SERIES_PREFERENCES_INPUT).optional(),
-    value_labels: z.enum(["main", "all"]).optional(),
-    table_shading: TABLE_SHADING_PREFERENCES_INPUT.optional(),
-  })
-  .strict();
+export const VIEW_PREFERENCES_INPUT = z.strictObject({
+  series: z.record(PREFERENCE_FIELD, SERIES_PREFERENCES_INPUT).optional(),
+  value_labels: z.enum(["main", "all"]).optional(),
+  table_shading: TABLE_SHADING_PREFERENCES_INPUT.optional(),
+});
 
 export type ViewPreferences = z.infer<typeof VIEW_PREFERENCES_INPUT>;
 

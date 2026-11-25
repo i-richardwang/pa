@@ -44,15 +44,13 @@ const RELATED_MEMBER_IDS_INPUT = z
   .max(BUSINESS_TERM_LIMITS.related_members)
   .default([]);
 
-export const BUSINESS_TERM_CONTENT_INPUT = z
-  .object({
-    canonical_term: CLEAN_TEXT("规范术语", BUSINESS_TERM_LIMITS.canonical_term),
-    definition: CLEAN_MULTILINE_TEXT("术语定义", BUSINESS_TERM_LIMITS.definition),
-    context: CLEAN_TEXT("适用语境", BUSINESS_TERM_LIMITS.context).optional(),
-    aliases: ALIASES_INPUT,
-    related_member_ids: RELATED_MEMBER_IDS_INPUT,
-  })
-  .strict();
+export const BUSINESS_TERM_CONTENT_INPUT = z.strictObject({
+  canonical_term: CLEAN_TEXT("规范术语", BUSINESS_TERM_LIMITS.canonical_term),
+  definition: CLEAN_MULTILINE_TEXT("术语定义", BUSINESS_TERM_LIMITS.definition),
+  context: CLEAN_TEXT("适用语境", BUSINESS_TERM_LIMITS.context).optional(),
+  aliases: ALIASES_INPUT,
+  related_member_ids: RELATED_MEMBER_IDS_INPUT,
+});
 export type BusinessTermContentInput = z.infer<typeof BUSINESS_TERM_CONTENT_INPUT>;
 
 export const CREATE_BUSINESS_TERM_BODY = BUSINESS_TERM_CONTENT_INPUT;
@@ -86,34 +84,28 @@ export type BusinessTermResolution = {
   matches: BusinessTermResolutionMatch[];
 };
 
-const RELATED_MEMBER_SCHEMA: z.ZodType<BusinessTermRelatedMember> = z
-  .object({
-    id: z.string(),
-    title: z.string().nullable(),
-    kind: z.enum(["measure", "dimension"]).nullable(),
-    status: z.enum(["available", "missing"]),
-  })
-  .strict();
+const RELATED_MEMBER_SCHEMA: z.ZodType<BusinessTermRelatedMember> = z.strictObject({
+  id: z.string(),
+  title: z.string().nullable(),
+  kind: z.enum(["measure", "dimension"]).nullable(),
+  status: z.enum(["available", "missing"]),
+});
 
-export const BUSINESS_TERM_SCHEMA = z
-  .object({
-    id: z.string().uuid(),
-    canonical_term: z.string(),
-    definition: z.string(),
-    context: z.string().optional(),
-    aliases: z.array(z.string()),
-    related_members: z.array(RELATED_MEMBER_SCHEMA),
-  })
-  .strict();
+export const BUSINESS_TERM_SCHEMA = z.strictObject({
+  id: z.uuid(),
+  canonical_term: z.string(),
+  definition: z.string(),
+  context: z.string().optional(),
+  aliases: z.array(z.string()),
+  related_members: z.array(RELATED_MEMBER_SCHEMA),
+});
 
-export const BUSINESS_TERMS_PAYLOAD_SCHEMA: z.ZodType<BusinessTermsPayload> = z
-  .object({ rows: z.array(BUSINESS_TERM_SCHEMA) })
-  .strict();
+export const BUSINESS_TERMS_PAYLOAD_SCHEMA: z.ZodType<BusinessTermsPayload> = z.strictObject({
+  rows: z.array(BUSINESS_TERM_SCHEMA),
+});
 
-export const BUSINESS_TERM_RESOLUTION_SCHEMA: z.ZodType<BusinessTermResolution> = z
-  .object({
-    input_term: z.string(),
-    status: z.enum(["resolved", "ambiguous"]),
-    matches: z.array(BUSINESS_TERM_SCHEMA).min(1),
-  })
-  .strict();
+export const BUSINESS_TERM_RESOLUTION_SCHEMA: z.ZodType<BusinessTermResolution> = z.strictObject({
+  input_term: z.string(),
+  status: z.enum(["resolved", "ambiguous"]),
+  matches: z.array(BUSINESS_TERM_SCHEMA).min(1),
+});

@@ -15,52 +15,41 @@ export type RecordProjectionViewBinding = {
 
 export type RecordProjectionBindings = { views: RecordProjectionViewBinding[] };
 
-export const RECORD_PROJECTION_BINDINGS_SCHEMA: z.ZodType<RecordProjectionBindings> = z
-  .object({
+export const RECORD_PROJECTION_BINDINGS_SCHEMA: z.ZodType<RecordProjectionBindings> =
+  z.strictObject({
     views: z.array(
-      z
-        .object({
-          result_view_id: z.string(),
-          metrics: z.record(
-            z.string(),
-            z.object({ metric_id: z.string(), title: z.string() }).strict(),
-          ),
-          dimensions: z.record(
-            z.string(),
-            z.object({ dimension_id: z.string(), title: z.string() }).strict(),
-          ),
-        })
-        .strict(),
+      z.strictObject({
+        result_view_id: z.string(),
+        metrics: z.record(z.string(), z.strictObject({ metric_id: z.string(), title: z.string() })),
+        dimensions: z.record(
+          z.string(),
+          z.strictObject({ dimension_id: z.string(), title: z.string() }),
+        ),
+      }),
     ),
-  })
-  .strict();
+  });
 
-const RECORD_PROJECTION_TIME_COORDINATE = z
-  .object({
-    from: z.string().regex(/^\d{4}-\d{2}$/),
-    to: z.string().regex(/^\d{4}-\d{2}$/),
-  })
-  .strict();
+const RECORD_PROJECTION_TIME_COORDINATE = z.strictObject({
+  from: z.string().regex(/^\d{4}-\d{2}$/),
+  to: z.string().regex(/^\d{4}-\d{2}$/),
+});
 
-export const RECORD_PROJECTION_REQUEST_BODY = z
-  .object({
-    revision: z.number().int().positive(),
-    result_view_id: z.string().min(1),
-    metric_id: z.string().min(1),
-    coordinates: z
-      .array(z.object({ dimension_id: z.string().min(1), value: CELL_SCHEMA }).strict())
-      .max(20),
-    time_coordinate: RECORD_PROJECTION_TIME_COORDINATE,
-    data_as_of: z.string().min(1),
-    offset: z
-      .number()
-      .int()
-      .nonnegative()
-      .max(RECORD_PROJECTION_MAX_ROWS - 1)
-      .default(0),
-    limit: z.number().int().min(1).max(100).default(50),
-  })
-  .strict();
+export const RECORD_PROJECTION_REQUEST_BODY = z.strictObject({
+  revision: z.int().positive(),
+  result_view_id: z.string().min(1),
+  metric_id: z.string().min(1),
+  coordinates: z
+    .array(z.strictObject({ dimension_id: z.string().min(1), value: CELL_SCHEMA }))
+    .max(20),
+  time_coordinate: RECORD_PROJECTION_TIME_COORDINATE,
+  data_as_of: z.string().min(1),
+  offset: z
+    .int()
+    .nonnegative()
+    .max(RECORD_PROJECTION_MAX_ROWS - 1)
+    .default(0),
+  limit: z.int().min(1).max(100).default(50),
+});
 
 export type RecordProjectionRequestBody = z.infer<typeof RECORD_PROJECTION_REQUEST_BODY>;
 
@@ -83,7 +72,7 @@ export type RecordProjectionPayload = {
 };
 
 export const RECORD_PROJECTION_PAYLOAD_SCHEMA: z.ZodType<RecordProjectionPayload> = z
-  .object({
+  .strictObject({
     metric_id: z.string(),
     metric_title: z.string(),
     record_set_title: z.string(),
@@ -91,18 +80,17 @@ export const RECORD_PROJECTION_PAYLOAD_SCHEMA: z.ZodType<RecordProjectionPayload
     columns: z.array(z.string()),
     column_keys: z.array(z.string()),
     rows: z.array(z.array(CELL_SCHEMA)),
-    offset: z.number().int().nonnegative(),
-    page_size: z.number().int().min(1).max(100),
+    offset: z.int().nonnegative(),
+    page_size: z.int().min(1).max(100),
     has_more: z.boolean(),
     limit_reached: z.literal(true).optional(),
     data_as_of: z.string(),
     data_changed: z.boolean(),
   })
-  .strict()
   .superRefine((payload, ctx) => {
     if (payload.columns.length !== payload.column_keys.length) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "columns 与 column_keys 长度必须一致",
         path: ["column_keys"],
       });
